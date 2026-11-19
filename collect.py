@@ -17,8 +17,11 @@ def links(text,base):
     found += [('',u.rstrip('.,;\'")]>')) for u in re.findall(r'https?://[^\s<>"\x00-\x1f]+',text)]
     out={}
     for label,u in found:
-        u=urljoin(base,u)
-        p=urlsplit(u)
+        try:
+            u=urljoin(base,u)
+            p=urlsplit(u)
+        except (ValueError,TypeError):
+            continue
         if p.scheme in ('http','https') and p.hostname and not p.username and p.hostname not in ('localhost','127.0.0.1'):
             out.setdefault(u,label)
     return [(label,u) for u,label in out.items()]
