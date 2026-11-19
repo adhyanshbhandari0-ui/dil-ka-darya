@@ -1,0 +1,45 @@
+name: Build research collection
+on:
+  push:
+    branches: [main]
+    paths: [collect.py, .github/workflows/collect.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: research-collection
+  cancel-in-progress: false
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+          python -m pip install requests beautifulsoup4 markdown-it-py
+      - name: Collect sources and documents
+        run: python -u collect.py 2>&1 | tee collection.log
+      - name: Publish collection
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git diff --cached --quiet || git commit -m "Collect cardiology sources, links and PDF text"
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: collection-report
+          path: |
+            collection_report.json
+            collection.log
+            failed_links.log
+            extraction_errors.log
+            large_files_skipped.log
+          retention-days: 30
