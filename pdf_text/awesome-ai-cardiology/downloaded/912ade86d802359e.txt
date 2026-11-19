@@ -1,0 +1,351 @@
+                                                                    Heartbeat Anomaly Detection
+                                                                   using Adversarial Oversampling
+                                                    Jefferson L. P. Lima                           David Macêdo                             Cleber Zanchettin
+                                                   Centro de Informática                      Centro de Informática                     Centro de Informática
+                                            Universidade Federal de Pernambuco          Universidade Federal de Pernambuco         Universidade Federal de Pernambuco
+                                               50.740-560, Recife, PE, Brazil              50.740-560, Recife, PE, Brazil             50.740-560, Recife, PE, Brazil
+                                                      jlpl@cin.ufpe.br                            dlm@cin.ufpe.br                            cz@cin.ufpe.br
+
+
+
+
+arXiv:1901.09972v1 [cs.LG] 28 Jan 2019
+                                            Abstract—Cardiovascular diseases are one of the most common       and the importance of taking spatial information in ECG
+                                         causes of death in the world. Prevention, knowledge of previous      analysis, Convolutional Neural Networks (CNN) have been
+                                         cases in the family, and early detection is the best strategy        used to tackle this problem in several studies [1] [2] [3] [4].
+                                         to reduce this fact. Different machine learning approaches to
+                                         automatic diagnostic are being proposed to this task. As in most        However, one problem commonly encountered in datasets
+                                         health problems, the imbalance between examples and classes is       involving health is the high degree of imbalance. Often, we
+                                         predominant in this problem and affects the performance of the       come across a smaller amount of samples involving the pos-
+                                         automated solution. In this paper, we address the classification     itive class (representing the disease). Many learning systems
+                                         of heartbeats images in different cardiovascular diseases. We
+                                         propose a two-dimensional Convolutional Neural Network for           are not used to deal with unbalanced data.
+                                         classification after using a InfoGAN architecture for generating        The use of this type of datasets to train models such
+                                         synthetic images to unbalanced classes. We call this proposal        as a neural network usually causes high accuracy for data
+                                         Adversarial Oversampling and compare it with the classical over-     belonging to the majority class, but an unacceptable accuracy
+                                         sampling methods as SMOTE, ADASYN, and RandomOversam-
+                                         pling. The results show that the proposed approach improves the      for minority class data. It typically happens because the
+                                         classifier performance for the minority classes without harming      model ends up specializing only in the classes with the most
+                                         the performance in the balanced classes.                             significant quantity of samples as the classes with few samples
+                                                                                                              are presented fewer times for the adjustments of the weights.
+                                                                I. I NTRODUCTION
+                                                                                                                 Many techniques try to increase the amount of minority
+                                            Cardiovascular diseases are demanding attention since they
+                                                                                                              class samples. The simplest way is to repeat samples randomly.
+                                         are among the leading causes of death in the world. Cardiac
+                                                                                                              Other techniques try to use some criterion to select the
+                                         arrhythmia consists of disturbances that alter heart rate, consti-
+                                                                                                              samples, such as a level of difficulty that they have according
+                                         tuting a severe public health problem. The electrocardiogram
+                                                                                                              to the classification model. Some more elaborate techniques to
+                                         (ECG) is the process of recording the heart electrical activity
+                                                                                                              generate extra samples trying to follow the original distribution
+                                         over some time using electrodes. ECG can be handy to
+                                                                                                              of the data, however, much class noise is inserted in the dataset
+                                         assist the cardiac arrhythmia diagnostic as it is a non-invasive
+                                                                                                              since samples may follow an incorrect assumption of that
+                                         method of detecting abnormal cadences of the heartbeats.
+                                                                                                              distribution.
+                                            Cardiologists often perform human arrhythmia detection
+                                         using ECG because of the high error rates of the comput-                To solve this problem, in this paper, we propose a generative
+                                         erized approaches. In order to perform arrhythmias detection         adversarial model architecture using InfoGAN to try to learn
+                                         using ECG, a machine learning algorithm must recognize the           the data distributions and generate synthetic samples of ECG
+                                         distinct arrhythmias wave types and its distinct forms. Detect       beats. The idea is to balance the dataset with sintentic data
+                                         arrhythmias is a difficult task due to the variability in wave       generated by an InfoGAN. We call this method adversarial
+                                         morphology between patients as well as the presence of noise.        oversampling. Moreover, we compared our proposed method
+                                         The considerable intra-class variation makes the challenger          with three other traditional oversampling methods: Rando-
+                                         even harder.                                                         mOversampler, SMOTE, and ADASYN.
+                                            Most of the current approaches to deal with arrhythmia clas-         The MIT-BIH arrhythmia database was used to perform
+                                         sification make use of feature extraction procedures. However,       experiments in order to verify if a CNN training using the
+                                         these approaches require a prior and specific knowledge about        proposed method outperforms the ones trained using standard
+                                         the characteristics that are essential to represent a specific       oversampling approaches.
+                                         type of heartbeat. A possible strategy is taking abnormal               In section II, we described related work. Section III presents
+                                         beats as crucial points and analyzing the recurrence of the          the proposed method. Additionally, the experiments and results
+                                         anomalies along the segment of the ECG. To overcome the              are reported in Section IV and Section V, respectively. Section
+                                         previously mentioned limitations, considering the difficulty         VI presents final remarks and future works.
+Fig. 1. Pipeline of the proposed model: Pre-processing (converts signals into 2D images of single beats); InfoGAN (generates synthetic samples to balance
+the dataset); CNN (classifies the database balanced).
+
+
+
+                         II. BACKGROUND                                       a density distribution as a criterion for automatically deciding
+   This section describes the subjects that served as a basis                 the needed number of synthetic samples to be generated for
+for developing this work. First, we present the standard over-                each example of the minority class. So, for each example of
+sampling methods used in this paper. After that, we describe                  the minority class xi , gi synthetic examples are generated.
+Generative Adversarial Networks (GAN) in generic terms.
+                                                                              B. Generative Adversarial Networks
+A. Oversampling Methods                                                          GANs [14] have shown remarkable success as a framework
+   The present work makes use of synthetic samples generated                  for training models to produce realistic-looking data. GANs
+by InfoGAN to perform a dataset balancing. To investigate                     are composed of two networks which compete in other to im-
+the effectiveness of this approach, we compare to three other                 prove their performance. Given a training set X, the Generator,
+classical methods for data balancing: RandomOversampler,                      G(x), takes as input a noise vector and tries to produce sample
+SMOTE, and ADASYN. These methods are widespread in                            data similar to real data presented in the training set.
+the literature and are widely used to deal with unbalanced                       A Discriminator network, D(x), is a binary classifier that
+datasets [5] [6] [7] [8] [9] [10]. All methods are available in               tries to distinguish between the real data exhibited in the
+the Imblearn library [11].                                                    training set X and the fake data generated by the Generator.
+   1) Random OverSampler: It consists of the most straight-                   So, given a set of training data, GANs can learn to estimate
+forward approach to performing Oversampling. The method                       the underlying probability distribution of the training data.
+suggests choosing samples from the minority class randomly                       Based on traditional GAN models, Xi Chen et al. [15]
+and with replacement.                                                         (2016) designed the infoGAN, which applies concepts from
+   2) SMOTE: Synthetic Minority Over-sampling Technique:                      Information Theory to transform some of the noise terms into
+To oversample with SMOTE [12], is took a sample from the                      latent codes that have systematic and predictable effects on the
+dataset, and consider its k nearest neighbors (in feature space).             outcome. InfoGAN performs its task by splitting the Generator
+To create a synthetic data point, take the vector between one                 input code into two parts: the traditional noise vector and a
+of those k neighbors, and the current data point. Basically,                  new latent code vector. The codes are then made meaningful
+synthesizes new instances between existing (real) minority                    by maximizing the Mutual Information between the code and
+instances. SMOTE draws lines between existing minority                        the generator output. It allows convergence to happen much
+samples and then generate new, synthetic minority instances                   faster than in traditional GANs.
+somewhere on these lines.                                                        Recently, the use of synthetic samples generated by GANs
+   3) ADASYN: Adaptive Synthetic Sampling Approach for                        has been gaining strength with the results obtained in some
+Imbalanced Learning: The basic idea behind ADASYN [13] is                     works. Anthreas Antoniou et al. (2018) [16] presented the Data
+to consider the level of difficulty in learning different samples             Augmentation Generative Adversarial Networks (DAGAN).
+from minority class examples and use to weighted distribu-                    It has been empirically shown that the samples generated
+tion for each class. The method generates synthetic data for                  by DAGAN generally yielded gains of accuracy, reaching
+minority class examples that are harder to learn compared                     improvements of up to 13% in experiments. M. Frid-Adar et
+to those minority examples that are easier to learn. That is,                 al. (2018) [17] used synthetic samples generated by a Deep
+forcing the learning algorithm to focus on regions of difficult               Convolutional GAN (DCGAN) to perform Data Augmentation
+learning. The main idea of the ADASYN algorithm is to use                     in order to improve liver lesion classification. It achieved an
+                            Fig. 2. Samples of heartbeat after the pre-processing step with their respective classes.
+
+
+
+improvement of 7% using synthetic augmentation over the                      As we need to generate new images, the Generator (G) and
+classic augmentation methods. F. Bolelli et al. (2018) [18]               Discriminator (D) are both composed by convolutional layers.
+used GANs in Skin Lesion Segmentation problem. The GANs                   The Generator also has upsampling and batch normalization
+was used to augment data in the image segmentation field, and             layers. At the end of the model, we employed a Tanh activation
+a Convolutional Deconvolutional Neural Network (CDNN) to                  function to have activation between −1 and 1.
+generate lesion segmentation mask from dermoscopic images.                   Therefore, the G takes a standard normal random noise of
+   Among the surveys, we have no find any approach to                     size 64×1, which turns on a synthetic image at the end of the
+address the use of GAN to deal with unbalanced datasets                   model. The D takes both fake and real images (not at same
+involving health problems, therefore, more like the Oversam-              time) with size 112×112. The D is composed of 2-dimensional
+pling we have is the use of GAN to Data Augmentation for a                convolutional layers, dropout to minimize overfitting, batch
+whole dataset.                                                            normalization, Leaky ReLU [20] as activation function, and
+                                                                          Sigmoid function as the output of the model. The auxiliary
+          III. H EARTBEAT A NOMALY D ETECTION
+                                                                          Q Net is composed of Fully Connected layers and a Softmax
+           USING A DVERSARIAL OVERSAMPLING
+                                                                          function as output to give us the current label of the synthetic
+   In this section, we describe the complete pipeline of the              image.
+model proposed in this work. The Figure 1 shows in a                         The Figure 3(a) shows at left the architecture of the Info-
+summarized way the flow of the solution. Three phases com-                GAN Generator, and a detailed architecture of the Discrimi-
+prise the method: Pre-processing, Adversarial Oversampling                nator (D) and Auxiliary Q Net at right.
+(InfoGAN), and CNN classification.                                           To train the InfoGAN, we use batches of noise generated
+  1) Pre-processing: The complete long ECG records are                    images as fake class and batches of real images as the true
+     preprocessed to extract all individual beats and produce             class. So, the traditional steps to train a conventional GAN is
+     heartbeat centered binary images;                                    performed. We pass a batch of samples with some fake data,
+  2) Adversarial Oversampling: The InfoGAN is used to                     and a batch of samples with real data to the Discriminator to
+     generate synthetic adversarial images for the minority               learn how to differentiate fake data from the real data. The
+     heartbeat classes;                                                   InfoGAN training is shown in the Figure 3(b).
+  3) Trainning and Classification: The new balanced dataset                  After training some epochs of the Discriminator and the
+     is used to training a 2D CNN to image classification.                Q Net, we freeze D weights and train only the Generator
+                                                                          model at the combined model. Consequently, the Generator
+A. Pre-processing
+                                                                          model iteratively learns how to generate synthetic images
+   After the acquisition of the signal, a pre-processing was              that follow the real distribution of the training images. The
+performed to collect a range of 25 time-slices of the signal.             general InfoGAN objective function is given by the lower-
+Those images have the peak of the heartbeat in its central                bound approximation to the Mutual Information as follows:
+region. Therefore, each peak centralized image is classified
+individually. Then, we produced binary images with 112×112
+resolution corresponding to the peaks. With this, the database            min(G, Q)max(D)Vinf oGAN (D, G, Q) = V (D, G) − λLI (G, Q)
+that was previously composed by a long 1-dimensional ECG
+series is now composed of several 2-dimensional labeled                      We adopted the following methodology to generate syn-
+images. The Figure 2 shows the data after all pre-processing.             thetic samples: Given training data samples from the minority
+                                                                          classes VEB and APC, we train the InfoGAN for both samples.
+B. Adversarial Oversampling                                               The training/generation of images was iterative. The max
+   After a search of the existing GAN models, rapid experi-               number of epochs was 100 thousand, and at every 500 epochs,
+ments were carried out to evaluate the speed of convergence,              we save a snapshot of the generator network model and some
+robustness to mode collapse and visual quality of the synthetic           synthetic images. When the training was finished, we looked
+generated images. We evaluated in details the traditional GAN,            at all samples and chose snapshots that generated images with
+the Wasserstein GAN [19], and InfoGAN. Finally, we chose                  a realistic appearance. Hence, we are not considering the loss,
+the InfoGAN as the adversary model.                                       but looking only to the quality of generated images.
+                             (a)                                                         (b)                            (c)
+                                 Fig. 3. (a) InfoGAN Architecture. (b) InfoGAN Training. (c) CNN Architecture.
+
+
+
+C. Training and Classification                                                                    IV. E XPERIMENTS
+   A Convolutional Neural Network (CNN) was chosen as the                   This section describes the experiments that investigate if
+classification model. The Figure 3(c) presents the high-level            Adversarial Oversampling could be used to balance the train-
+architecture of the proposed CNN. The network takes as input             ing data set. That is, whether synthetic data generated by a
+a 2D dimensional array, which represents a sampled heartbeat             GAN could improve the overall classification accuracy. We
+image with 112 × 112 dimensions. Two convolutional layers                compare the performance of this Adversarial Oversampling
+compose the model. The kernels initialization follow the He              with the RandomOversampler, SMOTE, and ADASYN.
+Initialization approach [21]. We used Rectified Linear Unit                 In this experiments, we use the MIT-BIH Arrhythmia
+(ReLU) [22] as the activation function.                                  Database, which is a classical arrhythmia database. This
+                                                                         dataset contains 48 half-hour excerpts of two-channel ambula-
+                    ReLU (x) = max(0, x)                          (1)    tory ECG 360hz recordings obtained from 47 subjects studied
+                                                                         by the BIH Arrhythmia Laboratory between 1975 and 1979.
+   To prevent overfitting, we employ some layers with the                [25]. From the MIT-BIH Arrhythmia dataset, we collect a
+dropout training strategy [23] and also batch normalization              number of samples from seven different classes as shown in
+[24] to accelerate training. As subsampling method, we use               Table II.
+simple AveragePooling layers. At the end of the network, we                 The CNN training consisted of 20 epochs and an early-stop
+used a Softmax layer to provide the output as probabilities of           if the loss in the validation set did not decrease considering
+each heartbeat class. We use the Adam optimizer [17] with the            the previous epoch. The experiments were repeated ten times,
+default parameters and interrupted the training when the loss            where 20% the data was used as the test set, 10% as the
+on the validation set stopped to decrease. Given the data set X,         validation set, and 70% to training.
+for a single sample of Xi from X, the network training consists             Considering the methodology used to generate InfoGAN
+in optimize the following cross-entropy objective function:              synthetic samples, we split the original dataset between the
+                                                                         training set and test set, and only the train set was used
+                                 M
+                                 X                                       to InfoGAN training. Considering only the training set, we
+                 L(Xi , c) = −         y(o,c) p(o,c)              (2)    generate how many samples were necessary to reach a total
+                                 c=1
+                                                                         of 1000 samples as the other classes have around this amount.
+   In the previously equation, M is the number of classes or             In this way, the new training set became relatively balanced.
+rhythms that a signal can assume, y is a binary indicator (0 or             After generating the synthetic samples, we perform the
+1) if class label c is the correct classification for observation        Adversarial Oversampling iteratively added the samples to the
+(heartbeat) o, and p is the predicted probability observation o          network training and observed the F1 score for each class.
+is of class c.                                                           Then we used the same training and test environment and
+                                                                       TABLE I
+                                                       F1 SCORE FOR EACH OVERSAMPLING METHOD
+
+                   Class         Original       Adversarial Oversampling    ADASYN        SMOTE        Random Oversampler
+                   APC          0.68 ± 0.03            0.80 ± 0.03         0.73 ± 0.02   0.71 ± 0.02        0.72 ± 0.03
+                   Normal       0.98 ± 0.01             0.98 ± 0.01        0.97 ± 0.02   0.95 ± 0.02        0.94 ± 0.01
+                   LBBB         0.96 ± 0.02             0.96 ± 0.02        0.95 ± 0.01   0.96 ± 0.01        0.93 ± 0.01
+                   PAB          0.92 ± 0.01             0.92 ± 0.01        0.92 ± 0.01   0.91 ± 0.01        0.91 ± 0.02
+                   PVC          0.93 ± 0.01             0.93 ± 0.02        0.91 ± 0.02   0.91 ± 0.01        0.89 ± 0.02
+                   RBB          0.93 ± 0.02             0.94 ± 0.01        0.93 ± 0.01   0.92 ± 0.01        0.92 ± 0.01
+                   VEB          0.43 ± 0.02            0.81 ± 0.02         0.61 ± 0.03   0.55 ± 0.02        0.49 ± 0.02
+                   Total        0.83 ± 0.02            0.91 ± 0.02         0.86 ± 0.02   0.84 ± 0.01        0.83 ± 0.02
+
+
+
+compare the Adversarial Oversampling with the traditional                  objective was to observe if the APC and VEB minority classes
+oversampling methods. The classifier for each oversampling                 would perform better in the classification, without decreasing
+methods was the proposed CNN method.                                       the performance of the other classes.
+                                                                              The Figure 5a and the Figure 5b show the CNN performance
+                V. R ESULTS AND D ISCUSSION                                for each class when 150 and 100 samples are added until
+   In this section, the results of the proposed Adversarial                reaching the total number of 1000. Both graphs contain a mean
+Oversampling approach are compared to the ones provided                    F1 score of 10 executions.
+by traditional oversampling methods. As shown in the second                   After observing the variation in CNN performance as syn-
+column in Table I, the CNN produced low performance in the                 thetic samples are inserted into the training set, we tested the
+original (unbalanced) dataset influenced by the F1 score for               CNN using the best amount of synthetic samples for each
+the minority classes VEB and APC.                                          of both classes. As shown in Figure 5a and Figure 5b, the
+   Consequently, this experiment aims to minimize this prob-               best performance of CNN was observed using 600 synthetic
+lem by generating high-quality synthetic samples to minority               samples of the APC class and 600 synthetic samples of the
+classes to get a more balanced train set. Although it had a                VEB class. The Table I shows the F1-score for each class using
+slightly smaller amount, the PAB class was not chosen to be                Adversarial Oversampling compared to the RandomOverSam-
+oversampled since it did not influence the performance of the              pler, ADASYN, SMOTE oversampling methods.
+overall classification.                                                       As we can see, the results favor the hypothesis that the
+   The Figure 4 shows three adversarial samples for the                    Adversarial Oversampling could be used to perform the dataset
+classes APC and VEB. On the left side, we have two images                  balancing taking into account the performance observed in
+representing the original samples of the mentioned clasess.                Table I, which was higher than obtained by oversampling
+                                                                           using RandomOversampler, SMOTE and ADASYN for the
+   To observe whether Adversarial Oversampling could be
+                                                                           two minority classes, APC and VEB.
+used to perform the dataset balancing, the F1 score for each
+                                                                              One possible explanation for this may be the fact that
+class was observed as synthetic samples were inserted. The
+                                                                           InfoGAN generates new samples, not just repeats them as
+
+                          TABLE II
+          MIT-BIH A RRHYTHMIA DATASSET D ESCRIPTION
+
+
+                    Heartbeat Type                      # Samples
+
+      Atrial Premature Contraction             APC         243
+
+      Normal                                  Normal       1079
+
+      Left Bundle Branch Block                LBBB         1051
+
+      Paced Beat                               PAB         895
+
+      Premature Ventricular Contraction        PVC         1012
+
+      Right Bundle Branch                      RBB         1006
+
+      Ventricular Escape Beat                  VEB         106
+                                                                                   Fig. 4. Adversarial samples from VEB and APC classes.
+                              (a)                                                                         (b)
+                       Fig. 5. Mean of F1-score for each class when (a) VEB and (b) APC synthetic samples are used.
+
+
+
+in the case of RandomOversampler. Besides, it can generate                                     ACKNOWLEDGMENT
+samples that follow the original distribution of the classes,
+                                                                        We would like to thank CAPES and CNPq (Brazilian re-
+reducing the occurrence of class noise, which is a common
+                                                                      search agencies) for the financial support. In addition the E.life
+risk in traditional Oversampling methods.
+                                                                      Brazil for making the infrastructure available for conducting
+                     VI. C ONCLUSION                                  the experiments.
+   When using deep learning for signal analysis, such as ECG,
+                                                                                                    R EFERENCES
+through convolutional neural networks, convolutions with one
+dimension consider the signal as a time series. However,               [1] S. Kiranyaz, T. Ince, and M. Gabbouj, “Real-time patient-specific ecg
+according to the obtained results, we can observe that the                 classification by 1-d convolutional neural networks,” IEEE Transactions
+                                                                           on Biomedical Engineering, vol. 63, pp. 664–675, March 2016.
+bi-dimensional approach used in our method obtained an                 [2] P. Sodmann, M. Vollmer, N. Nath, and L. Kaderali, “A convolutional
+excellent performance. Only the minority classes did not have              neural network for ecg annotation as the basis for classification of car-
+a satisfactory classification.                                             diac rhythms,” Physiological Measurement, vol. 39, no. 10, p. 104005,
+                                                                           2018.
+   Concerning the performance of the InfoGAN to generate               [3] zal Yldrm, P. Pawiak, R.-S. Tan, and U. R. Acharya, “Arrhythmia
+synthetic samples, we show that these samples have a variation             detection using deep convolutional neural network with long duration
+within the class and maintain the original characteristics                 ecg signals,” Computers in Biology and Medicine, vol. 102, pp. 411 –
+                                                                           420, 2018.
+of the signal, which is fundamental. So, we can see that               [4] B. Pourbabaee, M. J. Roshtkhari, and K. Khorasani, “Deep convolutional
+and Adversarial Oversampling can be used to perform an                     neural networks and learning ecg features for screening paroxysmal
+dataset balancing, generating new synthetics samples of the                atrial fibrillation patients,” IEEE Transactions on Systems, Man, and
+                                                                           Cybernetics: Systems, vol. 48, pp. 2095–2104, Dec 2018.
+minority classes on the dataset and that the generated and             [5] J. L. Leevy, T. M. Khoshgoftaar, R. A. Bauder, and N. Seliya, “A survey
+selected samples were able to decrease the effects of the                  on addressing high-class imbalance in big data,” Journal of Big Data,
+unbalance data significantly. The proposed approach improved               vol. 5, pp. 1–30, 2018.
+                                                                       [6] R. K. Shahzad, “Android malware detection using feature fu-
+the performance of CNN in the classification of VEB and                    sion and artificial data,” 2018 IEEE 16th Intl Conf on Depend-
+APC types. Besides, for the used dataset the Adversarial                   able, Autonomic and Secure Computing, 16th Intl Conf on Per-
+Oversampling proposed overcomes traditional methods such                   vasive Intelligence and Computing, 4th Intl Conf on Big Data
+                                                                           Intelligence and Computing and Cyber Science and Technology
+as RandomOversampler, SMOTE, and ADASYN.                                   Congress(DASC/PiCom/DataCom/CyberSciTech), pp. 702–709, 2018.
+   As future works we suggest the elaboration of a more                [7] X. R. Palou, C. Turino, A. Steblin, M. S. de-la Torre, F. Barbé,
+automatic form of generating and selection samples, possibly               and E. Vargiu, “Comparative analysis of predictive methods for early
+                                                                           assessment of compliance with continuous positive airway pressure
+observing only the loss, without the necessity of human                    therapy,” in BMC Med. Inf. and Decision Making, 2018.
+interference to select good synthetic samples to use. Also,            [8] S. Wang, Z. Li, W. Chao, and Q. Cao, “Applying adaptive over-
+we suggest evaluating the performance of new approaches                    sampling technique based on data density and cost-sensitive svm to
+such as Unrolled GAN [26]. The base code for this work is                  imbalanced learning,” in The 2012 International Joint Conference on
+                                                                           Neural Networks (IJCNN), pp. 1–8, June 2012.
+available publicly online (https://github.com/JeffersonLPLima/         [9] T. Liu, Y. Liang, and W. Ni, “Minority identification for imbalanced
+adversarial oversampling).                                                 dataset,” in Proceedings of the 31st Chinese Control Conference,
+                                                                           pp. 3897–3902, July 2012.
+                                                                      [10] B. Zhou, C. Yang, H. Guo, and J. Hu, “A quasi-linear svm combined
+                                                                           with assembled smote for imbalanced data classification,” in The 2013
+                                                                           International Joint Conference on Neural Networks (IJCNN), pp. 1–7,
+                                                                           Aug 2013.
+[11] G. Lemaı̂tre, F. Nogueira, and C. K. Aridas, “Imbalanced-learn: A             [19] M. Arjovsky, S. Chintala, and L. Bottou, “Wasserstein generative adver-
+     python toolbox to tackle the curse of imbalanced datasets in machine               sarial networks,” in Proceedings of the 34th International Conference
+     learning,” Journal of Machine Learning Research, vol. 18, no. 17, pp. 1–           on Machine Learning (D. Precup and Y. W. Teh, eds.), vol. 70 of
+     5, 2017.                                                                           Proceedings of Machine Learning Research, (International Convention
+[12] N. Chawla, K. Bowyer, L. O. Hall, and W. Philip Kegelmeyer, “Smote:                Centre, Sydney, Australia), pp. 214–223, PMLR, 06–11 Aug 2017.
+     Synthetic minority over-sampling technique,” J. Artif. Intell. Res. (JAIR),   [20] B. Xu, N. Wang, T. Chen, and M. Li, “Empirical evaluation of rectified
+     vol. 16, pp. 321–357, 01 2002.                                                     activations in convolutional network,” 05 2015.
+[13] H. He, Y. Bai, E. A. Garcia, and S. Li, “Adasyn: Adaptive synthetic           [21] K. He, X. Zhang, S. Ren, and J. Sun, “Delving deep into rectifiers: Sur-
+     sampling approach for imbalanced learning,” in 2008 IEEE Interna-                  passing human-level performance on imagenet classification,” in 2015
+     tional Joint Conference on Neural Networks (IEEE World Congress on                 IEEE International Conference on Computer Vision (ICCV), pp. 1026–
+     Computational Intelligence), pp. 1322–1328, June 2008.                             1034, Dec 2015.
+[14] I. Goodfellow, J. Pouget-Abadie, M. Mirza, B. Xu, D. Warde-Farley,
+                                                                                   [22] V. Nair and G. E. Hinton, “Rectified linear units improve restricted boltz-
+     S. Ozair, A. Courville, and Y. Bengio, “Generative adversarial nets,” in
+                                                                                        mann machines,” in Proceedings of the 27th International Conference
+     Advances in Neural Information Processing Systems 27 (Z. Ghahramani,
+                                                                                        on International Conference on Machine Learning, ICML’10, (USA),
+     M. Welling, C. Cortes, N. D. Lawrence, and K. Q. Weinberger, eds.),
+                                                                                        pp. 807–814, Omnipress, 2010.
+     pp. 2672–2680, Curran Associates, Inc., 2014.
+[15] X. Chen, Y. Duan, R. Houthooft, J. Schulman, I. Sutskever, and                [23] N. Srivastava, G. Hinton, A. Krizhevsky, I. Sutskever, and R. Salakhut-
+     P. Abbeel, “Infogan: interpretable representation learning by informa-             dinov, “Dropout: A simple way to prevent neural networks from overfit-
+     tion maximizing generative adversarial nets,” in Advances in Neural                ting,” Journal of Machine Learning Research, vol. 15, pp. 1929–1958,
+     Information Processing Systems, 2016.                                              2014.
+[16] A. Antoniou, A. Storkey, and H. Edwards, “Data augmentation genera-           [24] S. Ioffe and C. Szegedy, “Batch normalization: Accelerating deep
+     tive adversarial networks,” 2018.                                                  network training by reducing internal covariate shift,” in Proceedings
+[17] M. Frid-Adar, E. Klang, M. Amitai, J. Goldberger, and H. Greenspan,                of the 32Nd International Conference on International Conference on
+     “Synthetic data augmentation using gan for improved liver lesion clas-             Machine Learning - Volume 37, ICML’15, pp. 448–456, JMLR.org,
+     sification,” in 2018 IEEE 15th International Symposium on Biomedical               2015.
+     Imaging (ISBI 2018), pp. 289–293, April 2018.                                 [25] G. B. Moody and R. G. Mark, “The impact of the mit-bih arrhyth-
+[18] F. Bolelli, F. Pollastri, R. P. Palacios, and C. Grana, “Improving skin            mia database,” IEEE Engineering in Medicine and Biology Magazine,
+     lesion segmentation with generative adversarial networks,” in 2018 IEEE            vol. 20, pp. 45–50, May 2001.
+     31st International Symposium on Computer-Based Medical Systems                [26] L. Metz, B. Poole, D. Pfau, and J. Sohl-Dickstein, “Unrolled generative
+     (CBMS), pp. 442–443, June 2018.                                               adversarial networks,” CoRR, vol. abs/1611.02163, 2016.
+

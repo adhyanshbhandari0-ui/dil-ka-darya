@@ -1,0 +1,581 @@
+                                                         C REATING FAIR M ODELS OF ATHEROSCLEROTIC
+                                                                  C ARDIOVASCULAR D ISEASE
+
+
+                                                                        Stephen Pfohl∗                                  Ben Marafino †
+                                                                   spfohl@stanford.edu                             marafino@stanford.edu
+                                                                     Stanford Center for                              Stanford Center for
+
+
+
+
+arXiv:1809.04663v3 [cs.LG] 14 Jun 2019
+                                                                Biomedical Informatics Research                  Biomedical Informatics Research
+                                                                     Stanford University                              Stanford University
+
+
+                                                                          Adrien Coulet†                               Fatima Rodriguez
+                                                                     acoulet@stanford.edu                           frodrigu@stanford.edu
+                                                                        Stanford Center for                        Cardiovascular Medicine and
+                                                                  Biomedical Informatics Research                    Cardiovascular Institute
+                                                                       Stanford University                             Stanford University
+                                                                      Université de Lorraine,
+                                                                        CNRS, Inria, Loria
+
+                                                                     Latha Palaniappan                                   Nigam H. Shah
+                                                                   lathap@stanford.edu                                nigam@stanford.edu
+                                                              Primary Care and Population Health                        Stanford Center for
+                                                                      Stanford University                         Biomedical Informatics Research
+                                                                                                                       Stanford University
+
+                                                                                                   A BSTRACT
+                                                    Guidelines for the management of atherosclerotic cardiovascular disease (ASCVD) recommend the
+                                                    use of risk stratification models to identify patients most likely to benefit from cholesterol-lowering
+                                                    and other therapies. These models have differential performance across race and gender groups with
+                                                    inconsistent behavior across studies, potentially resulting in an inequitable distribution of beneficial
+                                                    therapy. In this work, we leverage adversarial learning and a large observational cohort extracted
+                                                    from electronic health records (EHRs) to develop a "fair" ASCVD risk prediction model with reduced
+                                                    variability in error rates across groups. We empirically demonstrate that our approach is capable
+                                                    of aligning the distribution of risk predictions conditioned on the outcome across several groups
+                                                    simultaneously for models built from high-dimensional EHR data. We also discuss the relevance of
+                                                    these results in the context of the empirical trade-off between fairness and model performance.
+
+                                         1       Introduction
+                                         Atherosclerotic cardiovascular disease (ASCVD), which includes heart attack, stroke, and fatal coronary heart disease,
+                                         is a major cause of mortality and morbidity worldwide, as well as in the U.S., where it contributes to 1 in 3 of all
+                                         deaths–many of which are preventable [1]. In deciding whether to prescribe cholesterol-lowering therapies to prevent
+                                         ASCVD, physicians are often guided by risk estimates yielded by the Pooled Cohort Equations (PCEs). The PCEs
+                                             ∗
+                                              Correspondence to Stephen Pfohl at spfohl@stanford.edu
+                                             †
+                                              These authors contributed equally
+                                              This work has been accepted to the AAAI/ACM Conference on Artificial Intelligence, Ethics, and Society, 2019. This version of
+                                         the work contains an updated set of experiments based on a refined patient cohort and outcome definition that is more relevant for the
+                                         intended clinical context. In this version, patients are excluded from the cohort on the basis of prior prescription of lipid lowering
+                                         drugs rather than antihypertensive drugs and fatal coronary heart disease is differentiated from coronary heart disease in the outcome
+                                         definition.
+provide a proportional hazards model [2] that leverages nine clinical measurements to predict the 10-year risk of a first
+ASCVD event. However this model has been found to overestimate risk for female patients [3], Chinese patients [4]
+or globally [5], as well as also underestimate risk for other groups such as Korean women [6]. Such mis-estimation
+results in an inequitable distribution of the benefits and harms of ASCVD risk scoring, because incorrect risk estimates
+can expose patients to substantial harm through both under- or over-treatment; potentially leading to preventable
+cardiovascular events or side effects from unnecessary therapy, respectively.
+The inability of the PCEs to generalize to diverse cohorts likely owes to both under-representation of minority
+populations in the cohorts used to develop the PCEs and shifts in medical practice and lifestyle patterns in the decades
+since data collection for those cohorts. In attempting to correct for these patterns, one recent study [5] updated the
+PCEs using data from contemporary cohorts and demonstrated that doing so reduced the number of minority patients
+incorrectly misclassified as being high or low risk. Similar results were observed in the same study with an approach
+using an elastic net classifier, rather than a proportional hazards model. However, neither approach is able to explicitly
+guarantee an equitable distribution of mis-estimation across relevant subgroups, particularly for race- and gender-based
+subgroups.
+To account for under-represented minorities and to take advantage of the wider variety of variables made available
+in electronic health records (EHRs), we derive a large and diverse modern cohort from EHRs to learn a prediction
+model for ASCVD risk. Furthermore, we investigate the extent to which we can encode algorithmic notions of fairness,
+specifically equality of odds [7], into the model to encourage an equitable distribution of performance across populations.
+To the best of our knowledge, our effort is the first to explore the extent to which this formal fairness metric is achievable
+for risk prediction models built using high-dimensional data from the EHR. We show that while it is feasible to develop
+models that achieve equality of odds, we emphasize that this process involves trade-offs that must be assessed in a
+broader social and medical context [8].
+
+
+2     Background and Related Work
+
+2.1   ASCVD Risk Prediction and EHRs
+
+The PCEs are based on age, gender, cholesterol levels, blood pressure, and smoking and diabetes status and were
+developed by pooling data from five large U.S. cohorts [2] composed of white and black patients, with white patients
+constituting a majority. Recently, attempts [5] were made to update the PCEs to improve model performance for race-
+and gender-based subgroups using elastic net regression and data from modern prospective cohorts. However, this
+effort focused on demographic groups and variables already used to develop the PCEs and did not consider other
+populations or clinical measurements. The increasing adoption of EHRs offers opportunities to deploy and refine
+ASCVD risk models. Efforts have recently been undertaken to apply and refine existing models, including the PCEs and
+the Framingham score, to large EHR-derived cohorts and characterize their performance in certain subgroups [9, 10].
+Beyond ASCVD risk prediction, there exist many recent works that develop prediction models with EHRs, which are
+reviewed in [11].
+
+2.2   Fair Risk Prediction
+
+We consider the case where supervised learning is used to estimate a function f (X) that approximates the conditional
+distribution p(Y |X), given N samples {xi , yi , zi }N
+                                                     i=1 drawn from the distribution p(X, Y, Z). We take X ∈ X = R
+                                                                                                                       m
+
+to correspond to a vector representation of the medical history extracted from the EHR prior to a patient-specific index
+time ti ; Y ∈ Y = {0, 1} to be a binary label, which for patient i, indicates the presence of the outcome observed in the
+EHR in the time frame [ti , ti + wi ], where wi is a parameter specifying the amount of time following the index time
+used to derive the outcome; and Z ∈ Z = {0, . . . , k − 1} indicates a sensitive attribute, such as race, gender, or age,
+with k groups. The output of the learned function f (X) ∈ [0, 1] is then thresholded with respect to a value T to yield a
+prediction Ŷ ∈ {0, 1}.
+One standard metric for assessing the fairness of a classifier with respect to a sensitive attribute Z is demographic parity
+[12], which evaluates the independence between Z and the prediction Ŷ . Formally, the demographic parity criterion
+may be expressed as
+                                      p(Ŷ |Z = Zi ) = p(Ŷ |Z = Zj ) ∀ Zi , Zj ∈ Z.                                      (1)
+However, optimizing for demographic parity is of limited use for clinical risk prediction, because doing so may preclude
+the model from considering relevant clinical features associated with the sensitive attribute and the outcome, thus
+decreasing the performance of the model for all groups [13].
+
+
+                                                              2
+Another related metric is equality of odds [7], which stipulates that the prediction Ŷ be conditionally independent of Z,
+given the true label Y . Formally, satisfying equality of odds implies that
+
+                        p(Ŷ |Z = Zi , Y = Yk ) = p(Ŷ |Z = Zj , Y = Yk ) ∀ Zi , Zj ∈ Z; Yk ∈ Y.                         (2)
+
+From this, it can be seen that, if equality of odds is achieved, then for a fixed threshold T , both the false positive (FPR)
+and false negative rates (FNR) are equal across all pairs of groups defined by Z. Compared to demographic parity,
+equality of odds is more appropriate in a clinical setting, since it does not necessarily preclude the learning of the
+optimal predictor in the case that a true relationship between sensitive attribute and the outcome exists [7].
+Furthermore, this definition can be extended to the case of a continuous risk score by requiring that
+
+                    p(f (X)|Z = Zi , Y = Yk ) = p(f (X)|Z = Zj , Y = Yk ) ∀ Zi , Zj ∈ Z; Yk ∈ Y.                         (3)
+
+In this case, the distribution of the predicted probability of the outcome conditioned on whether the event occurred
+or not should be matched across groups of a sensitive attribute. Formulation 3 is stronger than 2 since it implies that
+equality of odds is achieved for all possible thresholds, thus requiring that the same ROC curve be attained for all
+groups. This is desirable since it provides the end-user the ability to freely adjust the decision threshold of the model
+without violating equality of odds.
+Finally, we also note that satisfying equality of odds for a continuous risk score may be reduced to the problem of
+minimizing a divergence over each pair (Zi , Zj ) of distributions referenced in equation (3). Adversarial learning
+procedures [14] are well-suited to this problem in that they provide a flexible framework for minimizing the divergence
+over distributions parameterized by neural networks. As such, several related works [15, 16, 17, 18] have demonstrated
+the benefit of augmenting a classifier with an adversarial discriminator in order to align the distribution of predictions
+for satisfying fairness constraints.
+
+2.3   Approaches for Achieving Fairness
+
+Despite considerable interest in the ethical implications of implementing machine learning in healthcare [19, 20],
+relatively little work exists characterizing the extent to which risk prediction models developed with EHR data satisfy
+formal fairness constraints.
+Adversarial approaches for satisfying fairness constraints (in the form of demographic parity) have been explored
+in several recent works in non-healthcare domains. One approach, [17], in the context of image anonymization,
+demonstrated that representations satisfying demographic parity could be learned by augmenting a predictive model
+with both an autoencoder and an adversarial component. The adversarial approach to fairness was further investigated
+by [16] with a gradient reversal objective for data that is imbalanced in the distribution of both the outcome and in the
+sensitive attribute.
+In attempting to address the limitations of demographic parity as a metric, [7] introduced equality of odds as an
+alternative and devised post-processing methods to achieve it for fixed-threshold classifiers. Recently, [15] and [18]
+generalized the adversarial framework to achieve equality of odds by providing the discriminator access to the value of
+the outcome.
+Both demographic parity and equality of odds are referred to as group fairness metrics since they are concerned with
+encouraging an invariance of some property of a classifier over groups of a sensitive attribute. While straightforward to
+compute and reason about, optimizing for these metrics may produce models that are discriminatory over structured
+subgroups within and across groups of sensitive attributes, constituting a form of fairness gerrymandering [21]. The
+competing notion of individual fairness [12] and may be able to address these concerns by assessing whether a model
+produces similar outputs for similar individuals. However, this notion is often of limited practical use due to the
+challenges of developing a domain-specific similarity metric that encodes desired notions of fairness.
+Recent efforts [22] have investigated an alternative to both group and individual fairness metrics with a process that audits
+a classifier to discover subgroups for which the model is under-performing and iteratively improve model performance
+for those groups, ultimately resulting in a non-negative change in model performance for all computationally-identifiable
+subgroups.
+The closest related work examining the fairness of risk prediction models in healthcare is [23], which, in the context of
+mortality prediction in intensive care units, argued that any trade-off between model performance and fairness across
+subgroups is undesirable. They propose that the prediction error should be decomposed in terms of bias, variance, and
+noise and that the relative contribution of these terms be used to guide additional data collection.
+
+
+                                                             3
+Table 1: Cohort characteristics. The number of patients extracted, the incidence of the ASCVD outcome and the average
+length of follow-up for each subgroup are shown.
+
+                        Group          Count      ASCVD Incidence            Follow-up Length (Years)
+                        Asian         34,156                   0.0144                           2.83
+                        Black          9,018                   0.0271                           2.76
+                        Hispanic      21,587                   0.0152                           2.81
+                        Other         19,100                     0.013                          2.78
+                        Unknown       30,300                  0.00512                           2.96
+                        White        136,348                   0.0141                           2.93
+                        Female       154,266                   0.0116                           2.87
+                        Male          96,074                   0.0167                           2.93
+                        40-55        117,510                  0.00603                           2.95
+                        55-65         64,477                   0.0128                           2.92
+                        65-75         44,149                      0.02                          2.83
+                        75+           24,373                   0.0398                           2.64
+                        All          250,509                   0.0135                           2.89
+
+
+
+Table 2: Distribution alignment metrics. We report the coefficient of variation (CV; the ratio of the standard deviation to
+the mean) of the false positive rate (FPR, CV) and false negative rate (FNR, CV) at a fixed decision threshold of 0.075
+across the race, gender, and age groups. Furthermore, we compute the pairwise earth mover’s distance (EMD) between
+distributions of the predicted probabilities of having an ASCVD event, conditioned on the true ASCVD label y for each
+group of each sensitive attribute and take the mean.
+                                               Race                  Gender                     Age
+                                      Standard      EQrace        Standard      EQgender   Standard       EQage
+              FNR, CV                     0.267     0.0437          0.118         0.0072     0.347       0.0426
+              FPR, CV                     0.451       0.563         0.477          0.231     0.927         0.522
+              Mean EMD | y = 0         0.00905     0.00109         0.0107      0.000983     0.0277      0.00162
+              Mean EMD | y = 1          0.0264     0.00934         0.0144       0.00259     0.0363       0.0189
+
+
+
+3     Methods
+
+3.1   The Dataset and Cohort Definition
+
+We extract records from the Stanford Medicine Research Data Repository [24], a clinical data warehouse containing
+records on roughly three million patients from Stanford Hospital and Clinics and Lucile Packard Children’s Hospital for
+clinical encounters occurring between 1990 and 2018. We define a prediction task that resembles the setting in which
+the PCEs were developed [2] for the purpose of guiding physician decision-making in ASCVD prevention and construct
+a corresponding cohort. As a first step, we identify all patients with at least two clinical encounters over a time span of
+at least two years for which they are 40 years or older. Then, for each patient, we randomly select a clinical encounter
+from the time span that allows for at least one year of history and one year of follow-up and set the date of the encounter
+as the index time ti . Patients with no encounters meeting this criteria are excluded. We further exclude from the cohort
+patients with a historical diagnosis of cardiovascular disease (myocardial infarction, stroke, atrial fibrillation, heart
+failure) or a prescription of a lipid lowering drug (see supplementary material) in the five years prior to the index time.
+We assign a positive ASCVD label if a diagnosis code for an ASCVD event (myocardial infarction, stroke, or fatal
+coronary heart disease) is observed at any point in their record following the index time. We consider coronary heart
+disease to be fatal if a diagnosis code for coronary heart disease is followed by death within a year.
+The patients are randomly partitioned such that 80%, 10%, 10% are used for training, validation, and testing, respectively.
+The clinical concepts used to define the exclusion criteria and outcome definition are provided in the supplementary
+material.
+
+
+                                                              4
+3.2   Sensitive Attributes
+
+We consider race, gender, and age as sensitive attributes and assess model performance and fairness with respect to
+them. For race, we use both race and ethnicity variables to partition the cohort into six disjoint groups: Asian, Black,
+Hispanic, Other, Unknown, and White. Patients not considered Hispanic thus have either a non-Hispanic or unknown
+ethnicity. For gender, we partition the cohort into male and female populations. For age, we discretize the age at the
+index time into four disjoint groups: 40-55, 55-65, 65-75, and 75+ years, where the intervals are inclusive on the lower
+bound and exclusive on the upper bound. A summary of these groups is presented in Table 1.
+
+3.3   Feature Extraction
+
+For feature extraction, we adopt a strategy similar to the one described in [25] to convert time-stamped sequences of
+clinical concepts across several domains (i.e., diagnoses, procedures, medication orders, lab tests, clinical encounter
+types, departments, and other observations) into a static representation suitable for modeling. For each extracted patient,
+we filter the historical record to include only those concepts occurring prior to the index time. We encode as a binary
+attribute each unique clinical concept observed in the dataset according to whether that concept was present anywhere
+in the patient’s history prior to the prediction time; otherwise, it is absent or missing. Similarly, we do not use the
+numeric results of lab tests or vital measurements, but only include the presence of their measurement. In all models,
+we include race, gender, and age as features without regards as to whether the variable is treated as sensitive or not.
+
+3.4   Adversarial Learning for Equality of Odds
+
+To develop an ASCVD risk prediction model that satisfies the definition of equality of odds in (3), we consider two
+fully-connected neural networks: a classifier f : Rm → R ∈ [0, 1] parameterized by θf that predicts the probability of
+the ASCVD outcome Y given data X; and a discriminator g : R × {0, 1} → [0, 1]k parameterized by θg that takes
+as input both the logit of the output of f and the value of the true label Y to predict a distribution over the groups
+of a sensitive attribute Z. If Lcls and Ladv are the cross-entropy losses of the classifier predictions over Y and the
+discriminator predictions over Z, respectively, and λ is a positive scalar, then the training procedure may be described
+by alternating between the steps
+                                         min Lcls − λLadv        and   min Ladv .                                       (4)
+                                           θf                           θg
+
+
+3.5   Model Training and Evaluation
+
+The training procedure is composed of four experiments and thus produces four prediction models. The first model is
+trained to predict the risk of ASCVD and does not use adversarial training. The other three models result from separate
+training runs in which each of the discrete race, gender, and age variables are considered as sensitive attributes in the
+adversarial training procedure. We refer to these four experiments as Standard, EQrace , EQgender , and EQage .
+For each model, we compute standard metrics on the entire test set and on each subgroup. Specifically, we report the
+area under the receiver operating characteristic curve (AUC-ROC), the area under the precision-recall curve (AUC-PRC),
+the Brier score [26] as a measure of calibration, and the false positive and false negative rates (FPR, FNR) at a fixed
+threshold of T = 0.075, in keeping with current ASCVD guidelines for the prescription of statin therapy [2, 5]. To
+express adherence to the standard equality of odds definition in equation 2, we report the coefficient of variation (i.e.
+the ratio of the standard deviation to the mean) of the FPR and FNR at T = 0.075 across the groups of each sensitive
+attribute. To assess the distance between the distributions presented in (3), we compute the earth mover’s distance (EMD,
+or first Wasserstein distance) between the empirical distributions of the predicted probability of ASCVD conditioned on
+whether ASCVD occurred or not for each group of each sensitive attribute in a pairwise fashion and take the mean
+within each outcome strata.
+For each of the four models, we employ fully-connected feedforwad neural networks composed of layers of fixed
+size for both the classifier and discriminator. Hyperparameters were selected separately for each model across 100
+iterations of random search over a grid that included the number of classifier and discriminator layers, the size of each
+layer, the learning rates of the Adam optimizers [27] applied on θf and θg , the discriminator weight λ, the use of layer
+normalization [28] in the classifier and the discriminator, and the use of spectral normalization [29] in the discriminator.
+Models we trained for 100 epochs, where each epoch is composed of 100 one hundred randomly sampled batches of
+the data. During training, early stopping was performed on the basis of the maximal AUC-ROC on the validation set.
+As it is not clear how to best perform model selection for the EQ experiments, we take the model with the highest degree
+of distribution alignment on the validation set, computed as the mean of the EMD metrics computed on each outcome
+
+
+                                                             5
+      Table 3: Model performance measured on the test set without stratification for each experimental condition.
+
+                                                Standard     EQrace    EQgender      EQage
+                                 AUC-ROC           0.773      0.742       0.743     0.694
+                                 AUC-PRC          0.0904      0.083      0.0924    0.0887
+                                 Brier Score      0.0143     0.0137      0.0138    0.0136
+
+
+Table 4: Model performance measured on the test set stratified by group and experimental condition. EQ corresponds to
+training for the sensitive attribute corresponding to the subgroup of interest.
+                                         AUC-ROC             AUC-PRC            Brier Score
+                                     Stand.         EQ     Stand.        EQ     Stand.           EQ
+                       Asian           0.726    0.704      0.0775     0.0508      0.0142      0.0133
+                       Black           0.785     0.74       0.244      0.158      0.0294      0.0307
+                       Hispanic        0.721    0.724      0.0811      0.113      0.0157      0.0146
+                       Other           0.783    0.792      0.0887      0.097      0.0133      0.0123
+                       Unknown         0.824     0.77      0.0274     0.0141       0.004     0.00376
+                       White           0.768    0.744      0.0956     0.0914      0.0155       0.015
+                       Female          0.768    0.749      0.0835        0.1      0.0123      0.0119
+                       Male            0.769    0.731       0.104     0.0847      0.0175      0.0169
+                       40-55           0.726    0.689      0.0369     0.0398   0.00661        0.0063
+                       55-65           0.741    0.742      0.0966      0.116    0.0141        0.0131
+                       65-75           0.699    0.672      0.0966     0.0919    0.0209        0.0198
+                       75+             0.679    0.662       0.135      0.153    0.0408        0.0395
+
+
+strata, that also achieves an AUC-ROC of greater than 0.7 on the validation set. All training and model development
+was performed with the PyTorch library [30].
+
+
+4     Results
+
+4.1   Cohort Characteristics
+
+The cohort extraction procedure produces a cohort of 250,509 patients having 200,407 features, with 3,388 patients
+labeled as positive for ASCVD (Table 1). We note that in this cohort, there are 136,348 white patients, constituting
+a majority, and 9,018 black patients. Across race groups, ASCVD rates range from 1.0-2.0%, with the exception of
+patients with unknown race, who experience a reduced rate of 0.52%. Furthermore, we observe higher ASCVD rates
+for male patients compared to female patients. Finally, ASCVD rates appear to increase with age, with rates ranging
+from approximately 0.6% for the 40-55 age group to 4% for patients age 75 or older.
+
+4.2   Distribution Alignment with Adversarial Training
+
+Applying the adversarial training procedure results in a alignment of the distributions of the predicted probability of
+ASCVD conditioned on the true outcome label (Figure 1). Without employing a adversarial discriminator, the center of
+mass of these distributions appears to depend on the base ASCVD rate in the group. However, these differences largely
+disappear when training in an adversarial setting. This results in a substantial reduction in the mean pairwise EMD
+between each predictive distribution in both outcome strata for all sensitive attributes (Table 2). Furthermore, we note
+that variability in the FPRs and FNRs at a fixed threshold of 0.075 is greatly reduced following adversarial training
+(Table 2), indicating that the approach successfully encourages the model predictions to satisfy equality of odds.
+The relative lack of success in minimizing the mean pairwise EMD between the conditional predictive distributions
+across racial groups that experience ASCVD (Table 2) may be largely explained by the anomalous characteristics of
+the group of patients having unknown race. For instance, when using standard training (Standard), the predictive
+distribution for both outcome strata for the unknown race group is clearly separated from that of the five groups while
+the distributions for those five are mostly aligned (Figure 1). However, when training the model in an adversarial
+setting, it appears that the primary effect is to align the predictive distribution for the unknown race group to the region
+
+
+                                                             6
+Figure 1: Empirical distribution of the predicted probability of developing ASCVD in the followup period conditioned
+on whether ASCVD occurred. Plots are stratified by experimental condition (Standard or EQ), true value of the
+ASCVD outcome (y = 0 or y = 1), and the variable treated as sensitive (race, gender, or age).
+
+
+
+
+                                                         7
+inhabited by the distributions of the remaining groups while disturbing the relative alignment between the distributions
+for those groups.
+
+
+4.3   The Cost of Fairness
+
+Satisfying equality of odds with an adversarial objective incurs a reduction in AUC-ROC, AUC-PRC, and calibration
+for the population at large (Table 3), with the largest negative effects observed when training to adjust for the differences
+across age groups (Standard AUC-ROC = 0.773 vs. EQage AUC-ROC = 0.694). This procedure induces a reduction in
+AUC-ROC and AUC-PRC for many of the populations assessed (Table 4), with positive effects observed only in the
+Hispanic and Other race groups. Furthermore, while exactly satisfying equality of odds implies that the ROC curve be
+the same across for each group of a sensitive attribute, the procedure we apply does not empirically produce a model
+that achieves the same AUC-ROC on each group.
+It has been shown that developing a well-calibrated model is an objective that conflicts with that of satisfying equality
+of odds [31, 13]. In our case, we do not observe a trade-off, as the Brier score is reduced, indicating better calibration,
+when training for equalized odds both for the aggregate population (3) and for many subgroups (Table 4).
+
+
+5     Discussion
+
+We have demonstrated the capabilities of adversarial training procedures to encourage the learning of models whose
+predictions satisfy equality of odds for high-dimensional EHR data with sensitive attributes of more than two groups. In
+a setting such as ASCVD risk prediction, with a clear clinical intervention associated with the prediction, this procedure
+ensures that no group bears a disparate burden of mistreatment due to misclassification. However, we note that this
+comes at a cost of a reduction in AUC-ROC and AUC-PRC for some subgroups.
+
+
+5.1   Limitations of the Predictive Model
+
+While using EHR data allowed a high-capacity ASCVD risk prediction model to be trained using a large and diverse
+cohort, this model should not be directly compared to the PCEs for several reasons. First, the PCEs estimate ten-year
+ASCVD risk, whereas our model estimates risk over a period of at least a year. Furthermore, we cannot rule out the
+existence of biases that may lead to differential rates of selection or censoring in our cohort across age, gender, and race
+based subgroups, nor can we establish whether the nature of these biases differ from those present in the prospective
+cohort studies used to derive the PCEs.
+
+
+5.2   Moving Beyond Equality of Odds
+
+While we have demonstrated empirically that adversarial learning procedures are capable of encouraging a model to
+satisfy equality of odds, the use of this metric as a measure of fairness should be approached with caution. In the case
+that there is insufficient information in the training dataset to learn a high performing model for at least one group,
+optimizing for this criteria will upper bound the group-level model performance by the performance obtained for the
+least-well performing group. In the adversarial learning setting, this reduction in performance for some groups may
+be offset by performance gains for groups for which the model performs poorly when trained naively. However, we
+observed that if such a benefit exists, it is smaller than the reduction in performance incurred for most groups.
+We have not examined the relationship between the errors of the predictive model and notions of long-term utility
+when deploying the model clinically. To properly analyze the effect of these errors on utility requires careful causal
+modeling of the sequential decision-making process following ASCVD risk prediction while accounting for individual
+patient characteristics. We emphasize that while such a process is crucial to evaluate the long-term impact of any
+prediction model, it is not possible to properly identify and model that causal process with observational data in the
+EHR alone [32]. Additionally, it is unclear that satisfying fairness constraints for a single-step decision, as in ASCVD
+risk prediction, aligns with the goal of equitably maximizing long-term utility, as it has been shown that satisfying
+fairness constraints for a static decision may actually cause long-term harm in settings where an unconstrained objective
+would not [33], particularly if the outcome is measured with bias due to systematic censoring [34]. We find those
+approaches [35, 36] that establish causal notions of fairness to be promising directions for future work, as they permit
+sequential decision making processes to be studied under the lens of fairness at both the group and individual level.
+
+
+                                                             8
+6   Conclusion
+Existing approaches to ASCVD risk scoring perform poorly for the population at large, with more extreme risk
+mis-estimates for minority populations, inadvertently exposing those groups to excess harm. We develop an ASCVD
+prediction model using EHR data and show that we can encourage formal notions of fairness by reducing the variability
+in the FPR and FNR across groups. It is not yet known to what extent algorithmic notions of fairness align with other
+goals, including long-term utility maximization. We hope that our results will serve as an impetus for the community
+at large to investigate the fairness-utility trade-off during sequential clinical decision making resulting from fairness
+constraints imposed on clinical risk assessments.
+
+7   Acknowledgements
+We would like to thank Sam Corbett-Davies, Julia Daniels, Sebastian Le Bras, and Minh Nguyen for insightful
+discussion and support.
+This material is based upon work supported by the National Science Foundation Graduate Research Fellowship
+Program DGE-1656518; NLM R01 LM011369-06; NLM T15 LM007033. Any opinions, findings, and conclusions
+or recommendations expressed in this material are those of the authors and do not necessarily reflect the views of
+the funding bodies. We also thank the Widen Horizons program of the IDEX Lorraine Université d’Excellence
+(15-IDEX-0004) and the Snowball Associate Team funded by Inria.
+
+References
+ [1] Emelia J Benjamin, Salim S Virani, Clifton W Callaway, Alanna M Chamberlain, Alexander R Chang, Susan
+     Cheng, Stephanie E Chiuve, Mary Cushman, Francesca N Delling, Rajat Deo, et al. Heart disease and stroke
+     statistics-2018 update: a report from the american heart association. Circulation, 137(12):e67–e492, 2018.
+ [2] David C Goff, Donald M Lloyd-Jones, Glen Bennett, Sean Coady, Ralph B D’Agostino, Raymond Gibbons,
+     Philip Greenland, Daniel T Lackland, Daniel Levy, Christopher J O’donnell, et al. 2013 acc/aha guideline on the
+     assessment of cardiovascular risk: a report of the american college of cardiology/american heart association task
+     force on practice guidelines. Journal of the American College of Cardiology, 63(25 Part B):2935–2959, 2014.
+ [3] Samia Mora, Nanette K Wenger, Nancy R Cook, Jingmin Liu, Barbara V Howard, Marian C Limacher, Simin
+     Liu, Karen L Margolis, Lisa W Martin, Nina P Paynter, et al. Evaluation of the pooled cohort risk equations for
+     cardiovascular risk prediction in a multiethnic cohort from the women’s health initiative. JAMA internal medicine,
+     178(9):1231–1240, 2018.
+ [4] Andrew Paul DeFilippis, Rebekah Young, John W McEvoy, Erin D Michos, Veit Sandfort, Richard A Kronmal,
+     Robyn L McClelland, and Michael J Blaha. Risk score overestimation: the impact of individual cardiovascular
+     risk factors and preventive therapies on the performance of the american heart association-american college of
+     cardiology-atherosclerotic cardiovascular disease risk score in a modern multi-ethnic cohort. European heart
+     journal, 38(8):598–608, 2016.
+ [5] Steve Yadlowsky, Rodney A Hayward, Jeremy B Sussman, Robyn L McClelland, Yuan-I Min, and Sanjay Basu.
+     Clinical implications of revised pooled cohort equations for estimating atherosclerotic cardiovascular disease risk.
+     Ann Intern Med, 169(1):20–29, 2018.
+ [6] Keum Ji Jung, Yangsoo Jang, Dong Joo Oh, Byung-Hee Oh, Sang Hoon Lee, Seong-Wook Park, Ki-Bae Seung,
+     Hong-Kyu Kim, Young Duk Yun, Sung Hee Choi, et al. The acc/aha 2013 pooled cohort equations compared to a
+     korean risk prediction model for atherosclerotic cardiovascular disease. Atherosclerosis, 242(1):367–375, 2015.
+ [7] Moritz Hardt, Eric Price, Nati Srebro, et al. Equality of opportunity in supervised learning. In Advances in neural
+     information processing systems, pages 3315–3323, 2016.
+ [8] Abraham Verghese, Nigam H Shah, and Robert A Harrington. What this computer needs is a physician: humanism
+     and artificial intelligence. Jama, 319(1):19–20, 2018.
+ [9] Mindy M Pike, Paul A Decker, Nicholas B Larson, Jennifer L St Sauver, Paul Y Takahashi, Véronique L Roger,
+     Walter A Rocca, Virginia M Miller, Janet E Olson, Jyotishman Pathak, et al. Improvement in cardiovascular risk
+     prediction with electronic health records. Journal of cardiovascular translational research, 9(3):214–222, 2016.
+[10] Jamal S Rana, Grace H Tabada, Matthew D Solomon, Joan C Lo, Marc G Jaffe, Sue Hee Sung, Christie M
+     Ballantyne, and Alan S Go. Accuracy of the atherosclerotic cardiovascular risk equation in a large contemporary,
+     multiethnic population. Journal of the American College of Cardiology, 67(18):2118–2130, 2016.
+
+
+                                                           9
+[11] Benjamin A Goldstein, Ann Marie Navar, Michael J Pencina, and John Ioannidis. Opportunities and challenges
+     in developing risk prediction models with electronic health records data: a systematic review. Journal of the
+     American Medical Informatics Association, 24(1):198–208, 2017.
+[12] Cynthia Dwork, Moritz Hardt, Toniann Pitassi, Omer Reingold, and Richard Zemel. Fairness through awareness.
+     In Proceedings of the 3rd Innovations in Theoretical Computer Science Conference, pages 214–226. ACM, 2012.
+[13] Jon Kleinberg, Sendhil Mullainathan, and Manish Raghavan. Inherent trade-offs in the fair determination of risk
+     scores. arXiv preprint arXiv:1609.05807, 2016.
+[14] Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville,
+     and Yoshua Bengio. Generative adversarial nets. In Advances in neural information processing systems, pages
+     2672–2680, 2014.
+[15] Brian Hu Zhang, Blake Lemoine, and Margaret Mitchell. Mitigating unwanted biases with adversarial learning.
+     In Proceedings of the 2018 AAAI/ACM Conference on AI, Ethics, and Society, pages 335–340. ACM, 2018.
+[16] Alex Beutel, Jilin Chen, Zhe Zhao, and Ed H Chi. Data decisions and theoretical implications when adversarially
+     learning fair representations. arXiv preprint arXiv:1707.00075, 2017.
+[17] Harrison Edwards and Amos Storkey. Censoring representations with an adversary. arXiv preprint
+     arXiv:1511.05897, 2015.
+[18] David Madras, Elliot Creager, Toniann Pitassi, and Richard Zemel. Learning adversarially fair and transferable
+     representations. In International Conference on Machine Learning, pages 3381–3390, 2018.
+[19] Danton S Char, Nigam H Shah, and David Magnus. Implementing machine learning in health care - addressing
+     ethical challenges. The New England journal of medicine, 378(11):981, 2018.
+[20] I Glenn Cohen, Ruben Amarasingham, Anand Shah, Bin Xie, and Bernard Lo. The legal and ethical concerns that
+     arise from using complex predictive analytics in health care. Health affairs, 33(7):1139–1147, 2014.
+[21] Michael Kearns, Seth Neel, Aaron Roth, and Zhiwei Steven Wu. Preventing fairness gerrymandering: Auditing
+     and learning for subgroup fairness. In International Conference on Machine Learning, pages 2569–2577, 2018.
+[22] Úrsula Hébert-Johnson, Michael Kim, Omer Reingold, and Guy Rothblum. Multicalibration: Calibration for
+     the (computationally-identifiable) masses. In International Conference on Machine Learning, pages 1944–1953,
+     2018.
+[23] Irene Chen, Fredrik D. Johansson, and David Sontag. Why is my classifier discriminatory? In Proceedings of the
+     32nd International Conference on Neural Information Processing Systems, NIPS’18, 2018.
+[24] Henry J Lowe, Todd A Ferris, Penni M Hernandez, and Susan C Weber. Stride–an integrated standards-based
+     translational research informatics platform. In AMIA Annual Symposium Proceedings, volume 2009, page 391.
+     American Medical Informatics Association, 2009.
+[25] Jenna M Reps, Martijn J Schuemie, Marc A Suchard, Patrick B Ryan, and Peter R Rijnbeek. Design and
+     implementation of a standardized framework to generate and evaluate patient-level prediction models using
+     observational healthcare data. Journal of the American Medical Informatics Association, 25(8):969–975, 2018.
+[26] Glenn W Brier. Verification of forecasts expressed in terms of probability. Monthey Weather Review, 78(1):1–3,
+     1950.
+[27] Diederik Kingma and Jimmy Ba. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980,
+     2014.
+[28] Jimmy Lei Ba, Jamie Ryan Kiros, and Geoffrey E Hinton. Layer normalization. arXiv preprint arXiv:1607.06450,
+     2016.
+[29] Takeru Miyato, Toshiki Kataoka, Masanori Koyama, and Yuichi Yoshida. Spectral normalization for generative
+     adversarial networks. arXiv preprint arXiv:1802.05957, 2018.
+[30] Adam Paszke, Sam Gross, Soumith Chintala, Gregory Chanan, Edward Yang, Zachary DeVito, Zeming Lin,
+     Alban Desmaison, Luca Antiga, and Adam Lerer. Automatic differentiation in PyTorch. 2017.
+[31] Geoff Pleiss, Manish Raghavan, Felix Wu, Jon Kleinberg, and Kilian Q Weinberger. On fairness and calibration.
+     In Advances in Neural Information Processing Systems, pages 5680–5689, 2017.
+[32] Niki Kilbertus, Mateo Rojas Carulla, Giambattista Parascandolo, Moritz Hardt, Dominik Janzing, and Bernhard
+     Schölkopf. Avoiding discrimination through causal reasoning. In Advances in Neural Information Processing
+     Systems, pages 656–666, 2017.
+[33] Lydia Liu, Sarah Dean, Esther Rolf, Max Simchowitz, and Moritz Hardt. Delayed impact of fair machine learning.
+     In International Conference on Machine Learning, pages 3156–3164, 2018.
+
+
+                                                        10
+[34] Nathan Kallus and Angela Zhou. Residual unfairness in fair machine learning from prejudiced data. In Interna-
+     tional Conference on Machine Learning, pages 2444–2453, 2018.
+[35] Matt J Kusner, Joshua Loftus, Chris Russell, and Ricardo Silva. Counterfactual fairness. In Advances in Neural
+     Information Processing Systems, pages 4066–4076, 2017.
+[36] Razieh Nabi and Ilya Shpitser. Fair inference on outcomes. In Thirty-Second AAAI Conference on Artificial
+     Intelligence, 2018.
+
+
+
+
+                                                       11
+A     Clinical concepts used for cohort and outcome definition
+A.1   Exclusion Criteria: Cardiovascular Disease
+
+The presence of any of the following ICD9CM codes prior to the index time was used to define historical cardiovascular
+disease: 410, 410.0, 410.00, 410.01, 410.02, 410.1, 410.10, 410.11, 410.12, 410.2, 410.20, 410.21, 410.22, 410.3,
+410.30, 410.31, 410.32, 410.4, 410.40, 410.41, 410.42, 410.5, 410.50, 410.51, 410.52, 410.6, 410.60, 410.61, 410.62,
+410.7, 410.70, 410.71, 410.72, 410.8, 410.80, 410.81, 410.82, 410.9, 410.90, 410.91, 410.92, 411, 411.0, 411.1, 411.8,
+411.81, 411.89, 413, 413.0, 413.1, 413.9, 414, 414.0, 414.00, 414.01, 414.02, 414.03, 414.04, 414.05, 414.06, 414.07,
+414.1, 414.10, 414.11, 414.12, 414.19, 414.2, 414.3, 414.4, 414.8, 414.9, 427.31, 428, 428.0, 428.1, 428.2, 428.20,
+428.21, 428.22, 428.23, 428.3, 428.30, 428.31, 428.32, 428.33, 428.4, 428.40, 428.41, 428.42, 428.43, 428.9, 430, 431,
+432, 432.0, 432.1, 432.9, 433, 433.0, 433.00, 433.01, 433.1, 433.10, 433.11, 433.2, 433.20, 433.21, 433.3, 433.30,
+433.31, 433.8, 433.80, 433.81, 433.9, 433.90, 433.91, 434, 434.0, 434.00, 434.01, 434.1, 434.10, 434.11, 434.9, 434.90,
+434.91, 436
+
+A.2   Exclusion Criteria: Lipid Lowering Drugs
+
+The presence of any of the following medications from the Antomatical Therapeutic Chemical Classification System
+(ATC) in the five years prior to index time was used to exclude patients on the basis of a history of prescription of lipid
+lowering drugs: atorvastatin (C10AA05), simvastatin (C10AA01), rosuvastatin (C10AA07), lovastatin (C10AA02),
+pitavastatin (C10AA08), fluvastatin (C10AA04), pravastatin (C10AA03), atorvastatin and ezetimibe (C10BA05),
+cerivastatin (C10AA06), atorvastatin and amlodipine (C10BX03), lovastatin and nicotinic acid (C10BA01), simvastatin
+and ezetimibe (C10BA02), simvastatin and fenofibrate (C10BA04).
+
+A.3   Outcome Definition: ASCVD
+
+The presence of any of the following ICD9CM codes following the index time was used to define ASCVD events
+(myocardial infarction and stroke): 410, 410.0, 410.00, 410.01, 410.1, 410.10, 410.11, 410.2, 410.20, 410.21, 410.3,
+410.30, 410.31, 410.4, 410.40, 410.41, 410.5, 410.50, 410.51, 410.6, 410.60, 410.61, 410.7, 410.70, 410.71, 410.8,
+410.80, 410.81, 410.9, 410.90, 410.91, 430, 431, 433, 433.0, 433.01, 433.1, 433.11, 433.2, 433.21, 433.3, 433.31,
+433.8, 433.81, 433.9, 433.91, 434, 434.0, 434.01, 434.1, 434.11, 434.9, 434.91, 436.
+Patients were also labeled as positive for ASCVD if one of the following ICD9CM codes indicative of coronary heart
+disease was assigned following the index time and death occurred within one year of the diagnosis: 411, 411.0, 411.1,
+411.8, 411.81, 411.89, 413, 413.0, 413.1, 413.9, 414, 414.0, 414.00, 414.01, 414.02, 414.03, 414.04, 414.05, 414.06,
+414.07, 414.1, 414.10, 414.11, 414.12, 414.19, 414.2, 414.3, 414.4, 414.8, 414.9
+
+
+
+
+                                                           12
+

@@ -1,0 +1,904 @@
+                                                                                                                                                        METHODS
+                                                                                                                                       published: 03 February 2017
+                                                                                                                                     doi: 10.3389/fnins.2017.00012
+
+
+
+
+                                            BLINKER: Automated Extraction of
+                                            Ocular Indices from EEG Enabling
+                                            Large-Scale Analysis
+                                            Kelly Kleifges 1 , Nima Bigdely-Shamlo 2 , Scott E. Kerick 3 and Kay A. Robbins 1*
+                                            1
+                                             Department of Computer Science, University of Texas at San Antonio, San Antonio, TX, USA, 2 Qusp Labs, Qusp,
+                                            San Diego, CA, USA, 3 US Army Research Laboratory, Aberdeen, MD, USA
+
+
+
+                                            Electroencephalography (EEG) offers a platform for studying the relationships between
+                                            behavioral measures, such as blink rate and duration, with neural correlates of fatigue
+                                            and attention, such as theta and alpha band power. Further, the existence of EEG studies
+                                            covering a variety of subjects and tasks provides opportunities for the community to
+                                            better characterize variability of these measures across tasks and subjects. We have
+                                            implemented an automated pipeline (BLINKER) for extracting ocular indices such as
+                                            blink rate, blink duration, and blink velocity-amplitude ratios from EEG channels, EOG
+                                            channels, and/or independent components (ICs). To illustrate the use of our approach,
+                                            we have applied the pipeline to a large corpus of EEG data (comprising more than 2000
+                                            datasets acquired at eight different laboratories) in order to characterize variability of
+                           Edited by:       certain ocular indicators across subjects. We also investigate dependence of ocular
+                           Ioan Opris,
+                                            indices on task in a shooter study. We have implemented our algorithms in a freely
+         University of Miami School of
+                        Medicine, USA       available MATLAB toolbox called BLINKER. The toolbox, which is easy to use and can be
+                       Reviewed by:         applied to collections of data without user intervention, can automatically discover which
+                       Brent Winslow,       channels or ICs capture blinks. The tools extract blinks, calculate common ocular indices,
+              Design Interactive, USA
+                              Xiaoli Li,
+                                            generate a report for each dataset, dump labeled images of the individual blinks, and
+      Beijing Normal University, China      provide summary statistics across collections. Users can run BLINKER as a script or as
+                 *Correspondence:           a plugin for EEGLAB. The toolbox is available at https://github.com/VisLab/EEG-Blinks.
+                     Kay A. Robbins
+                                            User documentation and examples appear at http://vislab.github.io/EEG-Blinks/.
+               Kay.Robbins@utsa.edu
+                                            Keywords: eye blinks, blink duration, EEG, artifact, EEGLAB, machine learning, big data, human behavior
+                   Specialty section:
+         This article was submitted to
+                    Neural Technology,      INTRODUCTION
+               a section of the journal
+            Frontiers in Neuroscience
+                                            Contamination of electroencephalography (EEG) by eye and muscle activity is an ongoing
+       Received: 17 November 2016           challenge, and many techniques exist for the removal of these artifacts (Jung et al., 2000; Delorme
+        Accepted: 09 January 2017           et al., 2007; Nolan et al., 2010; Mognon et al., 2011; Winkler et al., 2011). On a parallel track,
+       Published: 03 February 2017
+                                            human performance characterization uses ocular indices to characterize fatigue and other changes
+                             Citation:      in subject state (Schuri and von Cramon, 1981; Recarte et al., 2008; Benedetto et al., 2011; Wilkinson
+        Kleifges K, Bigdely-Shamlo N,       et al., 2013; McIntire et al., 2014; Marquart et al., 2015). Eye movements also integrally relate
+    Kerick SE and Robbins KA (2017)
+                                            to perception and attention. Although direct measurement of eye activity is desirable, it is also
+   BLINKER: Automated Extraction of
+    Ocular Indices from EEG Enabling
+                                            possible to extract some types of ocular indices directly from EEG without additional experimental
+                 Large-Scale Analysis.      considerations. As large collections of EEG become available, these approaches enable the study of
+               Front. Neurosci. 11:12.      the distributions of ocular indices across many experimental conditions, diverse subject pools, and
+      doi: 10.3389/fnins.2017.00012         various disease conditions.
+
+
+Frontiers in Neuroscience | www.frontiersin.org                                  1                                            February 2017 | Volume 11 | Article 12
+Kleifges et al.                                                                                                 Analysis of Ocular Indices from EEG
+
+
+
+    This work investigates the identification of blinks and the            They also showed that right cerebral blood flow velocity declined
+extraction of standard ocular indices related to eye blinks from           as performance declined and suggested that eye blink measures
+EEG and/or electrooculography (EOG) in an automated fashion.               could be used as an operational indicator of arousal levels.
+The ocular indices that can be easily extracted from EEG include           Colzato et al. (2008) used daytime blink rate as a functional
+blink rate (BR), blink duration (BD), blink amplitude deviation            marker for attentional blinks. Attentional blinks refer to masking
+ratio (BAR), positive amplitude velocity ratio (pAVR), negative            of a second visual target that appears within 100–500 ms of a first
+amplitude velocity ratio (nAVR), percent time closed (%TEC), as            target. They show a negative correlation between blink rate and
+well as standard deviations, rates of change and ratios of these           the attentional blink effect. In earlier work Colzato et al. (2007)
+measures. Continuing themes in research on these ocular indices            showed that larger attentional blink effects are associated with a
+are significant individual differences in these indicators across          smaller operational span of working memory.
+subjects and consistent relationships among subjects to levels                 The amplitude-velocity ratio introduced by Johns (2003)
+of perceived sleepiness and to time-of-day (Ingre et al., 2006;            relates directly to drowsiness. The pAVR is the ratio of the
+Sandberg et al., 2011).                                                    maximum signal amplitude to the maximum eye-closing signal
+    Blink duration, usually measured in seconds or milliseconds,           velocity for the blink, while the nAVR is the ratio of the maximum
+typically ranges from 0.1 s to 0.5 s, but can go as high as                signal amplitude to the maximum eye-opening signal velocity
+2 or 3 s as subjects start to fall asleep. Ftouni et al. (2013)            for the blink. Both ratios are in units of time, independent
+found that blink duration began to increase dramatically after             of the units of the amplitude. BLINKER converts the time
+subjects had been awake for 18 h, reaching a peak at 28                    units to centiseconds for comparison with values reported in the
+h and then falling to a local minimum at around 34 h of                    literature. Johns found a mean pAVR of about 4 centiseconds for
+continuous wake time. Blink duration also showed a strong                  alert subjects, with a normal range from 2.5 to 5.7 centiseconds.
+circadian relationship, rising sharply after the subject’s core body       In sleep-deprived subjects, the mean pAVR rose to around 7
+temperature reached a minimum. Ftouni et al. demonstrated that             centiseconds. Johns observed that this mean was a result of
+perceived sleepiness as measured by the Karolinska Sleepiness              periods of normal pAVR interspersed with intervals of very
+Scale (KSS) (Akerstedt and Gillberg, 1990) follows the same                long blinks and high pAVRs. Johns postulates that some of the
+cyclic behavior as mean performance and mean reaction time                 observed drowsiness lapses involved central neural inhibition of
+lapses in a PVT (psychomotor vigilance task). Ftouni et al. also           vision.
+demonstrated similar cyclic patterns for pAVR, nAVR, and %TEC.                 Putilov and Donskaya (2013) developed an EEG-based test
+    In addition to circadian and time-awake influences, blink              called the Karolinska drowsiness test (KDT), which uses several
+duration and KSS show a large variability among subjects. Ingre            EEG spectral measures including the difference between alpha
+et al. (2006) characterized significant differences among subjects         and theta band powers and the value of the second principal
+in baseline blink duration, KSS, and lane deviation values in              component of the EEG spectrum (Makeig and Jung, 1995) during
+a driving simulation experiment. However, most subjects had                a 5 min eyes closed test. They showed that KDT correlated well
+larger values over baseline for all three measures when the                with subjective measures of drowsiness such as the KSS. Ftouni
+same experiment was conducted at night. Sandberg et al. (2011)             et al. (2013) showed that performance lapses and ocular measures
+reported similar results for real-world driving. Using linear              including blink duration, pAVR, nAVR, and %TEC also correlate
+mixed-effect regression, Sandberg et al. showed that several               well with EEG power changes in particular frequency bands
+measures, including blink duration varied linearly with KSS                including delta-theta (0.5–5.5 Hz), theta-alpha (5.0–9.0 Hz), and
+and with lateral lane position. However, the intercepts for these          beta (13.0–20.0 Hz) as well as with KSS.
+linear models varied considerably across test subjects. In another             Although many studies have established a relationship
+real-world driving experiment, Anund et al. (2013) showed that             between ocular indices and subject states such as fatigue,
+observer-rated sleepiness of driver behavior was also moderately           drowsiness, attention, and arousal, most studies have been
+correlated with blink duration.                                            relatively small. In addition, there appears to be considerable
+    Blink rate depends on many factors related to general visual           variability among subjects and even within the same subject
+function, eye physiology (such as the corneal tear film), facial           based on initial state. In this work, we examine the ocular indices
+movement, cognition, and level of arousal (Karson, 1988). Karson           computed directly from EEG, focusing on indices related to
+et al. (1990) showed that blink rates were higher than controls            blinks. We examine different ways of computing these indices
+in individuals with schizophrenia and lower than controls in               and quantify the way these values differ over signal selection,
+patients with Parkinson’s disease (Karson et al., 1984). Research          method of computing the ocular index, subject, and type of task
+in both humans and primates indicates that blink rates have a              for a large corpus of EEG. In order to accomplish this task, we
+significant social component in addition to other factors (Tada            have developed a collection of tools and an automated pipeline
+et al., 2013). In monkeys, Kleven and Koek (1996) showed                   for extracting ocular indices from EEG data. We have made the
+significant increases in blink rate with the applications of high-         pipeline freely available as a MATLAB toolbox called BLINKER
+efficiency dopamine agonists. Doughty (2014) showed that blink             (https://github.com/VisLab/EEG-Blinks) in hopes that more
+rate can also be influenced by other factors such as eye position          researchers will report the values of ocular indices from their EEG
+and visual glare.                                                          studies.
+    McIntire et al. (2014) showed that blink rate and blink                    The remainder of the paper is organized as follows. Section
+duration increased as performance in vigilance tasks declined.             Methods and materials describes the steps and methods used to
+
+
+Frontiers in Neuroscience | www.frontiersin.org                        2                                      February 2017 | Volume 11 | Article 12
+Kleifges et al.                                                                                                            Analysis of Ocular Indices from EEG
+
+
+
+extract blinks from EEG data, as well as the datasets we used                      average reference. We used the Infomax (Bell and Sejnowski,
+to validate the results. Section Results presents the results of                   1995) independent component algorithm (ICA) as implemented
+running the BLINKER toolbox on a large and varied collection                       in the EEGLAB runica function to compute independent
+of EEG data. Section The BLINKER software briefly introduces                       components for the IC versions of blink extraction. Infomax does
+the toolbox, referring readers to the more detailed online                         not always converge for noisy datasets. NCTU-LK and ARL-
+documentation and downloads. Section Visual verification of                        Shoot were mastoid-referenced at acquisition time, and the “raw”
+BLINKER output describes our manual video verification process                     data in these collections refers to mastoid-referenced data. The
+and some interesting results we obtained when comparing                            “raw” data for ARL-BCIT used the default Biosemi CMS/DRL
+subject behavior captured in video with blink signals captured                     reference, while the acquisition reference strategy for BCI-2000
+by EEG. Section Discussion offers some concluding remarks and                      was not known.
+discusses limitations of the method.
+
+                                                                                   Extracting Blinks from a Time Series
+METHODS AND MATERIALS                                                              In clean datasets, candidate time series corresponding to front
+Datasets Used in this Study                                                        channels, an upper vertical EOG channel, or frontally focused
+Table 1 summarizes the EEG collections used in this study.                         ICs activations contain good representations of blink behavior.
+The ARL-BCIT data collection consists of 669 datasets from                         However, in a given dataset some of these signals may be missing
+210 unique subjects performing simulated driving, rapid serial                     or corrupted. Thus, an automated process should provide
+visual presentation (RSVP), and guard duty tasks. The NCTU-                        options for extracting blinks from multiple sources and possibly
+LK collection consists of 40 subjects in 80 sessions performing                    combining the information. In this section, we refer to the
+a lane-keeping task with and without a motion platform.                            time series (EEG channel, EOG channel, or IC activation) from
+NCTU-LK, which uses a 33-channel Neuroscan, was contributed                        which we are attempting to extract blinks as the “signal.” The
+from an extensive archive of driving studies performed at the                      large variety and variability of eye and eyelid movements among
+National Chiao Tung University by C-T Lin and his collaborators                    subjects and tasks makes it difficult to capture all blinks in every
+(Chuang et al., 2012, 2014a,b). The ARL-Shoot study, is a task-                    data set using an automated technique. Hence, BLINKER uses
+load shooting study performed by Kerick and collaborators at                       several stages of processing and provides indicators of when
+the Army Research Laboratory using a 40-channel Neuroscan                          the algorithm is working well and when the results may not be
+headset (Kerick et al., 2007). The collection consisted of 9                       accurate.
+sessions for each of 14 subjects, resulting in 126 datasets. We                        The blink extraction algorithm takes an array of candidate
+also analyzed the publicly available BCI-2000 data collection, a                   time series and selects the best candidate signal from those
+109-subject motor imagery data collection contributed by Shalk                     provided. Figure 1 summarizes the steps of the algorithm. The
+and colleagues to Physionet (Goldberger et al., 2000; Schalk et al.,               following sections discuss these steps in more detail. BLINKER
+2004). This collection of 1308 datasets contains 12 sessions for                   provides a number of post processing utilities to calculate various
+each of 109 subjects using a 64-channel BCI2000 headset. The                       properties of individual blinks and to compare the positions of
+datasets in the ARL-Shoot and BCI-2000 collections are relatively                  the blinks calculated from multiple signals or methods.
+short in duration, and each subject performed the multiple
+tasks in a single session. For some analyses, as noted below, we                   Preprocessing and Potential Blink Detection
+combine the data for each subject in these collections into a single               Regardless of the input signal type, BLINKER uses the same
+dataset for analysis.                                                              method for initial blink detection and preliminary calculation
+                                                                                   of blink start and end times. Each candidate signal is band-
+Data Preprocessing                                                                 passed filtered in the interval [1, 20] Hz prior to blink detection.
+The results reported in this paper use unprocessed EEG channel                     BLINKER then determines the intervals during which the signal
+and EOG signals. However, we also tested our algorithms                            is greater than 1.5 standard deviations above the overall signal
+on datasets that had been robust average referenced using                          mean. These intervals form the potential blinks. We consider only
+the PREP pipeline (Bigdely-Shamlo et al., 2015) and on                             potential blinks that are longer than 50 ms and are at least 50 ms
+independent components extracted after PREP. PREP removes                          apart. These criteria eliminate many small rapid eye movements
+line noise, interpolates bad channels, and performs a robust                       without appearing to eliminate many actual blinks.
+
+
+TABLE 1 | Summary of the data collections used for this study: 2183 datasets from 370 unique subjects.
+
+Collection        Headsets                        Datasets   Unique subjects       Length in hours     EOG       Tasks
+
+ARL-BCIT          Biosemi (64 or 256 Ch)            669           210                   426.4          Yes       Driving with perturb, RSVP, guard duty
+ARL-Shoot         Neuroscan (40 Ch)                 126            14                    14.5          Yes       Shooting, arithmetic, dual shooting/arithmetic
+NCTU-LK           Neuroscan (32 Ch)                 80             37                   104.5          No        Driving with perturb motion/motionless
+BCI-2000          BCI2000 (64 Ch)                  1308           109                    44.8          No        Motor imagery (4 versions)
+
+
+
+
+Frontiers in Neuroscience | www.frontiersin.org                                3                                         February 2017 | Volume 11 | Article 12
+Kleifges et al.                                                                                                 Analysis of Ocular Indices from EEG
+
+
+
+                                                                              After determining the maxFrame, BLINKER computes the
+                                                                          remaining blink landmarks as follows. The leftZero is the last
+     Extract potiental blinks of candidate signals                        zero crossing before maxFrame. If the signal does not cross zero
+                                                                          between this blink and the previous blink, leftZero is the frame of
+                                                                          the lowest amplitude between the blinks. The rightZero frame has
+                                                                          a similar definition. The upStroke is the interval between leftZero
+                                                                          and maxFrame, and the downStroke is the interval between
+          Calculate landmarks of potential blinks                         maxFrame and rightZero. The leftBase (frame 100755 at time
+                                                                          393.57 s in the example of Figure 2) is the first local minimum to
+                                                                          the left of the maximum velocity frame in the upStroke. Similarly,
+                                                                          the rightBase is the first local minimum to the right of the
+                                                                          maximum velocity frame in the downStroke. BLINKER marks the
+                                                                          leftBase and rightBase with green crosses.
+                  Reject low SNR candidate signals                            Stereotypical blinks have a rounded tent-like shape and
+                                                                          BLINKER uses a tent-fitting strategy for characterizing blinks
+                                                                          similar to that proposed in Caffier et al. (2003) for characterizing
+                                                                          blink shape. BLINKER computes the best linear fits for the
+                                                                          inner 80% of the upStroke and downStroke, respectively, for
+     Calculate blink max amplitude distributions                          each potential blink in a candidate signal. The quality (R2 ) of
+                                                                          the correlation of these lines (denoted by leftR2 and rightR2,
+                                                                          respectively) with the actual blink trajectory is a measure of
+                                                                          the closeness of the potential blink to a stereotypical blink. For
+                                                                          the blink of Figure 2, the correlations to the upStroke and the
+                                                                          downStroke are both 0.999. BLINKER computes the intersection
+          Select “best” candidate as “used” signal                        of these fit two lines (the tentPeak) and displays the perpendicular
+                                                                          line using a thin black line. The tentPeak is slightly forward of and
+                                                                          above the maximum of the actual blink trajectory (the blinkPeak)
+                                                                          in a stereotypical blink. The values R2 , as well as the relative
+                                                                          position of the tentPeak to the blinkPeak, provide simple tests of
+      Calculate blink properties for “used” signal                        the how closely the blink resembles a stereotypical blink.
+
+                                                                          Rejecting Candidate Signals with Low SNR
+                                                                          After determining the landmarks for all of the potential blinks
+                                                                          in a candidate signal, BLINKER computes the blink-amplitude
+                                                                          ratio (BAR) for the signal. The blink-amplitude ratio is the average
+         Calculate ocular indices for “used” signal                       amplitude of the signal between the blink leftZero and rightZero
+                                                                          zero crossings divided by the average amplitude of the positive
+  FIGURE 1 | Steps used by the BLINKER software to extract blink          fraction of the signal “outside” the blink. (The blink excursion is
+  properties from time series. Each step is described in a separate       always in the positive direction.) The left outer portion consists
+  subsection of the Methods and materials.                                of the interval from the rightZero of the previous blink (or the
+                                                                          beginning of the signal for the first blink) to the leftZero of this
+                                                                          blink. The right outer portion consists of the interval from the
+Calculating Blink Landmarks                                               rightZero of this blink to the leftZero of the next blink (or the
+Having identified the potential blinks, BLINKER then applies a            end of the signal for the last blink). BLINKER rejects signals that
+fitting process to find specified landmarks for each blink and            have a BAR outside a specified range ([3, 50] by default). We
+saves information about each candidate blink in a structure.              have found empirically that signals with BAR values in the range
+Figure 2, produced by BLINKER using its blink plot overlay                [5, 20] usually capture blinks reasonably well. BAR is a measure
+function, illustrates the blink fitting process for a prototypical        of the signal-to-noise ratio (SNR) of the blink to the background
+blink. In the example of Figure 2, BLINKER overlays signals               in a candidate signal.
+corresponding to an independent component (IC), an EEG
+channel, and an EOG channel for the same blink. The plot                  Distinguishing Blinks from Other Eye Movements
+overlay function accepts a cell array of input signals and uses the       BLINKER uses a process of thresholding and elimination of
+first signal to compute and display the blink landmarks. In the           outliers to select the best signal from the signal candidates
+example plot, the maximum value in the interval occurs at frame           for identifying blinks. Blinks are tent-shaped and have a high
+100786 (the maxFrame), which is 393.695 s from the beginning              amplitude relative to the background signal. Unfortunately, small
+of the dataset. If two or more points in the interval achieve the         movements of the eyeballs as well as large artifactual spikes
+maximum value, the maxFrame is the first.                                 can confound blink detection. We have found empirically that
+
+
+Frontiers in Neuroscience | www.frontiersin.org                       4                                       February 2017 | Volume 11 | Article 12
+Kleifges et al.                                                                                                                        Analysis of Ocular Indices from EEG
+
+
+
+
+  FIGURE 2 | Output of BLINKER software showing various blink landmarks. The figure overlays three different time-series (an independent component, an EEG
+  channel, and an upper vertical EOG channel, respectively) corresponding to the time of the blink. The green crosses mark the leftBase and rightBase, respectively. The
+  green horizontal line marks the half-zero duration. The dotted black lines represent the best linear fits to the upStroke and downStroke of the blink, respectively. The
+  thin vertical line is the perpendicular from the tentPeak to the zero line.
+
+
+
+
+eye movements tend to have smaller amplitudes than the “best”                            blink median. By default, BLINKER eliminates “best blinks” more
+blinks, and large artifactual spikes tend to have larger amplitudes                      than five robust standard deviations from the median and “good”
+than the “best” blinks. We use these observations about blink                            blinks more than two robust standard deviations away from this
+amplitudes to exclude non-blink eye movements.                                           median. Here we define the robust standard deviation as 1.4826
+   Figure 3 shows examples of the maximum amplitude                                      times the median absolute deviation from the median. Figure 3
+distributions for three typical cases. The green line shows the                          displays the median of the “best” blinks with a gray vertical line
+distribution of maximum amplitudes of all potential blinks, and                          and the locations that are two robust standard deviations from
+the thick light gray line shows the distribution of maximum                              this median with dashed gray lines.
+amplitudes of the “good” blinks (upStroke and downStroke                                     The pAVR criterion captures the difference between the sharp
+R2 ≥ 0.90). The medium thick gray line shows the distribution                            rising edge of saccades and the more curved rise of normal blinks.
+of maximum amplitudes of the “better” blinks (upStroke and                               We have found empirically that blink candidates with pAVR ≤ 3
+downStroke R2 ≥ 0.95), and the black line shows the distribution                         do not correspond to normal blinks, but rather saccades having
+of maximum amplitudes of the “best” blinks (upStroke and                                 short, fast eye movements.
+downStroke R2 ≥ 0.98). The magenta line shows the blinks                                     The three graphs in Figure 3 correspond to datasets from
+selected by BLINKER. These “used” blinks have upStroke and                               three different subjects in a driving study. In all three cases,
+downStroke R2 ≥ 0.90 and satisfy the maximum amplitude                                   BLINKER selected the EOG detector above the right eye as
+distribution criterion and the pAVR criterion. These later                               containing the best blinks. The maximum candidate blink
+criteria allow BLINKER to separate normal blinks from eye                                amplitudes for the dataset of Figure 3A range from 144 to
+movements.                                                                               2880 µV with a median of 224. Most of the blinks in the
+   The maximum amplitude distribution criterion enforces the                             two robust-standard-deviation range [139, 309] have R2 ≥
+bell-shaped maximum distribution that normal blinks have                                 0.90 (gray line). However, the dataset also has some large
+around the median of the “best” blinks. This criteria eliminates                         excursions corresponding to artifacts, as indicated by the upper
+blinks whose R2 is low and whose amplitudes are far from the best                        end of the range of blinks amplitude maxima (2879.6611). The
+
+
+
+Frontiers in Neuroscience | www.frontiersin.org                                      5                                              February 2017 | Volume 11 | Article 12
+Kleifges et al.                                                                                                                         Analysis of Ocular Indices from EEG
+
+
+
+
+  FIGURE 3 | Distributions of maximum blink amplitudes for the upper vertical EOG channel of three different datasets. The green line shows the histogram
+  for all potential blinks, and the thick light gray line shows the histogram for blinks whose R2 values are at least 0.90 (good). The medium gray line shows the histogram
+  for blinks whose R2 values are at least 0.95 (better), and the black line shows the histogram of blinks with R2 values of at least 0.98 (best). The magenta line shows
+  the histogram of blinks selected by BLINKER. (A) Dataset has a typical distribution of blinks with a few very large amplitude non-blink artifacts. (B) Dataset has a
+  significant number of low-amplitude non-blink eye movements well-separated from normal blink amplitudes. (C) Dataset has a significant number of non-blink eye
+  movements with moderate R2 values and amplitude distribution that overlaps with the normal blink amplitude distribution.
+
+
+
+
+Frontiers in Neuroscience | www.frontiersin.org                                      6                                               February 2017 | Volume 11 | Article 12
+Kleifges et al.                                                                                                 Analysis of Ocular Indices from EEG
+
+
+
+BLINKER maximum amplitude distribution criterion excludes                  interpolated on a 64 × 64 grid) to a database of typical eye-
+these excursions.                                                          related scalp maps and provides a relative measure of how likely
+   Figure 3B shows a second type of typical distribution for               it is that a given IC contains eye-related artifacts. Typically,
+candidate blink maxima. Here the candidate blink maxima fall               of the ICs identified as eye-related, only a few contain eye
+into two, fairly well-separated groups. Video verification of the          blink phenomena, with the rest containing various other eye-
+blinks corresponding to the large green peak on the left indicate          related activations. Eye-blink ICs have spatial distributions that
+that these are small amplitude eyeball movements and not blinks.           are laterally symmetric, and significantly weighted to the front
+Most of the blinks with R2 ≥ 0.90 fall in a bell-shaped distribution       of the scalp map. To select these eye-blink ICs from the list
+that is within two robust standard deviations from the median of           of eye-related ICs provided by EyeCatch, BLINKER computes
+the “best” blinks.                                                         a figure-of-merit as the difference between the means of the
+   Figure 3C shows a dataset that also has two distinct                    frontal and rear hemisphere distributions of each component
+distributions of candidate blink maxima. In this case, the two             interpolated scalp map. BLINKER reorients the selected ICs so
+distributions are not well-separated, and many of the features             that the average spatial distribution of the frontal hemisphere is
+in the left distribution have reasonably high R2 values. Video             always greater than that of the rear hemisphere.
+verification of the blinks corresponding to the large green peak               After selecting candidate “blink” ICs, BLINKER uses the
+on the left indicate many saccades and complex eye movements.              procedures described in Section Preprocessing and potential
+Here the pAVR criterion eliminates many of these spurious                  blink detection, Calculating blink landmarks, Rejecting candidate
+motions.                                                                   signals with low SNR, Distinguishing blinks from other eye
+                                                                           movements, and Choosing the best signal from candidates. The
+                                                                           calculation of blinks using ICs requires a headset with sufficient
+Choosing the Best Signal from Candidates
+                                                                           detector density to get a reasonable estimate of the IC scalp maps.
+BLINKER requires a list of candidate EEG, EOG, or IC time
+                                                                           Using ICs instead of channels can improve blink detection for
+series from which to select the best signal for determining the
+                                                                           certain noisy datasets. However, IC-based blink detection can
+blinks. Frontal EEG channels and vertical upper EOG channels
+                                                                           also be sensitive to minor shifts in headset position during the
+usually provide the best signals for capturing blinks. However,
+                                                                           experiment. In this case, one IC component captures the blinks
+contamination by artifacts can sometimes render the “obvious”
+                                                                           before the cap shift and another IC component captures the
+channel unusable. For EEG channels, we usually provide several
+                                                                           blinks after the shift. For this reason, we recommend starting
+frontal channels and allow the algorithm to detect the channel
+                                                                           with EEG or EOG channels for blink detection or using channels
+that best captures blinks. This approach allows the algorithm
+                                                                           in combination with ICs. BLINKER supports merging of blinks
+to compensate for noisy channels and poor connections. If
+                                                                           detected from different methods with indications of how many
+the user provides a list of the EOG channels, the algorithm
+                                                                           methods produced a particular blink.
+usually automatically selects the upper vertical EOG channel
+from among the set of channels. This feature is useful in case
+the channels have been mislabeled (which does happen in our                Computation of Ocular Indices
+experience) and as a cross check on blink quality. If the user             The ocular indices that BLINKER computes include blink rate,
+doesn’t specify which channels to use, BLINKER tests all available         blink duration, and blink amplitude-velocity ratios. BLINKER
+channels and quite successfully chooses the best channel.                  also computes several other measures as well as statistics
+    To select the “best” signal from candidate signals, BLINKER            characterizing the variability of these measures.
+first tests whether any candidate signals have at least 70% of the
+blinks within two-standard deviations of the median of the “best”
+                                                                           Blink Rate
+                                                                           We define blink rate as the number of blinks per minute. Our
+blinks (good blink ratio criteria). From the set of candidates
+                                                                           blink detection algorithm always assigns a single maximum frame
+meeting this criterion, BLINKER selects the candidate signal with
+                                                                           to each blink. We compute the average blink rate for the dataset
+the most “good” blinks. If no candidate signals meet the good
+                                                                           as the number of blink maxima divided by the total length of the
+blink ratio criteria, BLINKER selects the signal with the most
+                                                                           dataset in minutes. Users can easily detect instantaneous blink
+“good” blinks and designates the signal as a “marginal” signal.
+                                                                           rates by computing the number of blinks in sliding window.
+This criteria works equally well for EOG channels and for EEG
+                                                                           Literature suggests that instantaneous blink rates be averaged
+channels, although EEG channels tend to have somewhat lower
+                                                                           over intervals of at least 3 to 5 min (Zaman and Doughty, 1997).
+percentages of good blinks than the upper vertical EOG channel.
+                                                                           Blink Duration
+Selecting the “Best” Independent Component                                 In eye tracking analyses, researchers often define blinks as eyelid
+To use independent components instead of EEG or EOG                        movements in which the pupil is more than half occluded.
+channels, you must provide the ICA decomposition, and                      We have used several different methods of calculating blink
+BLINKER automatically selects the “best” IC to use. BLINKER                duration. The half-zero duration is the width of the blink in
+uses the same process as described in the previous subsection              seconds at half of the blink amplitude from the zero level, as
+for channels with a separate initial step that uses EyeCatch               displayed by the green horizontal line in Figure 2. The low
+(Bigdely-Shamlo et al., 2013) to isolate probable eye-related ICs.         standard deviation (described below) suggests that the half-zero
+EyeCatch compares a given IC spatial distribution (IC scalp map            duration is the least sensitive to the effects of complex blinks
+
+
+Frontiers in Neuroscience | www.frontiersin.org                        7                                      February 2017 | Volume 11 | Article 12
+Kleifges et al.                                                                                                                                Analysis of Ocular Indices from EEG
+
+
+
+and eye movements. Similarly, half-base duration is the width                               vertically above the right eye (veou), vertically below the right
+at half of the blink amplitude measured from the leftBase of                                eye (veol), horizontally on the outside of the right eye (heor), and
+the blink. The half-base duration is slightly longer than the half-                         horizontally on the outside of the left eye (heol). BLINKER was
+zero duration, although these measures are highly correlated. The                           able to identify blinks in 662 out of the 669 ARL-BCIT datasets. In
+base duration is rightBase–leftBase and zero duration is rightZero–                         541 of these datasets, BLINKER selected the vertical upper EOG
+leftZero. These latter measures vary considerably for complex                               channel (veou) as having the best blink signal. Channels selected
+blinks or blinks contaminated by other eye movements (Caffier                               by BLINKER as the best in at least one dataset are labeled in
+et al., 2003). The tent duration is the difference between the                              Figure 4, with channels selected by only one dataset labeled in
+intersections of the downStroke and upStroke linear fit lines with                          red. For the most part, BLINKER automatically picks a frontal
+the zero line.                                                                              channel when the vertical EOG channel is not suitable.
+                                                                                               Figures 4C,D show the channel layouts for ARL-Shoot and
+Velocity Measures                                                                           NCTU-LK, respectively. The ARL-Shoot data collection also
+Johns (2003) has proposed two velocity measures as potential                                includes 4 EOG channels in the same positions as those defined
+indicators of fatigue: The positive amplitude velocity ratio                                above for ARL-BCIT. Again, BLINKER usually chooses the
+(pAVR) and the negative amplitude velocity ratio (nAVR). The                                vertical EOG channel when it is available or one of the frontal
+positive amplitude velocity ratio is the ratio of the maximum                               channels when it is not suitable or not available.
+amplitude of the blink over the maximum velocity (rate of                                      The BCI-2000 data collection uses a 64-channel headset, and
+change) during the blink upStroke. Similarly, the negative                                  BLINKER for the most part selects frontal channels. This subject’s
+amplitude velocity ratio is the ratio of the maximum amplitude                              data consists of 14 relatively short tasks, recorded consecutively
+of the blink over the maximum velocity found in the blink                                   in the same session. As with the ARL-Shoot data, we combine
+downStroke. These measures have units of centiseconds.                                      data across each session to get a better estimate of the blink
+                                                                                            maximum amplitude distributions for final channel selection.
+                                                                                            Three subjects had poor quality signals, and BLINKER failed
+RESULTS                                                                                     to detect blinks for several of the tasks within those subject’s
+                                                                                            sessions. The tasks for which BLINKER returned blinks in these
+We computed the blink statistics for the data collections                                   subjects were not frontal channels and are shaded in gray in
+described in Table 1. We analyzed ∼675,000 putative blinks                                  Table 2. Selection of appropriate channels is an indicator of blink
+extracted from ∼590 h of EEG recordings, allowing BLINKER                                   detection quality as discussed further below.
+to select the best channel. We used raw data for the calculations
+as described in Section Data preprocessing. Both ARL-Shoot
+and BCI2000 consisted of multiple tasks for a given subject
+recorded in a single session, and the individual task files for                             Analysis of Blink Rate
+these collections were too short to get good estimates of the                               Average blink rates over the collection ranged from 19.6 to
+blink maxima distributions. We used the combined datasets to                                22.6 blinks/min, well within the range of values reported in the
+determine the blink distributions for channel selection for these                           literature (Cruz et al., 2011) for spontaneous blink rates. Table 2
+two collections.                                                                            also indicates the channels BLINKER selected as the optimal
+   Table 2 summarizes the overall statistics and the results of                             “blink” channel. ARL-BCIT included a mix of 64 channel and
+automatic channel selection. The ARL-BCIT data collection                                   256 channel headsets; hence, the two lists of channels. BLINKER
+contains two types of headsets (64 channel and 256 channel EEG)                             often selected the front center channel, but sometimes channels
+as illustrated in Figures 4A,B, respectively. Figure 4 indicates                            slightly back had stronger signals or fewer non-blink artifacts.
+the channel positions for the headsets using dots. In addition                              EEG channels in general have a smaller ratio of “good” blinks
+each BCIT dataset includes 4 additional EOG channels placed                                 to potential blinks than the vertical upper EOG channel. This is
+
+TABLE 2 | Percentage of datasets for which BLINKER succeeded in computing blinks using channels/EOG as well as the overall average total blinks per
+minute for each collection and the total number of blinks.
+
+Collection        Successful (%)   Marginal (%)    Selected channel for all datasets                                                                     Mean rate   Total blinks
+
+ARL-BCIT            620 (93%)        44 (7%)       veou(291), fpz(13), fp1(8), p1(6), af7(6), po3(5), fp2(5), veol(3), afz(3), p10(2), af3(2), tp7(1),     19.6          514K
+                                                   po4(1), p5(1), p2(1), oz(1), af4(1),
+                                                   veou(250), e12(10), e29(7), e28(5), e11(5), f10(4), d32(3), d31(3), d24(3), e30(2), a6(2),
+                                                   e14(2), h3(1), h25(1), f3(1), f11(1), e27(1), e26(1), e24(1), c9(1), c5(1), b30(1), a5(1), a22(1),
+                                                   a20(1), a2(1)
+ARL-Shoot            99 (79%)        27 (21%)      veou(117), fp1(9)                                                                                       22.4         19.5K
+NCTU-LK              53 (66%)        27 (34%)      fp1(53), fp2(25), fcz(1), oz(1)                                                                         21.4          137K
+BCI-2000            961 (73%)        109 (8%)      fpz(253), fp1(146), f8(135), afz(103), af4(83), fp2(81), af8(48), af7(45), f7(39), f4(36), f6(30),      22.6          60K
+                                                   ft8(24), af3(24), f2(8), f1(7), p1(3), t9(2), tp7(1), fz(1), fc6(1)
+
+ARL-BCIT selected channels are separated by headset type (64 vs. 256 channels).
+
+
+
+
+Frontiers in Neuroscience | www.frontiersin.org                                         8                                                   February 2017 | Volume 11 | Article 12
+Kleifges et al.                                                                                                                  Analysis of Ocular Indices from EEG
+
+
+
+
+  FIGURE 4 | BLINKER channel selection for different datasets. Dots show positions of candidate channels. Labeled channels were selected. Channels labeled in
+  red were picked for only 1 dataset. (A) 64-channel ARL-BCIT driving collection (also has 4 EOG channels). (B) 256-channel ARL-BCIT driving collection (also has 4
+  EOG channels). (C) 34-channel ARL-Shoot data (also has 4 EOG channels). (D) 32-channel NCTU-LK driving data collection.
+
+
+
+
+expected, as EEG channels are positioned at a greater distance                       Blink Duration
+from the eyes and should have other content besides blinks.                          We can also calculate blink duration using several different
+   Datasets in ARL-BCIT and ARL-Shoot each contained four                            landmarks as described in Section Calculating blink landmarks.
+EOG channels: VEOU (above right eye), VEOL (below right                              Table 3 presents a summary of the mean (std) dataset blink
+eye), HEOR (to right of right eye), and HEOL (to the left                            duration using different landmarks for computing duration.
+of left eye). We always ran BLINKER with all four channels.                          As expected, the half-zero duration method has the lowest
+Usually, BLINKER automatically selected VEOU as the optimal                          standard deviation and a mean that is most consistent with
+blink channel. We manually examined the datasets for which                           reported values. As discussed in Section The BLINKER software,
+BLINKER did not select VEOU. Several of these had VEOU                               the half-zero duration corresponds closely to measuring the
+channels with weak signal quality or large artifacts. Usually the                    duration from when the eyelid first crosses the pupil. Eye
+values of blink parameters such as the blink amplitude ratios for                    trackers that rely on pupil detection also generally use this point
+these datasets were close to the border for failed blink detection.                  as the starting point of the blink. The standard deviation of
+Thus, we think it is useful to present the algorithm with all EOG                    the duration for prototypical (good) blinks is quite small, as
+channels as a cross check and to examine manually datasets where                     expected, based on the criteria for determining “good blinks.”
+BLINKER does not select the expected signal.                                         The average half-zero duration for the good datasets (good blink
+   Separately from the other tasks, the ARL-Shoot study ran an                       to potential blink ratio > 0.70) is very close to the average half-
+“eyes closed” task of ∼3-min duration. As a test of the algorithm,                   zero duration computed on all datasets. Further, the average
+we also ran the blink detector on these datasets for all 14 subjects.                half-zero duration from EEG and EOG channels is also in
+All 14 of the eyes closed datasets failed completely as expected.                    good agreement. The NCTU-LK collection has blink durations
+
+
+Frontiers in Neuroscience | www.frontiersin.org                                  9                                             February 2017 | Volume 11 | Article 12
+Kleifges et al.                                                                                                                     Analysis of Ocular Indices from EEG
+
+
+
+TABLE 3 | Mean and standard deviation of blink duration in seconds using different methods.
+
+Collection                 Half-zero                 Half-zero good data             Half-base                  Zero                    Base                     Tent
+
+ARL-BCIT                   0.12 (0.05)                      0.12 (0.05)              0.14 (0.10)             0.25 (0.09)             0.32 (0.10)             0.23 (0.10)
+ARL-Shoot*                 0.12 (0.05)                      0.12 (0.05)              0.14 (0.08)             0.24 (0.08)             0.29 (0.09)             0.22 (0.09)
+NCTU-LK                    0.14 (0.06)                      0.13 (0.06)              0.16 (0.09)             0.28 (0.11)             0.34 (0.11)             0.27 (0.12)
+BCI-2000*                  0.11 (0.04)                      0.11 (0.04)              0.12 (0.06)             0.24 (0.07)             0.32 (0.08)             0.21 (0.07)
+
+Datasets marked with asterisks indicate that signal selection used session data.
+
+
+
+
+  FIGURE 5 | Distribution of blink durations for the four collections. Top panel shows a quantile plot against the normal distributions of the average half-zero blink
+  duration for each dataset. The red dotted lines represent the best-fit normal distributions for the each of the four collections. Bottom panel shows the histogram of
+  individual half-zero blink durations for each collection.
+
+
+
+
+that are somewhat longer and more variable than the other                                  Figure 5 shows the statistical distribution of the half-zero
+collections. This is consistent with the experimental paradigms.                        durations. The upper graph shows a MATLAB normal probability
+The NCTU-LK experiment was designed to measure fatigue in                               plot of the mean blink durations for each dataset in the four
+simulated night-time driving, and each experiment ran an hour                           collections. The horizontal axis displays the dataset average
+or more.                                                                                values in the range [0.05, 0.35] s. The vertical axis represents the
+
+
+
+Frontiers in Neuroscience | www.frontiersin.org                                    10                                             February 2017 | Volume 11 | Article 12
+Kleifges et al.                                                                                                       Analysis of Ocular Indices from EEG
+
+
+
+corresponding quantile if the data were normally distributed. The                  To better understand the interplay between inter subject and
+vertical tic marks represent various standard quantiles. The red               inter task variability, we scaled each subject’s average blink rates
+dotted lines correspond to the best-fit normal distribution. While             by dividing by the average of the blink rates of the shooting only
+most datasets fall well along a normal distribution, there are some            tasks (bottom panel of Figure 6A and right panel of Figure 6B,
+datasets with very long average blink durations due mostly to                  respectively). As shown by Figure 6B, the scaled median of
+some unusually long blink durations. Many of these longer blinks               the average shooting-only blink rates is significantly lower than
+include more complex eye movements or are fatigue related. For                 the average of tasks involving arithmetic. We also found that
+example, the NCTU-LK study, which measures the effects of                      average blink durations and nAVR were larger for tasks involving
+fatigue on driver response, includes some subjects who appear                  arithmetic than those only involving shooting. All of these
+to drowse off for short periods. The lower panel of Figure 5                   indicators suggest that subjects spend longer time with eyes
+displays the fraction of half-zero blink durations in different                closed when doing arithmetic.
+intervals from 0.05 up to 0.35 s. This graph represents the 675K                   To quantify this relationship further, we performed an analysis
+individual blinks in the four data collections. The horizontal axis            of variance using the MATLAB anovan function. Table 4 shows
+is truncated at 0.35 s.                                                        the results of several variations on the analysis. The dataset has
+    Figure 5 uses raw data. However, as mentioned above, ARL-                  14 subjects performing 9 tasks: 4 tasks consisting of shooting
+Shoot and NCTU-LK are mastoid-referenced. Referencing makes                    only, while the remaining 5 tasks include arithmetic with and
+little difference in blink detection, but can slightly shift the values        without shooting. All of the analyses use Subjects and Tasks as
+of ocular indices such as blink duration. The referencing status of            the variables. The column labeled Individual shows the results of
+BCI-2000 is unknown. Durations computed for referenced data                    analysis using 14 levels for the Subjects variable and 9 levels for
+may shift slightly in either direction since the position of the               the Tasks variable. Because of the large variability in the base level
+zero mark relative to the blink may shift. Our computations of                 of the individual subjects, all appear to be significantly different
+durations for referenced and non-referenced data did not vary                  and the analysis does not reveal relationships. Clustering the tasks
+significantly from each other on average.                                      into Math and No math groups (designated Grouped in Table 4)
+                                                                               reduces, but does not eliminate inter-subject variability.
+Ocular Indices and Tasks                                                           The final column of Table 4 uses div data. Here we factor
+In this section, we demonstrate how analysis of blinks can                     out each subject’s intrinsic level by dividing a subject’s values
+discover patterns and validate observations on a large scale.                  by the average of that subject’s values on the non-math tasks.
+We focus on the ARL-Shoot dataset, which has 14 subjects                       Several other scaling methods also worked for most indicators,
+and 9 different tasks. Four of these tasks (SEO2, SEO4, SEF2,                  although the division scaling method appeared to give the best
+SEF4) were shooting only (indicated by S in their label). Their                results overall. As we can see from the last column of Table 4,
+targets were only enemies (indicated by EO in the label) or                    with division scaling, the indicators show a significant difference
+both enemies and friends (indicated by EF). The numerical                      between Math and No math categories, but little or no significant
+notations in the labels (2 and 4) distinguish how many seconds                 difference among the subjects. As indicated above, the values
+the target remains visible. The study also includes dual tasks                 indicate a tendency to spend more time in the blinking state
+(indicated by Ds in their labels) which consisted of simultaneous              (i.e., higher blink rate, longer blinks, as well as slower up and
+shooting and performing arithmetic (DEO2, DEO4, DEF2,                          down velocities) in the tasks involving arithmetic. As pointed
+DEF4). There is also an arithmetic only (ARIT) task in the                     out by Recarte et al. (2008) the relationship between blink rate
+study.                                                                         and task can be quite complicated. They argue that mental
+    Figure 6 shows the distributions of average dataset blink rate             workload of cognitive tasks increases blink rate while visual
+in blinks/min for different subjects and different tasks. Figure 6A            demand inhibits it. The results of our analysis points to the
+breaks down these dataset averages by subject. Each boxplot                    importance of factoring out subject effects in analyzing ocular
+in the upper panel represents the distribution of the average                  indicators (Nezlek, 2007).
+dataset blink rate for the 9 datasets (corresponding to the 9
+tasks) associated with each of the 14 subjects (A–N). The graph                THE BLINKER SOFTWARE
+illustrates the considerable variability in average blink rate for
+the different subjects. Some subjects, such as K, have similar                 BLINKER is freely available as a MATLAB toolbox at
+average blink rates among the tasks, while others subjects, such               https://github.com/VisLab/EEG-Blinks. The toolset depends on
+as B, I, and J, have considerable variability. Notice however, that            EEGLAB (Delorme and Makeig, 2004) and can be run as
+there are subjects with both high medians and high variability                 an EEGLAB plugin. Researchers wishing to calculate blinks
+(I and J). There are also subjects with low medians and high                   from independent components can also download EYECatch to
+variability (B). Each subject appears to have intrinsic blink rate             restrict the selection to known eye components (https://github.
+characteristics. However, within each subject, tasks involving                 com/bigdelys/eye-catch). This step is not necessary, but speeds
+arithmetic generally have higher blink rates than the shooting                 up the computations when using independent components.
+only tasks as can be seen by the left panel of Figure 6B. The                     The simplest command to extract the blinks (blinks),
+median of the average dataset blink rate for no math tasks is                  their     shapes     (blinkFits),     and    their   properties
+significantly lower than the median of the average dataset blink               (blinkProperties) using BLINKER and the default
+rate for the tasks including math.                                             settings is:
+
+
+Frontiers in Neuroscience | www.frontiersin.org                           11                                        February 2017 | Volume 11 | Article 12
+Kleifges et al.                                                                                                                     Analysis of Ocular Indices from EEG
+
+
+
+
+  FIGURE 6 | ANOVA analysis of blink rate for ARL-Shoot. (A) Top panel shows the distribution of average dataset blink rate for each of the 14 subjects (A through
+  N) over the 9 tasks. The bottom panel shows the same distributions when each average is divided by the average of the dataset blink rates for no-math tasks. (B) Left
+  panel compares the distributions of dataset average blink rates, grouping the math and no-math tasks for all subjects. The right panel shows the same distributions
+  after dividing the dataset average blink rates by the subject’s average no-math blink rate.
+
+
+
+              [EEG, com, blinks, blinkFits,...                                          of n consecutive data frames sampled at srate Hz.
+                  blinkProperties,params] = ...                                         The time series can be EEG channels, EOG channels, or
+                                       pop_blinks(EEG)                                  ICs or combinations of these. This version brings up a
+                                                                                        GUI that allows users to set various paths and options.
+Here EEG is a structure that is compatible with the EEGLAB                              Alternatively, pop_blinks can take a second optional
+EEG structure. However, BLINKER only requires that the                                  argument, params, a structure holding values that
+input data structure have an srate field containing the                                 override default values. This latter version can be called
+sampling rate in Hz and a data field containing an m                                    from a script without a GUI for large scale automated
+× n array of m candidate time series, each consisting                                   processing.
+
+
+
+Frontiers in Neuroscience | www.frontiersin.org                                    12                                             February 2017 | Volume 11 | Article 12
+Kleifges et al.                                                                                                                Analysis of Ocular Indices from EEG
+
+
+
+TABLE 4 | Results of analysis of variance with subjects and tasks for the                 Figure 7 uses red symbols to mark a blink with these manually
+ARL-Shoot data collection.                                                                collected video landmarks plotted on the BLINKER output
+Indicator Variable        Individual       Grouped              Grouped with              for the same blink. The first eyelid movement (red circle)
+                                                                divided scaling           is very close to the leftZero crossing, and the initial pupil
+                                                                                          crossing (red x) is close to the half-zero amplitude frame. The
+Blink       Subject   F(13, 112) = 19.3,   F(13, 112) = 15.9,   F(13, 112) = 2.3,         last frame prior to eyelid reversal (red cross) is close to the
+rate                  p = 3.7E−22          p = 7.8E−20          p = 0.01
+                                                                                          maximum frame. The pupil crossing during eyelid opening (red
+            Task      F(8, 117) = 11.2,    F(1, 124) = 49.0,    F(1, 124) = 25.0,
+                      p = 2.3E−11          p = 2.2E−10          p = 2.2E−6
+                                                                                          square) is close to the rightZero crossing, and the last eyelid
+Blink       Subject   F(13, 112) = 13.4,   F(13, 112) = 8.0,    F(13, 112) = 1.1,
+                                                                                          movement (red diamond) is close to the rightBase. The green
+duration              p = 5.8E−17          p = 4.0E−11          p = 0.36                  markers in this figure are from BLINKER and described in
+            Task      F(8, 117) = 11.7,    F(1, 124) = 7.0,     F(1, 124) = 8.4,          Figure 1.
+                      p = 9.8E−12          p = 0.0095           p = 0.0046                    To get a measure of detection accuracy and false positive rate,
+pAVR        Subject   F(13, 112) = 22.0,   F(13, 112) = 16.1,   F(13, 112) = 0.88,        we compared the blinks detected by BLINKER to the video taken
+                      p = 3.8E−24          p = 5.2E−20          p = 0.57                  for various subjects. Some examples of representative datasets are
+            Task      F(8, 117) = 6.1,     F(1, 124) = 1.1,     F(1, 124) = 1.2,          shown in Table 5.
+                      p = 2.0E−6           p = 0.29             p = 0.28
+                                                                                              The first dataset of Table 5 has the maximum blink
+nAVR        Subject   F(13, 112) = 36.0,   F(13, 112) = 21.0,   F(13, 112) = 1.5,
+                      p = 1.4E−32          p = 3.4E−24          p = 0.13
+                                                                                          distribution shown in Figure 3A. This dataset is very clean. This
+            Task      F(8, 117) = 12.6,    F(1, 124) = 8.5,     F(1, 124) = 9.3,
+                                                                                          dataset had no false positives, but the algorithm missed 10 out
+                      p = 1.8E−12          p = 0.0043           p = 0.0028                of the 143 blinks using the default settings. Examination of
+                                                                                          the 10 misses showed that four of them were members of a
+                                                                                          blink pair less than 0.5 s apart with one blink in the pair being
+   The toolbox comes with many code examples of how to                                    detected and the other missed. All of the missed blinks either
+call the functions and the user is referred to the online                                 had long tails or were at the beginning or end of a saccade,
+user manual at http://vislab.github.io/EEG-Blinks/ for additional                         which usually elevated the signal so that it did not fall below
+information.                                                                              zero on one end of the blink or the other. The second dataset
+                                                                                          of Table 5 had many candidate blinks that were low amplitude
+                                                                                          eye movements (Figure 3B), which BLINKER successfully
+VISUAL VERIFICATION OF BLINKER                                                            eliminated. BLINKER missed six of 38 blinks—four of which
+OUTPUT                                                                                    were confounded with saccades. Although the third dataset had
+                                                                                          a very difficult maximum amplitude distribution (Figure 3C),
+In order to determine the correspondence between computed                                 BLINKER successfully eliminated all eye movements in the
+BLINKER landmarks and visual manifestations of blinks, we                                 examined segment. The one miss was clearly a blink, but its
+compared the output of the BLINKER blink detection algorithm                              amplitude was greater than five robust standard deviations above
+to manual annotation of simultaneous video for several datasets.                          the best blink median, and so BLINKER eliminated it. The final
+Video recordings of subjects’ eyes were available for a number                            dataset had one miss and one false positive, both involving
+of ARL-BCIT datasets. We selected a subset of recordings based                            saccades.
+primarily based on how easy it was to determine eyelid position                               BLINKER provides a method of grouping candidate blinks
+from the video recording. We eliminated datasets in which the                             from multiple channels and displaying the individual candidates
+subject wore glasses, was not looking directly at the camera,                             in a convenient way. BLINKER forms blink groups when
+or had other physical features that made it difficult to score                            at least one usable signal goes above 1.5 robust standard
+blinks.                                                                                   deviations above zero. BLINKER overlays all of the usable
+    We dumped the video, initially recorded at 250 fps, as                                signals, displaying the blink candidates in this group with
+individual images sampled at a rate of 60 frames per second using                         solid lines and non-members of the group with dashed
+Adobe Premiere 6.0. Estimates of the synchronization of the start                         lines.
+of the video and the start of the EEG were accurate to about 1                                Figures 8A,B illustrate the BLINKER display of blink groups
+s. Further, the video frame rate was not perfectly uniform. Thus,                         for two misses of the first dataset in Table 5. Figures 8C,D
+we manually synchronized blocks of video with the EEG when                                illustrate the BLINKER display for the miss and the hit of the last
+we observed a drift. We then extracted the following data for the                         dataset in Table 5. The runs of Table 5 were made by providing
+observed blinks:                                                                          all 64 EEG channels plus 4 EEG channels as potential signals
+• Frame of first eyelid movement                                                          and allowing BLINKER to select the usable signals. For the first
+• Frame where eyelid is at top of pupil moving downward                                   dataset, BLINKER designated eight of the EEG channels and
+• Last frame prior to eyelid reversal                                                     the upper vertical EOG channel as “usable” and selected the
+• Frame where eyelid reaches the top of pupil moving upward                               vertical EOG channel (veou) as the best choice. Figure 8A shows
+• Frame of last eyelid movement                                                           a blink that closely follows another (correctly detected) blink.
+                                                                                          Only veou has this as a blink candidate as the signal has too
+Although there was some variation from blink to blink, typically                          low an amplitude in the other channels to be noticed. Further,
+this variation was attributable to time resolution of the video.                          this miss has a long tail and a close examination indicates that a
+
+
+Frontiers in Neuroscience | www.frontiersin.org                                      13                                      February 2017 | Volume 11 | Article 12
+Kleifges et al.                                                                                                                                Analysis of Ocular Indices from EEG
+
+
+
+
+  FIGURE 7 | An output by BLINKER of blink 15 of a specific ARL-BCIT dataset over-plotted with landmarks manually extracted from video: First eyelid
+  movement (red circle), eyelid at top of pupil moving downward (red x), at eyelid reversal (red cross), eyelid at top of pupil moving upward (red square),
+  and last detectable eyelid movement (red diamond). The x-axis label shows the frames and times in seconds of the leftBase point and point of blink maximum
+  amplitude, respectively.
+
+
+
+
+TABLE 5 | Video verification of correspondence between BLINKER detected blinks and visual manifestations of blinks.
+
+Dataset                  Figures                       TP          FP        FN         Explanations
+
+BCIT S2007 X2            Figure 3A                     143         0          10        Four were first of a blink pair with saccade between
+                                                                                        Four had a saccade at the beginning
+                                                                                        Two had a saccade at the end
+BCIT S2008 XB            Figure 3B                     32          0          6         Four had a saccade at the end
+                                                                                        Two were a pair of low amplitude blinks less than 0.1 s apart
+BCIT S2018 XB            Figure 3C                     17          0          1         Miss (FN) had amplitude slightly larger than high cutoff—obviously a blink from the trace.
+BCIT S2019 X2            Similar to Figure 3B          25          1          1         False positive was a “blink-like” saccade
+                                                                                        Miss had a long tail
+
+TP, true positives; FP, false positive (BLINKER yes, video no); FN, false negatives (BLINKER no, video yes).
+
+
+
+horizontal eye movement confounded the detection. Figure 8B                                     that the blink candidate is an actual blink with respect to the
+is also from the first dataset. This blink appears as a candidate                               used signal.
+in all of the usable signals, but here an eye movement preceding                                   Figures 8C,D show two examples from the last dataset of
+the blink confounds detection. The titles for both of these figures                             Table 5. The blink candidate of Figure 8C had a saccade directly
+appear in green because the used channel (veou) has the blinks                                  before the start of the blink. The blink candidate of Figure 8D
+as a blink candidate. When the used channel is not a member of                                  was detected as an actual blink, but appears to have actually been
+the blink group, the title appears in red. A black title indicates                              a saccade.
+
+
+
+
+Frontiers in Neuroscience | www.frontiersin.org                                            14                                             February 2017 | Volume 11 | Article 12
+Kleifges et al.                                                                                                           Analysis of Ocular Indices from EEG
+
+
+
+
+  FIGURE 8 | Sample output from the BLINKER group display for the first and last datasets from Table 5. (A) A miss with two closely spaced candidates
+  intermixed with a saccade. (B) A miss with a leading saccade. (C) A miss with a leading saccade. (D) A falsely detected blink that was a saccade.
+
+
+
+
+DISCUSSION                                                                       electronic sensing pad affixed on the forehead above the eye to
+                                                                                 measure blink durations. Very little work has been done to study
+Psychologists have long understood that pupillary responses                      eye-blinking activity extracted from EEG. Plöchl et al. (2012)
+and other ocular indices contain information about emotion                       have done a comprehensive study of how different types of eye
+and other characteristics of subjects (Mathôt and der Stigchel,                  artifacts manifest in EEG. They decompose EEG using ICA and
+2015). Opthmologists have measured blink rates and other                         then identify components that capture eye artifacts based on
+ocular properties to assess disease states such as glaucoma                      relationships of these components to eye tracker information.
+(Cruz et al., 2011; Doughty, 2014). Often researchers have                       They have also provided a MATLAB toolbox called EYE-EEG
+computed these indices manually from video. More recently                        that allows users to analyze eye-tracking data in conjunction with
+however, special devices such as a contact lens sensors (CLS)                    EEG. Other tools, such as EALab (Andreu-Perez et al., 2015)
+have been developed to extract blinking activity and other eye                   calculate ocular indices from eye-trackers independently of EEG.
+properties under continuous monitoring (Gisler et al., 2015).                    EALab focuses on pupillometry measures as well as saccades and
+Hsieh and Tai (2013) proposed the design of a dedicated                          fixations.
+
+
+Frontiers in Neuroscience | www.frontiersin.org                             15                                          February 2017 | Volume 11 | Article 12
+Kleifges et al.                                                                                                                              Analysis of Ocular Indices from EEG
+
+
+
+    Our motivation for developing BLINKER is that much                                        valuable investigative tool to researchers. BLINKER is freely
+information about blinking and eye movements is available                                     available at https://github.com/VisLab/EEG-Blinks.
+“for free” in EEG and can be extracted automatically for
+long stretches of EEG data. As far as the authors are aware,                                  ETHICS STATEMENT
+BLINKER is the first tool designed to extract ocular indices
+from EEG data in a standardized way. BLINKER makes it                                         This study is exempt in that it is the reanalysis of de-identified
+possible to post-process virtually any previously acquired EEG                                data. The original data for these studies were approved under
+dataset to extract the behavioral information embodied in several                             human subjects boards at their respective institutions.
+common ocular indices. BLINKER provides an opportunity to
+gather blink statistics and information about blink variability                               AUTHOR CONTRIBUTIONS
+over a much larger and diverse subject pool than has been
+previously available. Our collaborators have also used BLINKER                                KK performed much of the initial exploratory algorithm
+for mundane purposes such as extracting and/or verifying sync                                 development, participated in the development and testing of
+markers for EEG and eye tracking.                                                             the algorithms and assisted in writing the paper. NB helped
+    Our manual video verification shows that the BLINKER                                      in exploratory algorithm development and participated in the
+algorithms are effective in capturing a majority of the blinks.                               writing of the paper. SK provided data for testing, assisted in
+However, subjects are highly variable in their behavior, which                                the interpretation of results, and assisted in the writing of the
+can contaminate the EEG signal in a variety of ways. Eye                                      paper. KR conceived the study, participated in the development
+irritation, scratching, rubbing, squinting, and alternate rapid                               and testing of the algorithms, wrote the software documentation,
+winking behaviors observed in video are reflected in atypical                                 and led the writing of the paper.
+EEG signals. Saccades present a difficult detection problem, so
+tasks that involve extensive visual searching across a large visual                           ACKNOWLEDGMENTS
+field will be difficult for BLINKER. However, we believe that
+over long recordings, the effects of these difficulties will be                               The authors wish to gratefully acknowledge our many
+minimal.                                                                                      collaborators on the CAN-CTA project, especially Dave Hairston
+    Our analysis of a large EEG collection has revealed a variety                             and Vernon Lawhern of the Army Research Laboratory, CT
+of spontaneous blinking behaviors that BLINKER can detect                                     Lin, Tzyy-Ping Jung, Chun-Hsiang Chuang, and Jung-Tai
+from EEG. We have also demonstrated how to isolate ocular                                     King of National Chiao Tung University, as well as Tony
+index dependence on task. Recently, Wascher et al. (2015) have                                Johnson and Michael Dunkel of DCS Corporation. The
+argued that blinks play a fundamental role in human information                               research was sponsored by the Army Research Laboratory
+processing. The ability of BLINKER to accurately time individual                              and was accomplished under Cooperative Agreement Number
+blinks to stimuli and neural activity in EEG may provide a                                    W911NF-10-2-0022 and NIH grant 1R01MH084819-03.
+
+
+
+REFERENCES                                                                                    Caffier, P. P., Erdmann, U., and Ullsperger, P. (2003). Experimental evaluation
+                                                                                                 of eye-blink parameters as a drowsiness measure. Eur. J. Appl. Physiol. 89,
+Akerstedt, T., and Gillberg, M. (1990). Subjective and objective sleepiness in the               319–325. doi: 10.1007/s00421-003-0807-5
+   active individual. Int. J. Neurosci. 52, 29–37. doi: 10.3109/00207459008994241             Chuang, C.-H., Ko, L.-W., Jung, T.-P., and Lin, C.-T. (2014a). Kinesthesia
+Andreu-Perez, J., Solnais, C., and Sriskandarajah, K. (2015). EALab (Eye                         in a sustained-attention driving task. Neuroimage 91, 187–202.
+   Activity Lab): a MATLAB Toolbox for variable extraction, multivariate                         doi: 10.1016/j.neuroimage.2014.01.015
+   analysis and classification of eye-movement data. Neuroinformatics 14, 51–67.              Chuang, C.-H., Ko, L.-W., Lin, Y.-P., Jung, T.-P., and Lin, C.-T.
+   doi: 10.1007/s12021-015-9275-4                                                                (2014b). Independent component ensemble of EEG for brain–
+Anund, A., Fors, C., Hallvig, D., Åkerstedt, T., and Kecklund, G. (2013). Observer               computer interface. IEEE Trans. Neural Syst. Rehabil. Eng. 22, 230–238.
+   rated sleepiness and real road driving: an explorative study. PLoS ONE                        doi: 10.1109/TNSRE.2013.2293139
+   8:e64782. doi: 10.1371/journal.pone.0064782                                                Chuang, S.-W., Ko, L.-W., Lin, Y.-P., Huang, R.-S., Jung, T.-P., and Lin,
+Bell, A. J., and Sejnowski, T. J. (1995). An information-maximization approach                   C.-T. (2012). Co-modulatory spectral changes in independent brain
+   to blind separation and blind deconvolution. Neural Comput. 7, 1129–1159.                     processes are correlated with task performance. Neuroimage 62, 1469–1477.
+   doi: 10.1162/neco.1995.7.6.1129                                                               doi: 10.1016/j.neuroimage.2012.05.035
+Benedetto, S., Pedrotti, M., Minin, L., Baccino, T., Re, A., and Montanari, R. (2011).        Colzato, L. S., Slagter, H. A., Spapé, M. M. A., and Hommel, B. (2008). Blinks
+   Driver workload and eye blink duration. Transport. Res. Part F Traffic Psychol.               of the eye predict blinks of the mind. Neuropsychologia 46, 3179–3183.
+   Behav. 14, 199–208. doi: 10.1016/j.trf.2010.12.001                                            doi: 10.1016/j.neuropsychologia.2008.07.006
+Bigdely-Shamlo, N., Kreutz-Delgado, K., Kothe, C., and Makeig, S. (2013).                     Colzato, L. S., Spapé, M. M. A., Pannebakker, M. M., and Hommel, B. (2007).
+   “EyeCatch: data-mining over half a million EEG independent components to                      Working memory and the attentional blink: blink size is predicted by
+   construct a fully-automated eye-component detector,” in 2013 35th Annual                      individual differences in operation span. Psychon. Bull. Rev. 14, 1051–1057.
+   International Conference of the IEEE Engineering in Medicine and Biology                      doi: 10.3758/BF03193090
+   Society (Osaka: EMBC), 5845–5848. doi: 10.1109/EMBC.2013.6610881                           Cruz, A. A. V., Garcia, D. M., Pinto, C. T., and Cechetti, S. P. (2011). Spontaneous
+Bigdely-Shamlo, N., Mullen, T., Kothe, C., Su, K.-M., and Robbins, K. A. (2015).                 eyeblink activity. Ocul. Surf. 9, 29–41. doi: 10.1016/S1542-0124(11)70007-6
+   The PREP pipeline: standardized preprocessing for large-scale EEG analysis.                Delorme, A., and Makeig, S. (2004). EEGLAB: an open source toolbox for
+   Front. Neuroinform. 9:16. doi: 10.3389/fninf.2015.00016                                       analysis of single-trial EEG dynamics including independent component
+
+
+
+
+Frontiers in Neuroscience | www.frontiersin.org                                          16                                               February 2017 | Volume 11 | Article 12
+Kleifges et al.                                                                                                                               Analysis of Ocular Indices from EEG
+
+
+
+   analysis. J. Neurosci. Methods 134, 9–21. doi: 10.1016/j.jneumeth.2003.                    Nezlek, J. B. (2007). A multilevel framework for understanding relationships
+   10.009                                                                                        among traits, states, situations and behaviours. Eur. J. Pers. 21, 789–810.
+Delorme, A., Sejnowski, T., and Makeig, S. (2007). Enhanced detection of artifacts               doi: 10.1002/per.640
+   in EEG data using higher-order statistics and independent component analysis.              Nolan, H., Whelan, R., and Reilly, R. B. (2010). FASTER: fully automated statistical
+   Neuroimage 34, 1443–1449. doi: 10.1016/j.neuroimage.2006.11.004                               thresholding for EEG artifact rejection. J. Neurosci. Methods 192, 152–162.
+Doughty, M. J. (2014). Spontaneous eyeblink activity under different conditions of               doi: 10.1016/j.jneumeth.2010.07.015
+   gaze (eye position) and visual glare. Graefe’s Arch. Clin. Exp. Ophthalmol. 252,           Plöchl, M., Ossandón, J. P., and König, P. (2012). Combining EEG and eye
+   1147–1153. doi: 10.1007/s00417-014-2673-8                                                     tracking: identification, characterization, and correction of eye movement
+Ftouni, S., Rahman, S. A., Crowley, K. E., Anderson, C., Rajaratnam,                             artifacts in electroencephalographic data. Front. Hum. Neurosci. 6:278.
+   S. M. W., and Lockley, S. W. (2013). Temporal dynamics of ocular                              doi: 10.3389/fnhum.2012.00278
+   indicators of sleepiness across sleep restriction. J. Biol. Rhythms 28, 412–424.           Putilov, A. A., and Donskaya, O. G. (2013). Construction and validation of the EEG
+   doi: 10.1177/0748730413512257                                                                 analogues of the Karolinska sleepiness scale based on the Karolinska drowsiness
+Gisler, C., Ridi, A., Hennebert, J., Weinreb, R. N., and Mansouri, K. (2015).                    test. Clin. Neurophysiol. 124, 1346–1352. doi: 10.1016/j.clinph.2013.01.018
+   Automated detection and quantification of circadian eye blinks using a contact             Recarte, M. A., Pérez, E., Conchillo, A., and Nunes, L. M. (2008). Mental workload
+   lens sensor. Transl. Vis. Sci. Technol. 4:4. doi: 10.1167/tvst.4.1.4                          and visual impairment: differences between pupil, blink, and subjective rating.
+Goldberger, A. L., Amaral, L. A. N., Glass, L., Hausdorff, J. M., Ivanov, P. C., Mark,           Span. J. Psychol. 11, 374–385.
+   R. G., et al. (2000). PhysioBank, physiotoolkit, and physionet components                  Sandberg, D., Anund, A., Fors, C., Kecklund, G., Karlsson, J. G., Wahde, M.,
+   of a new research resource for complex physiologic signals. Circulation 101,                  et al. (2011). The characteristics of sleepiness during real driving at night—a
+   e215–e220. doi: 10.1161/01.CIR.101.23.e215                                                    study of driving performance, physiology and subjective experience. Sleep 34,
+Hsieh, C. S., and Tai, C. C. (2013). “A calculation for complex eye-blink duration               1317–1325. doi: 10.5665/sleep.1270
+   by regression,” in 2013 IEEE International Symposium on Next-Generation                    Schalk, G., McFarland, D. J., Hinterberger, T., Birbaumer, N., and Wolpaw, J. R.
+   Electronics (ISNE) (Kaohsiung), 549–552. doi: 10.1109/ISNE.2013.6512420                       (2004). BCI2000: a general-purpose brain-computer interface (BCI) system.
+Ingre, M., Akerstedt, T., Peters, B., Anund, A., and Kecklund, G.                                IEEE Trans. Biomed. Eng. 51, 1034–1043. doi: 10.1109/TBME.2004.827072
+   (2006). Subjective sleepiness, simulated driving performance and blink                     Schuri, U., and von Cramon, D. (1981). Heart rate and blink rate responses
+   duration: examining individual differences. J. Sleep Res. 15, 47–53.                          ruring mental arithmetic with and without continuous verbalization of results.
+   doi: 10.1111/j.1365-2869.2006.00504.x                                                         Psychophysiology 18, 650–653. doi: 10.1111/j.1469-8986.1981.tb01839.x
+Johns, M. W. (2003). The amplitude-velocity ratio of blinks: a new method for                 Tada, H., Omori, Y., Hirokawa, K., Ohira, H., and Tomonaga, M. (2013).
+   monitoring drowsiness. Sleep 26, A51–A52.                                                     Eye-blink behaviors in 71 species of primates. PLoS ONE 8:e66018.
+Jung, T.-P., Makeig, S., Humphries, C., Lee, T.-W., McKeown, M. J., Iragui, V., et al.           doi: 10.1371/journal.pone.0066018
+   (2000). Removing electroencephalographic artifacts by blind source separation.             Wascher, E., Heppner, H., Möckel, T., Kobald, S. O., and Getzmann, S. (2015).
+   Psychophysiology 37, 163–178. doi: 10.1111/1469-8986.3720163                                  Eye-blinks in choice response tasks uncover hidden aspects of information
+Karson, C. N. (1988). Physiology of normal and abnormal blinking. Adv. Neurol.                   processing. EXCLI J. 14, 1207–1218. doi: 10.17179/excli2015-696
+   49, 25–37.                                                                                 Wilkinson, V. E., Jackson, M. L., Westlake, J., Stevens, B., Barnes, M., Swann,
+Karson, C. N., Burns, R. S., LeWitt, P. A., Foster, N. L., and Newman, R.                        P., et al. (2013). The accuracy of eyelid movement parameters for drowsiness
+   P. (1984). Blink rates and disorders of movement. Neurology 34, 677–677.                      detection. J. Clin. Sleep Med. 9, 1315–1324. doi: 10.5664/jcsm.3278
+   doi: 10.1212/WNL.34.5.677                                                                  Winkler, I., Haufe, S., and Tangermann, M. (2011). Automatic classification of
+Karson, C. N., Dykman, R. A., and Paige, S. R. (1990). Blink rates in schizophrenia.             artifactual ICA-components for artifact removal in EEG signals. Behav. Brain
+   Schizophr. Bull. 16, 345–354. doi: 10.1093/schbul/16.2.345                                    Funct. 7, 1–15. doi: 10.1186/1744-9081-7-30
+Kerick, S. E., Hatfield, B. D., and Allender, L. E. (2007). Event-related cortical            Zaman, M. L., and Doughty, M. J. (1997). Some methodological issues in the
+   dynamics of soldiers during shooting as a function of varied task demand. Aviat.              assessment of the spontaneous eyeblink frequency in man. Ophthalm. Physiol.
+   Space Environ. Med. 78, B153–B164.                                                            Opt. 17, 421–432. doi: 10.1111/j.1475-1313.1997.tb00075.x
+Kleven, M. S., and Koek, W. (1996). Differential effects of direct and indirect
+   dopamine agonists on eye blink rate in cynomolgus monkeys. J. Pharmacol.                   Disclaimer: The views and the conclusions contained in this document are those of
+   Exp. Ther. 279, 1211–1219.                                                                 the authors and should not be interpreted as representing the official policies, either
+Makeig, S., and Jung, T. P. (1995). Changes in alertness are a principal                      expressed or implied, of the Army Research Laboratory or the U.S Government.
+   component of variance in the EEG spectrum. Neuroreport 7, 213–216.                         The U.S Government is authorized to reproduce and distribute reprints for
+   doi: 10.1097/00001756-199512000-00051                                                      Government purposes notwithstanding any copyright notation herein.
+Marquart, G., Cabrall, C., and de Winter, J. (2015). Review of eye-related
+   measures of drivers’ mental workload. Procedia Manuf. 3, 2854–2861.                        Conflict of Interest Statement: The authors declare that the research was
+   doi: 10.1016/j.promfg.2015.07.783                                                          conducted in the absence of any commercial or financial relationships that could
+Mathôt, S., and der Stigchel, S. V. (2015). New light on the mind’s eye the                   be construed as a potential conflict of interest.
+   pupillary light response as active vision. Curr. Dir. Psychol. Sci. 24, 374–378.
+   doi: 10.1177/0963721415593725                                                              Copyright © 2017 Kleifges, Bigdely-Shamlo, Kerick and Robbins. This is an open-
+McIntire, L. K., McKinley, R. A., Goodyear, C., and McIntire, J. P. (2014). Detection         access article distributed under the terms of the Creative Commons Attribution
+   of vigilance performance using eye blinks. Appl. Ergon. 45(2, Part B), 354–362.            License (CC BY). The use, distribution or reproduction in other forums is permitted,
+   doi: 10.1016/j.apergo.2013.04.020                                                          provided the original author(s) or licensor are credited and that the original
+Mognon, A., Jovicich, J., Bruzzone, L., and Buiatti, M. (2011). ADJUST: an                    publication in this journal is cited, in accordance with accepted academic practice.
+   automatic EEG artifact detector based on the joint use of spatial and temporal             No use, distribution or reproduction is permitted which does not comply with these
+   features. Psychophysiology 48, 229–240. doi: 10.1111/j.1469-8986.2010.01061.x              terms.
+
+
+
+
+Frontiers in Neuroscience | www.frontiersin.org                                          17                                                 February 2017 | Volume 11 | Article 12
+

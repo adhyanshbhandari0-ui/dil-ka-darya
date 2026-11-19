@@ -1,0 +1,1162 @@
+                                                                                              Chemical Senses, 2018, Vol 43, 583–597
+                                                                                                         doi:10.1093/chemse/bjy045
+                                                                                                                     Original Article
+                                                                                             Advance Access publication 7 July 2018
+
+
+
+Original Article
+
+Automated analysis of breathing waveforms
+using BreathMetrics: a respiratory signal
+processing toolbox
+Torben Noto, Guangyu Zhou, Stephan Schuele, Jessica Templer and
+Christina Zelano
+Department of Neurology, Northwestern University Feinberg School of Medicine, 303 E. Chicago Ave., Ward 13-270,
+Chicago, IL 60611, USA
+
+Correspondence to be sent to: Torben Noto, Neurology Department, Northwestern University Feinberg School of Medicine,
+303 E. Chicago Ave., Ward 13-270, Chicago, IL 60611, USA. e-mail: torben.noto@gmail.com
+
+Editorial Decision 29 June 2018.
+
+
+Abstract
+Nasal inhalation is the basis of olfactory perception and drives neural activity in olfactory and
+limbic brain regions. Therefore, our ability to investigate the neural underpinnings of olfaction
+and respiration can only be as good as our ability to characterize features of respiratory behavior.
+However, recordings of natural breathing are inherently nonstationary, nonsinusoidal, and idio-
+syncratic making feature extraction difficult to automate. The absence of a freely available compu-
+tational tool for characterizing respiratory behavior is a hindrance to many facets of olfactory and
+respiratory neuroscience. To solve this problem, we developed BreathMetrics, an open-source tool
+that automatically extracts the full set of features embedded in human nasal airflow recordings.
+Here, we rigorously validate BreathMetrics’ feature estimation accuracy on multiple nasal airflow
+datasets, intracranial electrophysiological recordings of human olfactory cortex, and computa-
+tional simulations of breathing signals. We hope this tool will allow researchers to ask new ques-
+tions about how respiration relates to body, brain, and behavior.
+
+Key words: algorithm, electrocorticography, feature extraction, humans, olfaction, respiration
+
+
+
+
+Introduction                                                                       rodents, both rodent and human LFPs in the respiratory frequency
+                                                                                   range align to breathing (Nguyen Chi et al. 2016; Zelano et al. 2016;
+Nasal breathing is inextricably linked to olfactory sampling behav-
+                                                                                   Heck et al. 2017; Herrero et al. 2018) and modulate functional net-
+iors, which involve complex interactions between olfactory and lim-
+bic brain regions. A growing body of data collected from humans                    work connectivity as well (Segers et al. 2008; Yu et al. 2016; Herrero
+and rodents suggest that nasal inhalation, with or without the pres-               et al. 2018). Notably, higher-frequency oscillations in the theta and
+ence of an odor (Grosmaitre et al. 2007; Wu et al. 2017), drives                   gamma ranges also align to respiration (Zhong et al. 2017).
+neural activity in olfactory, limbic, and prefrontal brain regions.                    Investigating the neural basis of olfaction necessarily requires
+This is reflected by changes in local field potential (LFP) oscilla-               information about nasal airflow. Because olfactory sampling can
+tions (Fontanini and Bower 2006; Ito et al. 2014; Rojas-Líbano                     only naturally occur at nasal inhales, any study seeking to link neural
+et al. 2014; Nguyen Chi et al. 2016; Zelano et al. 2016; Heck et al.               activity to sniff onsets must first identify when sniff onsets occur in
+2017; Herrero et al. 2018) and single-unit firing patterns (Roux and               nasal airflow recordings. Accurately labeling the time points when
+Uhlhaas 2014; Tsanov et al. 2014; Nguyen Chi et al. 2016; Sauer                    sniffs occur is crucial to understanding olfactory processing because
+et al. 2017). Even though humans breathe up to 10 times slower than                olfactory signals are encoded not only spatially but also temporally
+
+© The Author(s) 2018. Published by Oxford University Press. All rights reserved.
+                                                                                                                                                     583
+For permissions, please e-mail: journals.permissions@oup.com
+584                                                                                                      Chemical Senses, 2018, Vol. 43, No. 8
+
+
+on the order of single milliseconds (Luo and Katz 2001; Spors and            respiratory waveforms could also support analyses relating features
+Grinvald 2002; Gupta et al. 2015). Therefore, inaccurate labeling            of respiration to cardiovascular activity (Helfenbein et al. 2014).
+of sniff onsets blurs our ability to detect the dynamics of this tem-            In the preceding studies, quantifying respiratory data is generally
+poral encoding. In most olfactory neuroscience studies, sniff onsets         limited to analyzing the pronounced features of the signal such as
+are identified visually by researchers. Although this methodology has        inhales, exhales, and breathing rate—discarding the many other features
+its advantages, it may be unintentionally biased because different           present in these waveforms. Relative to the electrocardiogram (EKG),
+researchers may use different criteria for determining the instant a         where research has precisely defined each component of the waveform
+sniff has occurred. This, paired with the unknown accuracy of man-           (Ponikowski et al. 2016), established standard methods to detect them
+ual labeling across labs, reduces the comparability of findings across       (Addison 2005), and used this information to predict cardiovascular
+studies. Finally, this method is limited to studies analyzing breathing      disease (Václavík et al. 2014; Chen et al. 2016), the tools and method-
+recordings of a limited duration—as it is not feasible for researchers       ology available for interpreting respiratory signals have been relatively
+to hand-label extensive numbers of individual respiratory features,          limited. Several manuscripts mention a need for more sophisticated
+precluding analysis of datasets with large numbers of subjects or            respiratory signal processing methods to advance our understanding
+hundreds of respiratory and olfactory events.                                of respiration and its clinical applications (Boiten et al. 1994; Folke
+    In addition to the challenges of manually labeling sniff onsets,         et al. 2003; Van Duinen et al. 2010; Vlemincx et al. 2011; Meredith
+many features of nasal airflow during a sniff influence olfactory pro-       et al. 2012; Grassmann et al. 2016). The unique difficulty of analyz-
+cessing. Odorants with different volatility, sorptiveness, and water         ing human respiratory recordings has also been hypothesized to drive
+solubility elicit responses of different amplitudes in the olfactory nerve   the sometimes-contradictory findings reported in respiratory research
+when flowed across the nasal mucosa at different rates (Mozell et al.        (Boiten et al. 1994). Similarly, inaccurate respiratory feature estimation
+1991). For this reason, the direction and rate of airflow during nasal       may confound certain functional magnetic resonance imaging (MRI)
+breathing are important parameters in studies investigating olfactory        results (Giardino et al. 2007; Hutton et al. 2011). Therefore, a tool for
+processing. Furthermore, humans naturally modulate inspiratory               automatically characterizing the many features embedded in respiratory
+volumes when olfactory stimuli with different concentrations and             waveforms would be a boon to several fields of research.
+hedonics are sniffed (Johnson et al. 2003). Differences in olfactory             Previous algorithmic approaches to analyzing respiratory data
+processing have also been observed between odorants sniffed with             have proven to be successful at describing certain aspects of these
+a single nasal inhale compared with those that were sniffed in series        data including: estimating inhale onset times in rodents (Roux et al.
+(Laing 1983). Finally, it is possible that other characteristics of nasal    2006), psychometrically modeling event-related respiratory modu-
+inhales modulate olfactory processing such as durations of respira-          lations from human breathing belt recordings (Bach et al. 2016),
+tory pauses, durations of sniffs, and the shape of individual sniff          and classifying human respiratory data into states such as apnea
+waveforms, but the breadth of features embedded in nasal airflow             (Nepal et al. 2002; Varady et al. 2002). By algorithmically deriving
+recordings are not well defined. For these reasons, accurately charac-       the full set of components from respiratory signals, we may reveal
+terizing the full set of features contained in nasal airflow recordings is   novel understandings of neural control of breathing that cannot be
+critical for interpreting the neural bases of olfaction.                     addressed with the current methodology. However, automatically
+    Relating characteristics of airflow recordings to neural activ-          characterizing the full set of respiratory waveforms has remained an
+ity have widespread implications for other neuroscientific research          unsolved and unique technical barrier to our understanding of olfac-
+beyond olfaction. In line with the established links between respira-        tory and respiratory neuroscience.
+tory rhythms and neural oscillations, perturbations in human respir-             Automatically characterizing the full set of features in respiratory
+ation have been linked to emotional states (Nielsen and Roth 1929;           waveforms is challenging for many reasons. Like other oscillatory
+Bloch et al. 1991; Boiten 1998; Yackle et al. 2017), memory per-             biological signals, human airflow recordings are nonsinusoidal and
+formance (Wientjes et al. 1998; Zelano et al. 2016), fear learning           have nonstationary statistics (Figure 1A). But unlike other oscilla-
+(Castegnetti et al. 2017), and social interaction (Butler et al. 2006).      tory biological signals such as EKG that have highly stereotyped
+It is well known that opioid-mediated circuitry plays a key role in          sequences of activity, breathing patterns are surprisingly complex
+governing respiratory patterns (Bouillon et al. 2003; Lalley 2003),          (Del Negro et al. 2018) as individuals regularly breathe at varying
+but an eclectic collection of neurological and psychiatric condi-            rates, with different individual breath volumes, and may choose to
+tions is associated with changes in respiration as well. Respiratory         pause their breathing for up to minutes at a time. Human respiratory
+disturbances are associated with epileptic seizures (Dlouhy et al.           signals present a unique set of challenges to decompose compared
+2015; Lacuey et al. 2017), Parkinson’s disease (Hardie et al. 1986;          with respiratory recordings from rodents. These signals tend to have
+Sobel et al. 2001; Rice et al. 2002; Sadagopan and Huber 2007),              a high degree of noise due to the inherent difficulties of working with
+Alzheimer’s disease (Smallwood et al. 1983; Cooke et al. 2006;               humans as experimental subjects, whose comfort during experimen-
+Osorio et al. 2014), Rett syndrome (Julu et al. 2008), and schizo-           tal tasks is of utmost importance. Humans breathe up to 10× slower
+phrenia (Peupelmann et al. 2009). Dyspnea and hyperventilation are           than rodents and express complex waveforms with a high degree
+common physical symptoms of anxiety, often occurring in patients             of variability between individuals. These innate aspects of human
+with panic disorders (Wilhelm et al. 2001; American Psychiatric              respiratory signals do not meet the assumptions made by most trad-
+Association 2013). Characteristic changes in respiration have also           itional automated digital signal processing analyses, meaning that
+been found in autism spectrum disorder (Rozenkrantz et al. 2015;             other methods must also be used for accurate feature decompos-
+Ming et al. 2016), and mood disorders (Ohayon 2003; Leander et al.           ition of respiratory signals. For this reason, a reliable algorithmic
+2014). In line with the prevalence of respiratory correlates of these        approach to extracting these features must be validated on a broad,
+disorders, respiratory training has been an effective component for          heterogeneous set of data to demonstrate that it is flexible enough
+treatments of anxiety and mood disorders (Han et al. 1996; Brown             to accommodate the wide range of idiosyncratic characteristics that
+and Gerbarg 2009), attention-deficit/hyperactivity disorder (Sonne           individual respiratory waveforms may contain.
+and Jensen 2016), and can help reduce stress in otherwise healthy                Here, we present BreathMetrics, a respiratory signal processing
+individuals (Perciavalle et al. 2017). Extracting components of              toolbox. BreathMetrics is an algorithm (implemented here in Matlab)
+Chemical Senses, 2018, Vol. 43, No. 8                                                                                                                  585
+
+
+
+
+Figure 1. (A) Representative segment of a human respiratory flow recording where some important signal properties are annotated. (B) The same recording after
+removing drift and noise, and estimating features with BreathMetrics.
+
+
+that automatically extracts the full set of features embedded in raw                • Instantaneous phase
+human respiratory flow recordings and contains additional methods                   • Breathing rate and average interbreath interval
+for calculating event-related respiratory waveforms, statistical sum-               • Tidal volume
+maries of breathing, several visualizations for features of breathing,              • Minute ventilation
+and a GUI for manual inspection of respiratory feature estimations.                 • Duty cycle of each breath
+We validated our algorithm in 4 ways. First, we compared the mag-                   • Breathing-rate-normalized breath waveforms for comparison
+nitude and variability of trial-averaged inhale peaks computed with                   between subjects
+inhale onsets defined by different methods on a data set of human                   • Summary statistics of respiratory recordings, such as vari-
+nasal airflow recordings (N = 23). Second, we compared the magni-                     ation in breathing rate and duty cycles, percent of breaths with
+tude of hallmark odor-evoked theta increases computed using nasal                     pauses, and average peak flow rates and volumes
+inhale onsets defined by different methods. Third, we directly com-                 • Several visualizations of these features
+pared automated BreathMetrics inhale onsets with those that were
+                                                                                 By providing a data processing pipeline that automatically and
+marked by hand in 2 recordings. Finally, we show that BreathMetrics’
+                                                                                 precisely computes the full set of respiratory features embedded in
+feature estimations had 95% confidence intervals on the order of sin-
+                                                                                 respiratory flow recordings, BreathMetrics simplifies respiratory
+gle milliseconds by evaluating thousands of simulated respiratory
+                                                                                 waveform decomposition and enables analysis of high-throughput
+recordings. With a raw recording of respiratory airflow and a single-
+                                                                                 respiratory datasets. This will simplify investigation into how respir-
+input parameter (the sampling rate), BreathMetrics can estimate the
+                                                                                 ation relates to body, brain and behavior.
+following features and metrics of the data:
+
+   • Denoised and drift-corrected respiratory signal
+                                                                                 Materials and methods
+   • Inhale and exhale onsets and offsets
+   • inhale and exhale pause (breath holding) onsets and offsets                 Accessibility, implementation, and organization of
+   • Durations of inhales, exhales, and respiratory pauses                       BreathMetrics algorithm
+   • Peak respiratory flow of inhales and exhales                                The implementation of BreathMetrics used in this manuscript is
+   • Volumes of individual inhales and exhales                                   publicly available online as a Matlab package with source code
+586                                                                                                   Chemical Senses, 2018, Vol. 43, No. 8
+
+
+(including simulations), documentation, and a tutorial at https://         the scalp, though data were re-referenced to a common average fol-
+github.com/zelanolab/breathmetrics. This package is organized              lowing exportation into Matlab. Odor stimulus presentation was
+as a custom Matlab class object with functions for calculating,            synchronized with the ongoing iEEG data trace using a data acqui-
+storing, and visualizing features of human respiratory flow data.          sition board (Measurement Computing, USB-1208FS) connected to
+All code was designed to conform to the standard Matlab style              a laptop computer on one end and Nihon Kohden’s DC input port
+guide. Some functions described later have modular parameters for          on the other end. The USB-1208FS was controlled by Matlab using
+custom processing but were designed to work reliably on human              PsychToolBox’s PsychHID scripts (Brainard 1997). Trials began
+recordings without any parameter tuning. Our methods have pre-             with an auditory cue consisting of either the word “rose” or “mint,”
+processing steps that can flexibly handle data with sampling rates         followed by presentation of odor. The patient’s task was to indicate
+between 20 and 5000 Hz and include at least 2 full breaths. The            whether the odor matched the cue.
+analysis pipeline assumes that raw data comes in the form of a                 Electrode locations were determined using preoperative struc-
+vector where the amplitude of inhalation is represented as having          tural MRI scans and postoperative computed tomography (CT)
+more positive values than exhalation. All functions are designed to        scans using FSL’s registration tool flirt. Individual CT images were
+be part of the class object and their output saved as parameters,          registered to MRI images using 6 degrees of freedom (df) with a cost
+but each function can also be called independently for researchers         function of mutual information, which was followed by an affine
+to customize their analyses. This toolbox is dependent on Matlab           registration with 12 df.
+2017. All functions described here do not require the Matlab Signal
+Processing package except for instantaneous phase estimation, and          Respiratory flow recordings
+the GUI tool is dependent on the GUI layout toolbox (MATLAB                In the behavioral data set, respiration was recorded using a pneu-
+and Signal Processing Toolbox, Sampson and Tordoff 2014).                  motachometer (high-sensitivity flowmeter model #4719, Hans
+                                                                           Rudolph, Inc., Kansas City, MO) attached to a nasal mask worn
+Human subjects                                                             by the participants. The pressure differential measured by the pneu-
+BreathMetrics was designed using data collected from 23 partici-           motachometer was converted to a voltage signal using a spirometer
+pants (78% female) whose nasal respiration was recorded while they         (ADInstruments). Amplified pneumotachometer traces were then
+performed an emotion recognition task for approximately 15 min.            recorded using Powerlab and Chart software (ADInstruments).
+This task was chosen so that participants would elicit a wide range            In the electrophysiological data set, respiration was recorded
+of natural respiratory behaviors that would not be present in sleep-       using a nasal cannula attached to a piezoelectric pressure sensor
+ing or resting conditions. The task included 180 trials, each begin-       (Salter Labs), providing a measure of airflow through the nose.
+ning with the presentation of a face expressing either fear or surprise.   The signal from the sensor was directly recorded into the Nihon
+Participants were instructed to indicate, via button press, as quickly     Kohden software, allowing perfect synchronization between respira-
+and accurately as possible, which emotion the face was expressing.         tory and iEEG data. Respiratory and iEEG data were exported from
+Faces were presented for 100 ms at jittered time intervals ranging         the Nihon Kohden NeuroWorkBench software text files and then
+between 3.5 and 6.5 s apart (average 5 s).                                 imported into Matlab for all further processing and analysis.
+    Participants were instructed to breathe naturally through their
+nose for the duration of the experiment. No participant reported           Simulation of respiratory flow recordings
+any psychological disorders or major health problems or was cur-           We simulated respiratory flow recordings to evaluate the accuracy
+rently taking any medication known to affect breathing. All subjects       of BreathMetrics’ feature estimations on a large collection of data
+were recruited from flyers posted around Northwestern University           expressing respiratory characteristics varying from those observed
+Chicago campus and gave written informed consent prior to the              in our other datasets. Respiratory flow recordings were simulated
+beginning of the experiment. The Institutional Review Board of             by seeding a custom algorithm with the following input parame-
+Northwestern University approved all experimental procedures, and          ters: number of breaths to simulate, sampling rate, breathing rate,
+this study complies with the Declaration of Helsinki for Medical           average peak flow amplitude, variance in peak flow amplitude, vari-
+Research involving Human Subjects.                                         ance in interbreath interval, percent of breaths with inhale pauses,
+                                                                           average duration of inhale pause, variance in the duration of inhale
+Human electrophysiology recordings                                         pauses, percent of breaths with exhale pauses, average duration of
+To validate our toolbox using an objective, independent neural             exhale pauses, variance in the duration of exhale pauses, noise range
+correlate of respiration in humans, we analyzed intracranial elec-         of pause amplitudes, variance in pause amplitude noise, and sig-
+troencephalography (iEEG) data from a patient with surgically              nal noise. The values chosen for these parameters were randomly
+implanted depth electrodes in piriform cortex (primary olfactory           selected from within the range observed in the human datasets. With
+cortex) as part of a clinical evaluation for medication-resistant          these parameters, our simulation algorithm composes individual
+epilepsy. The data analyzed here were collected while the patient          breaths with characteristics that fall within the input constraints
+was performing a cued odor-identification task. iEEG data were             and saves their values (inhale onsets, exhale max flow, etc.). By inde-
+recorded using the clinical Nihon Kohden EEG acquisition sys-              pendently manipulating the specific components of each simulated
+tem in place at Northwestern Memorial Hospital. The patient                breath, we could recover the estimation accuracy of BreathMetrics
+provided informed consent to take part in the study, and the               on an extensive array of respiratory recordings that it might encoun-
+Institutional Review Board of Northwestern University approved             ter. Furthermore, we could determine the resilience of BreathMetrics’
+this experiment.                                                           feature estimations with regard to signal noise by manipulating the
+    iEEG data were collected with a sampling rate of 2000 Hz, with         noise saturation in the simulated recording. Code for simulating
+an online high-pass filter of 0.08 Hz. The reference and ground            human respiratory data is available at https://github.com/zelanolab/
+consisted of a surgically implanted electrode strip facing toward          breathmetrics.
+Chemical Senses, 2018, Vol. 43, No. 8                                                                                                                                                                                        587
+
+
+Data normalization and smoothing                                                                                       Dynamic Confidence Thresholding
+Before decomposing raw respiratory flow recordings into their basic                                                        for Extrema Identification
+components, measurement noise and signal drift must be removed.
+First, the signal is left-right padded and mean-smoothed by a 25-ms      A
+                                                                                                              Inhale
+window. The window size of 25 ms was chosen because it is large
+enough to reduce signal noise but not so large that it would influ-                                                                                            Overfitting
+ence the shape of natural breathing waveforms, which oscillate at
+                                                                                                                                                                                                                   17 PWCT
+approximately 0.2 Hz in humans. Like other hard-coded parameters
+                                                                                                                                                                                                                   42 PWCT
+used in this toolbox, this value can easily be adjusted by the user.
+
+
+
+                                                                         Respiratory Flow
+                                                                                                                                                                                                                   67 PWCT
+Mean smoothing is used rather than other filtering techniques to                                                                                                                                                   92 PWCT
+avoid introducing an artificial time shift and minimize any distor-
+tions of signal waveforms across an unlimited range of respiratory
+wavelengths. Next, global linear drift is removed by subtracting the
+slope of the linear regression model of the data. Local signal drifts
+are corrected to continuous, minute-long sliding mean baseline win-
+dows, and padding is removed. These methods are parameterized
+such that researchers can customize noise removal and drift correc-
+tion, or z-score respiratory amplitudes if they choose, although cus-                                         Exhale                                            Underfitting
+tom options are not validated here.
+                                                                                                                       5 Seconds
+
+Inhale and exhale extrema detection                                      B
+                                                                                                              300
+The amplitudes of inhale and exhale extrema vary in human respira-                                                                   Change in Total Peaks Identified
+tory recordings, which renders simple threshold-based approaches
+
+
+
+
+                                                                         Total Respiratory Peaks Identified
+to respiratory peak finding infeasible. We achieved algorithmic labe-                                         250          +0         -1        +0        -1        -1        +0        +0        +0
+
+ling of inhale peaks and exhale troughs using a custom multiple                                                                                                                                             -52
+sliding-window peak-finding method. This involved 2 steps: first,                                             200
+we scored peaks by their likelihood of being a true peak, and sec-
+                                                                                                                                                                                                                  -55
+ond, we determined the best recording-specific confidence threshold
+                                                                                                              150
+to use. To programmatically score respiratory extrema, the respira-
+tory vector was sectioned into a range of window sizes (300, 500,                                                                                                                                                       -43
+700, 1000, and 5000 ms), each with 3 shifts in their starting index                                           100
+(0%, 33%, and 66% of the window size). Multiple windows were
+used because small windows tend to falsely identify local maxima
+                                                                                                               50
+as peaks (false positives), and large windows tend to falsely reject                                                                   Valid Range
+true peaks (false negatives). This technique produces a score for each                                                                  of PWCT
+
+time point that represents how many windows identify it is a peak                                                0
+                                                                                                                       8        17         25        33        42        50        58        67        75    83    92    100
+or trough (Figure 2A).
+    With scored peaks, we could then determine the most appropri-                                                               Percent Window Consensus Threshold
+ate threshold for how many windows must agree for a point to be
+                                                                         Figure 2. Identification of respiratory flow extrema using dynamic confi-
+considered a putative peak or trough, minimizing both false posi-
+                                                                         dence thresholding. (A) Scoring putative extrema using multiple sliding win-
+tives and false negatives. Because breathing rates and breath sizes      dows. (B) The most stable PWCT is identified by finding the largest inclusion
+vary across individuals, the appropriate Percent Window Consensus        criterion where the marginal requirement of window agreement produces
+Threshold (PWCT) for accurate extrema labeling—or how many               the smallest difference in total extrema identified. PWCT values that are too
+distinct windows must independently agree that each extremum is          low result in overfitting noise as extrema, and PWCT values that are too high
+                                                                         underfit the signal by falsely rejecting true extrema.
+valid—must be calculated dynamically for each recording session. By
+calculating the PWCT score for each peak and then finding the larg-
+                                                                         do not always occur at every instant that the trace crosses the zero
+est PWCT value that excluded the fewest peaks compared with the
+                                                                         threshold, even if the data have been noise corrected. These factors
+number of peaks found in the previous iteration, we could find the
+                                                                         make inhale onset identification challenging. To overcome this, we
+most stable threshold for peak identification (Figure 2B). Although
+                                                                         created a custom algorithm that identifies whether a pause occurs in
+this is a custom technique, it is similar to the elbow method, which
+                                                                         a breath, the point where the pause initiates, and the point where the
+is a technique that can be used to determine the optimal number of
+                                                                         pause ends and the next breath begins.
+clusters in k-means clustering (Thorndike 1953).
+                                                                             We first made the assumption that exactly one inhale begins
+                                                                         between each trough of exhalation airflow and subsequent peak of
+Detecting onsets and offsets of inhales, exhales,                        inhalation air flow and that exactly one exhale begins between each
+and respiratory pauses                                                   peak of inhalation air flow and subsequent trough of exhalation air
+Using the peaks and troughs of respiratory flow determined by the        flow. To check for the existence of a respiratory pause in the window
+preceding method, we could now estimate the onset of inhales and         between a peak and trough, we tested whether respiratory ampli-
+exhales. In human respiratory flow recordings, both inhale and           tudes were evenly distributed within this window or rather if they
+exhale onsets are often preceded by a phase pause, or plateau, in the    clustered around a certain value. To this end, we first binned all of
+respiratory cycle (Figure 1, Wientjes et al. 1998) and breath onsets     the time points between the extrema. Then, a pause was presumed
+588                                                                                                                           Chemical Senses, 2018, Vol. 43, No. 8
+
+
+to exist if the mode bin (the bin with the most data points) did not                              respiratory flow passes out of the noise range defines the offset of the
+coincide with a peak or trough and had 5 times more samples than                                  pause and the onset of the next breath (Figure 3A).
+the average bin (Figure 3B).
+    In the absence of a respiratory pause, the first point where the                              Calculation of breath volumes and additional
+trace crosses zero is used as both the breath offset and the subse-                               features
+quent breath onset. However, when a respiratory pause is found,                                   Because BreathMetrics is designed to analyze respiratory airflow,
+the onset and offset of the pause must be determined. To do this, the                             which is a measure of instantaneous airflow over time, we can math-
+offset of the pause must be distinguished from noise because natural                              ematically derive the volume of each breath by calculating the inte-
+amplitude variation in respiratory flow recordings can mimic real                                 gral of the airflow amplitudes within each breath’s onset and offset.
+respiratory events. To distinguish between the two, we first find the                             Although a ground-truth calculation of volume requires tempera-
+noise range of the potential pause by iteratively checking the number                             ture and barometric information (Jacky 1980), we provide code to
+of time points collected in 5 amplitude bins adjacent to the mode bin                             estimate normalized breath volumes by assuming these measures
+in either direction. If the number of time points in an adjacent bin                              are constant. In addition to breath volumes, we can compute many
+exceeds 25% of the mode bin, this suggests amplitude noise in the                                 other respiratory characteristics using the features calculated earlier.
+respiratory pause extends to this range. The choices to iterate over 5                            Table 1 summarizes the respiratory features that BreathMetrics can
+bins and appending a bin to the noise range if it exceeds 25% were                                compute, along with their corresponding equations. BreathMetrics
+made after testing multiple values and examining the results. Using                               also includes code to generate several visualizations of respiratory
+looser values resulted in falsely identifying pauses where there were                             characteristics as well as a GUI for inspecting individual respiratory
+none and tighter values resulted in falsely missing pauses when they                              events (Figure 4).
+were present. Like other hard-coded parameters used in this toolbox,
+these values can easily be adjusted by the user. Using this technique,
+we can dynamically fit the noise range of each breath. The first point                            Time–frequency analysis of human electrophysiology
+that crosses into the noise range now defines the offset of the pre-                              Natural respiratory rhythms and odor stimulation induce characteris-
+ceding breath and the onset of the pause, and the first point before                              tic theta-band power increases in human piriform cortex (Adrian 1942;
+
+
+
+                 A                                                                     B
+                                             One Respiratory Oscillation                       Binned Respiratory Flow Between Trough and Peak
+                                 0.08                                                            0.08
+
+
+
+                                 0.06                                                            0.06
+
+
+
+                                 0.04                                                            0.04
+                                                  Last time point before respiratory flow
+                                                  crosses out of noise threshold
+                                 0.02                                                            0.02                        Mode Bin
+
+
+
+
+             Respiratory Flow
+                                    0                                                                0
+
+
+
+                                -0.0 2                                                           -0.02
+                                                     First time point after respiratory flow                               Noise Range of
+                                                     crosses into noise threshold                                         Respiratory Pause
+                                -0.0 4                                                           -0.04
+                                                                   Trough of Exhale
+                                                                   Exhale Offset and
+                                                                   Exhale Pause Onset
+                                -0.0 6                                                           -0.06
+                                                                   Exhale Pause Offset
+                                                                   and Inhale Onset
+                                                                    Peak of Inhale
+                                -0.0 8                                                           -0.08
+                                         0    1    2     3     4      5     6                            0      200        400         600        800
+                                                  Time (Seconds)                                             Samples per amplitude bin
+
+Figure 3. Method for detecting breath pauses and onsets. (A) A single respiratory oscillation where a pause occurs after exhalation. The point of maximum
+exhale flow (dark blue marker) and maximum inhale flow (cyan marker) are defined by the extrema identification method described in Figure 2. Offset of preced-
+ing exhale/onset of exhale pause (yellow marker) and offset of exhale pause/onset of subsequent inhale (green marker) are determined using the respiratory
+flow binning method. (B) Time points between extrema are binned by amplitude of respiratory flow. If there is an uneven amplitude distribution, a respiratory
+pause is identified and the threshold of its noise range is fit. The first samples to cross this threshold in either direction, respectively, indicate 1) the offset of the
+preceding breath and onset of the pause and 2) the offset of the pause and onset of the subsequent breath.
+Chemical Senses, 2018, Vol. 43, No. 8                                                                                                               589
+
+
+Table 1 List of respiratory metrics implemented in BreathMetrics and their respective calculations
+
+Metric                                                                                       Calculation
+
+Breathing rate                                                                               1/average time between inhale onsets
+Inter-breath interval                                                                        Average time between inhale onsets
+Inhale and exhale volumes                                                                    Sum of airflow between breath onset and offset
+Tidal volume (average volume of air displaced per breath)                                    Average inhale volume + average exhale volume
+Minute ventilation (volume of air displaced each minute)                                     (Breathing rate × average tidal volume)/1 min
+Duty cycle (proportion of breath that is inhaled)                                            Average inhale duration/average interbreath interval
+Coefficient of variation of duty cycle                                                       SD of inhale duration/average inhale duration
+Coefficient of variation of breathing rate                                                   SD of difference between inhale onsets/average difference
+                                                                                               between inhale onsets
+Coefficient of variation of breath volumes                                                   SD of breath volumes/average breath volume
+
+
+
+
+Zelano et al. 2016; Jiang et al. 2017). To validate our method, we took            3)	Feature estimations must resemble those that were hand
+advantage of this hallmark feature of piriform LFPs and compared                       labeled by an expert.
+the strength of odor-evoked theta power using sniff onsets defined by              4)	Feature estimations must be correlated with independent and
+our method and the other methods. To examine odor-evoked ampli-                        objective measures of respiration.
+tude changes, we computed spectrograms of LFP amplitude recorded
+from human piriform cortex. Raw LFP data were bandpass filtered in               Because inhale onset estimations are dependent on other meas-
+100 logarithmic-spaced frequencies from 1 to 200 Hz with the band-               ures computed by BreathMetrics, including respiratory extrema
+width increasing from 2 to 50 Hz (logarithmic spaced). The envelope              and pause characterizations, we chose to validate the accuracy of
+at each frequency was obtained using the Hilbert transform (Matlab’s             inhale onsets as an indicator of the validity of the rest of our estima-
+hilbert.m) and segmented into epochs of [−0.5, 5] s relative to inhala-          tions. In the following subsections, we evaluate the performance of
+tion onsets. The epochs were averaged across trials, and the baseline            BreathMetrics’ respiratory onset estimations on 2 human datasets
+([−0.5, 0] s) was subtracted, producing a spectrogram for each condi-            that together satisfy all of the criteria described earlier. Furthermore,
+tion. To test the statistical significance of the spectrogram, the real events   we evaluate BreathMetrics’ performance on a comprehensive body
+were shifted a random amount, and the mean amplitude of those per-               of simulated respiratory recordings to ascertain its estimation accur-
+muted events was calculated. By repeating the above procedure 10 000             acy and resilience to signal noise.
+times, a null distribution was obtained at each time–frequency point.
+A z-score map was calculated by dividing the spectrogram with the                Validating inhale onset accuracy with inter-inhale
+standard deviation (SD) of the distribution. These z-score maps were             similarity
+reported as the spectrogram in this article. The z-scores were converted
+                                                                                 To demonstrate that BreathMetrics-derived inhale onsets outper-
+to P values by assuming a normal distribution. Multiple comparisons
+                                                                                 form other onset-detection methods, we compared the performance
+were corrected using false discovery rate (FDR) method.
+                                                                                 of BreathMetrics to 2 other methods on a dataset of nasal breathing
+    To compare spectrograms aligned to sniff onsets determined by
+                                                                                 collected from 23 participants. The first was a zero-crossing refer-
+BreathMetrics compared with other methods, we subtracted the
+                                                                                 enced method (ZC). In this method, 2 criteria were used to define an
+condition-specific spectrograms from each other. The significance of
+                                                                                 inhale onset: 1) a baseline crossing of the preprocessed respiratory
+these differences was tested using a permutation method. In each
+                                                                                 trace and 2) an average amplitude of one-tenth of an SD above aver-
+permutation, the trial labels of the 2 conditions were shuffled, and
+                                                                                 age for the next 3 s of data following the baseline crossing. The sec-
+the permuted spectrogram difference was calculated as described
+                                                                                 ond method was motivated by previous work by Roux et al. (2006)
+earlier. Then, a null distribution of permuted spectrogram differ-
+                                                                                 who could accurately estimate inhale onsets from respiratory flow
+ence was obtained by repeating the above procedure 1000 times.
+                                                                                 in rodents with instantaneous respiratory phase referencing. In this
+The z-score map of the real difference was corrected for multiple
+                                                                                 method, the breathing rate was calculated by finding the peak of the
+comparisons using the FDR method.
+                                                                                 power spectrum of the preprocessed trace. The instantaneous phase
+                                                                                 of the respiratory signal was then calculated by bandpass filtering it
+Results                                                                          around this peak using a 2-way low-pass Butterworth filter and tak-
+                                                                                 ing the angle of its Hilbert transform (Matlab’s hilbert.m). Each point
+Rationale for validation methods                                                 where the instantaneous phase passed π/2 (where the respiratory
+The features estimated by our toolbox are visually accurate                      trace crosses baseline toward a peak) was considered an inhale onset.
+(Figure 1B). However, numerical validation of respiratory feature                    The reliability of the 3 methods was scored in 2 ways. First, we
+estimation is nontrivial because there is no established set of respira-         compared the magnitude of peaks of each subject’s average inhale
+tory features to which we can compare our estimations. To address                as defined by each method. Decreases in accuracy of inhale onset
+this limitation, we propose that a respiratory feature extraction pipe-          estimation will introduce temporal shifts in each inhale trace, which
+line is accurate and reliable if it meets the following criteria:                will wash out the true maxima of inhales when averaged. Therefore,
+                                                                                 we hypothesized that trial-averaged inhale maxima calculated with
+  1)	Features estimated using our method must outperform other                  BreathMetrics would be larger than those calculated with the other
+      feature estimation methods across multiple subjects.                       2 methods. Second, we compared the variability in onset-to-peak
+  2)	Feature estimations must be reliable across multiple data sets             latency as defined by each method. Although individual breath
+      and recording devices.                                                     waveforms naturally vary, inaccurate labeling of breath onsets will
+590                                                                                                                                                                                      Chemical Senses, 2018, Vol. 43, No. 8
+
+
+
+                     A                                                                             Inhales
+                                                                                                                    B                                 Peak at 77.7
+                                                                                                                                                      Max Flow: 0.053 Peak at 82.7
+                                                                                                                                                                                      Peak at 87.3
+                                                                                                                                                                                                                   Respiration
+                                      120                                                                                                      0.06                                   Max Flow: 0.051
+                                                                                                   Inhale Pauses                                                      Max Flow: 0.048
+                                                                                                                                                                                                                   Inhale Peaks
+                                                                                                   Exhales                                                                                                         Exhale Troughs
+                                                                                                                                                                                                             Peak at 92.7
+
+
+
+
+                                                                                                                       Respiratory Flow (AU)
+                                                                                                   Exhale Pauses                               0.04                                                          Max Flow: 0.043
+                                                                                                                                                                                                                   Inhale Onsets
+                                      100
+
+
+
+
+                      Breath Number
+                                                                                                                                                                                                                   Exhale Onsets
+                                                                                                                                               0.02                                                                Inhale Pauses
+                                      80                                                                                                                                                                           Exhale Pauses
+
+                                                                                                                                                 0
+                                      60
+                                                                                                                                           -0.02
+                                      40
+                                                                                                                                           -0.04                                                                     Trough at 94.6
+                                                                                                                                                                                                                     Max Flow: -0.034
+                                      20                                                                                                                    Trough at 80.2
+                                                                                                                                                            Max Flow: -0.041                       Trough at 89.6
+                                                                                                                                           -0.06                                Trough at 84.4
+                                                                                                                                                                                Max Flow: -0.051   Max Flow: -0.05
+
+
+                                            0            1       2       3     4      5        6       7     8                                         78     80     82        84   86    88       90   92      94      96     98
+                                                                     Time (seconds)                                                                                            Time (seconds)
+                     C                                                                                              D
+                                      120                                                          Inhales                                        4
+                                                                                                   Inhale Pauses                                                                            x = 2.04
+
+
+
+
+                                                                                                                      Duration of Respiratory
+                                                                                                   Exhales                                                                 x = 0.556        σ = 0.436
+                                      100                                                          Exhale Pauses                                                           σ = 0.311
+
+
+
+
+                      Breath Number
+                                                                                                                                                  3             x = 1.6                                     x = 1.6
+                                                                                                                                                               σ = 0.311                                   σ = 0.436
+                                       80
+
+
+
+
+                                                                                                                         Phase (seconds)
+                                       60                                                                                                         2
+
+                                       40
+                                                                                                                                                  1
+                                       20
+
+
+                                        0%                   20%         40%         60%       80%         100%
+                                                                                                                                                                Inhales         Inhale       Exhales          Exhale
+                                                         Proportion of Breathing Period                                                                                         Pauses                        Pauses
+
+
+
+
+                     E                      Exhale Pause Onset for Breath #10 at 48.96 (seco...                      Phase Selec...                                                 Breath Select...
+                                                                                                                     Inhales                                                        no pause at this ind.
+                                                       0.06
+                                                                                                                     Inhale Pauses                                                  no pause at this ind.
+                                                                                                                     Exhales                                                        no pause at this ind.
+                                                                                                                     Exhale Pauses                                                  no pause at this ind.
+                                                                                                                                                                                    7
+                                                       0.04                                                                                                                         no pause at this ind.
+                                                                                                                                                                                    9
+                                                                                                                                                                                    10
+                                                                                                                                                                                    11
+                                                       0.02                                                                                                                         no pause at this ind.
+
+
+
+
+                                        Airflow (AU)
+                                                             0
+                                                                                                                     Window Size Pre (...                                           Window Size Post (...
+
+
+
+                                                       -0.02                                                                                          2500                                              2500
+
+
+
+
+                                                       -0.04
+
+
+                                                                                                                                                                        Update Plot
+                                                       -0.06
+                                                                 -2000       -1000         0        1000     2000
+                                                                               Time (seconds)
+
+
+
+
+Figure 4. BreathMetrics tools for visualizing breathing recordings. (A) Duration of each component of every breath. (B) Baseline-corrected breathing with labeled
+features and annotated extrema. (C) Proportion each respiratory phase contributes to each breathing cycle. (D) Each breath is plot as a line where its x-value rep-
+resents its progression through each respiratory phase and y-value represents the time spent in each phase. Lines representing individual breaths are colored
+by order (the first breath is dark blue, and the last breath is yellow). (E) GUI for inspecting individual respiratory features.
+
+
+introduce additional variance in the time each breath takes to reach                                                P < 1 × 10−6) and PR (T22 = 6.98, P < 1 × 10−6) (Figure 5B). Similarly,
+its point of max inspiratory flow. Therefore, we hypothesized that                                                  follow-up paired t tests confirmed that BreathMetrics had smaller
+the variance in time-to-peak would decrease as the onset estimation                                                 variance in time-to-peak flow than ZC (T22 = −11.10, P < 1 × 10−9)
+accuracy increases. Thus, we hypothesized that BreathMetrics would                                                  and PR (T22 = −6.60, P < 1 × 10−5) (Figure 5C).
+have smaller variance in time-to-peak than the other methods.
+    We found an overall effect of method on both inhale maxima                                                      Validation using LFP recordings from human
+(F2,66 = 10.37, P = 0.0001) and time-to-peak variance (F2,66 = 23.12,                                               piriform cortex
+P < 1 × 10−7). Follow-up paired t tests confirmed that BreathMetrics                                                The preceding validation indicates that our method finds more con-
+produced inhales with larger maxima than both ZC (T22 = 7.55,                                                       sistent onset estimations than the other methods across subjects,
+Chemical Senses, 2018, Vol. 43, No. 8                                                                                                                                                                                                     591
+
+
+
+            A                                                                                  B                                 *
+                                                                                                                                                                                 C                                 *
+                                                                                                                                                                                                          *
+
+
+
+
+                                                                          Max Amplitude of Avg Inhale
+                                                                                                                                                                                          x 105
+                                                                                                                       *               p < 0.001                                                                          p < 0.001
+
+
+
+
+                                                                                                                                                               Varience in Time to Peak
+                                                                                                        0.08                                                                                           p < 0.001
+
+
+
+
+Respiratory Flow (AU)
+                        0.05                                                                                        p < 0.001
+                                                                                                                                                                                          5
+                        0.04                                                                            0.07
+                        0.03                                                                            0.06                                                                              4
+                        0.02                                                                            0.05
+                                                                                                                                                                                          3
+                        0.01                                                                            0.04                                       x = 0.044                                       x = 3 x 105         x = 2 x 105
+                          0                                                                                     x = 0.03
+                                                                                                        0.03                         x = 0.034                                            2
+                    -0.01                   Putative Breath Onset
+                                            Zero-Cross                                                  0.02
+                    -0.02                   Phase Referenced                                                                                                                              1
+                                                                                                        0.01                                                                                                             x = 9 x 104
+                    -0.03                   BreathMetrics
+                                                                                                          0                                                                               0
+                           -1   -1.5   0   0.5   1    1.5   2       2.5
+                                                                                                               ZC               PR               BM                                               ZC               PR                 BM
+                                           Time (s)
+
+Figure 5. Scoring reliability of 3 inhale estimation methods by calculating average within-subject peak of inhale and variance in time-to-peak. (A) Single-subject
+example of average inhales calculated using different methods. Hue of shade represents the method used and shaded areas indicate SEM. BreathMetrics has
+smaller variance throughout the course of the average inhale and a higher peak than the other methods. (B) Inhales identified using BreathMetrics have larger
+within-subject average maxima than other methods. (C) Inhales identified using BreathMetrics have smaller variance in time-to-peak than other methods. (B, C)
+Color represents individual subjects and horizontal bars indicate the mean. P values are derived from paired t tests.
+
+
+satisfying the first criterion described earlier. To show that these esti-                                                      match an independent neurological correlate of respiration. In
+mations are linked to ground-truth respiratory features, and not just                                                           human olfactory studies that rely on accurate sniff onset-detection
+internally consistent, we took advantage of the well-established fact                                                           methods, experimenters frequently resort to manual checking of each
+that inhalation and sniffing induce increases in LFP theta-band power                                                           sniff onset. Here, we analyzed 2 recordings of subjects performing
+in human piriform cortex (Zelano et al. 2016; Jiang et al. 2017). In                                                            different sniffing tasks to test whether sniff onsets calculated with
+this way, we could use human piriform theta power as an independ-                                                               BreathMetrics are similar to those that were hand labeled. The first
+ent and objective indicator of respiratory onset accuracy. To do so,                                                            recording we analyzed was the same one analyzed earlier in Figure 6.
+we analyzed concurrent recordings of nasal respiration and human                                                                Because this was collected while a subject was performing an odor-
+piriform cortical LFPs collected from an epilepsy patient with intra-                                                           identification task, a subset of inhalations in this data set coincided
+cranial depth wires implanted in piriform cortex. Respiratory record-                                                           with sniffs during odor presentations. The second recording was col-
+ings were obtained using a nasal cannula attached to a piezoelectric                                                            lected from a different subject who moved a lot during the task,
+sensor, a different recording device than the pneumotachometer and                                                              resulting in a noisy respiratory recording. By testing the similarity of
+spirometer used in the first dataset. Thus, evaluating our method’s                                                             BreathMetrics’ sniff onsets to hand-labeled sniff onsets in both clean
+performance on this dataset also confirmed that BreathMetrics                                                                   and noisy datasets we were able to evaluate whether BreathMetrics’
+parameters can generalize to unseen data collected using different                                                              feature estimations remain stable as a function of data quality. The
+instrumentation in a hospital setting, satisfying validation criterion 2.                                                       similarity of BreathMetrics’ sniff onsets to hand-labeled sniff onsets
+    To perform the validation test, one author calculated the inhale                                                            was compared by first hand labeling each sniff onset in both record-
+onsets using each method. Time points of inhale onsets using each of                                                            ings (64 sniffs in recording 1 and 32 sniffs in recording 2). These
+these methods were then submitted, unlabeled, to another author for                                                             time points were then compared with the closest corresponding
+use into calculating the piriform LFP response following each set of                                                            inhale onset automatically computed by BreathMetrics.
+estimations. Because this data set had not been evaluated as part of                                                                BreathMetrics produced sniff onset estimations that closely
+designing the toolbox and because both experimenters were blind to                                                              resemble hand-labeled ones in both recordings (Figure 7). The average
+the conditions being tested, this validation method was as unbiased                                                             sniff waveform computed using onsets identified by BreathMetrics
+as possible.                                                                                                                    was nearly identical to that computed using hand-labeled onsets in
+    To compare the differences in sniff-evoked piriform theta                                                                   both recordings (Figure 7A, D). Although sniff onsets defined with
+amplitude across methods, spectrograms (time–frequency plots)                                                                   BreathMetrics appear less accurate in recording 2, paired t tests
+were computed by aligning trials to onsets determined by each                                                                   revealed no significant statistical difference between the sniff onsets
+method (Figure 6). Statistically significant sniff-evoked amplitude                                                             identified using hand labeling and BreathMetrics in either recording
+increases (FDR corrected P < 0.05) were observed for all 3 meth-                                                                (recording 1: P = 0.52, recording 2: P = 0.29). Ninety-four percent
+ods (Figure 6A). However, we found that spectrograms computed                                                                   of BreathMetrics estimations were within 100 ms of hand-labeled
+using BreathMetrics onsets had significantly larger theta responses                                                             onsets in the first recording, and 72% were within 100 ms of hand-
+in human piriform cortex compared with the other 2 methods                                                                      labeled onsets in the second recording (Figure 7B, E).
+(Figure 6B, black outlined areas indicate a significant difference,
+P < 0.05, FDR corrected for multiple comparisons). Corresponding                                                                Evaluation of BreathMetrics’ feature estimations on
+with this theta power increase, respiratory peaks following inhales                                                             simulated data
+identified using BreathMetrics were larger than both ZC (T613 = 4.73,                                                           In the preceding section, we showed that BreathMetrics’ sniff esti-
+P < 1 × 10−5) and PR (T664 = 9.99, P < 1 × 10−21) (Figure 6C, D).                                                               mations were accurate on both a clean and a noisy human respira-
+                                                                                                                                tory recording. Because signal noise can take many forms and may
+Comparison between sniff onsets identified using                                                                                corrupt certain characteristics of breathing waveforms differently,
+hand labeling and BreathMetrics                                                                                                 the fidelity of feature estimations made with BreathMetrics can be
+We have shown that BreathMetrics outperforms other methods                                                                      better evaluated by comparing its feature estimations to ground-
+across subjects, in 2 datasets, and that its estimations accurately                                                             truth values on a large dataset of breathing recordings that span
+592                                                                                                               Chemical Senses, 2018, Vol. 43, No. 8
+
+
+
+
+Figure 6. Piriform theta responses and respiratory features computed using different inhale onset-detection methods. (A) Spectrograms of piriform LFP power
+following the patient’s inhales computed using each method. Black outlines indicate statistically significant clusters (FDR corrected P < 0.05). (B) Difference in
+spectrograms computed using each method. Black outlines in indicate statistically significant clusters (FDR corrected P < 0.05) for between-method differences.
+(C) Maximum respiratory flow in the 2-s window following each inhale onset. Each dot indicates 1 peak, and the horizontal lines indicate mean ± SEM. (D)
+Average inhale defined using each method. Shaded area indicates SEM. (E) Mean theta (4–8 Hz) power across phase of respiratory cycle.
+
+
+a broad range of parameter values. Because ground-truth respira-                   simulation, we could deduce 95% confidence intervals for each
+tory parameters are not obtainable in raw recordings, simulations                  of these measures, which fell on the order of single milliseconds
+of breathing recordings were used. One thousand simulations of res-                (Figure 8D).
+piratory flow recordings were generated, each with a random com-
+bination of characteristics (i.e., average breathing rate, variance in             Ongoing work to extend BreathMetrics functionality
+max flow rate, probability of pausing after inhales, etc.) and with                to rodent and belt data
+known, ground-truth values for each characteristic. Each simulated                 In the preceding sections, we have demonstrated that BreathMetrics
+respiratory recording was convolved with a vector of random num-                   can accurately recover features of nasal airflow recordings col-
+bers spanning the simulation’s amplitude range and multiplied by                   lected from humans using 2 devices that both directly measure air-
+increasing weights ranging from 0% noise to 100% noise in the                      flow. These devices were chosen in favor of breathing belts, which
+resultant signal (Figure 8A). Each simulated recording was evalu-                  measure chest and abdomen expansions, because respiratory flow
+ated using BreathMetrics, and then the error between the ground-                   provides a more sensitive measure of respiratory features (Johnson
+truth breathing rate and the estimated breathing rate was compared                 et al. 2006). However, many researchers use other tools to measure
+(Figure 8B). This analysis revealed that BreathMetrics could robustly              breathing in humans and animal models. Expanding the function-
+estimate breathing rates in a diverse collection of simulated record-              ality of BreathMetrics to accommodate these other signals could
+ings that were up to approximately 80% noise.                                      benefit a broader community of researchers. Accomplishing this is
+    To determine the measurement error for the features that                       nontrivial. Signals that measure respiration using different measures
+BreathMetrics extracts, we produced 1000 new simulations of                        (temperature or chest wall expansions for example) require very dif-
+respiratory flow recordings, each with a random combination                        ferent respective analysis strategies. Here, we show preliminary data
+of characteristics but a constant signal noise of 10%. The fea-                    indicating that the functions for extracting features from respiratory
+ture estimations for this dataset are visually matched with their                  waveforms introduced here can be adjusted to extract information
+ground-truth values (Figure 8C). For each simulation, we calcu-                    from other respiratory recording methods, enabling their analysis with
+lated the estimation error for breathing rate, average inhale dura-                BreathMetrics. Though not yet rigorously validated, we are currently
+tion, average inhale pause duration, average exhale duration, and                  expanding BreathMetrics to support other methods, including human
+average exhale pause duration. Using the errors calculated in each                 breathing belts, rodent thermocouple, and rodent flow sensors.
+Chemical Senses, 2018, Vol. 43, No. 8                                                                                                                                                                                                                 593
+
+
+
+      A                            2500
+                                                                    Hand-Labeled
+                                                                                               B    30
+
+                                   2000                             BreathMetrics                   25                                                                              In
+
+
+
+
+                Respiratory Flow
+                                                                                                                                                                 Respiratory Flow
+                                   1500                                                             20
+                                                                                                                                                                                     0
+                                   1000
+                                                                                                    15
+                                   500
+                                                                                                    10                                                                              Ex
+                                                                                                                                                                                         0    2    4    6    8 10 12 14
+                                      0                                                                                                                                                       Time (Seconds)
+                                   -500                                                              5
+
+                               -1000                                                                 0
+                                    -1         -0.5 0     0.5   1   1.5   2    2.5   3                -1 -0.8 -0.6 -0.4 -0.2 0       0.2 0.4 0.6 0.8 1
+                                                           Time (s)                                 Difference Between Hand-Labeled Onsets and
+
+      C                                                                                        D
+                                                                                                         Nearest Computed Onsets (Seconds)
+                                   1400                                                             18
+                                                                                                                                                                In
+                                   1200                             Hand-Labeled                    16
+
+
+
+                                                                                                                                             Respiratory Flow
+                                                                    BreathMetrics
+
+
+
+
+                Respiratory Flow
+                                   1000                                                             14
+                                                                                                                                                                 0
+                                    800                                                             12
+                                    600                                                             10
+                                    400                                                              8                                                          Ex 0                     15       30    45    60   75
+
+                                                                                                     6                                                                               Time (Seconds)
+                                    200
+                                      0                                                              4
+
+                                   -200                                                              2
+
+
+                                          -1   -0.5   0   0.5   1   1.5   2    2.5   3                    -1 -0.8 -0.6 -0.4 -0.2 0   0.2 0.4 0.6 0.8 1
+                                                           Time (s)                                Difference Between Hand-Labeled Onsets and
+      E                                                                                                 Nearest Computed Onsets (Seconds)
+                                                                                                                                                                                                                                       Hand-Labeled
+                               3000
+
+
+
+
+    Respiratory Flow
+                                                                                                                                                                                                                                       BreathMetrics
+                               2000
+                               1000
+                                     0
+                            -1000
+                            -2000
+                            -3000
+                                                          10              20              30        40                 50                 60                                                           70                  80   90        100
+
+      F                                                                                                                     Time (s)
+                                                                                                                                                                                                                                       Hand-Labeled
+                               2000                                                                                                                                                                                                    BreathMetrics
+
+
+
+
+    Respiratory Flow
+                               1000
+
+                                     0
+
+                            -1000
+
+                           -2000
+
+                                                0                   20                   40              60                    80                                                    100                                  120    140            160
+
+                                                                                                                            Time (s)
+
+Figure 7. Comparison between sniff onsets determined using hand labeling and BreathMetrics in 2 recordings of individuals performing sniffing tasks. (A–C)
+Data from the first recording. (D–F) Data from the second recording. (A, D) Average sniff computed using hand labeling and BreathMetrics. (B, E) Temporal dif-
+ferences in sniff onsets calculated using BreathMetrics and hand labeling. (C, F) Representative data showing similarity between sniff onsets identified using
+hand labeling and BreathMetrics.
+
+
+    Breathing belts measure respiration by quantifying chest/abdom-                                                           Although there are respiratory features embedded in breathing belt
+inal expansions. This results in a signal that represents an estimate                                                         recordings in addition to breath onsets, estimating them remains a
+of the instantaneous volume of air in the lungs. Because volume is a                                                          challenge.
+different property of breathing than airflow, the interpretation of a                                                             Extracting respiratory features from rodents presents a differ-
+signal representing instantaneous volume is different than the instan-                                                        ent challenge because they can breathe up to 10 times faster than
+taneous change in flow rate. Specifically, positive derivatives of the                                                        humans, well outside the range of parameters tested in our simula-
+breathing signals indicate inhalation and negative derivatives rep-                                                           tions of human breathing above. By using a bank of shorter sliding
+resent exhalation, contrary to recordings of airflow where positive                                                           windows for extrema detection (5, 10, 20, and 50 ms), BreathMetrics
+signals represent inhales and negative signals represent exhales. This                                                        was able to accurately extract respiratory features from a recording
+means that breath onsets occur at the inflection points of extrema                                                            of airflow collected from an awake, behaving mouse (Figure 9B).
+in breathing belt recordings, unlike recordings of airflow where                                                                  Finally, a large body of research in rodent olfaction and respira-
+breath onsets are (roughly) demarcated by sign changes in flow rate.                                                          tion uses thermocouples to infer respiration by measuring changes
+Furthermore, breathing belt signals increase as lung volumes expand,                                                          in temperature of air around the nose. During inhales, ambient
+meaning the inflection points of peaks represent exhale onsets, and                                                           air drawn into the nose decreases the temperature of the air in the
+troughs represent inhale onsets in these signals. By considering these                                                        nasal cavity. This means that in thermocouple recordings, inhales
+aspects of breathing belt recordings, we can apply the same extrema                                                           are demarcated by inflection points at peaks where temperature
+detection method described for airflow data. However, in a breath-                                                            begins decreasing, and exhales are demarcated by inflection points
+ing belt signal, we have to redefine the extrema such that peaks rep-                                                         at troughs where temperature begins increasing. We could reliably
+resent exhale onsets and troughs represent inhale onsets (Figure 9A).                                                         recover breath onsets from a thermocouple recording of an awake,
+594                                                                                                                                                      Chemical Senses, 2018, Vol. 43, No. 8
+
+
+
+                A                                                        B                                          0.045
+
+
+
+
+                                                                               Error in Breathing Rate Estimation
+                           0% Noise                                                                                  0.04
+
+                                                                                                                    0.035
+
+                                                                                                                     0.03
+                     50% Noise
+                                                                                                                    0.025
+
+                                                                                                                     0.02
+
+                     80% Noise                                                                                      0.015
+
+                                                                                                                     0.01
+
+                                                                                                                    0.005
+                     99% Noise
+                                                                                                                       0
+                                                                                                                            0   10   20    30   40   50     60   70   80   90   100
+                                                                                                                                          Percent Signal Noise
+                C                                                         D
+                                                                                                                            95% Confidence Intervals
+
+
+
+                     Respiratory Flow
+                                        Inhale                                                                  Breathing Rate
+                                                                                                                                                           (1.4, 2.5) x 10-6
+                                                                                                                (breaths per second)
+                                                                                                                    Average Inhale
+                                                                                                                    Duration (seconds)   (0.001, 0.001)
+                                        Exhale                                                                      Average Exhale
+                                                 5 Seconds                                                          Duration (seconds)  (0.002, 0.0018)
+                                                                                                                    Average Inhale Pause (0.006, 0.02)
+                              Simulated Respiratory Recording (Noise-Corrected)                                     Duration (seconds)
+                                      True Feature      Estimated Feature
+                        Inhale Onsets Inhale Pause Onsets        Inhale Peaks                                       Average Exhale Pause
+                                                                                                                    Duration (seconds)     (0.006, 0.02)
+                        Exhale Onsets Exhale Pause Onsets Exhale Troughs
+
+Figure 8. Evaluating accuracy of feature estimations using simulations. (A) Segments of representative simulations with different noise saturations. (B)
+Breathing rate estimation error calculated on 1000 simulated respiratory flow recordings that vary in both respiratory characteristics and noise saturation. (C)
+Ground-truth feature values and estimated feature values for a segment of a representative simulated respiratory recording. (D) 95% confidence intervals for
+features calculated for 1000 simulations of respiratory recordings with 10% noise saturation and varying respiratory characteristics.
+
+
+behaving mouse by using the preceding extrema detection method                                               human piriform cortex were significantly stronger when computed
+for rodent airflow recordings. However, the inflection points have to                                        using sniff onsets defined by BreathMetrics. We demonstrated these
+be reinterpreted to represent breath onsets (Figure 9C).                                                     estimations match land-labeled inhale onsets by showing that inhale
+                                                                                                             onsets estimated using BreathMetrics were statistically indistinguish-
+                                                                                                             able from those that were hand labeled in 2 recordings. By using
+Discussion                                                                                                   1000 simulations of breathing, differing in many respiratory features,
+Our ability to understand the neural bases of olfaction and respir-                                          we showed that BreathMetrics’ estimations have high resilience to
+ation can only be as good as our ability to relate them to features                                          noise saturation and feature estimation accuracy on the order of
+of respiratory waveforms. This end is limited by the lack of stand-                                          single milliseconds. Finally, by adjusting BreathMetrics functions to
+ardized, automated, and reliable estimation of respiratory features                                          account for differences in other respiratory signals, we were able to
+from recordings. To address this, we have developed BreathMetrics,                                           recover respiratory features from a human breathing belt recording,
+a toolbox that estimates and calculates a host of meaningful respira-                                        a mouse airflow recording, and a mouse thermocouple recording.
+tory features from nasal respiratory flow recordings. BreathMetrics                                          Thus, BreathMetrics is a stable algorithm for fast, standardized, and
+expands upon the advantages to several previous algorithmic                                                  objective analysis of respiratory data. In this way, our tool removes a
+approaches to respiratory data analysis (Nepal et al. 2002; Varady                                           large technical barrier to respiratory data analysis, enabling research-
+et al. 2002; Roux et al. 2006; Bach et al. 2016). BreathMetrics dif-                                         ers to thoroughly analyze high-throughput respiratory datasets and
+fers from these methods in that it can identify the complete set of                                          address new questions about the nature of respiration.
+respiratory features including those typically imbedded in noise such
+as respiratory pauses at any phase of respiration, individual breath
+volumes, apneas, inhale onsets, exhale onsets, and many more. By                                             Funding
+allowing researchers to investigate the precise features of respiration                                      This work was supported by National Institutes of Health
+that are perturbed under experimental conditions, biology and cog-                                           (R00-DC-012803 and R01-DC-016364 to C.Z. and T32-NS047987
+nition can be more tightly linked to respiratory behaviors.                                                  to T.N.).
+    In this study, we satisfied rigorous validation criteria to ensure
+that BreathMetrics achieves accurate respiratory feature estima-
+tion across multiple datasets. We showed that BreathMetrics                                                  Acknowledgments
+outperformed 2 other algorithmic approaches in 2 ways. First,                                                We thank Minghong Ma, Andrew Moberly, and Leslie Kay for providing
+BreathMetrics-defined inhale onsets resulted in larger and less-var-                                         rodent respiratory data and providing valuable feedback about interpreting
+iable trial-average inhale peaks. Second, odor-evoked responses in                                           these signals; Behzad Iravani and Johan Lundstrom for contributing code;
+Chemical Senses, 2018, Vol. 43, No. 8                                                                                                                                           595
+
+
+
+                                A                                                                                                Respiration
+                                                        300
+                                                                                                                                 Inhale Onsets
+                                                                                                                                 Exhale Onsets
+
+
+
+
+                                 Breathing Belt (AU)
+                                                        200
+
+
+                                                        100
+
+
+                                                          0
+
+
+                                                       -100
+
+
+                                                       -200
+
+
+
+                                                                1               2           3           4            5                6           7
+                                                                                                    Time (seconds)
+                                B
+                                                       2000                                                                       Respiration
+                                                                                                                                  Inhale Peaks
+                                                                                                                                  Exhale Troughs
+
+
+                                Airflow (AU)
+                                                       1000
+                                                                                                                                  Inhale Onsets
+                                                           0
+                                                                                                                                  Exhale Onsets
+                                                                                                                                  Inhale Pauses
+                                                       -1000
+                                                                                                                                  Exhale Pauses
+
+                                                       -2000
+
+
+
+                                                                        1           2               3           4            5            6
+
+
+
+                                C                                                                   Time (seconds)
+
+
+                                                         0.2
+
+
+
+
+                                Thermocouple (AU)
+                                                        0.15
+                                                                                                                                 Respiration
+                                                         0.1                                                                     Inhale Onsets
+                                                        0.05                                                                     Exhale Onsets
+                                                           0
+
+                                                       -0.0 5
+
+                                                        -0.1
+
+                                                       -0.15
+
+                                                        -0.2
+
+                                                       -0.2 5
+
+                                                                    1       2           3       4           5            6        7           8
+
+                                                                                                    Time (seconds)
+
+Figure 9. Preliminary data demonstrating accurate estimations of features in respiratory signals other than human nasal airflow. (A) Human breathing belt
+recording. (B) Mouse pressure sensor recording. (C) Mouse thermocouple recording.
+
+
+the Northwestern Comprehensive Epilepsy Center for help with human elec-                                Boiten FA, Frijda NH, Wientjes CJ. 1994. Emotions and respiratory patterns:
+trophysiology data acquisition; Jingwen Jin, Ghazaleh Arabkheradmand,                                       review and critical analysis. Int J Psychophysiol. 17:103–128.
+Gregory Lane, Sarah Lurie, Nikita Arora, and Scott Cole for extensive feed-                             Bouillon T, Bruhn J, Roepcke H, Hoeft A. 2003. Opioid-induced respiratory
+back and discussions; and Erin Cole for the name of the algorithm.                                          depression is associated with increased tidal volume variability. Eur J
+                                                                                                            Anaesthesiol. 20:127–133.
+                                                                                                        Brainard D. 1997. The Psychophysics Toolbox. Spatial Vision, 433–436. doi:1
+Conflict of Interest                                                                                        0.1163/156856897x00357
+We have no conflicting financial or nonfinancial interests to declare.                                  Brown RP, Gerbarg PL. 2009. Yoga breathing, meditation, and longevity. Ann
+                                                                                                            N Y Acad Sci. 1172:54–62.
+                                                                                                        Butler EA, Wilhelm FH, Gross JJ. 2006. Respiratory sinus arrhythmia, emo-
+References
+                                                                                                            tion, and emotion regulation during social interaction. Psychophysiology.
+Addison PS. 2005. Wavelet transforms and the ECG: a review. Physiol Meas.                                   43:612–622.
+    26:R155–R199.                                                                                       Castegnetti G, Tzovara A, Staib M, Gerster S, Bach DR. 2017. Assessing
+Adrian ED. 1942. Olfactory reactions in the brain of the hedgehog. J Physiol.                               fear learning via conditioned respiratory amplitude responses.
+    100: 459–473.                                                                                           Psychophysiology. 54:215–223.
+American Psychiatric Association. 2013. Diagnostic and statistical manual of                            Chen KCJ, Ni YS, Wang JY. 2016. Electrocardiogram diagnosis using wavelet-
+    mental disorders: DSM-5. 5th ed. Arlington (VA): American Psychiatric                                   based artificial neural network. 2016 IEEE 5th Global Conference on
+    Publishing.                                                                                             Consumer Electronics; 2016 October 11–14; Mielparque Kyoto, Kyoto,
+Bach DR, Gerster S, Tzovara A, Castegnetti G. 2016. A linear model for event-                               Japan. Piscataway, NJ, USA: IEEE. p. 1–2. doi:10.1109/GCCE.2016.7800547
+    related respiration responses. J Neurosci Methods. 270(Supplement C):                               Cooke JR, Liu L, Natarajan L, He F, Marler M, Loredo JS, Corey-Bloom J,
+    147–155. doi:10.1016/j.jneumeth.2016.06.001                                                             Palmer BW, Greenfield D, Ancoli-Israel S. 2006. The effect of sleep-dis-
+Bloch S, Lemeignan M, Aguilera N. 1991. Specific respiratory patterns dis-                                  ordered breathing on stages of sleep in patients with Alzheimer’s disease.
+    tinguish among human basic emotions. Int J Psychophysiol. 11:141–154.                                   Behav Sleep Med. 4:219–227.
+Boiten FA. 1998. The effects of emotional behaviour on components of the                                Dlouhy BJ, Gehlbach BK, Kreple CJ, Kawasaki H, Oya H, Buzza C, Granner
+    respiratory cycle. Biol Psychol. 49:29–51.                                                              MA, Welsh MJ, Howard MA, Wemmie JA, et al. 2015. Breathing inhibited
+596                                                                                                              Chemical Senses, 2018, Vol. 43, No. 8
+
+
+     when seizures spread to the amygdala and upon amygdala stimulation. J        Luo M, Katz LC. 2001. Response correlation maps of neurons in the mamma-
+     Neurosci. 35:10281–10289.                                                        lian olfactory bulb. Neuron. 32:1165–1179.
+Folke M, Cernerud L, Ekström M, Hök B. 2003. Critical review of non-              MATLAB and Signal Processing Toolbox Release. 2017. The MathWorks, Inc.,
+     invasive respiratory monitoring in medical care. Med Biol Eng Comput.            Natick, Massachusetts, United States.
+     41:377–383.                                                                  Meredith DJ, Clifton D, Charlton P, Brooks J, Pugh CW, Tarassenko L. 2012.
+Fontanini A, Bower JM. 2006. Slow-waves in the olfactory system: an olfac-            Photoplethysmographic derivation of respiratory rate: a review of relevant
+     tory perspective on cortical rhythms. Trends Neurosci. 29:429–437.               physiology. J Med Eng Technol. 36:1–7.
+Giardino ND, Friedman SD, Dager SR. 2007. Anxiety, respiration, and cerebral      Ming X, Patel R, Kang V, Chokroverty S, Julu PO. 2016. Respiratory and
+     blood flow: implications for functional brain imaging. Compr Psychiatry.         autonomic dysfunction in children with autism spectrum disorders. Brain
+     48:103–112.                                                                      Dev. 38:225–232.
+Grassmann M, Vlemincx E, von Leupoldt A, Mittelstädt JM, Van den Bergh            Mozell MM, Kent PF, Murphy SJ. 1991. The effect of flow rate upon the
+     O. 2016. Respiratory changes in response to cognitive load: a systematic         magnitude of the olfactory response differs for different odorants. Chem
+     review. Neural Plast. 2016:8146809.                                              Senses. 16:631–649.
+Grosmaitre X, Santarelli LC, Tan J, Luo M, Ma M. 2007. Dual functions of          Del Negro CA, Funk GD, Feldman JL. 2018. Breathing matters. Nat Rev
+     mammalian olfactory sensory neurons as odor detectors and mechanical             Neurosci. 19:351–367.
+     sensors. Nat Neurosci. 10:348–354.                                           Nepal K, Biegeleisen E, Ning T. 2002. Apnea detection and respiration
+Gupta P, Albeanu DF, Bhalla US. 2015. Olfactory bulb coding of odors,                 rate estimation through parametric modelling. Proceedings of the
+     mixtures and sniffs is a linear sum of odor time profiles. Nat Neurosci.         IEEE 28th Annual Northeast Bioengineering Conference (IEEE Cat.
+     18:272–281.                                                                      No.02CH37342); Drexel University, Philadelphia, PA, USA. Piscataway,
+Han JN, Stegen K, De Valck C, Clément J, Van de Woestijne KP. 1996.                   NJ, USA: IEEE. p. 277–278.
+     Influence of breathing therapy on complaints, anxiety and breathing pat-     Nguyen Chi V, Müller C, Wolfenstetter T, Yanovsky Y, Draguhn A, Tort AB,
+     tern in patients with hyperventilation syndrome and anxiety disorders. J         Brankačk J. 2016. Hippocampal respiration-driven rhythm distinct from
+     Psychosom Res. 41:481–493.                                                       theta oscillations in awake mice. J Neurosci. 36:162–177.
+Hardie RJ, Efthimiou J, Stern GM. 1986. Respiration and sleep in Parkinson’s      Nielsen JM, Roth P. 1929. Clinical spirography: spirograms and their signifi-
+     disease. J Neurol Neurosurg Psychiatry. 49:1326.                                 cance. Arch Intern Med. 43:132–138.
+Heck DH, McAfee SS, Liu Y, Babajani-Feremi A, Rezaie R, Freeman WJ,               Ohayon MM. 2003. The effects of breathing-related sleep disorders on mood
+     Wheless JW, Papanicolaou AC, Ruszinkó M, Sokolov Y, et al. 2017.                 disturbances in the general population. J Clin Psychiatry. 64:1195–1200;
+     Breathing as a fundamental rhythm of brain function. Front Neural                quiz, 1274.
+     Circuits. 10:115.                                                            Osorio RS, Ayappa I, Mantua J, Gumb T, Varga A, Mooney AM, Burschtin
+Helfenbein E, Firoozabadi R, Chien S, Carlson E, Babaeizadeh S. 2014.                 OE, Taxin Z, During E, Spector N, et al. 2014. Interaction between sleep-
+     Development of three methods for extracting respiration from the surface         disordered breathing and apolipoprotein E genotype on cerebrospinal
+     ECG: a review. J Electrocardiol. 47:819–825.                                     fluid biomarkers for Alzheimer’s disease in cognitively normal elderly indi-
+Herrero JL, Khuvis S, Yeagle E, Cerf M, Mehta AD. 2018. Breathing above               viduals. Neurobiol Aging. 35:1318–1324.
+     the brain stem: volitional control and attentional modulation in humans. J   Perciavalle V, Blandini M, Fecarotta P, Buscemi A, Di Corrado D, Bertolo L,
+     Neurophysiol. 119:145–159.                                                       Fichera F, Coco M. 2017. The role of deep breathing on stress. Neurol Sci.
+Hutton C, Josephs O, Stadler J, Featherstone E, Reid A, Speck O, Bernarding J,        38:451–458.
+     Weiskopf N. 2011. The impact of physiological noise correction on fMRI       Peupelmann J, Boettger MK, Ruhland C, Berger S, Ramachandraiah CT,
+     at 7 T. Neuroimage. 57:101–112.                                                  Yeragani VK, Bär KJ. 2009. Cardio-respiratory coupling indicates suppres-
+Ito J, Roy S, Liu Y, Cao Y, Fletcher M, Lu L, Boughter JD, Grün S, Heck DH.           sion of vagal activity in acute schizophrenia. Schizophr Res. 112:153–157.
+     2014. Whisker barrel cortex delta oscillations and gamma power in the        Ponikowski P, Voors AA, Anker SD, Bueno H, Cleland JG, Coats AJ, Falk V,
+     awake mouse are linked to respiration. Nat Commun. 5:3572.                       González-Juanatey JR, Harjola VP, Jankowska EA, et al.; Authors/Task Force
+Jacky JP. 1980. Barometric measurement of tidal volume: effects of pattern            Members; Document Reviewers. 2016. 2016 ESC guidelines for the diagno-
+     and nasal temperature. J Appl Physiol. 49: 319–325.                              sis and treatment of acute and chronic heart failure: the task force for the
+Jiang H, Schuele S, Rosenow J, Zelano C, Parvizi J, Tao JX, Wu S, Gottfried           diagnosis and treatment of acute and chronic heart failure of the European
+     JA. 2017. Theta oscillations rapidly convey odor-specific content in human       Society of Cardiology (ESC). Developed with the special contribution of the
+     piriform cortex. Neuron. 94:207–219.e4.                                          Heart Failure Association (HFA) of the ESC. Eur J Heart Fail. 18:891–975.
+Johnson BN, Mainland JD, Sobel N. 2003. Rapid olfactory processing impli-         Rice JE, Antic R, Thompson PD. 2002. Disordered respiration as a levodopa-
+     cates subcortical control of an olfactomotor system. J Neurophysiol.             induced dyskinesia in Parkinson’s disease. Mov Disord. 17:524–527.
+     90:1084–1094.                                                                Rojas-Líbano D, Frederick DE, Egaña JI, Kay LM. 2014. The olfactory bulb
+Johnson BN, Russell C, Khan RM, Sobel N. 2006. A comparison of methods                theta rhythm follows all frequencies of diaphragmatic respiration in the
+     for sniff measurement concurrent with olfactory tasks in humans. Chem            freely behaving rat. Front Behav Neurosci. 8:214.
+     Senses. 31:795–806.                                                          Roux SG, Garcia S, Bertrand B, Cenier T, Vigouroux M, Buonviso N, Litaudon
+Julu PO, Engerström IW, Hansen S, Apartopoulos F, Engerström B, Pini G,               P. 2006. Respiratory cycle as time basis: an improved method for averag-
+     Delamont RS, Smeets EE. 2008. Cardiorespiratory challenges in Rett’s             ing olfactory neural events. J Neurosci Methods. 152:173–178.
+     syndrome. Lancet. 371:1981–1983.                                             Roux F, Uhlhaas PJ. 2014. Working memory and neural oscillations: α-γ ver-
+Lacuey N, Zonjy B, Londono L, Lhatoo SD. 2017. Amygdala and hippocam-                 sus θ-γ codes for distinct WM information? Trends Cogn Sci. 18:16–25.
+     pus are symptomatogenic zones for central apneic seizures. Neurology.        Rozenkrantz L, Zachor D, Heller I, Plotkin A, Weissbrod A, Snitz K, Secundo
+     88:701–705.                                                                      L, Sobel N. 2015. A mechanistic link between olfaction and autism spec-
+Laing DG. 1983. Natural sniffing gives optimum odour perception for                   trum disorder. Curr Biol. 25:1904–1910.
+     humans. Perception. 12:99–117.                                               Sadagopan N, Huber JE. 2007. Effects of loudness cues on respiration in indi-
+Lalley PM. 2003. Mu-opioid receptor agonist effects on medullary respira-             viduals with Parkinson’s disease. Mov Disord. 22:651–659.
+     tory neurons in the cat: evidence for involvement in certain types of        Sampson D, Tordoff B. 2014. GUI layout toolbox. MATLAB Central File
+     ventilatory disturbances. Am J Physiol Regul Integr Comp Physiol.                Exchange. Available from: https://www.mathworks.com/matlabcentral/
+     285:R1287–R1304.                                                                 fileexchange/47982-gui-layout-toolbox. Accessed 10 June 2018.
+Leander M, Lampa E, Rask-Andersen A, Franklin K, Gislason T, Oudin A,             Sauer J-F, Biskamp J, Bartos M. 2017. Organization of prefrontal network
+     Svanes C, Torén K, Janson C. 2014. Impact of anxiety and depression on           activity by respiration-related oscillations. Sci Rep. 7: 45508. doi:10.1038/
+     respiratory symptoms. Respir Med. 108:1594–1600.                                 srep45508
+Chemical Senses, 2018, Vol. 43, No. 8                                                                                                                          597
+
+
+Segers LS, Nuding SC, Dick TE, Shannon R, Baekey DM, Solomon IC, Morris           Varady P, Micsik T, Benedek S, Benyó Z. 2002. A novel method for the detec-
+    KF, Lindsey BG. 2008. Functional connectivity in the pontomedullary               tion of apnea and hypopnea events in respiration signals. IEEE Trans
+    respiratory network. J Neurophysiol. 100:1749–1769.                               Biomed Eng. 49:936–942.
+Smallwood RG, Vitiello MV, Giblin EC, Prinz PN. 1983. Sleep apnea: relation-      Vlemincx E, Taelman J, De Peuter S, Van Diest I, Van den Bergh O. 2011. Sigh
+    ship to age, sex, and Alzheimer’s dementia. Sleep. 6:16–22.                       rate and respiratory variability during mental load and sustained atten-
+Sobel N, Thomason ME, Stappen I, Tanner CM, Tetrud JW, Bower JM,                      tion. Psychophysiology. 48:117–120.
+    Sullivan EV, Gabrieli JD. 2001. An impairment in sniffing contributes to      Wientjes CJ, Grossman P, Gaillard AW. 1998. Influence of drive and timing
+    the olfactory impairment in Parkinson’s disease. Proc Natl Acad Sci USA.          mechanisms on breathing pattern and ventilation during mental task per-
+    98:4154–4159.                                                                     formance. Biol Psychol. 49:53–70.
+Sonne T, Jensen MM. 2016. Evaluating the chillfish biofeedback game with          Wilhelm FH, Trabert W, Roth WT. 2001. Characteristics of sighing in panic
+    children with ADHD. Proceedings of the 15th International Conference on           disorder. Biol Psychiatry. 49:606–614.
+    Interaction Design and Children; 2016 June 21–24; Media City, Salford,        Wu R, Liu Y, Wang L, Li B, Xu F. 2017. Activity patterns elicited by airflow in the
+    UK. New York (NY): ACM. p. 529–534.                                               olfactory bulb and their possible functions. J Neurosci. 37:10700–10711.
+Spors H, Grinvald A. 2002. Spatio-temporal dynamics of odor representations       Yackle K, Schwarz LA, Kam K, Sorokin JM, Huguenard JR, Feldman JL, Luo
+    in the mammalian olfactory bulb. Neuron. 34:301–315.                              L, Krasnow MA. 2017. Breathing control center neurons that promote
+Thorndike RL. 1953. Who belongs in the family? Psychometrika. 18:                     arousal in mice. Science. 355:1411–1415.
+    267–276.                                                                      Yu L, De Mazancourt M, Hess A, Ashadi FR, Klein I, Mal H, Courbage M,
+Tsanov M, Chah E, Reilly R, O’Mara SM. 2014. Respiratory cycle entrain-               Mangin L. 2016. Functional connectivity and information flow of the
+    ment of septal neurons mediates the fast coupling of sniffing rate and hip-       respiratory neural network in chronic obstructive pulmonary disease.
+    pocampal theta rhythm. Eur J Neurosci. 39:957–974.                                Hum Brain Mapp. 37:2736–2754.
+Václavík J, Špinar J, Vindiš D, Vítovec J, Widimský P, Číhalík Č, Linhart A,      Zelano C, Jiang H, Zhou G, Arora N, Schuele S, Rosenow J, Gottfried JA.
+    Málek F, Táborský M, Dušek L, et al. 2014. ECG in patients with acute             2016. Nasal respiration entrains human limbic oscillations and modulates
+    heart failure can predict in-hospital and long-term mortality. Intern Emerg       cognitive function. J Neurosci. 36:12448–12467.
+    Med. 9:283–291.                                                               Zhong W, Ciatipis M, Wolfenstetter T, Jessberger J, Müller C, Ponsel S,
+Van Duinen MA, Niccolai V, Griez EJ. 2010. Challenging anxiety: a focus               Yanovsky Y, Brankačk J, Tort ABL, Draguhn A. 2017. Selective entrain-
+    on the specificity of respiratory symptoms. Curr Top Behav Neurosci.              ment of gamma subbands by different slow network oscillations. Proc
+    2:229–250.                                                                        Natl Acad Sci USA. 114:4519–4524.
+

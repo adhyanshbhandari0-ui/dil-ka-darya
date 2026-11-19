@@ -1,0 +1,717 @@
+    xStream: Outlier Dete‘x’ion in Feature-Evolving Data Streams
+                  Emaad Manzoor                                                 Hemank Lamba                                      Leman Akoglu
+             H. John Heinz III College                                   School of Computer Science                         H. John Heinz III College
+            Carnegie Mellon University                                   Carnegie Mellon University                       Carnegie Mellon University
+                 emaad@cmu.edu                                              hlamba@cs.cmu.edu                              lakoglu@andrew.cmu.edu
+
+ABSTRACT                                                                                             Known Features                           Evolving Features
+This work addresses the outlier detection problem for feature-
+                                                                                                                                                       Updates to existing
+evolving streams, which has not been studied before. In this setting                                                                                     feature & point
+both (1) data points may evolve, with feature values changing, as                                                                                        New Emerging
+well as (2) feature space may evolve, with newly-emerging features                                                                                         Features
+over time. This is notably different from row-streams, where points
+                                                                                              Time                                  Time
+                                                                                                                       Incoming
+with fixed features arrive one at a time.                                                                                Points
+
+   We propose a density-based ensemble outlier detector, called
+xStream, for this more extreme streaming setting which has the fol-
+lowing key properties: (1) it is a constant-space and constant-time
+(per incoming update) algorithm, (2) it measures outlierness at mul-
+tiple scales or granularities, it can handle (3i) high-dimensionality
+through distance-preserving projections, and (3ii) non-stationarity
+                                                                                                         (a) row-stream                    (b) feature-evolving stream
+via O (1)-time model updates as the stream progresses. In addition,
+xStream can address the outlier detection problem for the (less
+                                                                                              Figure 1: Row-streaming data [all prior work] vs. Feature-
+general) disk-resident static as well as row-streaming settings.
+                                                                                              evolving data stream [this paper] (colors indicate unique
+   We evaluate xStream rigorously on numerous real-life datasets
+                                                                                              ids): in (a) points arrive, get scored for outlierness, and dis-
+in all three settings: static, row-stream, and feature-evolving stream.
+                                                                                              carded one-at-a-time, vs. in (b) not only new points (rows) ar-
+Experiments under static and row-streaming scenarios show that
+                                                                                              rive over the stream, but also (i) feature space evolves with
+xStream is as competitive as state-of-the-art detectors and particu-
+                                                                                              newly-emerging features (columns), and (b) id’s evolve with
+larly effective in high-dimensions with noise. We also demonstrate
+                                                                                              feature-value updates arriving in an interleaved fashion. As
+that our solution is fast and accurate with modest space overhead
+                                                                                              such, (b) is inherently a more challenging setting.
+for evolving streams, on which there exists no competition.
+ACM Reference Format:
+Emaad Manzoor, Hemank Lamba, and Leman Akoglu. 2018. xStream: Out-                             (1) static (d, n known): when the full n × d data matrix D is given,
+lier Dete‘x’ion in Feature-Evolving Data Streams . In KDD ’18: The 24th                            containing n points in d dimensions, and
+ACM SIGKDD International Conference on Knowledge Discovery & Data Min-                         (2) row-streaming (d known, n unknown): when d-dimensional
+ing, August 19–23, 2018, London, United Kingdom. ACM, New York, NY, USA,                           rows of D arrive over time—one by one.
+10 pages. https://doi.org/10.1145/3219819.3220107
+                                                                                                  In this work we consider a (3)rd, new setting that has not been
+                                                                                              addressed before in any prior work: when indices of D arrive
+1     INTRODUCTION                                                                            arbitrarily in time over a stream where both n and d are unknown
+How can we detect outlier data points in a stream, which “evolves”                            apriori. Concretely, triplets of the form (id, f , δ ) arrive over the
+over time, that is a stream where not only new points arrive over                             stream, where id is the unique identifier for a data point, f is a
+time but also (i) the feature values of the points may change and                             unique feature name and δ is the amount of update (positive or
+(ii) previously unseen features may arrive?                                                   negative) to the value of feature f for point id. Here both id and
+    Outlier detection has numerous key applications in finance, se-                           f may be previously unseen or seen, i.e. both new rows as well as
+curity, etc. and has been studied vastly [2]. All of existing work for                        new columns can be added to the data or values of existing indices
+point outlier detection can be categorized to one of two settings:                            can be updated over the stream. In this paper, we introduce the
+                                                                                              term feature-evolving stream (or evolving stream in short) to refer
+                                                                                              to such a data stream. These settings are substantially different as
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed         illustrated in Figure 1 (see caption).
+for profit or commercial advantage and that copies bear this notice and the full citation         We propose a new algorithm for the outlier detection problem
+on the first page. Copyrights for components of this work owned by others than ACM            in evolving streams, called xStream, to handle this (3)rd, more
+must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,
+to post on servers or to redistribute to lists, requires prior specific permission and/or a   extreme (hence the name xStream) setting. xStream can also
+fee. Request permissions from permissions@acm.org.                                            handle settings (1) and (2) above, as (3) is more general as well as
+KDD ’18, August 19–23, 2018, London, United Kingdom                                           more challenging.
+© 2018 Association for Computing Machinery.
+ACM ISBN 978-1-4503-5552-0/18/08. . . $15.00                                                      A key challenge is the need to maintain not only the outlier
+https://doi.org/10.1145/3219819.3220107                                                       detection model but also the data points in memory for the timely
+processing of the stream. That is, we cannot simply process and                 properties: (i) it is a constant memory approach with fixed-
+discard the points one at a time as they arrive over the stream as              size model and data sketches, processing each stream element
+in setting (2), since those points may “evolve” in two key ways:                in constant time; (ii) it tackles high-dimensionality via de-
+(i) their feature values may change, and/or (ii) new features may               tection in subspace projections; (iii) it measures outlierness
+emerge. Second, both n and d are unknown; as such, if we were to                at multiple scales or different granularities, which allows
+maintain the data points in memory, space should be dynamically                 identifying both scattered and clustered outliers; and (iv) it
+allocated for growing n and d, both of which could be extremely                 handles non-stationarity via a window-based scheme that
+large. A space cap could cause spillover to disk and as a result                requires O (1) update time per window.
+“thrashing”. Third, a very fast technique is needed to accommodate            • We also show that xStream can easily accommodate settings
+a likely high-frequency arrival rate of delta-updates per point per             (1) and (2). In particular, it applies to static disk-resident data,
+feature. Those are specific challenges associated with the (3)rd                requiring only two passes—one for model building and another
+setting. Other typical challenges include non-stationarity of the               for scoring outlierness—as well as to row-streaming data, with
+data stream, curse of dimensionality, outliers at multiple scales (or           minor modifications to the implementation.
+granularities) or different subspaces. With xStream, we address all
+                                                                             Through extensive experiments on benchmark datasets, we com-
+of these challenges above.
+                                                                          pare xStream to widely-known state-of-the-art ensemble methods
+    While the (3)rd setting for outlier detection has not been con-
+                                                                          on (1) static and (2) streaming outlier detection. On these settings,
+sidered before, likely because of the challenges associated with
+                                                                          xStream is as competitive as existing methods on low-to-medium
+evolving data points with potentially high yet unknown dimension-
+                                                                          dimensional datasets, and superior in high-dimensions. To further
+ality, the practical cases for this setting are abound. We give three
+                                                                          set xStream apart from the rest, we demonstrate its performance
+real world examples as follows.
+                                                                          on (3) evolving streams, for which there is no existing competitor.
+   • Data center monitoring: Jobs arriving to a data center over time        To facilitate reproducibility, we make all source code and data
+     may evolve, where features like syscall counts, memory usage,        publicly available at https://github.com/cmuxstream/.
+     #threads, etc. may change or new features like files/repos/URLs
+     accessed or applications run may emerge.                             2     RELATED WORK
+   • Customer behavior tracking: Users arriving to a host website         Our work introduces an ensemble-based approach to outlier detec-
+     over time may evolve, where features like page visit counts,         tion in evolving streams. We cover related work in both areas.
+     #clicks, etc. may change and new features involving e.g. se-            Ensemble Methods: Outlier detection is a well-studied area,
+     quence of visited page types may emerge.                             especially for static point-cloud data [2, 12]. Following the success
+   • User monitoring: Active users logging on Twitter/Facebook/etc.       of ensemble methods on classification, several ensemble detectors
+     over time may evolve, where features like hashtag counts, frac-      have been developed in the past to leverage “the strength of the
+     tion of posts with URL, URL domain counts, etc. may change           many”. For example, Lazarevic and Kumar developed feature bag-
+     and new hashtags or domains may emerge.                              ging [22], an ensemble inspired by bagging [8] that employs ran-
+   In a nutshell, xStream operates on projections of the data points,     domly selected feature subsets to detect outliers in subspaces. Liu
+which it maintains on-the-fly, seamlessly accommodating newly-            et al. [23] propose a method based on random forests [9], which
+emerging features. These projections are lower dimensional, fixed         used different subsamples of training data to construct an ensemble
+size, and preserve the distances between the points well. xStream per-    of trees to isolate outliers on the basis of the path length from the
+forms outlier detection via density estimation, through an ensem-         root to the leaves. Most recently, Aggarwal [3] and Zimek [34] laid
+ble of randomized partitions of the data. These partitions are con-       out opportunities and challenges in this area, which created a surge
+structed recursively, where the data is split into smaller and smaller    of focus on ensemble methods for outlier detection, including the
+bins, which allows us to find outliers at different granularities. Tem-   subsampling technique [35] that assembled base detectors with
+poral shifts are handled by a window-based approach where bin             different subsamples of the data points, ensemble of randomized
+counts accumulated in the previous window are used to score points        space trees RS-Forest [32], rotated bagging with variable subsam-
+in the current window, with windows sliding forward periodically          pling techniques [4], selective [27] and sequential [28] ensembles,
+after each current window is full. We give a list of the notable          projection-based histogram ensemble LODA [26], and the random-
+contributions of our work as follows.                                     ized subspace hashing ensemble RS-Hash [29]. Ensemble techniques
+                                                                          enjoy reduced variance and the ability to detect outliers hidden in
+   • Our most innovative contribution is addressing the outlier           subspaces. They have been shown to outperform base detectors
+     detection problem for evolving streams for the first time. In        alone and are considered state-of-the-art for outlier detection.
+     such streams, not only new points arrive over time, but feature         Streaming Methods: There exist various outlier detectors for
+     values may change and new features (columns) may emerge.             data streams [6, 7, 11, 17, 30, 33]. Most related to our work are the
+     This is a (3)rd setting where n and d (the total number of           ensemble methods that partition the representation space (feature
+     data rows and columns, respectively) are both unknown, as            subspaces, projections, etc.) and estimate density based on counts
+     compared to (1) the static setting with n and d both known,          in the partitions [26, 31, 32], which are easily generalized to data
+     and (2) the row-streaming setting with d known, n unknown.           streams. The idea is to maintain two separate counts; one for the
+   • We propose a new algorithm called xStream for outlier detec-         most recent historical window (called reference) and another for
+     tion in evolving streams. xStream exhibits a number of key           the current window. Then, every time the window slides, reference
+Table 1: Comparing xStream with state-of-the-art outlier                                                                                                                     Proposed Method: xStream
+detection techniques in terms of various properties.
+                                                                                                                                                                             We now propose xStream to detect outliers in feature-evolving
+                                                                                                                                                                             data streams. xStream is an ensemble of Half-Space Chains that
+
+
+
+                                                                                          HS-Stream [31]
+                                                                                                                                                                             approximates density efficiently, without needing to know the un-
+
+                                  Feat.Bag. [22]   LOCI [25]   HiCS [21]   iForest [23]                    STORM [6]   LODA [26]   RS-Hash [29]   RS-Forest [32]
+                       LOF [10]                                                                                                                                    xStream
+       Methods/                                                                                                                                                              derlying feature space a-priori. Each chain approximates the density
+       Properties                                                                                                                                                            of a point by counting its nearby neighbors at multiple scales. The
+                                                                                                                                                                             method builds on the following key components: (1) StreamHash:
+                                                                                                                                                                             subspace-selection and dimensionality reduction via sparse random
+    Static              ✔           ✔               ✔           ✔            ✔              ✔                           ✔            ✔              ✔               ✔
+    Streaming                                                                               ✔               ✔           ✔            ✔              ✔               ✔        projections for evolving feature spaces; (2) Half-Space Chains: an
+    Multi-scale                                     ✔                                                                                                               ✔        efficient ensemble to estimate density at multiple scales; and (3)
+    Subspaces                       ✔                           ✔            ✔              ✔                           ✔            ✔              ✔               ✔        extensions to handle non-stationarity and evolving data points in
+    Projections                                                                                                         ✔                                           ✔        the stream. We now describe each of these components, followed
+    Evolving
+                                                                                                                                                                    ✔        by the complete algorithm and its complexity in space and time.
+    feature space
+    Evolving points/
+                                                                                                                                                                    ✔        3.2    StreamHash
+    feature values
+                                                                                                                                                                             Random projections are an efficient and effective method of re-
+counts are overwritten by current counts and the latter are set to                                                                                                           ducing data dimensionality while accurately preserving distances
+zero. Differently, RS-Hash [29] uses continuous counting (i.e., no                                                                                                           between points. Classical random projections [19] involve drawing
+sliding windows) where points are down-weighted by recency.                                                                                                                  a set of Gaussian random vectors {r 1 , . . . ,r K } ⊂ Rd and project-
+   While there is much work on time series outlier detection [18],                                                                                                           ing each point x ∈ Rd to a low-dimensional embedding y ∈ RK
+this differs from outlier detection in data streams. Here, the goal is                                                                                                       as: y = (x T r 1 , . . . ,x T r K ), where K is the number of random pro-
+to identify outlying time-series patterns based on temporal depen-                                                                                                           jections. This low-dimensional embedding preserves pairwise dis-
+dencies, rather than independent outlying objects.                                                                                                                           tances between points with high-accuracy [20].
+   Remarkably, all of the existing techniques consider the row-                                                                                                                 In high-dimensional data, outliers often lie in low-dimensional
+stream setting where data objects arrive one at a time and assume                                                                                                            subspaces, rendering them difficult to detect with a large number
+that dimensionality is known. None of them can handle either evolv-                                                                                                          of irrelevant features [5, 36]. This difficulty may be mitigated by
+ing objects with changing feature values, or newly-emerging fea-                                                                                                             looking for outliers in selected subspaces of the data [2]. Hence, we
+tures where dimensionality is unknown. Our work is the first to                                                                                                              consider a variant of random projections called database-friendly
+address this more challenging setting and easily generalizes to                                                                                                              random projections [1], which replaces the Gaussian random vec-
+static as well as row-streaming scenarios as well. Table 1 compares                                                                                                          tors with sparse random vectors where only 1/3 of the vector com-
+xStream to several popular static and streaming methods in terms                                                                                                             ponents are non-zero. Under this scheme, each projection ignores
+of various properties and highlights key differences.                                                                                                                        a 2/3 fraction of the feature space, essentially selecting a subspace,
+                                                                                                                                                                             while still maintaining the ability to preserve pairwise distances.
+3  OUTLIER DETECTION IN                                                                                                                                                      Specifically, the projection values r i [j] follow the distribution:
+   FEATURE-EVOLVING DATA STREAMS
+3.1 Problem Definition                                                                                                                                                                               −1 with probability 61
+                                                                                                                                                                                                 3 
+                                                                                                                                                                                                 r  
+                                                                                                                                                                                                    
+                                                                                                                                                                                       r i [j] =     0 with probability 2
+                                                                                                                                                                                                    
+We now formalize the problem of outlier detection in feature-                                                                                                                                    K                                3
+evolving data streams. Consider an incoming stream of elements                                                                                                                                       +1 with probability 1
+                                                                                                                                                                                                    
+                                                                                                                                                                                                    
+                                                                                                                                                                                                                                     6
+D = {et }t =1,2, ... where each element et is a triple of the form
+                                                                                                                                                                                                    
+                                                                                                                                                                             In a feature-evolving stream, however, the true dimensionality d
+(id, f , δ )t . Here, the id is a unique integer identifying each data
+                                                                                                                                                                             is unobserved and evolving over time. Hence, it is impossible to
+point. f is a feature name, represented as a string. δ is a discrete or
+                                                                                                                                                                             draw random vectors r 1 , . . . ,r K of this dimensionality a-priori.
+continuous scalar.
+                                                                                                                                                                             To address this issue, we propose StreamHash, a hashing-based
+   Each such triple is an update to the point with identifier id lying
+                                                                                                                                                                             implementation of sparse random projections that functions in
+in a feature space F that is unobserved. We do not assume anything
+                                                                                                                                                                             unobserved and evolving feature spaces. StreamHash is instanti-
+about the types of features: they may be categorical or numerical.
+                                                                                                                                                                             ated with K hash-functions h 1 (·), . . . , h K (·). Each hash function hi
+The update is made to a feature with name f and is of magnitude δ .
+                                                                                                                                                                             maps a string f (the feature name) to a hash-value, i.e., hi : f → R.
+For example: the triple (1000, “sudo”, +2) increments the number of
+                                                                                                                                                                             Given a point x in a fixed feature space F , its random projection
+times a user with ID 1000 ran the sudo command on a machine, and
+                                                                                                                                                                             via StreamHash is computed as follows:
+the triple (3, “rainfall_2018.02”, 2.5) records the amount of rainfall                                                                                                                           X
+observed by a sensor with ID 3 on a specific date.                                                                                                                                       y [i] =    hi ( f j ) x [j], i = 1, . . . , K .            (1)
+   We define our outlier detection problem formally as follows:                                                                                                                                   fj ∈ F
+
+   Problem 1 (Outlier Detection in Feature-Evolving Data                                                                                                                     Eq. (1) applies to data points arriving with all their features at once.
+Streams). Given a stream D = {et }t =1,2, ... of triples et = (id, f , δ )t ,                                                                                                In a feature-evolving stream D of triples (id, f , δ ), updates to the
+compute and maintain an outlier score for each evolving point id such                                                                                                        projection of point id are computed as follows:
+that outliers are scored higher than non-outlier points at any time t.                                                                                                                  y id [i] = y id [i] + hi ( f ) δ,   i = 1, . . . , K .     (2)
+                                                                                                         (4,0)                   (4,4)
+If y id did not exist on the arrival of the first triple, it is initialized
+                                                                                       Δ = (2,2)                            y            y = (2.2,3)
+with the first such update. Hence, with this projection scheme, we                                         x2
+can now compute and maintain low-dimensional projections of the                         s = (0,0)                                        z = (0,0)
+incoming data points in an online fashion, without observing the                                         (0,0)                   (0,4)
+                                                                                                                      x1
+underlying feature space.
+    What remains is to specify an implementation of the hash func-                                                          y            z = (1.1, 0.0)
+tions hi ’s such that the hash function values hi ( f ) follow the dis-             p[l=1] x1                                            z = (1, 0)
+tribution of projection values r i [j] in Eq. (1). Let д1 (·), . . . , дK (·)
+be functions from an efficiently computable universal hash family
+[14, 15], mapping strings to 32 bit integers. The exact number of                                                           y            z = (1.1, 1.5)
+bits is irrelevant, and is chosen for efficiency based on the machine               p[l=2] x2                                            z = (1, 1)
+word size. Let ai ( f ) = дi ( f )/(232 − 1), a number between 0 and 1.
+hi ( f ) is defined for K random projections, analogous to Eq. (1) as:
+                                                                                                                            y            z = (2.2, 1.5)
+                                                                                    p[l=3] x1                                            z = (2, 1)
+                             −1 if ai ( f ) ∈ [0, 1/6)
+                          3 
+                      r     
+                            
+          hi [f ] =          0 if ai ( f ) ∈ [1/6, 5/6)                 (3)
+                            
+                          K 
+                             +1 if ai ( f ) ∈ [5/6, 1]
+                            
+                                                                               Figure 2: Example illustration of a Half-Space Chain (left) of depth
+                                                                                D = 3 and ∆, s as shown in a K = 2 dimensional projected space (top).
+                            
+3.3     Half-Space Chains                                                       The dimension selected at each level p [l =1], p [l =2] and p [l =3] is re-
+                                                                                cursively split into bins (middle). Corresponding un-discretized and
+To detect density-based outliers, it suffices to approximate the den-           discretized bin-vectors, respectively z and z̄ , at each level are shown
+sity of each point by counting the number of its neighbors lying                (right, last computed bin element in bold). See §3.3 for details.
+within some radius r (i.e., at some scale). There are two issues
+with performing neighborhood-counting directly: (1) the success
+of outlier detection is sensitive to the choice of scale, and (2) in            initial bin-width as z̄ [p] = ⌊y [p]/∆ [p]⌋. Every subsequent time p is
+high-dimensional data, the number of neighbors at any scale tends               sampled in the chain, the bin-width is halved and used to update
+to zero as the dimensionality increases. We resolve both these is-              the bin-vector as above.
+sues by coupling dimensionality-reduction via StreamHash as                         For binning-based density estimation, the placement of the bin
+described in the previous subsection, with an ensemble that approx-             boundaries plays a crucial role; which may have an adverse ef-
+imates the density by computing neighborhood-counts at multiple                 fect on points near the boundaries, potentially causing clusters
+scales, which we describe now.                                                  to split due to lying on both sides. To tackle this issue, we intro-
+   We perform density estimation in the projected K-dimensional                 duce a random shift s [p] for each dimension p ∈ P, such that
+space denoted as P = {1, . . . , K }. One approach to approximating             s [p] ∈ Uniform(0, ∆ [p]). These shifts reduce the impact of deter-
+density is to construct histograms with equiwidth bins and use the              ministic bin boundaries on clustered points by providing them an
+bin-counts. However, as the dimensionality of the binned space                  opportunity to fall into the same bin. Let o(p, l ) be the number
+increases, the number of bins grows exponentially. This leaves every            of times feature p ∈ P has been sampled in the chain until and
+bin too sparsely populated to reliably approximate the density, as a            including level l, where o(p, l ) = 1 at the first level p is sampled.
+consequence of the curse of dimensionality. Instead, we propose an              The bin-vector of y at level l is then computed as,
+ensemble of Half-Space Chains of depth D. Each chain randomly                                            y [p] + s [p]/2o (p,l )−1
+selects a single split-dimension p ∈ P at each level l = 1, . . . , D, and                  z [p]   =                              ,     ∀p ∈ P           (4)
+                                                                                                              ∆ [p]/2o (p,l )−1
+recursively splits the space along that dimension into discrete bins.
+Additionally, if a feature is sampled again at subsequent levels in                            z̄   =    ⌊z ⌋                                             (5)
+the chain, it is discretized with a smaller bin width, thus enabling            where z ∈ RK is the un-discretized bin-vector of y . Fig. 2 illustrates
+density approximation at multiple scales.                                       the process of recursively splitting a 2-dimensional projected space
+   Let us denote by p the vector of split features sampled by a chain,          by a Half-Space Chain of depth D = 3, bin-widths ∆ = (2, 2) without
+where p [l] ∈ P for each level l = 1, . . . , D. The split features are         shifts, i.e. s = (0, 0) for simplicity. At levels l = 1 and 2, dimensions
+sampled uniformly at random with replacement; this allows dimen-                p [1] = x 1 and p [2] = x 2 are selected for the first time and split
+sions to be split into finer granularities if sampled multiple times.           into two bins each of width ∆ [1] = 2 and ∆ [2] = 2. At level l = 3,
+Let ∆ [p] be the initial bin-widths, used to discretize dimensions              dimension p [3] = x 1 is split again to a finer granularity, into bins of
+when sampled for the first time. This is set to approximately half              width ∆ [1]/2 = 1. Corresponding z̄ and z at each level are shown
+the range of the projected data along each dimension p, and may                 on the right.
+be estimated by an initial sample.                                                  Given z̄ at any level, we index z̄ into a counting data-structure
+   We approximate the density at a projected pointy at level l of the           maintained at that level to obtain the bin-count of the point. How-
+chain by binning the point at that level and retrieving the bin-count.          ever, the number of unique bin vectors (esp. at higher granularities
+Let the bin-vector (corresponding to a unique bin-id) be z̄ ∈ ZK ,              or levels) can be large and in fact is theoretically unbounded in
+initialized to 0. Let p = p [1] ∈ P be the feature sampled by the               a streaming scenario. Hence, we use a count-min-sketch Hl ∈ H
+chain at level l = 1. The bin-vector at l = 1 is computed using the             at each level l = 1, . . . , D, which approximates the bin-counts at
+that level with high accuracy while consuming constant space [13].          Algorithm 1 xStream
+Overall, each chain is defined by C = {p , ∆ ,s , H } and the collec-       Input Stream D; Half-Space Chains C; Window size ψ
+tion of M such chains C = {C 1 . . . , C M } constitutes xStream’s
+                                                                            Output Outlier score for each id in D, at any instant
+ensemble of Half-Space Chains.
+                                                                              1: cache = []                              ▷ Size-N LRU cache
+   In-place construction of bin-vectors. We may use Eqs. (4)
+                                                                              2: numpoints = 0
+and (5) to compute the bin-vectors at each level l = 1, . . . , D. How-
+ever, the following recursive relationship enables computing the              3: for e t = (id, f , δ )t ∈ D do
+
+un-discretized bin-vectors incrementally; starting at l = 1 and mov-          4:     if id < cache then          ▷ previously unseen id, §3.4
+ing downward (z = 0 initially) using a few arithmetic operations:             5:          if numpoints = ψ then
+                                                                              6:              numpoints ← 0
+           z [p] = (y [p] + s [p])/∆ [p]   if o(p, l ) = 1
+                                                                              7:              for Hl ∈ HC , ∀C ∈ C do
+           z [p] = 2z [p] − s [p]/∆ [p]    if o(p, l ) > 1           (6)      8:                   Hl .r ← Hl .c
+where p is the feature sampled at level l, and o(p, l ) denotes the           9:                   Hl .c ← 0
+number of times feature p ∈ P has been sampled as defined earlier.           10:          numpoints ← numpoints +1
+   Updating bin-counts in a Half-Space Chain. On the arrival                 11:     else                         ▷ evolving existing id, §3.4
+of a projected point y , its bin-vector z̄ is constructed at each level      12:         y id ← Remove (id, y id ) from cache
+l = 1, . . . , D recursively using Eq. (6) and is indexed into Hl to
+                                                                             13:          Delete y id from the current counters of C
+increment the bin-count Hl [z̄ ]. One may also need to delete points
+from the chain: we will see in §3.4 that, when points evolve, their          14:    y id ← Get updated projection for triple et ▷ Eq. (2)
+old projected points are deleted from the chain and updated ones             15:     Add (id, y id ) to (head of) cache
+are added. Deletion proceeds exactly the same as addition, with the          16:     Add y id to the current counters of C
+bin-count being decremented instead.                                         17:    S (y id ) ← score with reference counters of C ▷ Eq. (7)
+   Multi-scale Outlier Scoring. At higher levels, the bin-counts             18:     return S (y id )
+tend to be lower. To facilitate comparing outlier scores across levels,
+we define the outlier score of y (with bin-vector z̄ ) at each level l as
+the extrapolated bin-count 2l Hl [z̄ ]. This is equal to the expected
+                                                                            the chain, the current window bin-counts Hl .c [z̄ ] are incremented
+number of points in each bin if the initial bin-widths ∆ [p] for p ∈ P
+                                                                            by 1 at each level whereas the reference window counts Hl .r [z̄ ]
+were exactly half the range of p, and the data points were distributed
+                                                                            are used to compute is outlierness score. On the arrival of (ψ + 1) th
+uniformly at random.
+                                                                            new point, the counts in Hl .r are replaced with those in Hl .c , and
+   We define the multi-scale outlier score of a point y from a chain
+                                                                            the counts in Hl .c are set to zero to begin processing the next
+C as the minimum extrapolated bin-count across all levels, corre-
+                                                                            window. The swapping and resetting of counts, i.e., model update
+sponding to the lowest density this point has among all the consid-
+                                                                            is effectively O (1).
+ered granularities. The overall outlierness score by the ensemble is
+                                                                                Here, ψ is set based on the expected frequency of distribution-
+then the average of the scores across all chains, that is:
+                                                                            changes in the stream; a higher frequency would benefit from lower
+                   1 X              1 X                                     ψ . However, setting ψ too low reduces the statistical power of the
+         S (y ) =         SC (y ) =         minl 2l Hl [z̄ ]          (7)
+                   M                M                                       reference window, resulting in outlier scores with a high variance.
+                    C ∈C               C ∈C
+                                                                                Handling evolving data points. Points may evolve by receiv-
+Note that we update the bin-counts and compute outlierness scores
+                                                                            ing updates in the stream to either an existing feature or to a new,
+simultaneously as we traverse each chain from l = 1 downward.
+                                                                            previously unseen feature. In either case, Eq. (2) requires the exist-
+                                                                            ing projected point y to reside in main memory so as to update it
+3.4    Handling Non-stationarity and                                        quickly without accessing the disk.
+       Evolving Points                                                          Hence, we maintain in memory a fixed-size cache of N projected
+Streaming random projections (§3.2) coupled with Half-Space Chains          points. We follow a Least-Recently-Updated (LRU) eviction protocol
+(§3.3) can be used to compute outlier scores over any stream of             for the cache: addition of a new point to a full cache is followed
+incoming data points in evolving feature space. However, the dis-           by the eviction of the least recently updated point. The LRU cache
+tribution of points may change as the stream progresses, causing            is implemented as a linked-list, with additions to the head and
+bin-counts constructed in the past to no longer represent the current       evictions from the tail. On receiving an update, the existing pro-
+distribution of the data. Additionally, triples in the data stream may      jected point is first removed from the cache and from the chains by
+update previously seen points. As such, we next extend xStream to           decrementing its bin-counts at all levels. It is then updated using
+handle non-stationarity and evolving data points.                           Eq. (2), moved to the head of the cache and used to increment the
+   Handling non-stationarity. We handle non-stationarity by                 corresponding bin-counts in the chains.
+maintaining separate bin-counts for an alternating pair of windows              Overall xStream algorithm, including the mechanisms to han-
+containing ψ points each, termed as current and reference windows.          dle non-stationarity and evolving data points, is provided in Al-
+   These are associated with two separate counters in each entry            gorithm 1. The window mechanism is depicted in lines 4–10, and
+of a count-min-sketch Hl , denoted by Hl .c and Hl .r for the current       the caching mechanism in lines 11–15. Note that lines 16-17 are
+and reference window respectively. As a pointy is propagated down           performed simultaneously during the same traversal of each chain.
+3.5    Time and Space Complexity                                                       Table 2: Datasets used for evaluation.
+Time: Given arriving stream element et , we update the projected
+vector y in O (K ). For a given chain in the ensemble, we then con-        Name            Evolving     Evolving     n or      d       No. of
+struct the bin-vector z̄ and index it into the count-min-sketch (CMS)                      F?           points?      |D|               outliers
+at every level. Here, indexing involves hashing z̄ into m different        gisette         No           No            3850     4970    351
+fixed-size CMS hashtables (the larger the m, the better the approx-        isolet          No           No            4886     617     389
+imate counts). This takes O (Km) at each level. For a total of M           letter          No           No            4586     617     389
+chains each with depth D, time complexity per incoming update              madelon         No           No            1430     500     130
+becomes (KmDM ), which is a constant.                                      cancer          No           No            385      30      28
+    Space: xStream maintains (i) M half-space chains and (ii) N            ionosphere      No           No            242      33      17
+evolving (projected) points in main memory. The CMS hashtables             telescope       No           No            13283    10      951
+per level constitute the main space requirement for a chain. That          indians         No           No            538      8       38
+is, for m size-L hashtables at D levels, the space for the ensem-
+ble structure is O (mLDM ). Together with the LRU cache, overall           Spam-SMS        Yes          No            5574     8442    747
+requirement becomes O (MmLD + N K ), also a constant.                      Spam-URL        Yes          No            2.4M     3.2M    792K
+    For e.g., an ensemble with M=100, m=10, L=1000, D=10 plus a            Attk-Flash      Yes          Yes           63.1M    1.1M    2.8M
+cache of N =100, 000 points with K=100 would require 160MB.                Attk-Java       Yes          Yes           89.7M    1.1M    29.5M
+    Note that our space overhead is linear in depth by design; unlike
+for e.g., tree structures employed by existing (static/row-streaming)
+outlier ensembles [23, 31, 32], which grow exponentially by depth.
+                                                                          are unsupervised, as such, training does not make ground truth
+                                                                          labels available to the models but only used for evaluation.
+3.6    xStream for Static and Row-Streaming Data                             Datasets. We use the top eight static datasets in Table 2 with
+Next we demonstrate that xStream can easily accommodate set-              varying size and dimensionality. These are standard UCI datasets
+tings (1) and (2) as we discussed in the Introduction.                    previously used for outlier detection (see [26] for details).
+    Note that the half-space chains ensemble structure can be con-           Baselines. In static setup, we compare xStream to four tech-
+structed without data. That is, the split dimension and shift for each    niques: iForest [23], HS-Trees [31], LODA [26], and RS-Hash [29].
+level and the fixed-size count-min-sketches can be instantiated apri-     These are all ensemble methods that seek outliers in subspaces, and
+ori. Moreover, K d-dimensional sparse projector vectors (r i ’s) can      have been shown to outperform numerous standard detectors [4]
+be created and kept in memory.                                            and hence are considered the state-of-the-art.
+    For disk-resident static setting, xStream then makes two passes          We use recommended sample size ψ = 256 and height limit
+over the data. In pass 1, it populates the counters. That is, it loads       √ 15 for iForest, max-depth 15 for HS-Trees, sparsity factor
+                                                                          hlim=
+one point/row x at a time, computes projected vector y and the            1/ d for LODA and let it select the best width for its histograms,
+corresponding bin-ids at each level of each chain using Eq.(6) to         the recommended sample size 1000 for RS-Hash, and k = 100 and
+increment the count-min-sketch counters. In pass 2, it scores for         ℓ = 15 for our xStream. For all methods, we set the number of
+outlierness. That is, it follows the same steps as in pass 1 but this     ensemble components (trees, histograms, chains) to 100.
+time uses the populated counts in corresponding count-min-sketch             Row-stream. The second setting is where data points with
+bins to compute outlierness per point as in Eq. (7).                      known dimensionality arrive one-at-a-time over the stream. Each
+    For the row-streaming setting, xStream implementation is al-          arriving point is scored under the detection model and discarded.
+most identical to the disk-resident static setting above, since reading      Datasets. We use the Spam-SMS and Spam-URL datasets listed
+one point at a time from disk is analogous to receiving one point at      in the middle part of Table 2, containing ground truth spam SMS
+a time over the stream. The difference is that this time xStream em-      messages and emails containing spam URLs, respectively. Each SMS
+ploys the window mechanism where it uses current and reference            or URL document arrives one at a time over the stream. As such,
+counters to populate and score points, respectively. Note that in         these datasets well-align with the row-streaming setting—except
+this setting, xStream can still create and cache the K projectors in      for one caveat, which is their feature representations. We use the
+memory apriori, since dimensionality d is known for row-streams.          word and shingle counts as features for both type of documents,
+                                                                          however, the vocabulary size in reality is unknown apriori (esp.
+                                                                          for SMS, where the vocabulary is highly variable). That is, the
+4 EVALUATION                                                              feature domain F is in fact evolving. Nevertheless, we give the
+                                                                          advantage of known-d to existing methods, by identifying all unique
+4.1 Experiment Settings
+                                                                          features in the entire corpus apriori and constructing feature vectors
+We evaluate and compare xStream to various state-of-the-art base-         accordingly for the incoming documents.
+lines under three different settings.                                        Baselines. We compare to the streaming versions of the baseline
+   Static. This is the offline setting, where both n and d are known      techniques from the previous part, namely HS-Stream and LODA
+and all of the data is available at train time. We use all the data       (iForest does not have a stream version). We use similar hyperpa-
+to train detection models and subsequently score the same points          rameter settings as before. In addition, we use two sliding windows
+under the trained model. Note that all the models used for detection      (reference and current) for HS-Stream, LODA, and xStream with
+various window sizes. RS-Hash uses a continuous counting ap-               Table 3: Mean Average Precision on static datasets. Mean and
+proach with (recommended) decay rate 0.015.                                standard deviation are reported over 10 runs.
+    Note that our work addresses a much more challenging outlier
+detection problem than the offline and row-streaming (w/ known-d)          Dataset            iForest          HS-Trees           RS-Hash             LODA           xStream
+scenarios above. We provide comparative results solely for com-            cancer           0.617 ± 0.021     0.646 ± 0.033     0.619 ± 0.030     0.826 ± 0.013     0.845 ± 0.008
+pleteness and to show xStream’s competitiveness in these settings.         ionosphere       0.705 ± 0.006     0.706 ± 0.007     0.764 ± 0.032     0.642 ± 0.067     0.848 ± 0.018
+                                                                           telescope        0.367 ± 0.008     0.392 ± 0.012     0.391 ± 0.012     0.322 ± 0.007     0.344 ± 0.009
+    Evolving Stream. This is the extreme setting we consider in            indians          0.142 ± 0.003     0.146 ± 0.002     0.156 ± 0.007     0.177 ± 0.008     0.216 ± 0.010
+this work, in which updates arrive over time as a stream D. These          gisette          0.078 ± 0.002     0.080 ± 0.002     0.084 ± 0.007     0.087 ± 0.003     0.090 ± 0.003
+may include updates to existing features’ values as well as newly-         isolet           0.099 ± 0.003     0.097 ± 0.005     0.108 ± 0.004     0.089 ± 0.004     0.112 ± 0.006
+                                                                           letter           0.093 ± 0.001     0.092 ± 0.002     0.104 ± 0.004     0.094 ± 0.006     0.122 ± 0.005
+emerging features of new or previous data points.                          madelon          0.110 ± 0.003     0.101 ± 0.013     0.092 ± 0.005     0.101 ± 0.010     0.097 ± 0.004
+    Datasets. We use the Attk-Flash and Attk-Java datasets listed          Avg Rank             3.75             3.3125            2.875              3.3125            1.75
+in the last section of Table 2, also used in our prior work [24].
+They contain traces from processes executing simultaneously on a
+                                                                           Table 4: Mean Average Precision on static perturbed datasets,
+machine, respectively from malicious processes exploiting a Flash
+                                                                           reported over 10 runs. Numbers in brackets indicate the
+or Java vulnerability. Each dataset also contains traces each from 5
+                                                                           number of Gaussian noise columns as a % of the original di-
+non-attack scenarios corresponding to casual browsing activities:
+                                                                           mensionality.
+YouTube, GMail VGame (a Flash game), Download (downloading a
+file) and CNN (a news website). Here, processes do not arrive one at
+                                                                                                iForest          HS-Trees          RS-Hash             LODA             xStream
+a time as in setting (2), rather, they run in parallel. Moreover, they
+                                                                           Dataset
+                                                                           cancer (100)       0.599 ± 0.031     0.605 ± 0.031     0.646 ± 0.032     0.811 ± 0.012     0.825 ± 0.012
+evolve; executing various system calls (e.g., file read/port write/etc.)   cancer (1K)        0.406 ± 0.088     0.201 ± 0.024     0.425 ± 0.112     0.722 ± 0.056     0.813 ± 0.022
+over time. We represent the sequence of calls by a process with            cancer (2K)        0.306 ± 0.044     0.229 ± 0.029     0.337 ± 0.077     0.633 ± 0.092     0.822 ± 0.021
+shingle (subsequence) counts, where new shingles emerge in time.           cancer (5K)        0.120 ± 0.040     0.158 ± 0.018     0.153 ± 0.070     0.336 ± 0.141     0.796 ± 0.028
+Moreover, such shingle updates arrive to any and all processes             i.sphere (100)     0.651 ± 0.049     0.568 ± 0.026     0.622 ± 0.038     0.560 ± 0.056     0.848 ± 0.011
+                                                                           i.sphere (1K)      0.302 ± 0.072     0.231 ± 0.006     0.258 ± 0.070     0.589 ± 0.073     0.819 ± 0.019
+running on the host in an interleaved fashion, requiring the detector
+                                                                           i.sphere (2K)      0.211 ± 0.105     0.085 ± 0.007     0.233 ± 0.100     0.561 ± 0.092     0.791 ± 0.026
+to maintain the representation of “live” processes and update their        i.sphere (5K)      0.112 ± 0.035     0.150 ± 0.017     0.135 ± 0.062     0.494 ± 0.072     0.685 ± 0.065
+outlier scores over time.                                                  t.scope (100)      0.311 ± 0.012     0.260 ± 0.006     0.326 ± 0.015     0.322 ± 0.006     0.340 ± 0.008
+    Baselines. In this new setting, there is no existing competitor.       t.scope (1K)       0.156 ± 0.011     0.102 ± 0.004     0.164 ± 0.019     0.303 ± 0.010     0.311 ± 0.006
+xStream is the first technique (to the best of the authors’ knowl-         t.scope (2K)       0.108 ± 0.010     0.098 ± 0.014     0.112 ± 0.019     0.296 ± 0.016     0.284 ± 0.005
+                                                                           t.scope (5K)       0.084 ± 0.005     0.079 ± 0.001     0.087 ± 0.011     0.248 ± 0.017     0.271 ± 0.005
+edge) for outlier detection in evolving data streams—handling evolv-
+                                                                           indians (100)      0.123 ± 0.007     0.093 ± 0.003     0.128 ± 0.009     0.171 ± 0.008     0.196 ± 0.015
+ing feature space and evolving feature values.                             indians (1K)       0.086 ± 0.014     0.096 ± 0.009     0.087 ± 0.011     0.153 ± 0.028     0.178 ± 0.006
+                                                                           indians (2K)       0.087 ± 0.013     0.076 ± 0.003     0.085 ± 0.008     0.139 ± 0.028     0.151 ± 0.013
+                                                                           indians (5K)       0.073 ± 0.007     0.075 ± 0.009     0.083 ± 0.018     0.126 ± 0.028     0.152 ± 0.020
+4.2    Static Experiments                                                  Avg Rank              4.0625            4.4375             3.25              2.1875           1.0625
+Table 3 reports the performance of competing methods as measured
+by average precision (area under the precision-recall curves) on
+static datasets. The results are averaged across 10 independent runs,
+since all methods are non-deterministic.                                                                    1          2          3          4
+   We statistically compare the average ranks of the algorithms
+(reported in Table 3) using the nonparametric Friedman test [16].
+With p = 0.1107, we could not reject the null hypothesis at a 5%
+confidence-level that all methods are equally performant, suggest-
+ing xStream is as competitive as the state-of-the-art in this basic
+setting. Next, we perform the Nemenyi post-hoc test to compare
+the methods in pairs while accounting for multiple testing. The test
+reports significance if the average ranks of two methods differ by a                                    1         2           3       4           5
+“critical distance” (CD): for 5 methods on 8 datasets at a significance
+level α = 0.05, the CD = 2.1567. Since the gap between the low-
+est (by xStream) and highest (by iForest) average ranks is already
+less than the CD, we again conclude that there is no significant
+difference in performance between any pair of methods.
+   xStream is designed for high-dimensional data with many newly-
+emerging features. With many dimensions, we expect most features
+to be irrelevant for outlier detection. Put differently, outliers tend     Figure 3: Comparison of detectors in terms of average rank
+not to stand out in all possible dimensions. To showcase such a            with the Nemenyi test on (top) original and (bottom) noisy
+scenario, we append new columns with Gaussian noise to the four            static datasets. Groups of methods that are not significantly
+lowest dimensional static datasets, thereby increasing the dimen-          different (p = 0.05) are connected. CD is the critical distance
+sionality with noisy features. Specifically we append 100%, 1000%,         required to reject equivalence.
+Table 5: Mean average precision (MAP) and overall average precision (OAP) on Spam-SMS. Window-size set as a percentage of
+the rows in the entire dataset. xStream-1K denotes our method using M = 1000 half-space chains (instead of 100).
+
+  Window                HS-Stream                      LODA                       RS-Hash                 xStream                   xStream-1K
+   size ψ               MAP       OAP                MAP    OAP                 MAP     OAP              MAP      OAP              MAP       OAP
+        1%         0.480 ± 0.178      0.416     0.090 ± 0.028       0.076   0.291 ± 0.129   0.171   0.505 ± 0.138    0.422    0.522 ± 0.153     0.430
+        5%         0.492 ± 0.179      0.416     0.082 ± 0.014       0.077   0.216 ± 0.034   0.195   0.455 ± 0.135    0.406    0.493 ± 0.134     0.415
+       10%         0.430 ± 0.024      0.419     0.081 ± 0.010       0.080   0.174 ± 0.017   0.164   0.444 ± 0.037    0.433    0.448 ± 0.037     0.436
+       25%         0.363 ± 0.024      0.359     0.080 ± 0.001       0.080   0.203 ± 0.014   0.201   0.409 ± 0.009    0.404    0.435 ± 0.013     0.429
+
+Table 6: Mean average precision (MAP) and overall average precision (OAP) on Spam-URL. Window size set as days of incoming
+URLs, for a total of ≈20,000 URLs per-day.
+
+   Window                HS-Stream                      LODA                     RS-Hash                  xStream                   xStream-1K
+    size ψ               MAP       OAP                MAP    OAP                MAP      OAP             MAP      OAP              MAP       OAP
+       1 day        0.331 ± 0.055      0.330     0.329 ± 0.059      0.331   0.358 ± 0.061   0.357   0.436 ± 0.083    0.437    0.451 ± 0.106     0.452
+       3 days       0.339 ± 0.058      0.329     0.307 ± 0.055      0.328   0.357 ± 0.046   0.356   0.478 ± 0.078    0.479    0.508 ± 0.064     0.509
+       5 days       0.336 ± 0.059      0.329     0.321 ± 0.044      0.328   0.357 ± 0.038   0.356   0.472 ± 0.050    0.472    0.493 ± 0.055     0.496
+       7 days1            —              —       0.303 ± 0.040      0.321   0.355 ± 0.036   0.356   0.497 ± 0.053    0.502    0.533 ± 0.049     0.530
+      1 HS-Stream exceeds the available memory on a 1 TB machine.
+
+
+
+2000% and 5000% noisy features of the original dataset dimension-                   with ψ = 1, 5, 10, and 25% of the rows. For Spam-URL, the rows are
+ality, with noise ∼ N (.1µ, .1σ ) where µ and σ are the mean and                    grouped into collections of all the ham and spam URLs received
+tandard deviation of all features in the original dataset.                          daily for a total of 120 days. As such, we specify the window size
+   Table 4 lists the mean average precision along with average ranks                in terms of the number of days; specifically, ψ = 1, 3, 5, and 7 days.
+of each method. This time, we can reject the null with p = 5.565 ×                      All methods assign an outlier score to each row as soon as it
+10−10 using the Friedman test. We proceed with the Nemenyi post-                    arrives, which remains unchanged henceforth. Using these scores,
+hoc test to find out which detectors actually differ significantly. For             we compute the average precision for each window containing ψ
+5 methods on 16 (perturbed) datasets at a significance level α = 0.05,              rows, and report the mean average precision (MAP) over all such
+the CD = 1.524. As shown in Table 4, we find a significant difference               windows. Additionally, we report the average precision for all the
+between xStream and all baselines except LODA. As expected,                         rows observed at the end of the row stream, denoted as OAP; the
+projection-based methods are superior on high-dimensional noisy                     overall average precision. Note that the first ψ rows are not assigned
+datasets, while the performance drops gradually for iForest, HS-                    scores, since those are used to instantiate the models.
+Trees, and RS-Hash as the number of noisy features increases.                           We observe that xStream outperforms LODA and RS-Hash, and
+   We summarize our findings through a graphical presentation of                    performs on par with HS-Stream on Spam-SMS containing a total
+results in Figure 3. On average, xStream is as competitive with no                  of 5574 rows in the stream. On Spam-URL with 2.4 million rows
+significant difference to existing baselines in the static setting. This            (≈20,000 daily), on the other hand, xStream outperforms HS-Stream,
+is not a coincidence: intuitively, they all score outliers via density              LODA and RS-Hash on average as well as in terms of the end-of-
+estimation, albeit in different ways. xStream and projection-based                  stream performance—where HS-Trees ran out of memory for ψ = 7
+LODA are advantageous in high dimensions with many irrelevant                       days on a server with 1TB RAM.
+features, as the (small set of) features carrying signal are less likely                HS-Stream’s decayed performance on Spam-URL containing 3.2
+to be selected by other methods that work with the original features.               million features can be attributed to the dimensionality. While HS-
+Non-projection methods also face the “curse of dimensionality”,                     Stream operates directly on the high dimensional rows, xStream
+where the amount of data needed to obtain a statistically reliable                  operates on distance-preserving low-dimensional projections and,
+density estimate grows exponentially with the dimension.                            as such, is less prone to curse of dimensionality. This advantage
+                                                                                    is further magnified on datasets where a large number of dimen-
+4.3      Row-Stream Experiments                                                     sions are irrelevant for outlier detection (as was demonstrated in
+                                                                                    §4.2). Though LODA also projects the data, its poor performance
+We report results of all competing methods on Spam-SMS and Spam-
+                                                                                    can be attributed to two factors. First, it uses only 1-dimensional
+URL in Table 5 and Table 6 respectively. We evaluate the methods
+                                                                                    projections, which may not be enough to preserve structure for
+with varying window sizes (ψ ). We instantiate the window-based
+                                                                                    high-dimensional datasets like Spam-URL. Second, it relies on dis-
+methods xStream, HS-Stream and LODA using the first window
+                                                                                    cretizing the data using an optimized yet single bin-width. In con-
+of ψ points. For RS-Hash we use an initial sample size of 1000, as
+                                                                                    trast, xStream employs few but multiple projections, and uses a
+recommended in [29]. For Spam-SMS, the data does not provide an
+                                                                                    spectrum of bin-widths to capture outliers at different granularities.
+explicit time granularity (like minutes/days); hence, we experiment
+   In all experiments, we use 100 ensemble components                             YouTube              GMail             VGame                Download             CNN
+(trees/histograms/chains) for each method. We also use the same                 1.0
+maximum depth for xStream and HS-Stream. Note that HS-Stream
+                                                                                0.8
+                                                                         AUC    0.6
+requires space exponential in depth (as it builds balanced binary               0.4
+trees) in contrast to space linear in depth required by xStream.                0.2             java                                      flash
+In Table 5 and Table 6, we also present the MAP and OAP for                     0.0
+                                                                                           5         10        15                   5          10        15
+xStream using 1000 chains (thus, increasing the diversity and                                  syscalls (millions)                       syscalls (millions)
+expressiveness of the ensemble), demonstrating improved perfor-                         (a) AUC over time, points scored in each window.
+mance while still consuming exponentially less space than HS-
+Stream: O (100 × 215 ) for HS-Stream vs. O (1000 × 15) for xStream.
+   Note that the performance of all methods varies with the window-             1.0
+size ψ . This is due to the temporal variation in the distribution of
+                                                                                0.8
+                                                                         AP     0.6
+rows over different windows, resulting in varying models being                  0.4
+constructed at the start of each window, which are used later for               0.2             java                                      flash
+scoring. Hence, no consistent trend is to be expected (nor is ob-               0.0
+                                                                                           5         10        15                   5          10        15
+served) as ψ is varied. We experiment with and present results using                           syscalls (millions)                       syscalls (millions)
+different window-sizes in order to demonstrate that our conclusions
+are not biased by the choice of a specific window-size                                  (b) AP over time, points scored in each window.
+
+
+                                                                                    Normal Scenario               Attk-Java                 Attk-Flash
+4.4    Evolving Stream Experiments
+                                                                                    YouTube                      0.832 ± 0.146               0.990 ± 0.020
+We now evaluate xStream on a feature-evolving stream, to de-
+                                                                                    GMail                        0.990 ± 0.020               0.886 ± 0.142
+tect attack processes executing simultaneously with non-attack
+                                                                                    VGame                        0.999 ± 0.001               0.999 ± 0.001
+processes. For each non-attack scenario, we concatenate a ran-
+                                                                                    Download                     0.905 ± 0.190               0.875 ± 0.156
+dom sample of 25% of the processes from each attack and shuffle
+                                                                                    CNN                          0.828 ± 0.211               0.854 ± 0.173
+the updates, such that the streams interleave but the order of up-
+dates in each trace is maintained. xStream is configured with                       All                          0.794 ± 0.254               0.854 ± 0.262
+M = 100, K = 100, D = 15, ψ = 25 and m = 8, L = 210 for the
+count-min-sketches.                                                                       (c) Mean average precision over all windows.
+   We compute the AP and AUC of the points scored in each window
+and report them at different instants of the stream in Fig 4 (a)-(b).    Figure 4: Performance of xStream on feature-evolving streams. K =
+                                                                         100, M = 100, D = 15, ψ = 25, N = 100%.
+The MAP over all windows is reported in Fig 4 (c). We observe that
+the AUC is near-ideal over all windows. The AP fluctuates across
+windows more than the AUC, but remains ∼0.75+ for the majority                 1.0                                             1.0
+of datasets and windows. The AP on CNN fluctuates over windows                 0.8                                             0.8
+for both Attk-Java and Attk-Flash. The CNN website contains              MAP   0.6                                       MAP   0.6
+                                                                               0.4                             java            0.4                               java
+a wide variety of Java and Flash-based rich-media content; this                0.2                             flash           0.2                               flash
+makes the CNN scenario relatively more difficult to distinguish as             0.0 10                                          0.0 10              100              1000
+                                                                                                100               1000
+an outlier using the extracted shingles as features.                                      Number of chains M                                 Projection size K
+   To make the setting more realistic, we also combine all the non-                     (a) MAP vs. M                                     (b) MAP vs. K
+attack processes to construct the “All” scenario and again evaluate
+the performance of xStream in detecting a 25% random sample of                 1.0                                             1.0
+                                                                               0.8                                             0.8
+each attack. The MAP is noted in the last row of Fig 4 (c). While              0.6
+                                                                         MAP                                             MAP   0.6
+performance reduces slightly, xStream still remains a competitive              0.4                             java            0.4                          java
+outlier detector in this setting.                                              0.2                             flash           0.2                          flash
+                                                                               0.0 5                                           0.0 25%        50%       75%    100%
+   We analyze the effect of the parameters in the “All” scenario and                               15              25
+                                                                                                 Depth D                                       Cache size N
+plot the variation in MAP with each parameter in Fig. 5 (a)-(d).
+   Increasing M and K each improve the diversity of the ensemble                         (c) MAP vs. D                                   (d) MAP vs. N
+by increasing the number of chains, and increasing the diversity of
+features sampled in each chain, respectively. The resulting increase     Figure 5: Effect of parameters on xStream’s performance. Unless
+in MAP in either case is confirmed in 5 (a)-(b).                         specified, M = 100, K = 100, D = 15, ψ = 25, N = 100%.
+   As the maximum depth D is increased, xStream is able to detect
+outliers at finer granularities. However, the gains from increasing D
+diminish after a point, when the granularity is too fine for the given      Finally, the MAP improves as the size of the cache N (in terms
+data. Hence, it is sufficient to use small D in most cases, though a     of the % of total data points) is increased, as expected and observed
+larger D has no negative impact. This is confirmed in Fig. 5(c).         in Fig. 5 (d). However, the performance remains competitive even
+                                                                         with a cache containing just 50% of the original points.
+                10                                           2000
+                        Projection time                               Update time
+                                                                                             REFERENCES
+
+Time (micros)                                Time (micros)
+                                                                                              [1] Dimitris Achlioptas. 2003. Database-friendly Random Projections: Johnson-
+                5                                            1000                                 Lindenstrauss with Binary Coins. J. Comput. System Sci. (2003).
+                                                                                              [2] Charu C. Aggarwal. 2013. Outlier Analysis. Springer.
+                                                                                              [3] Charu C. Aggarwal. 2013. Outlier ensembles. SIGKDD Explorations (2013).
+                0 50                                           0 5     10     15 20     25    [4] Charu C. Aggarwal and Saket Sathe. 2015. Theoretical Foundations and Algo-
+                        100 150 200 250                                                           rithms for Outlier Ensembles. SIGKDD Explorations (2015).
+                         Projection size K                                  Depth D
+                                                                                              [5] Charu C. Aggarwal and Philip S Yu. 2001. Outlier detection for high dimensional
+                                                                (b) Update time vs. D             data. SIGMOD Record (2001).
+                 (a) Projection time vs. K                                                    [6] Fabrizio Angiulli and Fabio Fassetti. 2007. Detecting distance-based outliers in
+                                                                                                  streams of data. In CIKM.
+Figure 6: Time for xStream to (a) project a triple with a 32-                                 [7] Ira Assent, Philipp Kranen, Corinna Baldauf, and Thomas Seidl. 2012. AnyOut:
+                                                                                                  Anytime Outlier Detection on Streaming Data. In DASFAA.
+byte feature name, and (b) update M = 100 chains, for differ-                                 [8] Leo Breiman. 1996. Bagging Predictors. Machine Learning (1996).
+ent values of sketch size K and maximum depth D. All times                                    [9] Leo Breiman. 2001. Random Forests. Machine Learning (2001).
+                                                                                             [10] Markus M Breunig, Hans-Peter Kriegel, Raymond T Ng, and Jörg Sander. 2000.
+are in microseconds.                                                                              LOF: identifying density-based local outliers. In SIGMOD.
+                                                                                             [11] Hui Cao, Yongluan Zhou, Lidan Shou, and Gang Chen. 2010. Attribute Outlier
+                                                                                                  Detection over Data Streams. In DASFAA.
+                                                                                             [12] Varun Chandola, Arindam Banerjee, and Vipin Kumar. 2009. Anomaly Detection:
+   We also record the time taken for the main operations performed                                A Survey. Comput. Surveys (2009).
+on each incoming update. To facilitate evaluation, we use string                             [13] Graham Cormode and S Muthukrishnan. 2005. An improved data stream sum-
+feature names that were padded to 32 bytes. Fig. 6 shows the the                                  mary: the count-min sketch and its applications. Journal of Algorithms (2005).
+                                                                                             [14] Søren Dahlgaard, Mathias Knudsen, and Mikkel Thorup. 2017. Practical Hash
+projection time (Fig. 6(a)) and the time to update all the M = 100                                Functions for Similarity Estimation and Dimensionality Reduction. In NIPS.
+chains (Fig. 6(b)) as the projection size K and maximum depth D                              [15] Søren Dahlgaard, Mathias Bæk Tejs Knudsen, Eva Rotenberg, and Mikkel Thorup.
+are varied. The overall time grows linearly with both parameters,                                 2015. Hashing for statistics over k-partitions. In FOCS.
+                                                                                             [16] Janez Demšar. 2006. Statistical Comparisons of Classifiers over Multiple Data
+as expected. The absolute time is of the order of milliseconds; thus,                             Sets. Journal of Machine Learning Research (2006).
+xStream is capable of processing 1000s of updates per-second.                                [17] Sudipto Guha, Nina Mishra, Gourav Roy, and Okke Schrijvers. 2016. Robust
+                                                                                                  Random Cut Forest Based Anomaly Detection on Streams. In ICML.
+                                                                                             [18] Manish Gupta, Jing Gao, Charu C. Aggarwal, and Jiawei Han. 2014. Outlier
+5                CONCLUSION                                                                       Detection for Temporal Data: A Survey. Transactions on Knowledge and Data
+                                                                                                  Engineering (TKDE) (2014).
+We have formulated the problem of detecting outliers in feature-                             [19] Piotr Indyk and Rajeev Motwani. 1998. Approximate nearest neighbors: Towards
+evolving data streams, wherein both the data points and feature                                   removing the curse of Dimensionality. In STOC.
+space may evolve over time. This setting is novel in the outlier-                            [20] William B Johnson and Joram Lindenstrauss. 1984. Extensions of Lipschitz
+                                                                                                  mappings into a Hilbert space. Contemp. Math. (1984).
+detection literature with numerous applications, while being inher-                          [21] Fabian Keller, Emmanuel Müller, and Klemens Böhm. 2012. HiCS: High Contrast
+ently more challenging than the static and row-stream settings.                                   Subspaces for Density-Based Outlier Ranking. In ICDE.
+                                                                                             [22] Aleksandar Lazarevic and Vipin Kumar. 2005. Feature bagging for outlier detec-
+   We proposed xStream to solve the problem of outlier-detection                                  tion. In KDD.
+in feature-evolving data streams. xStream addresses a number of                              [23] Fei Tony Liu, Kai Ming Ting, and Zhi-Hua Zhou. 2008. Isolation Forest. In ICDM.
+key challenges in this new setting. To handle large and unobserved                           [24] Emaad Manzoor, Sadegh M. Milajerdi, and Leman Akoglu. 2016. Fast Memory-
+                                                                                                  efficient Anomaly Detection in Streaming Heterogeneous Graphs. In KDD.
+dimensionality, it employs a streaming random projection scheme                              [25] Spiros Papadimitriou, Hiroyuki Kitagawa, Phillip B. Gibbons, and Christos Falout-
+to embed points in a low-dimensional space on-the-fly, while pre-                                 sos. 2003. Fast Outlier Detection Using the Local Correlation Integral. In ICDE.
+serving pairwise distances. xStream then detects outliers in this                            [26] Tomás Pevný. 2016. Loda: Lightweight on-line detector of anomalies. Machine
+                                                                                                  Learning (2016).
+projected space via an ensemble of half-space chains. Each half-                             [27] Shebuti Rayana and Leman Akoglu. 2016. Less is More: Building Selective
+space chain of the ensemble enables computing outlier scores for                                  Anomaly Ensembles. Transactions on Knowledge Discovery from Data (TKDD)
+                                                                                                  (2016).
+each point via randomized partitions (within subspaces) of the pro-                          [28] Shebuti Rayana, Wen Zhong, and Leman Akoglu. 2016. Sequential Ensemble
+jected input space. Outlier scores are computed at multiple scales,                               Learning for Outlier Detection: A Bias-Variance Perspective. In ICDM.
+thus facilitating the detection of both clustered and scattered out-                         [29] Saket Sathe and Charu C. Aggarwal. 2016. Subspace Outlier Detection in Linear
+                                                                                                  Time with Randomized Hashing. In ICDM.
+liers. Further, a window-based mechanism is implemented that                                 [30] Markus Schneider, Wolfgang Ertel, and Fabio Ramos. 2016. Expected similarity
+handles non-stationarity in the stream. Overall, xStream functions                                estimation for large-scale batch and streaming anomaly detection. Machine
+in constant time and constant space for each update, which can be                                 Learning (2016).
+                                                                                             [31] Swee Chuan Tan, Kai Ming Ting, and Fei Tony Liu. 2011. Fast Anomaly Detection
+controlled via user-configurable parameters.                                                      for Streaming Data. In IJCAI.
+   Via extensive experiments, we showed that xStream (1) per-                                [32] Ke Wu, Kun Zhang, Wei Fan, Andrea Edwards, and Philip S Yu. 2014. RS-Forest:
+                                                                                                  A Rapid Density Estimator for Streaming Anomaly Detection. In ICDM.
+forms on par with the state-of-the art on static data and row-streams,                       [33] Ji Zhang, Qigang Gao, and Hai H Wang. 2008. SPOT: A System for Detecting
+with few changes required, (2) outperforms the state-of-the-art on                                Projected Outliers From High-dimensional Data Streams. In ICDE.
+high-dimensional data streams, and (3) achieves desirable perfor-                            [34] Arthur Zimek, Ricardo J.G.B. Campello, and Jörg Sander. 2013. Ensembles for
+                                                                                                  Unsupervised Outlier Detection: Challenges and Research Questions. SIGKDD
+mance on feature-evolving streams while processing over 1000                                      Explorations (2013).
+updates per-second.                                                                          [35] Arthur Zimek, Matthew Gaudet, Ricardo Campello, and Jörg Sander. 2013. Sub-
+                                                                                                  sampling for efficient and effective unsupervised outlier detection ensembles. In
+                                                                                                  KDD.
+ACKNOWLEDGMENTS                                                                              [36] Arthur Zimek, Erich Schubert, and Hans-Peter Kriegel. 2012. A survey on unsu-
+                                                                                                  pervised outlier detection in high-dimensional numerical data. Statistical Analysis
+This research is sponsored by NSF CAREER 1452425, IIS 1408287,                                    and Data Mining: The ASA Data Science Journal (2012).
+and an Adobe University Marketing Research Award. Any con-
+clusions in this material are of the authors and do not necessarily
+reflect the views, expressed or implied, of the funding parties.
+

@@ -1,0 +1,205 @@
+                                  Estimating a Gamma distribution
+                                                                   Thomas P. Minka
+                                                                        2002
+
+
+                                                                         Abstract
+
+         This note derives a fast algorithm for maximum-likelihood estimation of both parameters of a Gamma
+     distribution or negative-binomial distribution.
+
+
+
+1    Introduction
+
+We have observed n independent data points X = [x1 ..xn ] from the same density θ. We restrict θ to the class of
+Gamma densities, i.e. θ = (a, b):
+
+                                                                                             xa−1       x
+                                         p(x|a, b) = Ga(x; a, b) =                                 exp(− )
+                                                                                            Γ(a)ba      b
+
+                                               0.14
+
+
+
+
+                                               0.12
+
+
+
+
+                                                0.1
+
+
+
+
+                                               0.08
+
+                                        p(x)
+
+                                               0.06
+
+
+
+
+                                               0.04
+
+
+
+
+                                               0.02
+
+
+
+
+                                                 0
+                                                      0    2   4    6         8        10   12   14   16   18   20
+                                                                                        x
+
+
+
+
+                                           Figure 1: The Ga(3, 2) density function.
+
+Figure 1 plots a typical Gamma density. In general, the mean is ab and the mode is (a − 1)b.
+
+
+
+2    Maximum likelihood
+
+The log-likelihood is
+                                                                    X                                                1X
+                        log p(D|a, b)          =          (a − 1)            log xi − n log Γ(a) − na log b −            xi   (1)
+                                                                    i
+                                                                                                                     b i
+                                               =          n(a − 1)log x − n log Γ(a) − na log b − nx̄/b                       (2)
+
+The maximum for b is easily found to be
+
+                                                                        b̂        = x̄/a                                      (3)
+
+
+                                                                                   1
+                                       −4
+
+                                     −4.5
+                                                                                   Exact
+                                       −5                                          Approx
+                                                                                   Bound
+                                     −5.5
+
+                                       −6
+                                             0          5             10      15          20
+
+Figure 2: The log-likelihood (4) versus the Gamma-type approximation (9) and the bound (6) at conver-
+gence. The approximation is nearly identical to the true likelihood. The dataset was 100 points sampled
+from Ga(7.3, 4.5).
+
+
+Substituting this into (1) gives
+
+                          log p(D|a, b̂)    = n(a − 1)log x − n log Γ(a) − na log x̄ + na log a − na                  (4)
+
+We will describe two algorithms for maximizing this function.
+
+The first method will iteratively maximize a lower bound. Because a log a is convex, we can use a linear lower
+bound:
+
+                a log a    ≥    (1 + log a0 )(a − a0 ) + a0 log a0                                                    (5)
+        log p(D|a, b̂)     ≥    n(a − 1)log x − n log Γ(a) − na log x̄ + n(1 + log a0 )(a − a0 ) + na0 log a0 − na    (6)
+
+The maximum is at
+
+                                      0 = nlog x − nΨ(a) − n log x̄ + n(1 + log a0 ) − n                              (7)
+                                  Ψ(â) = log x − log x̄ + log a0                                                     (8)
+
+where Ψ is the digamma function. The iteration proceeds by setting a0 to the current â, then inverting the Ψ
+function to get a new â. Because the log-likelihood is concave, this iteration must converge to the (unique) global
+maximum. Unfortunately, it can be quite slow, requiring around 250 iterations if a = 10, less for smaller a, and
+more for larger a.
+
+The second algorithm is much faster, and is obtained via ‘generalized Newton’ [1]. Using an approximation of
+the form,
+
+                                             log p(D|a, b̂)   ≈   c0 + c1 a + c2 log(a)                               (9)
+
+the update is
+
+                                            1          1 log x − log x̄ + log a − Ψ(a)
+                                                  =      +                                                           (10)
+                                           anew        a       a2 (1/a − Ψ0 (a))
+
+This converges in about four iterations. Figure 2 shows that this approximation is very close to the true log-
+likelihood, which explains the good performance.
+
+
+
+
+                                                                  2
+A good starting point for the iteration is obtained via the approximation
+                                                               1
+                           log Γ(a)      ≈    a log(a) − a −     log a + const.           (Stirling)        (11)
+                                                               2
+                                                           1
+                               Ψ(a)      ≈    log(a) −                                                      (12)
+                                                          2a
+                                                   0.5
+                                    â   ≈                                                                  (13)
+                                              log x − log x
+
+(Note that log x ≥ log x by Jensen’s inequality.)
+
+
+2.1    Negative binomial
+
+The maximum-likelihood problem for the negative binomial distribution is quite similar to that for the Gamma.
+This is because the negative binomial is a mixture of Poissons, with Gamma mixing distribution:
+
+                                                                    λ −λ λa−1 −λ/b
+                                     Z                           Z x
+                       p(x|a, b) =       Po(x; λ)Ga(λ; a, b)dλ =       e         e   dλ                   (14)
+                                       λ                          λ x!    Γ(a)ba
+                                                          x          a
+                                         a+x−1            b             b
+                                 =                                1−                                      (15)
+                                            x          b+1           b+1
+
+Let’s consider a slightly generalized negative binomial, where the ‘waiting time’ for x is given by t:
+
+                                                                      (λt)x −λt λa−1 −λ/b
+                                      Z                            Z
+                     p(x|t, a, b) =       Po(x; λt)Ga(λ; a, b)dλ =          e           e   dλ              (16)
+                                        λ                            λ x!        Γ(a)ba
+                                                            x             a
+                                          a+x−1           bt              bt
+                                  =                                 1−                                      (17)
+                                             x          bt + 1          bt + 1
+
+Given a data set D = {(xi , ti )}, we want to estimate (a, b). One approach is to use EM, where the E-step infers
+the hidden variable λi :
+                                                                         b
+                                             E[λi ]   =    (xi + a)                                         (18)
+                                                                      bti + 1
+                                                                                   b
+                                         E[log λi ]   =    Ψ(xi + a) + log                                  (19)
+                                                                                bti + 1
+The M-step then maximizes
+                                    X                                              1X
+                          (a − 1)        E[log λi ] − n log Γ(a) − na log b −          E[λi ]               (20)
+                                     i
+                                                                                   b i
+
+which is a Gamma maximum-likelihood problem.
+
+
+
+References
+[1] Thomas P. Minka. Beyond newton’s method. research.microsoft.com/~minka/papers/newton.html,
+    2000.
+
+
+
+
+                                                               3
+

@@ -1,0 +1,638 @@
+                                               Learning Representations of Ultrahigh-dimensional Data for
+                                                       Random Distance-based Outlier Detection
+                                                                           Guansong Pang                                                                      Longbing Cao
+                                                                University of Technology Sydney                                                     University of Technology Sydney
+                                                                       Sydney, Australia                                                                   Sydney, Australia
+                                                                  pangguansong@gmail.com                                                               longbing.cao@uts.edu.au
+
+                                                                                Ling Chen                                                                        Huan Liu
+                                                                University of Technology Sydney                                                          Arizona State University
+                                                                        Sydney, Australia                                                                 Tempe, United States
+
+
+
+
+arXiv:1806.04808v1 [cs.LG] 13 Jun 2018
+                                                                     ling.chen@uts.edu.au                                                                   huan.liu@asu.edu
+
+                                         ABSTRACT                                                                                      ACM Reference Format:
+                                         Learning expressive low-dimensional representations of ultrahigh-                             Guansong Pang, Longbing Cao, Ling Chen, and Huan Liu. 2018. Learning
+                                                                                                                                       Representations of Ultrahigh-dimensional Data for Random Distance-based
+                                         dimensional data, e.g., data with thousands/millions of features, has
+                                                                                                                                       Outlier Detection. In KDD 2018: 24th ACM SIGKDD International Conference
+                                         been a major way to enable learning methods to address the curse                              on Knowledge Discovery & Data Mining, August 19–23, 2018, London, United
+                                         of dimensionality. However, existing unsupervised representation                              Kingdom. ACM, New York, NY, USA, 10 pages. https://doi.org/10.1145/
+                                         learning methods mainly focus on preserving the data regularity                               3219819.3220042
+                                         information and learning the representations independently of sub-
+                                         sequent outlier detection methods, which can result in suboptimal
+                                         and unstable performance of detecting irregularities (i.e., outliers).
+                                             This paper introduces a ranking model-based framework, called                             1    INTRODUCTION
+                                         RAMODO, to address this issue. RAMODO unifies representation                                  Outlier detection, which is referred to as the process of identifying
+                                         learning and outlier detection to learn low-dimensional represen-                             data objects that deviate significantly from the majority of data
+                                         tations that are tailored for a state-of-the-art outlier detection ap-                        objects, can offer important insights into broad applications in
+                                         proach - the random distance-based approach. This customized                                  a range of domains such as medical diagnosis, fraud detection,
+                                         learning yields more optimal and stable representations for the                               and information security. Many of these applications often have
+                                         targeted outlier detectors. Additionally, RAMODO can leverage                                 ultrahigh dimensionality, e.g., thousands of features in detecting
+                                         little labeled data as prior knowledge to learn more expressive and                           abnormal bioactivities [9], hundreds of thousands of features in
+                                         application-relevant representations. We instantiate RAMODO to                                corporate fraud detection [15], and millions of features in detecting
+                                         an efficient method called REPEN to demonstrate the performance                               malicious URLs [20]. Such ultrahigh-dimensional data presents
+                                         of RAMODO.                                                                                    significant challenges to existing outlier detection methods due to
+                                             Extensive empirical results on eight real-world ultrahigh dimen-                          the curse of dimensionality [38].
+                                         sional data sets show that REPEN (i) enables a random distance-                                  One straightforward yet challenging solution is to map such
+                                         based detector to obtain significantly better AUC performance and                             high-dimensional data sets into low-dimensional representations
+                                         two orders of magnitude speedup; (ii) performs substantially better                           that preserve the relevant information for subsequent learning
+                                         and more stably than four state-of-the-art representation learning                            tasks. Many unsupervised representation learning techniques have
+                                         methods; and (iii) leverages less than 1% labeled data to achieve up                          been introduced to address this issue, such as spectral-based meth-
+                                         to 32% AUC improvement.                                                                       ods, neural network-based methods, and manifold learning [5, 33].
+                                                                                                                                       However, most of these methods focus on preserving the data regu-
+                                         KEYWORDS                                                                                      larity information (e.g., data reconstruction/proximity information)
+                                                                                                                                       for learning tasks like clustering and data compression. They may
+                                         Outlier Detection, Representation Learning, Ultrahigh-dimensional
+                                                                                                                                       therefore fail to retain the important information for uncovering
+                                         Data, Dimension Reduction
+                                                                                                                                       the irregularities (i.e., outliers). A few studies (e.g., [28]) have at-
+                                                                                                                                       tempted to learn representations for identifying outliers in very
+                                                                                                                                       recent years. However, they learn the representations indepen-
+                                         Permission to make digital or hard copies of all or part of this work for personal or
+                                         classroom use is granted without fee provided that copies are not made or distributed
+                                                                                                                                       dently of subsequent outlier detection methods. As a result, the
+                                         for profit or commercial advantage and that copies bear this notice and the full citation     optimal representations they produce may be suboptimal to a given
+                                         on the first page. Copyrights for components of this work owned by others than ACM            specific outlier detection method, which leads to ineffective and
+                                         must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,
+                                         to post on servers or to redistribute to lists, requires prior specific permission and/or a   unstable performance of the outlier detector.
+                                         fee. Request permissions from permissions@acm.org.                                               Also, since these techniques focus on unsupervised learning, it
+                                         KDD 2018, August 19–23, 2018, London, United Kingdom                                          is difficult for them to incorporate application-specific knowledge
+                                         © 2018 Association for Computing Machinery.
+                                         ACM ISBN 978-1-4503-5552-0/18/08. . . $15.00
+                                                                                                                                       (e.g., a few labeled outliers) into the representation learning. When
+                                         https://doi.org/10.1145/3219819.3220042                                                       such prior knowledge is available as in many real-world outlier
+detection applications, the valuable information cannot be used by        more stably than four state-of-the-art representation learning com-
+these representation learning techniques.                                 petitors; (iii) achieves up to 32% AUC improvement by leveraging
+    In an attempt to address the above issues, this paper introduces a    less than 1% labeled outliers as prior knowledge; (iv) performs sta-
+RAnking MOdel-based representation learning framework to learn            bly w.r.t. a wide range of representation dimensions; and (v) obtains
+representations of ultrahigh-dimensional data for Distance-based          linear time complexity w.r.t. both data size and dimensionality.
+Outlier detection methods (RAMODO). RAMODO incorporates
+random distance-based outlier detection methods into the objective        2 RELATED WORK
+function of its representation learning to learn customized repre-
+sentations for such outlier scoring methods. Random distance-based        2.1 Distance-based Outlier Detection
+outlier detection defines the outlierness of a data object based on its   Distance-based outlier detection is arguably one of the most widely-
+distance to the data objects in a random subsample. This approach         used detection approaches [6]. Some very popular distance-based
+has shown state-of-the-art accuracy and scalability [26, 30, 32], but     methods include K-th nearest neighbor distance- and average K
+it still suffers from the curse of dimensionality. RAMODO therefore       nearest neighbors distance-based methods [4]. This type of methods
+chooses random distance-based methods as its representation learn-        has time complexity quadratic w.r.t. data size. The time complexity
+ing target to introduce state-of-the-art distance-based methods for       may be reduced to be nearly linear by using indexing [4] or dis-
+ultrahigh-dimensional outlier detection. Moreover, RAMODO can             tributed computing techniques [8]. Recent studies [26, 30, 32] show
+be easily extended to leverage the application-specific knowledge         that random distance-based methods or distance-based ensemble
+to learn more expressive and application-relevant representations.        methods can achieve not only a similar time complexity reduction
+    RAMODO is implemented by a method called REPEN that learns            but also low false positive errors, resulting in scalable state-of-the-
+customized REPresentations for a random nEarest Neighbor distance-        art distance-based detectors. However, these techniques still do
+based method, Sp [30]. REPEN defines its objective function using         not address the curse of dimensionality issue. Subspace-based ap-
+Sp-based outlier scores to guide the representation learning, re-         proaches [1, 16] define outlierness using a set of relevant feature
+sulting in low-dimensional representations that are tailored for Sp.      subspaces to avoid the curse of dimensionality. Outlying feature
+While Sp is chosen for its state-of-the-art effectiveness and effi-       selection, which retains a feature subset that is relevant to outlier
+ciency [30], RAMODO can also be customized for other random               detection, emerges as an alternative solution to subspace-based
+distance-based methods.                                                   methods [3, 23–25]. However, both approaches are mainly focused
+    Accordingly, this paper makes three major contributions:              on data sets with tens/hundreds of features due to their prohibitive
+                                                                          subspace search in the ultrahigh-dimensional space.
+   (1) We introduce the RAMODO framework to learn customized
+       low-dimensional representations of ultrahigh-dimensional
+       data for random distance-based outlier detectors. Unlike ex-
+                                                                          2.2    Unsupervised Representation Learning for
+       isting methods that preserve the regularity information and               Outlier Detection
+       separate representation learning from subsequent outlier de-       Numerous unsupervised representation learning methods have
+       tectors, RAMODO unifies representation learning and outlier        been proposed to learn low-dimensional representations of high-
+       detection to learn a small set of features that are tailored for   dimensional data [5, 33]. They include: spectral-based methods, like
+       the random distance-based detectors. As a result, RAMODO           principal component analysis (PCA) and its variants [7, 14]; neural
+       can learn better representations for the detectors with more       network-based methods, like autoencoder and its variants [13, 21];
+       effective and stable performance.                                  manifold learning, like locally linear embedding (LLE) and Hessian
+   (2) The RAMODO framework is instantiated into a method                 LLE [10]; random projection, like sparse random projection [19], to
+       called REPEN to learn customized representations for one           name a few. However, these methods can be biased by the presence
+       state-of-the-art random distance-based method, Sp. Sp has          of outliers, since they treat the inliers and outliers equally. Also,
+       provable error bounds and is highly scalable, which enables        these methods are mainly designed to preserve the information of
+       REPEN to learn the representations with an upper error             data regularities for unsupervised learning tasks like clustering and
+       bound and scale up to large ultrahigh-dimensional data.            data compression. Their resultant representations may therefore
+   (3) We further introduce a method for REPEN to incorporate a           ignore important information for uncovering the irregularities.
+       small set of labeled outliers as application-specific knowl-           In recent years, robust PCA and robust autoencoder methods
+       edge, which helps the REPEN-enabled Sp identify application-       have been introduced to learn robust representations to reduce the
+       relevant outliers, rather than data noises or uninteresting        bias caused by the outliers [7, 34]. However, these methods mainly
+       data objects due to the lack of such prior knowledge. This         address the bias issue. The very recent coherent pursuit in [28] and
+       capability results in practical solutions in many real-world       the combination of robust PCA and autoencoders [36] help address
+       applications where a few labeled outliers are available.           the above both issues. However, these two methods involve the
+                                                                          costly eigen analysis or alternative optimization, making it unscal-
+   Extensive empirical results on eight real-world data sets with         able to large ultrahigh-dimensional data. In addition, the method in
+thousands to millions of features and two sets of synthetic data          [36] needs to tune its parameters in a semi-supervised way. Lastly,
+show that REPEN (i) enables the original distance-based outlier           all the above methods may produce suboptimal representations for
+detector to obtain significantly better AUC performance and two           a specific outlier detection method, as they ignore the subsequent
+orders of magnitude speedup; (ii) performs substantially better and       outlier detection when learning the data representations.
+2.3     Using Labeled Outliers as Prior Knowledge                                 labeled inliers or outliers) into the inlier or outlier candidate set
+One problem with unsupervised outlier detection methods is that                   when there exists such labeled data.
+many of the outliers they identify are data noises or uninteresting
+data objects due to the lack of prior knowledge of irregularities [2].
+Building the outlier detectors with application-specific knowledge
+(e.g., labeled outliers) may help identify application-relevant out-
+liers. Related studies have attempted to incorporate some labeled
+outliers into graph outlier detection by belief propagation [22, 31].
+Converting ultrahigh-dimensional data into K-nearest-neighbor
+graph may facilitate the adoption of this technique, but such conver-
+sion faces big challenges due to the difficulty of obtaining accurate
+distances in the high-dimensional space. Active learning and/or
+semi-supervised learning have been explored in [12, 27] to iter-
+atively interact with domain experts to label some outliers and
+improve the detection performance with the labeled outliers, but
+these methods may require extensive feedback from the experts.
+Different from the above contexts, our model focuses on represen-
+tation learning and it incorporates a few labeled outliers by a minor
+change to its inputs, and is thus very flexible in practice.                      Figure 1: The Proposed RAMODO Framework. RAMODO learns a
+                                                                                  representation function f (·) to map D-dimensional input objects
+                                                                                  into a M -dimensional space, with M ≪ D.
+3 THE PROPOSED FRAMEWORK: RAMODO
+3.1 Problem Statement
+We aim to learn a low-dimensional space out of the ultrahigh-
+dimensional data, such that it becomes easier and/or more efficient                   Why the representations learned by RAMODO are tailored for
+for random distance-based detectors to identify outliers in the new               random distance-based outlier scoring? RAMODO optimizes the rep-
+                                                                                  resentations by encouraging ϕ f (x− )| < f (xi ), · · · , f (xi+n−1 ) >
+                                                                                                                                                           
+space. Specifically, given a set of N data objects X={x1 , x2 , · · · , xN }                                    +
+                                                                                  to be larger than ϕ f (x )| < f (xi ), · · · , f (xi+n−1 ) > , in which ϕ
+with xi ∈ RD (i.e., xi ={x i1 , x i2 , · · · , x i D }), and a random distance-
+                                                                                  is equivalent to the random distance-based outlier scoring using
+based outlier scoring function ϕ : X 7→ R that uses distances in
+                                                                                  < f (xi ), · · · , f (xi+n−1 ) > as a random subsample. The representa-
+a random subsample to define outlierness, our goal is to learn a
+                                                                                  tions learned by RAMODO are therefore tailored for the random
+representation function f : X 7→ RM (M ≪ D) in a way that we
+                                                                                  distance-based detectors. For example, ϕ can be instantiated to
+have ϕ(f (xi )) > ϕ(f (xj )) if xi is an outlier and xj is an inlier.
+                                                                                  be the popular KNN-based detectors using the K-th (or average)
+                                                                                  nearest neighbor distances in the query set as outlier scores.
+3.2     Ranking Model-based Representation                                            How to guarantee the quality of triplet sampling? Having a reliable
+        Learning Framework                                                        outlier candidate set is the key to the quality of the triplet sampling
+We introduce the RAMODO framework by using a generalized                          and the representation learning. However, in an unsupervised case,
+pairwise ranking model to learn data representations that are tai-                we do not know whether a given x is an outlier or not. We show in
+lored for random distance-based detectors. As shown in Figure                     the RAMODO’s instance below that two approaches can be used to
+1, RAMODO consists of four essential components. RAMODO                           produce an outlier candidate set of good quality. The first approach
+first performs an outlier thresholding to partition the data into                 is to use state-of-the-art outlier detection methods and Chebyshev’s
+inlier and outlier candidate sets. It then generates a meta triplet              inequality to include the most likely outliers into the candidate set.
+sample T = < xi , · · · , xi+n−1 >, x+ , x− by randomly picking up                Another approach is to incorporate a few labeled outliers into the
+n data objects from the inlier candidate set I as the query set                   outlier candidate set when such labeled data is available.
+(xi , · · · , xi+n−1 ), one object from I as a positive example (x+ ), and            What are the intuitions behind RAMODO? Since the representa-
+one object from the outlier candidate set O as a negative exam-                   tion function f is guided by the scoring function ϕ, f only attains
+ple (x− ). This meta triplet sampling serves as an input layer to a               the information that is the most important for ϕ to distinguish
+network architecture. RAMODO further learns the data represen-                    outliers from inliers. By working on such a highly relevant space,
+tations by a function f that can be composed of one or multiple                   ϕ is expected to obtain an accuracy that is comparable to, or better
+fully-connected hidden layer(s). RAMODO finally performs          the op-         than that working on the original space even when M ≪ D. In
+                                                            
+timization guided by a outlier score-based ranking loss, L ϕ f (x+ )| <           terms of efficiency, distance-based outlier scoring normally involves
+                                                                                nearest neighbor searching, which can be very computationally
+f (xi ), · · · , f (xi+n−1 ) > , ϕ f (x− )| < f (xi ), · · · , f (xi+n−1 ) > ,
+                               
+                                                                                  costly in high-dimensional space since indexing methods like k-d
+in which ϕ(·|·) is a random distance-based scoring function and                   tree fails to work. By working on a significantly lower-dimensional
+L(·, ·) is a loss function.                                                       (e.g., M ≤ 30) space, the distance computation and nearest neigh-
+   Note that RAMODO is an unsupervised framework, but it is                       bor searching in ϕ can be substantially accelerated when indexing
+flexible to incorporate application-specific knowledge (e.g., some                methods are used.
+4     A RAMODO INSTANCE: REPEN                                                We further sample a negative example x− from the outlier can-
+RAMODO is instantiated to the method REPEN that learns data                didate set O. Importance sampling is used here to obtain high
+representations for the random nearest neighbor distance-based             probability of choosing the most likely outliers as negative exam-
+detector, Sp [30]. While Sp is a highly scalable outlier detector          ples. Given a data object x j ∈ O, its probability of being chosen as
+with significant accuracy improvement over several other popu-             a negative example is defined as:
+lar distance-based methods and state-of-the-art high-dimensional                                                  rj
+                                                                                                    p(xj ) = Í           .                   (4)
+methods [26, 30, 32], it still suffers from the curse of dimensionality.                                         |O|
+                                                                                                                t =1 r t
+REPEN is customized for Sp to substantially improve its perfor-
+mance on ultrahigh-dimensional data.                                       4.3    A Shallow Data Representation
+                                                                           One single hidden layer is defined below to learn a shallow data
+4.1    Outlier Thresholding Using State-of-the-art                         representation. The shallow representation is used for two main
+       Detectors and Cantelli’s Inequality                                 reasons. (i) In many ultrahigh-dimensional data, we often have
+We first use Sp to obtain an initial fairly good outlier ranking. Note     N ≪ D. As a result, we may not have sufficient data to train a deep
+that the original Sp [30] may perform unstably since it only uses          representation. (ii) Deep representation learning requires extensive
+one single subsample to define the outlierness. Following [26, 32],        computation for data sets with millions of features.
+we use bootstrap aggregating to produce a bagging ensemble of Sp
+                                                                             Definition 4.3 (Single-layer Fully-connected Representations). Given
+to obtain a more stable and reliable initial outlier ranking. While
+                                                                           an input x, it is mapped to a new space of M dimensions by:
+REPEN only uses the Sp-based ensemble for efficiency considera-
+                                                                                                          ⊺         ⊺                ⊺
+tion, we may combine Sp with other methods to build heteroge-                           f Θ (x) = {ψ (w1 x),ψ (w2 x), · · · ,ψ (wM x)},            (5)
+neous ensembles [29] to further improve this initial outlier ranking.
+                                                                           where ψ (·) is an activation function, wi        ∈ RD is a weight vector,
+  Definition 4.1 (Sp-based Outlier Scoring). Given a data object xi ,      and Θ = {w1 , w2 , · · · , wM } is the parameter set to be learned.
+Sp defines its outlierness as follows:
+                                                                              The ReLu function ψ (z) = max(0, z) is used because of its effi-
+                              m
+                           1 Õ                                             cient computation and gradient propagation.
+                     ri =        nn_dist(xi |Sj ),               (1)
+                          m j=1
+                                                                           4.4    Ranking Loss Using Random Nearest
+where Sj ⊂ X is a random data subsample, m is the ensemble size,
+and nn_dist(·|·) returns the nearest neighbor distance of xi in Sj .
+                                                                                  Neighbor Distance-based Outlier Scores
+                                                                           A random nearest neighbor distance-based function is used in ϕ(·|·)
+   We then use the Cantelli’s inequality [11], a one-sided Cheby-          for the loss function L(·, ·) to learn customized data representations
+shev’s inequality, to define pseudo outliers.                              for Sp. Let Q =< f Θ (xi ), · · · , f Θ (xi+n−1 ) > be the query set, then
+   Definition 4.2 (Cantelli’s Inequality-based Outlier Thresholding).      given an object x, REPEN defines the outlierness of f Θ (x) using its
+Given an outlier score vector r ∈ RN , in which large values indicate      nearest neighbor distance in Q:
+high outlierness, and let µ and δ 2 be its expected value and variance,                      ϕ f Θ (x)|Q = nn_dist f Θ (x)|Q .
+                                                                                                                                  
+                                                                                                                                                   (6)
+then the outlier candidate set O is defined as:                                                                       +
+                                                                           Hence, given a triplet T = Q, f Θ (x ), f Θ (x ) , our goal is to learn
+                                                                                                                              − 
+              O = {xi |r i ≥ µ + αδ }, ∀xi ∈ X, r i ∈ r,            (2)    a representation function f (·) that results in
+where α ≥ 0 is user-defined based on a desired false positive bound.                     nn_dist f Θ (x+ )|Q < nn_dist f Θ (x− )|Q ,
+                                                                                                                                      
+                                                                                                                                                   (7)
+   We show in Section 5.2 that Eqn. (2) is equivalent to selecting         i.e., the pseudo outlier x− has a larger nearest neighbor distance in
+                                                                 1 .
+an outlier candidate set with a false positive upper bound of 1+α 2        Q than the pseudo inlier x+ . We then define the following hinge
+After determining O, we obtain the inlier candidate set by I = X \O.       loss function for the triplet T to achieve this goal:
+
+                                                                               J (Θ;T ) = L ϕ f Θ (x+ )|Q , ϕ f Θ (x− )|Q =
+                                                                                                                        
+4.2    Triplet Sampling Based on Outlier Scores
+                                                                                                         
+
+An outlier score-based importance sampling is then used to generate                 max {0, c + nn_dist f Θ (x+ )|Q − nn_dist f Θ (x− )|Q }, (8)
+                                                                                                                                        
+meta triplet samples. We first sample n query objects from the inlier
+candidate set I according to their outlier scores. The probability of      where c is a margin parameter that controls    the difference between
+                                                                           the two distances nn_dist f Θ (x+ )|Q and nn_dist f Θ (x− )|Q . The
+                                                                                                                                          
+a data object xi ∈ I being sampled as the query object is inversely
+proportional to its outlier score and is defined as follows:               hinge loss is a convex function, which penalizes the violation of
+                                    Z − ri                                 the ranking order in Eqn. (7) and encourages a separation between
+                       p(xi ) = Í                 ,               (3)      positive examples (inliers) and negative examples (outliers).
+                                  |I |
+                                  t =1 [Z − r t ]                             Given a set of triplets T , our objective function becomes
+            Í|I |
+where Z = t =1 r t . The importance sampling offers high probabil-                                             1 Õ
+                                                                                                                   |T |
+ity of choosing a set of representative inliers as query objects.                                 arg min               J (Θ;Ti ).                 (9)
+                                                                                                      Θ       |T | i=1
+   We then sample a positive example x+ from I using uniform
+sampling. Instead of importance sampling, we use uniform sampling             Since the positive and negative examples come from the bottom-
+to diversify the positive examples in different triplets.                  ranked and top-ranked objects of the ranking r respectively, given
+an infinite number of T , REPEN optimizes the precision at top |O|           complexity of the optimization in Steps 4-13 is mainly determined
+of the detector Sp by minimizing the loss function J . Additionally,         by the computation of the loss function in Step 9 and the gradient
+REPEN does not learn the representation dimension M automati-                descents in Step 10. Since REPEN has only one fully connected
+cally, since there does not exist reliable supervision information to        hidden layer, both the loss function and gradient descents have
+effectively guide the learning.                                              a time complexity linear w.r.t. D and M. After the optimization,
+                                                                             REPEN takes O(N DM) to map the original data into the represen-
+4.5    The Algorithm and Its Time Complexity                                 tation space. The overall time complexity of REPEN is expected to
+Algorithm 1 presents the procedure of REPEN. Step 1 uses an en-              be linear w.r.t. data size and dimensionality size.
+semble of Sp to produce an outlier ranking. Following [26, 30], a
+small subsampling size of 8 and an ensemble size of 50 are used to           4.6     Leveraging A Few Labeled Outliers to
+yield an initial reliable ranking r. Step 2 yields the inlier and outlier            Improve Triplet Sampling
+candidate sets using the Cantelli’s inequality with α = 1.732, which         Given a small set of l labeled outliers, a minor change to the sam-
+is equivalent to an outlier thresholding with a 25% false-positive           pling of negative examples in REPEN (i.e., Step 8 in Algorithm 1) can
+upper bound. After a random weight initialization in Step 3, REPEN           well leverage them to improve the quality of triplets. Specifically,
+iteratively learns the parameters Θ using mini-batch gradient de-            we first sample b2 objects from the outlier candidate set O using
+scents in Steps 4-13.                                                        the importance sampling described in Eqn. (4); and then the other
+   Specifically, Steps 6-9 generate one mini-batch of training triplets      half of the negative examples are sampled from the set of l labeled
+of size b. We found that REPEN using n = 1 performs stably, and              outliers using uniform sampling with replacement. The negative
+more importantly, runs substantially faster than that using a larger         examples from O may cover types of outliers that do not present in
+n. According to the analysis in Section 5.1, using small n can also          the labeled outliers, while sampling from the labeled outlier pool
+result in a small error bound of the representation learning. n = 1 is       guarantees the presence of outliers in the negative examples. Hence,
+thus used. The parameter settings of n_epochs , n_batches and b are          these two sources of negative examples can well complement each
+provided in Section 6.3.1. Additionally, the sampling in Steps 6-9           other for more effective subsequent representation learning.
+is with replacement. Step 10 then computes the average loss given               Note that the above method assumes the availability of only
+one batch of triplet samples, in which square Euclidean distance             a few labeled outliers since it is typically very difficult or costly
+is used in nn_dist(·|·) and c = 1000 is used in order to encourage           to collect labeled outliers. We may sample all negative examples
+large margins between inliers and outliers in the representation             from the labeled outliers in the cases where the number of labeled
+space. After that, Step 11 computes the partial derivatives w.r.t. the       outliers is sufficiently large to cover different types of outliers.
+weight parameters and performs a gradient descent step using the
+ADADELTA optimization [35]. Lastly, Step 14 uses the function f
+                                                                             5 THEORETICAL FOUNDATION OF REPEN
+to map all objects into the representation space.
+                                                                             5.1 Upper Error Bound for the Representation
+Algorithm 1 REPEN                                                                Learning
+Input: X ∈ RD - ultrahigh-dimensional data objects
+                                                                             We show below that REPEN can obtain an upper error bound for
+Output: X ′ ∈ RM - low-dimensional data representations                      its representation learning based on the theorems in [30]. An equiv-
+          1 Ím                                                               alent form of K-th nearest neighbor distance-based outliers is the
+ 1: r ← m      i =1 nn_dist(X | Si )
+ 2: O ← {xi |r i ≥ µ + aδ }, ∀xi ∈ X, and I ← X \ O                          DB(β, δ )-outliers [17] that defines an object x as an outlier if |{x ′ ∈
+ 3: Randomly initialize Θ                                                    X|dist(x, x ′ ) > δ }| ≥ βN , where dist is a distance measure. We de-
+ 4: for i = 1 to n_epochs do                                                 note the DB(β, δ )-outliers by O(β; δ ), and let I(β; δ ) = X \ O(β; δ )
+ 5:    for j = 1 to n_bat ches do                                            be the rest of instances. Is (β; δ ) is a subset of I(β; δ ) such that
+ 6:       Bq ← Sample b sets of n-sized query set from I using Eqn. (3)      minx′ ∈Is (β ;δ ) dist(x, x ′ ) > δ for every outlier x ∈ O(β; δ ). Let a
+ 7:       Bp ← Sample b objects from I using uniform sampling                δ -radius partition Pδ of Is (β; δ ) be a set of h non-empty disjoint
+ 8:       Bn ← Sample b objects from O using Eqn. (4)
+ 9:      Generate the triplet set T = {T1, · · · , Tb }, with each triplet
+                                                                             clusters, i.e., Is (β; δ ) = ∪hi=1 Ci , such that each cluster satisfies
+         Ts = (< xt , · · · , xt +n−1 >, x+, x− ) from the s-th element of   maxx,x′ ∈ C dist(x, x ′ ) < δ . It shows in [30] that
+          Bq , Bp , and Be respectively
+                                                                                p nn_dist(x|S) ≤ nn_dist(x ′ |S) <
+                                                                                                                
+          J (Θ) ← b1 bs=1 J (Θ; Ts )
+                      Í
+10:
+11:      Perform a gradient descent step w.r.t. the parameters in Θ                          1 − γ n max ηδ (n), ∀x ∈ O(β; δ ), ∀x ′ ∈ I(β; δ ),           (10)
+12:    end for                                                                                         Pδ
+13: end for
+                                                                                  |I (β ;δ )|
+                                                                             γ = sN           and ηδ (n) = ∀i;ni ⪈0 д(n 1 , · · · , nh ; n, p1 , · · · , ph ), in
+                                                                                                          Í
+14: X ′ ← f Θ (X)
+15: return X ′                                                               which n = |S| and д is a probability mass function of the multino-
+                                                                             mial distribution with hi=1 ni = n and hi=1 pi = 1. By replacing x
+                                                                                                        Í              Í
+                                                                             with f Θ (x) and S with Q, we obtain the following error bound:
+   Step 1 requires O(mN D|S|) to obtain the nearest neighbor distance-
+based outlier scores for all objects. Step 2 requires O(N ) to scan over
+                                                                             p nn_dist f Θ (x− )|Q ≤ nn_dist f Θ (x+ )|Q < 1 − γ n max ηδ (n).
+                                                                                                                             
+the outlier ranking list to produce the inlier and outlier candidate                                                                               Pδ
+sets. Since n_epochs, n_batches and b are small constant, the time                                                                                         (11)
+    Different from [30] that uses nn_dist(·|·) to identify outliers
+                                                                  di-               URL, AD, LC, p53 and Webspam contain real outliers, but URL and
+rectly, REPEN uses the difference between nn_dist f Θ (x+ )|Q and                   Webspam were originally prepared for balanced classification tasks.
+nn_dist f Θ (x− )|Q to perform the gradient descent steps in its rep-                Following the literature [6, 16, 37], URL and Webspam are converted
+resentation learning. Hence, Eqn. (11) can be seen as an upper error                 to outlier detection data sets with 2% outliers by downsampling the
+bound for the representation learning.                                               small class or the positive class. This downsampling approach is
+    We often have a sufficiently large γ in Eqn. (11). This is because               also applied to News20. For R8 that is very imbalanced, we follow
+Is (β; δ ) represents a set of inliers that demonstrate very different               [16, 18, 29, 32] to treat the rare classes as outliers and the largest
+characteristics from outliers, and the proportion of such inliers can                class as inliers. After the above data preparation, all data sets contain
+be very large in practice. Hence, the error bound is often a small                   (semantically) real outliers.
+value when using a small query set Q (i.e., a small n). In such cases,
+the expressiveness of REPEN’s representations is well guaranteed                     6.2      Performance Evaluation Methods
+when the pseudo outliers x− and inliers x+ are genuine.                              We evaluate the effectiveness of the representations by the perfor-
+                                                                                     mance of the subsequent outlier detector Sp. Sp is used with the
+5.2      Reliable Triplet Sampling                                                   recommended settings as in [26]. Given a set of data objects in the
+Since it has a high probability of hitting genuine inliers given their               original space or the representation space, Sp returns a full ranking
+large proportion, having genuine outliers in the outlier candidate                   list of data objects based on their outlier scores. After that, many
+set is the key to the representation learning. Thus, the above error                 performance measures, such as the area under Receiver Operat-
+bound has a good guarantee when a few labeled outliers are avail-                    ing Characteristic curve (AUC) and average precision, are avail-
+able. In the case of only having the score vector r, our problem is                  able for evaluating the quality of the ranking. A detailed analysis
+to determine an outlierness threshold for r, such that we obtain an                  of the advantages and drawbacks of these measures for unsuper-
+outlier candidate set with small false positives. We show below that                 vised outlier detection can be found in [6]. Following the literature
+the Cantelli’s inequality can help achieve this goal. Given µ and δ 2                [6, 16, 30, 32, 37], the popular measure AUC is used. AUC inherently
+be the mean and variance of r, we have p(r i ≥ µ + ϵ) ≤ δ 2δ+ϵ 2 with
+                                                              2
+                                                                                     considers the class-imbalance nature of outlier detection, making
+ϵ ≥ 0 per the Cantelli’s inequality. By replacing ϵ = αδ , we obtain                 it comparable across data sets with different outlier proportions
+                                            1                                        [6]. An AUC value close to 0.5 indicates a random ranking of the
+                      p(r i ≥ µ + αδ ) ≤        ,                 (12)               objects. Higher AUC indicates better detection performance.
+                                         1 + α2
+                                                                                         The paired Wilcoxon signed rank test is used to examine the
+which states that most r values distribute very closely to the ex-
+                                                 1 that a few excep-                 significance of the performance of REPEN against its competitors.
+pected value, with the probability of up to 1+α    2
+                                                                                     For algorithms or data sets that involve sampling, their AUCs are
+tions occur. In other words, when µ + αδ is used as the threshold                    the averaged results over 10 independent runs.
+of labeling outliers, we have a false positive upper bound of 1+α  1 .
+                                                                    2                    The runtime presented in our experiments is calculated at a node
+Note that the Cantelli’s inequality holds for any distribution that                  in a 2.8GHz Titan cluster with 256GB memory.
+has statistical mean and variance, and thus makes no assumption
+on specific probability distributions. This property enables us to                   6.3     Effectiveness in Real-world Data with
+obtain a good outlier candidate set even when r follows different
+                                                                                             Thousands to Millions of Features
+distributions in different data sets.
+                                                                                         6.3.1 Experiment Settings. We compare the AUC performance
+6 EXPERIMENTS                                                                        and detection runtime of Sp in the low-dimensional representation
+                                                                                     space learned by REPEN and in the original high-dimensional space
+6.1 Data Sets                                                                        to evaluate the effectiveness of REPEN. Sp is applied with the same
+As shown in Table 1, eight real-world ultrahigh-dimensional data                     settings, subsampling size set to 8 and ensemble size set to 50, in
+sets are used, which cover diverse domains, e.g., malicious URL                      both the representation space and original space. For the nearest
+detection, cancer detection, molecular bioactivity detection, and                    neighbor searching, k-d tree indexing is used.
+Internet advertisement detection. OvarianTumour (OT ) is taken                           REPEN with the default representation dimension M = 20 is
+from the RSCTC Discovery Challenge for medical diagnosis and                         used. In the optimization, n_epochs = 30, b = 256 and 5,000 sam-
+treatment1 . Webspam is taken from the Pascal Large Scale Learning                   ples per epoch (equivalent to 5,000b batches per epoch) are used by
+Challenge2 . URL consists of 120-day collection of malicious and                     default. Note that Sp is very cost-effective, which only requires the
+benign URLs [20]. Since URL contains evolving URLs data, the                         presence of a few representative inliers in a subsample to effectively
+first-week subset of this collection is used. R8 3 and News20 4 are                  distinguish outliers from inliers [26, 30, 32]. Therefore, although
+text classification data sets. AD is a data set for detecting Internet               the number of possible triplets is huge for large data sets, our ex-
+advertisements, LungCancer (LC) is for cancer detection, and p53 is                  periments showed that these settings enable the optimization to
+about abnormal protein activity detection. These three data sets are                 achieve the convergence and impressive detection accuracy for all
+available at UCI Machine Learning Repository5 . The data sets OT,                    the data sets except p53, in which outliers are deeply mixed with
+1 http://tunedit.org/challenge/RSCTC-2010-A                                          inliers and thus we increase the number of samples per epoch to
+2 ftp://largescale.ml.tu-berlin.de/largescale/                                       its data size to sufficiently train the representation model. Both Sp
+3 http://csmining.org/tl_files/Project_Datasets/r8_r52/r8-train-all-terms.txt
+4 https://www.csie.ntu.edu.tw/∼cjlin/libsvmtools/datasets/binary/news20.binary.bz2
+                                                                                     and REPEN are implemented in Python 6 .
+5 https://archive.ics.uci.edu/ml/index.php                                           6 The code of REPEN is available at https://sites.google.com/site/gspangsite/sourcecode.
+   6.3.2 Findings - REPEN Enables the Detector Sp to Obtain Sig-                    (CoP) [28]. These methods are chosen because they are state-of-the-
+nificantly Better AUC Performance and Two Orders of Magnitude                       art methods of four popular unsupervised representation learning
+Speedup. Table 1 shows the AUC performance and detection run-                       approaches, i.e., neural network-based approaches, manifold learn-
+time7 of Sp in the original data space and the 20-D space output                    ing, random projections, and robust PCA approaches. All methods
+by REPEN. Although REPEN retains only 20 dimensions, which                          learn a mapping from the original space to a space of the same
+are at most 1.3% of the dimensionality size in the original data, the               dimension (M = 20) to examine their effectiveness of learning low-
+REPEN-enabled Sp is either substantially better than, or roughly the                dimensional representations. AE uses the same training settings as
+                                                                                                                                             M (M +3)
+same as, that working on the original space. Our significance test                  REPEN. Since HLLE requires its neighborhood size K >        2     in
+based on the AUC performance on the eight data sets obtains a p-                    its optimization, K = 250 is used. SRP and CoP do not have addi-
+value of 0.0156, indicating that the REPEN-enabled Sp significantly                 tional parameters. AE, HLLE and SRP are implemented using the
+outperforms the original Sp at the 95% confidence level.                            built-in functions in the Scikit-learn Python library. CoP is taken
+                                                                                    from their authors in MATLAB.
+Table 1: AUC and Detection Runtime of the Original Sp (ORG) and
+                                                                                       6.4.2 Findings - REPEN Performs Substantially Better and More
+the REPEN-enabled Sp (REPEN). D is the dimensionality size and
+N is the data size. IMP and SU indicate the AUC improvement and                     Stably Than the Competitors. Table 2 demonstrates the AUC per-
+speedup of REPEN over ORG, respectively.                                            formance of Sp using the representations output by REPEN, AE,
+                                                                                    HLLE, SRP, and CoP. REPEN performs significantly better than AE
+                                         AUC                  Runtime (s)           and SRP at the 95% confidence level, and is comparably better than
+  Data        D          N       ORG REPEN IMP            ORG     REPEN SU          HLLE and Cop. In general, REPEN enables Sp to achieve substantial
+  AD          1,555      3,279   0.7117 0.8533 19.90%     0.16    0.10      2       improvement over its competitors on the data sets AD, R8, OT, URL,
+  LC          3,312      145     0.9149 0.9283 1.47%      0.59    0.02     38       and Webspam, in which Sp has fairly good performance on the
+  p53         5,408      16,772 0.6686 0.6817 1.95%       230.39 0.91     253
+  R8          9,467      3,974   0.8602 0.9080 5.56%      0.21    0.12      2       original space. For example, the REPEN-based Sp obtains about 14%
+  OT          54,621     265     0.6976 0.7627 9.34%      23.50   0.04    529       to 32% AUC improvement over all its competitors on AD, 5% to
+  News20      1,355,191 10,201 0.5361 0.5822 8.60%        5.30    0.29     18       42% improvement over all its competitors on OT, and 27% to 33%
+  URL         3,231,961 89,063 0.7556 0.7733 2.35%        16.40   2.48      7       improvement over AE and SRP on URL. This is because when Sp
+  Webspam     16,609,143 215,001 0.8781 0.8713 -0.78%     1879.68 6.08    309
+                                                                                    obtains good performance on the original data space, the triplet
+                                                                                    sampling in REPEN yields higher-quality training triplet samples,
+   Particularly, REPEN enables Sp to obtain about 1.5% to 20% AUC                   which lead its optimization to better representations for Sp. The
+improvement on most data sets. This is mainly due to the fact                       four competitors learn representations independently of the de-
+that there often exists only a small percentage of features that are                tector, and thus they are unable to achieve this merit. Note that
+relevant to outlier detection, since outliers are the minority objects;             the representation learning in the methods AE and SRP is simpler
+the large proportion of irrelevant features in the original space                   than the other methods, and they often require a sufficiently large
+renders Sp less effectively. In contrast, the customized objective                  number of representation features (e.g., hundreds to thousands of
+function enables REPEN to effectively preserve the most important                   features) to perform fairly well. Therefore, they perform poorly in
+information for Sp. Therefore, Sp performs outlier detection in a                   most data sets when they only retain 20 representation features.
+highly relevant space when working with our representation space,
+resulting in the above substantial improvement.                                     Table 2: AUC Performance of Sp using REPEN, AE, HLLE, SRP, and
+   In terms of runtime, by working on our 20-D representation                       CoP. ‘•’ indicates out-of-memory errors while ‘◦’ denotes algorith-
+space, Sp runs up to two-order of magnitude faster than on the                      mic constraint violation errors.
+original space. This is because the original data has very high di-                         Data       REPEN       AE     HLLE      SRP      CoP
+mensionality, data indexing methods fail to work. In contrast, k-d                          AD         0.8533    0.6848   0.6462   0.7249   0.7483
+tree indexing excels at the 20-D representations, which enables                             LC         0.9283    0.9266      ◦     0.9041   0.9161
+Sp to achieve a remarkable speedup. Such speedup is striking for                            p53        0.6817    0.5624   0.3870   0.6874   0.6805
+the two dense data sets, p53 and OT, and the large sparse data set,                         R8          0.9080   0.7698   0.8764   0.8494   0.9326
+                                                                                            OT         0.7627    0.5355   0.7273   0.6708   0.7247
+Webspam. Note that we have used the efficient implementation of                             News20      0.5822   0.5154   0.6206   0.4435      •
+distance measures that is specifically designed for high-dimensional                        URL        0.7733    0.6040      •     0.5774      •
+sparse data in Sp, so Sp runs very fast in the small sparse data sets,                      Webspam     0.8713   0.8766      •     0.6390      •
+News20 and URL.                                                                                        p-value   0.0234   0.3125   0.0156   0.3125
+
+
+6.4     Comparing to State-of-the-art                                                  Also, REPEN performs much more stably than the other methods
+        Representation Learning Competitors                                         across the data sets. REPEN obtains the best performance in five
+   6.4.1 Experiment Settings. This section compares REPEN with                      data sets, with the other three ranked in second. Although AE, HLLE
+autoencoder (AE) [13], Hessian locally linear embedding (HLLE)                      and CoP respectively obtain one best performance, they perform
+[10], sparse random projection (SRP) [19], and coherent pursuit                     poorly in several other data sets, e.g., the performance of AE and
+                                                                                    HLLE on AD and p53. One main reason here is that AE, HLLE and
+7 The detection runtime is the execution time of online detection, which does not   CoP are not specifically designed for the outlier detectors, and as a
+include the data loading and offline training time.                                 result, the best representations they obtain may be suboptimal for
+Sp. This reinforces the importance of incorporating the subsequent        available of a few labeled outliers. The third factor Nlo represents
+detection methods into the representation learning.                       the ratio of the number of the labeled outliers to the number of
+   CoP outperforms REPEN on R8. This may be because CoP is able           unlabeled outliers in the data sets. For URL, REPEN can use the
+to preserve information for detecting some structural outliers in         labeled outliers that account for only up to 4.50% of unlabeled
+R8, while REPEN fails to do that. HLLE outperforms REPEN on               outliers to achieve 18% AUC improvement. The Nlo in News20 is
+News20. This may be because a large neighborhood size is required         much larger than that in URL. In such cases, REPEN leverages the
+to detect more outliers than REPEN does. We plan to instantiate           extra labeled outliers to achieve more substantial improvement,
+other RAMODO’s instances to handle these two issues in future.            resulting in more than 32% AUC improvement. These results show
+                                                                          the strong capability of REPEN in making very effective use of the
+6.5    The Capability of Leveraging Labeled                               small number of labeled outliers in different cases.
+       Outliers as Prior Knowledge
+   6.5.1 Experiment Settings. This section examines the capabil-          Table 3: Outlier Statistics of News20 and URL w.r.t. the Number of
+                                                                          Labeled Outliers. l is the number of labeled outliers, No is the num-
+ity of REPEN in incorporating a small set of labeled outliers into
+                                                                          ber of unlabeled outliers in the data, and N is the data size.
+its representation learning. Since we downsampled one class in
+News20, URL, and Webspam to create outliers, the rest of data ob-            Factor      Data      1       5       10      20      40       80
+jects in the downsampled class can be used as the pool of labeled                l      News20   0.01%   0.05%   0.10%   0.20%   0.39%    0.78%
+                                                                                 N       URL     0.00%   0.01%   0.01%   0.02%   0.04%    0.09%
+outliers. We randomly pick up l objects from the pool and add
+                                                                                l +No   News20   2.01%   2.05%   2.10%   2.20%   2.39%    2.78%
+them into our training using the method described in Section 4.6.                  N     URL     2.00%   2.00%   2.01%   2.02%   2.04%    2.09%
+l ∈ {1, 5, 10, 20, 40, 80} is used. The AUC performance of using a                      News20   0.49%   2.45%   4.90%   9.80%   19.61%   39.22%
+                                                                                  l
+set of l labeled outliers is averaged over 10 independent runs.                  No      URL     0.06%   0.28%   0.56%   1.13%   2.25%    4.50%
+   6.5.2 Findings - REPEN Achieves Up to 32% AUC Improvement
+by Leveraging 1-80 Labeled Outliers. Figure 2 illustrates the AUC
+performance of REPEN on News20 and URL using different num-               6.6      Sensitivity Test w.r.t. the Representation
+bers of labeled outliers. Similar results are observed on Webspam.                 Dimension
+The results of REPEN on News20 and URL in Table 2 are used as
+                                                                             6.6.1 Experiment Settings. We examine the sensitivity of the
+the baselines, i.e., the performance of REPEN without using the
+                                                                          performance of REPEN w.r.t. the number of representation fea-
+labeled outliers. The AUC performance increases quickly with the
+                                                                          tures, M, on all the eight data sets. A wide range of M values,
+increasing of the number of known outliers. For the complex data
+                                                                          {1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100}, is used.
+set News20, in which REPEN originally obtains an AUC of only
+0.5822, REPEN can harness the limited number of available out-               6.6.2 Findings - REPEN Performs Stably w.r.t. Different Num-
+liers to improve the AUC up to 0.7707. For the easier data set URL,       bers of Representation Features. Figure 3 presents the AUC perfor-
+REPEN improves the AUC performance from 0.7733 to 0.9160 when             mance of REPEN-based Sp using different representation dimen-
+the labeled outliers are provided. This is mainly because the labeled     sions. REPEN performs very stably when M is set between 10 and
+outlier-based prior knowledge largely improves our training data          100. Neural network-based methods can represent up to O(2M )
+quality and helps identify more application-relevant outliers.            concepts when using M neural nodes [5]. Therefore, REPEN can
+                                                                          theoretically learn complex representations (i.e., up to O(210 ) con-
+                                                                          cepts) when M = 10 is used, making it sufficient for most data sets.
+                                                                          The expressiveness of REPEN’s representations is expected to be
+                                                                          increased w.r.t. the representation dimensions. However, the more
+                                                                          complex representations we intend to learn, the larger amount
+                                                                          of high-quality training data is required. Due to the unsupervised
+                                                                          nature of our triplet sampling, our training triplets may not informa-
+                                                                          tive enough for REPEN to learn more powerful higher-dimensional
+                                                                          (e.g., M > 10) representations. Hence, the performance of REPEN
+                                                                          flattens after M = 10 (this issue may be addressed by incorporat-
+                                                                          ing labeled outliers to generate high-quality training triplets, as
+                                                                          explained in the discussion below). We recommend M = 20 to at-
+Figure 2: AUC Results of REPEN-based Sp Using Labeled Outliers.           tain stable accuracy and at the same time make full use of k-d tree
+                                                                          indexing for distance computation in the representation space.
+   We further investigate the changes of outlier statistics of the           It is interesting that REPEN using M = 1 can perform as well as
+two data sets w.r.t. the number of labeled outliers. The results are      that using a large M in the data sets R8, News20 and URL. This phe-
+reported in Table 3. The number of labeled data objects is less           nomenon may be due to two main reasons. On one hand, in the sim-
+than 1% of the unlabeled data according to the Nl factor. Also, the       plest case that the inliers and the outliers are well separable by one
+proportion of (labeled and unlabeled) outliers (i.e., l +N o
+                                                         N ) remains to   linear/non-linear decision boundary, learning a one-dimensional
+be very small for both data sets. These two data factors indicate that    representation space (i.e., M = 1) is sufficient, since the problem is
+the intrinsic complexity of the problem does not decrease due to the      similar to a one-class or binary classification problem. On the other
+                                                                             Figure 4: Scalability Test w.r.t. Data Size and Dimensionality. CoP is
+                                                                             excluded since it is implemented in a programming language differ-
+                                                                             ent from the others. Logarithmic scale is used in both axes.
+
+
+                                                                             can produce more optimal and stable representations for a specific
+                                                                             outlier detector. This is verified by substantially better and more
+    Figure 3: AUC Performance w.r.t. Representation Dimension.               stable detection performance of REPEN, compared to four state-
+                                                                             of-the-art representation learning competitors that separate these
+                                                                             two correlated tasks. The second benefit is that our method can
+hand, the optimization in REPEN may also encounter the afore-                easily and effectively incorporate application-specific knowledge to
+mentioned training data quality problem. Improving the triplet               learn more application-relevant representations for the given outlier
+quality, e.g., by incorporating a few labeled outliers, can upgrade          detector, which helps REPEN achieve up to 32% AUC improvement.
+the performance of REPEN using a large M. For example, without               The third benefit is that we can effectively represent ultrahigh-
+using labeled outliers, REPEN obtains similar performance by using           dimensional data using very low-dimensional representations (i.e.,
+M = 1 and M = 20 on News20 and URL; however, when we use                     20-dimensional representations) and our representations perform
+l = 80 labeled outliers to improve the triplet quality and learn 1-D         stably w.r.t. a wide range of representation dimensions.
+representations, we only obtain AUC results of 0.7201 and 0.8320                 To effectively learn customized representations for the detector,
+on respective News20 and URL, which substantially underperform               it is critical to generate high-quality training triplets. We show
+the AUC results of 0.7707 and 0.9160 based on 20-D representations,          that (i) the combination of state-of-the-art outlier detectors and
+as shown in Figure 2. This again highlights the effectiveness of our         Cantelli’s inequality can help generate sufficiently reliable triplets
+method in using the limited number of labeled outliers to improve            to learn expressive representations; and (ii) the availability of a few
+the triplet quality.                                                         labeled outliers can be further leveraged to substantially improve
+                                                                             the triplet quality and learn better representations.
+6.7    Scalability Test                                                          We are implementing other instances of RAMODO that define
+   6.7.1 Experiment Settings. We generate synthetic data sets by             sophisticated distance-based outlier scoring to better represent
+varying the data size in [1000, 125000] of a 10,000-D data set for the       more complex data.
+scaleup test w.r.t. data size, and likewise, varying the dimensions
+w.r.t. a fixed data size (i.e., 10,000) for the test w.r.t. dimension. The   ACKNOWLEDGEMENTS
+execution time below includes both training and testing runtime.             This work is partially supported by the ARC Discovery Grant
+    6.7.2 Findings - REPEN Achieves Linear Time Complexity w.r.t.            DP180100966.
+Both Data Size and Dimensionality. The scalability test results are
+illustrated in Figure 4. REPEN has time complexity linear w.r.t.             REFERENCES
+both data size and dimensionality, which justifies our complexity             [1] Charu Aggarwal and S Yu. 2005. An effective and efficient algorithm for high-
+                                                                                  dimensional outlier detection. The VLDB Journal 14, 2 (2005), 211–221.
+analysis in Section 4.5. REPEN is much faster than HLLE because               [2] Charu C Aggarwal. 2017. Supervised outlier detection. In Outlier Analysis.
+HLLE requires nearest neighbor searching in the entire data set                   Springer, 219–248.
+                                                                              [3] Fatemeh Azmandian, Ayse Yilmazer, Jennifer G Dy, Javed Aslam, David R Kaeli,
+that has quadratic time complexity w.r.t. data size. SRP is the most              et al. 2012. GPU-accelerated feature selection for outlier detection using the local
+efficient method since it only requires the fast operation of random              kernel density ratio. In ICDM. IEEE, 51–60.
+matrix projection. REPEN has a similar network architecture as AE,            [4] Stephen D Bay and Mark Schwabacher. 2003. Mining distance-based outliers
+                                                                                  in near linear time with randomization and a simple pruning rule. In SIGKDD.
+but it runs slower than AE as it requires more distance computation               ACM, 29–38.
+in its representation learning.                                               [5] Yoshua Bengio, Aaron Courville, and Pascal Vincent. 2013. Representation
+                                                                                  learning: A review and new perspectives. IEEE Transactions on Pattern Analysis
+                                                                                  and Machine Intelligence 35, 8 (2013), 1798–1828.
+7     CONCLUSIONS                                                             [6] Guilherme O Campos, Arthur Zimek, Jörg Sander, Ricardo JGB Campello, Barbora
+                                                                                  Micenková, Erich Schubert, Ira Assent, and Michael E Houle. 2016. On the
+This paper introduces the RAMODO framework and its instance                       evaluation of unsupervised outlier detection: Measures, datasets, and an empirical
+REPEN that learn customized low-dimensional representations of                    study. Data Mining and Knowledge Discovery 30, 4 (2016), 891–927.
+ultrahigh-dimensional data for random distance-based detectors.               [7] Emmanuel J Candès, Xiaodong Li, Yi Ma, and John Wright. 2011. Robust principal
+                                                                                  component analysis? Journal of the ACM 58, 3 (2011), 11.
+By unifying the two correlated tasks, representation learning and             [8] Lei Cao, Yizhou Yan, Caitlin Kuhlman, Qingyang Wang, Elke A Rundensteiner,
+outlier detection, we gain three main benefits. One benefit is that we            and Mohamed Eltabakh. 2017. Multi-Tactic Distance-based Outlier Detection. In
+     ICDE. IEEE, 959–970.                                                                    couplings. In ICDM. IEEE, 410–419.
+ [9] Samuel A Danziger, Jue Zeng, Ying Wang, Rainer K Brachmann, and Richard H          [25] Guansong Pang, Longbing Cao, Ling Chen, and Huan Liu. 2017. Learning Ho-
+     Lathrop. 2007. Choosing where to look next in a mutation sequence space: Active         mophily Couplings from Non-IID Data for Joint Feature Selection and Noise-
+     Learning of informative p53 cancer rescue mutants. Bioinformatics 23, 13 (2007).        Resilient Outlier Detection. In IJCAI. 2585–2591.
+[10] David L Donoho and Carrie Grimes. 2003. Hessian eigenmaps: Locally linear          [26] Guansong Pang, Kai Ming Ting, and David Albrecht. 2015. LeSiNN: Detecting
+     embedding techniques for high-dimensional data. Proceedings of the National             anomalies by identifying least similar nearest neighbours. In ICDM Workshop.
+     Academy of Sciences 100, 10 (2003), 5591–5596.                                          IEEE, 623–630.
+[11] Devdatt P Dubhashi and Alessandro Panconesi. 2009. Concentration of measure        [27] Dan Pelleg and Andrew W Moore. 2005. Active learning for anomaly and rare-
+     for the analysis of randomized algorithms. Cambridge University Press.                  category detection. In NIPS. 1073–1080.
+[12] Jingrui He and Jaime Carbonell. 2008. Nearest-neighbor-based active learning       [28] Mostafa Rahmani and George Atia. 2017. Coherence pursuit: Fast, simple, and
+     for rare category detection. In NIPS. 633–640.                                          robust subspace recovery. In ICML. 2864–2873.
+[13] Geoffrey E Hinton and Ruslan R Salakhutdinov. 2006. Reducing the dimensional-      [29] Shebuti Rayana and Leman Akoglu. 2016. Less is more: Building selective anomaly
+     ity of data with neural networks. Science 313, 5786 (2006), 504–507.                    ensembles. ACM Transactions on Knowledge Discovery from Data 10, 4 (2016), 42.
+[14] Songlei Jian, Longbing Cao, Guansong Pang, Kai Lu, and Hang Gao. 2017.             [30] Mahito Sugiyama and Karsten Borgwardt. 2013. Rapid distance-based outlier
+     Embedding-based representation of categorical data by hierarchical value cou-           detection via sampling. In NIPS. 467–475.
+     pling learning. In IJCAI. AAAI Press, 1937–1943.                                   [31] Acar Tamersoy, Kevin Roundy, and Duen Horng Chau. 2014. Guilt by association:
+[15] Enric Junqué de Fortuny, Marija Stankova, Julie Moeyersoms, Bart Minnaert,              Large scale malware detection by mining file-relation graphs. In SIGKDD. ACM,
+     Foster Provost, and David Martens. 2014. Corporate residence fraud detection.           1524–1533.
+     In SIGKDD. ACM, 1650–1659.                                                         [32] Kai Ming Ting, Takashi Washio, Jonathan R Wells, and Sunil Aryal. 2017. Defying
+[16] Fabian Keller, Emmanuel Muller, and Klemens Bohm. 2012. HiCS: High contrast             the gravity of learning curve: A characteristic of nearest neighbour anomaly
+     subspaces for density-based outlier ranking. In ICDE. IEEE, 1037–1048.                  detectors. Machine Learning 106, 1 (2017), 55–91.
+[17] Edwin M Knox and Raymond T Ng. 1998. Algorithms for mining distance-based          [33] Laurens Van Der Maaten, Eric Postma, and Jaap Van den Herik. 2009. Dimen-
+     outliers in large datasets. In VLDB. 392–403.                                           sionality reduction: A comparative review. Journal of Machine Learning Research
+[18] Aleksandar Lazarevic and Vipin Kumar. 2005. Feature bagging for outlier detec-          10 (2009), 66–71.
+     tion. In SIGKDD. ACM, 157–166.                                                     [34] Pascal Vincent, Hugo Larochelle, Isabelle Lajoie, Yoshua Bengio, and Pierre-
+[19] Ping Li, Trevor J Hastie, and Kenneth W Church. 2006. Very sparse random                Antoine Manzagol. 2010. Stacked denoising autoencoders: Learning useful repre-
+     projections. In SIGKDD. ACM, 287–296.                                                   sentations in a deep network with a local denoising criterion. Journal of Machine
+[20] Justin Ma, Lawrence K Saul, Stefan Savage, and Geoffrey M Voelker. 2009. Identi-        Learning Research 11 (2010), 3371–3408.
+     fying suspicious URLs: An application of large-scale online learning. In ICML.     [35] Matthew D Zeiler. 2012. ADADELTA: An adaptive learning rate method. CoRR
+     ACM, 681–688.                                                                           abs/1212.5701 (2012).
+[21] Alireza Makhzani and Brendan J Frey. 2015. Winner-take-all autoencoders. In        [36] Chong Zhou and Randy C Paffenroth. 2017. Anomaly detection with robust deep
+     NIPS. 2791–2799.                                                                        autoencoders. In SIGKDD. ACM, 665–674.
+[22] Mary McGlohon, Stephen Bay, Markus G Anderle, David M Steier, and Christos         [37] Arthur Zimek, Matthew Gaudet, Ricardo JGB Campello, and Jörg Sander. 2013.
+     Faloutsos. 2009. SNARE: A link analytic system for graph labeling and risk              Subsampling for efficient and effective unsupervised outlier detection ensembles.
+     detection. In SIGKDD. ACM, 1265–1274.                                                   In SIGKDD. ACM, 428–436.
+[23] Guansong Pang, Longbing Cao, Ling Chen, Defu Lian, and Huan Liu. 2018. Sparse      [38] Arthur Zimek, Erich Schubert, and Hans-Peter Kriegel. 2012. A survey on unsu-
+     Modeling-based Sequential Ensemble Learning for Effective Outlier Detection in          pervised outlier detection in high-dimensional numerical data. Statistical Analysis
+     High-dimensional Numeric Data. In AAAI.                                                 and Data Mining 5, 5 (2012), 363–387.
+[24] Guansong Pang, Longbing Cao, Ling Chen, and Huan Liu. 2016. Unsupervised
+     feature selection for outlier detection by modelling hierarchical value-feature
+

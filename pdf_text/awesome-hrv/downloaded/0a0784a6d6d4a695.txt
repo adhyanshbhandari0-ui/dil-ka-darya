@@ -1,0 +1,1014 @@
+                                         IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, 2019                                                                                          1
+
+
+
+
+                                                  Generative Adversarial Active Learning for
+                                                      Unsupervised Outlier Detection
+                                              Yezheng Liu, Zhe Li, Chong Zhou, Yuanchun Jiang, Jianshan Sun, Meng Wang and Xiangnan He
+
+                                              Abstract—Outlier detection is an important topic in machine learning and has been used in a wide range of applications. In this paper,
+                                              we approach outlier detection as a binary-classification issue by sampling potential outliers from a uniform reference distribution.
+                                              However, due to the sparsity of data in high-dimensional space, a limited number of potential outliers may fail to provide sufficient
+                                              information to assist the classifier in describing a boundary that can separate outliers from normal data effectively. To address this, we
+                                              propose a novel Single-Objective Generative Adversarial Active Learning (SO-GAAL) method for outlier detection, which can directly
+                                              generate informative potential outliers based on the mini-max game between a generator and a discriminator. Moreover, to prevent the
+
+
+
+
+arXiv:1809.10816v4 [cs.LG] 18 Mar 2019
+                                              generator from falling into the mode collapsing problem, the stop node of training should be determined when SO-GAAL is able to
+                                              provide sufficient information. But without any prior information, it is extremely difficult for SO-GAAL. Therefore, we expand the network
+                                              structure of SO-GAAL from a single generator to multiple generators with different objectives (MO-GAAL), which can generate a
+                                              reasonable reference distribution for the whole dataset. We empirically compare the proposed approach with several state-of-the-art
+                                              outlier detection methods on both synthetic and real-world datasets. The results show that MO-GAAL outperforms its competitors in the
+                                              majority of cases, especially for datasets with various cluster types or high irrelevant variable ratio. The experiment codes are available
+                                              at: https://github.com/leibinghe/GAAL-based-outlier-detection
+
+                                              Index Terms—Outlier Detection, Generate Potential Outliers, Curse of Dimensionality, Generative Adversarial Active Learning, Mode
+                                              Collapsing Problem, Multiple-Objective Generative Adversarial Active Learning
+
+                                                                                                                       F
+
+
+                                         1    I NTRODUCTION                                                                normal data. However, the lack of prior information about
+                                                                                                                           the data characteristics makes it difficult to select an appro-
+
+                                         O     UTLIERS refer to the observations that have signif-
+                                               icantly different characteristics from the other data.
+                                         Due to the critical and interesting insights they often pro-
+                                                                                                                           priate model and parameter. Although the non-parametric
+                                                                                                                           models [17] can achieve good results regardless of the
+                                                                                                                           underlying distribution of data, they usually require large
+                                         vide, outlier detection technologies play important roles in                      amounts of data and computing resources. To avoid this
+                                         various application domains. Such as the abnormal trajec-                         problem, another widely used outlier detection method,
+                                         tory and moving object detection [1], [2], [3], fraud detec-                      proximity-based model [18], [19], [20], [21], [22], assumes
+                                         tion [4], [5], emerging topic detection [6], [7], and medical                     that the outliers are far from their nearest neighbors. Com-
+                                         information detection [8], [9]. An essential feature of these                     pared to the first one, the key advantage of the proximity-
+                                         applications is that sufficient anomalies and correct labels                      based models is that they do not require any training or
+                                         are often prohibitively expensive to obtain. Therefore, the                       assumptions about the entire dataset. However, due to
+                                         outlier detection is usually considered to be a one-class                         the detection mechanism and the”curse of dimensionality”,
+                                         classification problem by assuming that the entire dataset                        their efficiency and effectiveness may be severely affected
+                                         contains only normal instances [10].                                              by the increasing data volumes and dimensions. Therefore,
+                                             The most straightforward way is to create a model for                         this paper approaches the unsupervised outlier detection
+                                         all samples, and then compute the outlier scores based on                         as a binary-classification problem by Artificially Generating
+                                         the deviations from the established normal profiles. Spe-                         Potential Outliers (AGPO), which can address all these
+                                         cific methods include the statistical-based models [11], [12],                    issues.
+                                         regression-based models [13], cluster-based models [14],                              First, the AGPO-baesd methods create a labeled dataset
+                                         and reconstruction-based models [15], [16], which make                            by generating potential outliers. Then any off-the-shelf clas-
+                                         different assumptions about the generating mechanism of                           sifier can be used for subsequent detection. The most in-
+                                                                                                                           tuitive way is to sample potential outliers from a Uniform
+                                         Xiangnan He is the corresponding author.
+                                                                                                                           distribution. However, due to the sparsity of data in high-
+                                         •   Y. Liu, Z. Li, Y. Jiang, and J. Sun are with School of Management,            dimensional space, a limited number of potential outliers
+                                             Hefei University of Technology, China. E-mail:{liuyezheng, ycjiang,
+                                             sunjs9413}@hfut.edu.cn and lizhe@mail.hfut.edu.cn.
+                                                                                                                           may fail to provide sufficient information to assist the
+                                         •   C. Zhou is with Department of Data Science, Worcester Polytechnic             classifier in describing a clearly boundary that can separate
+                                             Institute, USA. E-Mail: czhou2@wpi.edu.                                       outliers from normal data. To address this issue, several
+                                         •   M. Wang is with School of Computer Science and Informa-                       efforts have been made to generate data points that occur
+                                             tion Engineering, Hefei University of Technology, China. E-mail:
+                                             eric.mengwang@gmail.com.                                                      inside or close to the real data. For example, a one-class clas-
+                                         •   X. He is with the School of Information Science and Technology, Univer-       sification method [23] synthesizes potential outliers based
+                                             sity of Science and Technology of China, Hefei, Anhui, China, 230031.         on the density estimate of the real data; however, it needs to
+                                             E-Mail: xiangnanhe@gmail.com.
+                                                                                                                           make assumptions about the underlying distribution of the
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, 2019                                                                        2
+
+data. An active learning-based approach [24] selects infor-       based methods, which are most relevant to our work. We
+mative samples from randomly generated data by a version          first review the classic outlier detection methods, followed
+of uncertainty sampling; however, due to the increasingly         by AGPO-based and GAN-based methods. More compre-
+complex data structures, there is no guarantee to achieve a       hensive literature review can be found in recent survey [10],
+consistently good performance.                                    [28].
+    In this paper, we firstly propose a novel outlier detection
+method based on the recent generative adversarial learning        2.1 Classic Outlier Detection Methods
+framework [25], which we call Single-Objective Generative         The most straightforward outlier detection method, model-
+Adversarial Active Learning (SO-GAAL). Specifically, it per-      based method, is to create a model for all samples, and
+forms a mini-max game between two adversarial compo-              then predict outliers as those having large deviations from
+nents — a generator and a discriminator, which can also be        the established profiles. For example, the Gaussian mix-
+considered as an active learning process in our models [26].      ture model (GMM) [11] fits the whole dataset to a mixed
+The generator, which takes randomly generated noises as           Gaussian distribution and evaluates the parameters through
+input, can directly generate informative potential outliers       the Expectation-Maximization [29] or a deep estimation
+that occur inside or close to the real data through the           network [12]. However, GMM needs to predetermine the
+guide of the discriminator. As a result, the discriminator        appropriate cluster type and number, which are crucial
+in SO-GAAL can identify outliers by describing a division         and extremely difficult. Although Parzen [17] can achieve
+boundary that separates the potential outliers from the real      good results regardless of the underlying distribution of
+data. However, the ultimate goal of generating informative        data, it requires large amounts of data and computing
+potential outliers is to provide a reasonable reference dis-      resources. The Attribute-wise Learning for Scoring Outliers
+tribution for the whole dataset. If all informative potential     [13] supposes that each attribute of normal examples can
+outliers occur inside or close to part of the real data as the    be predicted by the rest, while clustering-based detectors
+training progressed, which can be identified as the mode          [10], [14] assume each normal data point lies close to its
+collapse problem [27], SO-GAAL may obtain an erroneous            closest cluster. However, their performance may be limited
+detection result. Therefore, the stop node of training should     by simplified models that are unable to handle complex
+be determined when the potential outliers provide suffi-          data structures [12]. The reconstruction-based methods, e.g.,
+cient information, which is extremely difficult for SO-GAAL       PCA [15], [30], Matrix Factorization (MF) [31], [32] and deep
+without any prior information. To overcome this drawback          Auto-encoders [16], [33], map the instances to the output
+of SO-GAAL, we further propose a Multiple-Objective Gen-          through the compression and decompression, and identify
+erative Adversarial Active Learning (MO-GAAL), which              points with high reconstruction error as outliers. The main
+expands the network architecture from a single generator to       difference from PCA and MF is the greater power of auto-
+multiple generators with different objectives. This migrates      encoders in modeling complex data distributions [10], [34].
+the mode collapse problem by generating a mixture of              One-Class Support Vector Machine (OC-SVM) [35], [36]
+multiple reference distributions for the entire dataset.          does not make any assumptions about the data distribution.
+    We summarize the main contributions of this work as           It aims to find a hyperplane that can separate the vast
+follows:                                                          majority of data from the origin in the projected high-
+   • We approach outlier detection as a binary-classification     dimensional space. Overall, choosing a suitable model and
+     issue, which does not depend on assumptions about            parameters are the key to the above methods, which mainly
+     the normal data and requires less computing resources.       depend on the available expertise. Besides, most of initial
+     Based on that, we propose a new outlier detection            model-based detectors may be skewed by the anomalies in
+     algorithm, SO-GAAL, which employs generative adver-          a contaminated dataset.
+     sarial learning to directly generate informative potential       Another widely used outlier detection method,
+     outliers, solving the lack of information caused by the      proximity-based method, does not require any training or
+     ”curse of dimensionality”.                                   assumptions about the dataset. They are performed by
+   • We expand the network architecture of SO-GAAL from           measuring the rarity of the point, such as the distance
+     a single generator to multiple generators with different     to k -th nearest neighbor (k NN) [37] or the ratio of local
+     objectives (MO-GAAL) to prevent the single generator         reachability density (LOF) [18]. Moreover, to avoid the rele-
+     from falling into the mode collapsing problem. And           vant features being masked by a high portion of irrelevant
+     then, we perform a comprehensive evaluation of both          variables, Mao et al. [1] divide all the features into two parts,
+     local behaviors and overall performance of MO-GAAL.          while the fast angle-based outlier detection (FastABOD) [38]
+    The rest of this paper is organized as follows. In Section    quickly estimates the angular variation of each data object.
+2, a brief review of related works is provided. Section 3.1       For high-volume data streams, Salehi et al. [21] propose a
+approaches outlier detection as a classification issue, and       memory efficient incremental local outlier detection method
+the proposed models are described in Section 3.2. We report       to approximate the precision of incremental LOF within
+experiment results in Section 4 and the whole paper is            a limited memory. However, further efforts are needed to
+concluded in Section 5.                                           simultaneously handle all of the above issues, i.e., the high
+                                                                  computational costs and ”curse of dimensionality”.
+
+2   R ELATED W ORK                                                2.2 AGPO-based Outlier Detection Methods
+We briefly review previous work on outlier detection, with a      This type of algorithm first creates a labeled dataset by
+special focus on generative methods for outliers and GAN-         artificially generating potential outliers, and then trains a
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, 2019                                                                          3
+
+classifier for subsequent detection. They weakly depend            algorithm. The core idea is to replace the density level
+on the assumption of the data distribution, and good re-           detection with a classification process by sampling potential
+sults can be obtained with the randomly generated data.            outliers from a uniform reference distribution. However,
+However, as the number of dimensions increases, a limited          due to the sparsity of data in high-dimensional space, a lim-
+number of outliers cannot provide enough information for           ited number of potential outliers cannot provide sufficient
+subsequent detection. Therefore, some algorithms attempt           information to assist the classifier to separate outliers from
+to generate outliers based on the characteristics of the real      normal data effectively. Therefore, we then propose two
+data. For example, the one-class classification method [23]        Generative Adversarial Active Learning (GAAL) methods
+takes advantage of the probability density function of the         for outlier detection, which can be viewed as a combination
+real data to generate informative potential outliers. The          of the informative potential outlier generator and the outlier
+distribution-based artificial anomaly method [39] randomly         discriminator.
+changes one feature value of an instance to modify the
+non-uniform feature distribution of the original dataset to        3.1   Approaching Outlier Detection as A Classification
+a uniform reference distribution. Moreover, the One-Class          Given a data set X = [x1 , x2 , . . . , xn ] ∈ Rd×n with un-
+Random Forests (OCRF) [40] tackles this issue through the          observable labels Y = [y1 , y2 , . . . , yn ], where xi ∈ Rd
+ensemble learning strategy. Although it can appropriately          represents a data point. The label yi = 1 indicates the
+reduce both the dimension of feature space and the req-            normal data and yi = 0 for outlier. Our goal is to find a
+uisite number of potential outliers, it cannot address some        division boundary that can separate outliers from normal
+fundamental problems such as how to generate informative           data effectively. To describe this boundary, we construct a
+data directly. The Active-Outlier method (AO) [24] utilizes        scoring function ζ(x) ∈ (0, 1). The optimal boundary can
+the active learning [41] to select potential outliers with         be determined by minimizing the loss function Lζ of ζ(x),
+high uncertainty. However, due to the increasingly complex         which attempts to assign a score of 1 to normal data and 0
+data structures, such method is not guaranteed to have             to an outlier. Let co and cn be the misclassification costs of
+consistently good performance. Therefore, we propose a             outlier and normal respectively, the loss function Lζ can be
+GAAL-based method, which can directly generate informa-            defined as follows:
+tive potential outliers to assist the classifier in accurately                  n
+identifying outliers from normal data.                                       1X
+                                                                    Lζ = −         (cn yi log(ζ(xi ))+co (1−yi ) log(1−ζ(xi ))). (1)
+                                                                             n i=1
+
+2.3   GAN-based Outlier Detection Methods                              Now the question is how to find a optimal scoring
+                                                                   function ζ(x) that can minimize Lζ ? The difficulty lies in
+Generative adversarial networks (GAN) [25] can capture the
+                                                                   that there is no prior information about yi . To address this,
+deep representation of real data through a mini-max game
+                                                                   we consider inherent properties of outliers that they have
+process. And the representations learned by GAN and its
+                                                                   significantly different characteristics from normal data, and
+improved models can achieve state-of-the-art performance
+                                                                   the class distributions are extremely unbalanced between
+in a variety of applications, e.g., image synthesis, super-
+                                                                   outlier and normal data. Thus, we assume that outliers are
+resolution, visual sequence prediction and semantic image
+                                                                   not as concentrated as the normal data (shown in Fig.1),
+inpainting. Therefore, increasing attention in the field of out-
+                                                                   which is consistent with many previous researches [46].
+lier detection is focused on this emerging technique. Schlegl
+                                                                       Based on this perception, we introduce a uniform ref-
+et al. [8] propose a deep convolutional generative adversarial
+                                                                   erence distribution µ on Rd , and define the concentration
+network (AnoGAN) that evaluates the posterior probability
+                                                                   of x by the relative density ρ(x) with respect to µ. When
+of test samples generated by the same generative model to
+                                                                   the relative density ρ(x) is less than a reasonable threshold
+discover abnormal marker in medical images. Subsequently,
+                                                                   τ , it indicates the sample is an outlier, and vice versa.
+to reduce the computational complexity of remapping to the
+                                                                   Thus, the optimal scoring function ζ(x) should satisfy these
+latent vector, Zenati et al. [42] take advantage of the network
+                                                                   conditions as follows,
+structure of BiGAN [43] to jointly train the mapping from
+image to latent space and from latent space to image, while                              ζ(x|ρ(x) ≥ τ ) → 1,
+                                                                                                                                  (2)
+Akcay et al. [44] introduce a generator with an encoder-                                 ζ(x|ρ(x) ≤ τ ) → 0,
+decoder-encoder sub-networks (GANomaly). To address the            and for ∀x, it holds that
+non-convex of the underlying optimization, Deecke et al.
+[45] initialize multiple latent vectors from multiple areas                       ζ(x|ρ(x) ≥ τ ) ≥ ζ(x|ρ(x) ≤ τ ).                (3)
+in the latent space. However, they all consider GAN as a               However, the calculation of ρ(x) typically requires a
+feature extractor or re-constructor, which is quite different      large amount of computing resources. Therefore, we attempt
+from our models. Moreover, to deal with the mode collaps-          to replace the density level detection process with a clas-
+ing problem, for the GAN-based models, we also extend              sification. We generate n data points from the reference
+the model from a single generator (SO-GAAL) to multiple            distribution µ as the potential outliers (shown with grey
+generators with different objectives (MO-GAAL).                    dots in Fig.1(b)); and then introduce a classifier C(x) ∈ (0, 1)
+                                                                   to distinguish them from the original dataset X . The loss
+3     M ETHODOLOGY                                                 function LC of C(x) can be defined as follows,
+                                                                                 2n
+In this section, we first provide a straightforward derivation                1 X
+                                                                    LC = −          (yi log(C(xi )) + (1 − yi ) log(1 − C(xi ))), (4)
+to explain the rationality of AGPO-based outlier detection                   2n i=1
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, 2019                                                                                         4
+
+where yi is labeled as 1 or 0 when xi is drawn from X                              3.2 Generative Adversarial Active Learning for Outlier
+or µ, respectively. In order to minimize LC , the classifier                       Detection
+should output a higher value to original data having a
+                                                                                   3.2.1 Single-Objective      Generative    Adversarial    Active
+higher relative density ρ(x) with respect to µ, such as the
+                                                                                   Learning (SO-GAAL)
+data in the patch shown in Fig.1(c); and vice versa, such
+as the data in the patch shown in Fig.1(d). Thus, for any                          Generative adversarial networks can be viewed as a mini-
+positive number (e.g., τ ), we can make C(x) subject to the                        max game between a generator G and a discriminator D.
+following conditions by minimizing LC , which is what ζ(x)                         Specifically, the generator G attempts to generate the sample
+wants.                                                                             G(z; θg ) that is similar to the real data, where θg denotes the
+                            C(x|ρ(x) ≥ τ ) → 1,                                    parameter of G and z is the noise variable sampled from
+                                                                             (5)   a predefined distribution pz . The discriminator D(x; θd )
+                            C(x|ρ(x) ≤ τ ) → 0,                                    attempts to effectively estimate the probability that the data
+                                                                                   comes from the real data pdata or generated data G(z). The
+and for ∀x, it holds that                                                          optimization process can be formulated as:
+
+                 C(x|ρ(x) ≥ τ ) ≥ C(x|ρ(x) ≤ τ ).                            (6)
+                                                                                       min max V (D, G) =Ex∼pdata [log D(x)]
+                                                                                        θg   θd
+This means that when we minimize the loss function LC ,                                                                                         (7)
+                                                                                                             + Ez∼pz [log(1 − D(G(z)))].
+the optimal scoring function ζ(x) can be substituted by
+C(x), which does not depend on any assumptions about the                           In order to solve the lack of information caused by the
+normal data and requires less computing resources.                                 ”curse of dimensionality”, we apply the generative ad-
+                                                                                   versarial learning framework to outlier detection, which
+!                       !                                                          actually performs an active learning process in the proposed
+                                                                                   method SO-GAAL [26]. The network structure and detection
+                                                                                   process of SO-GAAL can be illustrated in Fig. 3, where
+                                                   #(%                             both generator G and discriminator D are multi-layer neural
+                                                              4*35$/
+                                                              12+/.,3
+                                                                                   network.
+                                                              )*+,-+.$/012+/.,3        In SO-GAAL, the generator G, which takes noise vari-
+                   "                       "
+        #$%                      #&%               #'%                             ables z as input, is used to generate potential outliers;
+                                                                                   while the discriminator D acts as the describer of division
+Fig. 1. Illustration of the AGPO-based outlier detection mechanism.                boundary, such as the classifier C(x) in Section 3.1. At the
+Normal examples are shown with blue dots, outliers with red ”x”, and
+generated potential outliers with grey dots.                                       early stage of training, the generator G may not synthesize
+                                                                                   a sufficient number of potential outliers (shown with grey
+    However, due to the absolute density ρ0 (x) of data points                     dots in Fig. 3) around the real data. This makes the discrim-
+that draw from µ converges to 0 with increasing dimension,                         inator D separate the generated data from real data by a
+a limited number of potential outliers cannot provide suf-                         rough boundary (shown with the red line). But, after several
+ficient information for the classifier. Therefore, the classifier                  iterations, the generator G gradually learns the generating
+C(x) may fail to describe a correct boundary in many cases,                        mechanism and synthesizes an increasing number of poten-
+such as the potential outliers are hard to approach the true                       tial outliers that occur inside or close to the real data. As a
+anomalies (shown in Fig.2(a) and 2(b)) or just gather around                       result, the discriminator D can accurately describe the divi-
+several normal samples (shown in Fig.2(c)). This implies                           sion boundary that encloses the concentrated normal data
+that we need to generate an exponential number of potential                        points. In other words, the generator G effectively improve
+outliers relative to the increasing dimension to evenly cover                      the accuracy of the discriminator D by generating informa-
+the whole sample space, which is unrealistic [40]. Moreover,                       tive potential outliers, which is actually an active learning
+potential outliers that are far from the real data have no                         process. Compared with the existing active learning-based
+effect on the description of the division boundary. Therefore,                     outlier detection method [24] that selects potential outliers
+we propose a novel strategy based on the recent generative                         from randomly generated data by a version of uncertainty
+adversarial learning framework [25] to directly generate                           sampling, SO-GAAL can generate valuable data points di-
+informative potential outlier that occurs inside or closes to                      rectly. In addition, due to the strong learning ability of
+the real data.                                                                     generative adversarial learning framework, the generator G
+                                                                                   can capture deep representations of complex data structures
+                                                                                   without any assumptions about the generation mechanisms,
+                                                                                   which is more likely to provide consistently good results.
+                                                          -",.'(                       However, the ultimate goal of generating informative
+                                                          *+#(&$,
+                                                          !"#$%#&'()*+#(&$,        potential outliers is to provide a reasonable reference dis-
+                                                          /",,$0#)1"+%2',3
+                                                          4%0",,$0#)1"+%2',3
+                                                                                   tribution for the real data. That is, to carve out the decision
+                                                                                   boundary accurately, it is necessary to ensure the relative
+         (a)                (b)              (c)                                   density level of the normal case ρ(x|y = 1) is greater than
+Fig. 2. Illustration of the detection performance of the classifier C(x) in        that of the outlier ρ(x|y = 0). Therefore, based on the
+three cross-sectional data drilled from high-dimensional datasets. The
+correct boundaries are shown with blue lines and incorrect boundaries
+                                                                                   perception of SO-GAAL, there are still two issues that need
+with red lines.                                                                    to be discussed.
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, 2019                                                                                              5
+
+                                                                x
+
+
+
+
+                                                                                    x                                           x
+                                                         3'*4-5*+*
+                                                                                        x                                           x
+                                                                                                                                                 *
+                                                                                                                                            6+')
+                                                                                            x                                           x
+                                                                                                                                                +/,(
+
+                                                                                                x                                           x
+
+
+                 !"#$!%                          6+')
+                                                  *+/,
+                                                    (
+                                                                                                                              7,8(5*)9-5'01)/#+/,(
+
+
+
+                                                             &'(')*+'5-5*+*
+                                  &'(')*+,)-&                                                         ./01)/2/(*+,)-.
+
+Fig. 3. The detection process of SO-GAAL based outlier detection algorithm. At the beginning of training, generator G cannot generate a sufficient
+number of potential outliers around the real data, which causes the discriminator D to describe a rough boundary. But, after several iterations, the
+generator G gradually learns the generation mechanism of real data based on the mini-max game between G and D, and generates an increasing
+number of informative potential outliers. As a result, the discriminator D can describe a correct boundary around the concentrated data points.
+
+
+
+               2.0
+
+
+               1.5
+
+
+               1.0
+
+
+               0.5
+
+
+               0.0
+                     0      100          200       300               400      500               600       700           800   900           1000
+                                                                     Number of Iterations
+Fig. 4. The optimization process of SO-GAAL based outlier detection. The generator loss is shown with the red line, discriminator loss with the blue
+line, and AUC with the yellow line. Gradient color in the top six pictures indicates the probability that the point is an outlier, and data points closer
+to the green area are more likely to be outliers. Due to all potential outliers occur inside or close to part of the real data, the accuracy of SO-GAAL
+drops dramatically when the mini-max game reaches the Nash equilibrium.
+
+    The first one is what kind of network structure should                          line in Fig. 4). The reason is that all informative potential
+be used for the generator G? If G adopts a random network                           outliers occur inside or close to part of the real data as the
+structure with s-shaped activation functions and default                            training progressed, which can be identified as the mode
+initial weights, the generated data may be aggregated to the                        collapse problem, causing some normal examples to con-
+center of the sample space (i.e., all output values are around                      front a higher-density reference distribution than outliers.
+0.5); and then moved to the area where the real data are                            Therefore, to prevent this problem, the stop node of training
+located in the form of a cluster, which is inconsistent with                        should be determined when the potential outliers are able
+the above optimization process of SO-GAAL. To address                               to provide sufficient information. However, it is extremely
+this, we apply the network structure of d∗d∗. . .∗d (as shown                       difficult for SO-GAAL because there is no prior information
+in Fig. 3) with a rectified linear (ReLU) activation function                       during the training stage. To provide an advanced solution,
+and a random orthogonal initial weights to the generator                            we then expand the structure from a single generator to
+G in SO-GAAL. Through the guidance of discriminator D,                              multiple generators with different objectives (MO-GAAL)
+the generated potential outliers can be gradually aggregated                        to generate a mixture of multiple reference distributions for
+from the entire sample space to the area where the real data                        the whole dataset.
+are located to create a reasonable reference distribution.
+    The second one is how many iterations are required                              3.2.2 Multiple-Objective Generative Adversarial Active
+to guarantee the discriminator D describes the boundary                             Learning (MO-GAAL)
+accurately? To shed some lights on this question, we plot                           In order to ensure the effectiveness of outlier detection
+the optimization process of SO-GAAL in Fig. 4. Due to the                           method, we also propose a multiple-objective generative
+low-dimensional, all outliers can be recognized (AUC=1)                             adversarial active learning (MO-GAAL) algorithm, which
+when the generated potential outliers are still scattered in                        consists of k sub-generators G1:k and a discriminator D, as
+the sample space during the first 100 iterations. One can find                      shown in Fig. 5. The central idea of MO-GAAL is to get each
+that the discriminator D provides a promising description                           sub-generator Gi actively learns the generation mechanism
+of the division boundary in the subsequent 100 iterations                           of the data x in the specific real data subset Xi , where the
+(shown in the third picture in Fig. 4). However, as the                             data x ∈ Xi are similar to each other and ∪ki=1 Xi = X .
+mini-max game reaches a Nash equilibrium, the accuracy                              Thus, as the training progresses, the integration of different
+of SO-GAAL drops dramatically (shown with the yellow                                numbers of potential outliers generated by different sub-
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, 2019                                                                                                                                                                   6
+
+                                                                                                       x
+                                                                                           x
+                                                                                               xx
+                                                       '
+                                                                                           x                                                                                                       x
+                                                   )*6+
+              /012/3                                                                                                                 x
+                                               5*&(
+                                                                                                                                                                                       x
+                                                                                                                         x
+                                                                                                                                                                                       x
+                                                                                           8&)9,7)*)                     x                                                                              x
+                                                                                                                                                                                                                    5*&(
+                                                                                                                                          x                                                x
+                            !"#$%&'&()*+(,-.               -.,2/3
+                                                                                                                             x
+                                                                                                                                                                                           x                         )*6+
+                                                                                                                             x                                                                              x          '
+                                                                                                                                              x                                                x
+                                                                                                                                 x
+                                                                                                                                                                                               x                x
+                                                                                                                                 x                x                                                x
+                                                                                                                                     x                                                                 xx
+                                                                                                                                         xx                                                        x
+                                                                                                                                     x
+                                                                                       )
+                                                                    5'*&%()*6+'   5*&(
+              /012/3                           5*&(                                 *6+'                                                                      :6;<(6=6')*+(,:              >+"'7)(?,7&;<(61*6+'
+                                                 )*6+
+                                                   '
+
+
+                            !"#$%&'&()*+(,-4               -4,2/3                                   -&'&()*&7,7)*)
+
+Fig. 5. The detection process of MO-GAAL based outlier detection algorithm. MO-GAAL consists of k sub-generators G1:k , which generate different
+reference distributions for different data subsets. Although there are two clusters in the dataset, integrated potential outliers still provide a reasonable
+reference distribution to assist the discriminator D in describing a correct boundary around the concentrated data points.
+
+
+
+
+                  5.0
+
+                  4.0
+
+                  3.0
+
+                  2.0
+
+                  1.0
+
+                  0.0
+                        0       100       200              300        400         500                600      700      800           900              1000   1100     1200      1300   1400             1500
+
+                                                                                                     Number of Iterations
+Fig. 6. The optimization process of MO-GAAL based outlier detection. The meaning of the color is the same as the Fig. 4, and the sub-generator
+loss is shown with a green line. Due to the comprehensive reference distribution is generated by ten sub-generators, the detection accuracy of
+MO-GAAL still remains at a relatively high level.
+
+generators Gi can provide a reasonable reference distribu-                                                              of potential outliers for each subset. However, in an extreme
+tion.                                                                                                                   situation, the integrated sub-generator Gi may create an
+    More specifically, in order for each sub-generator Gi to                                                            identical distribution with the real data X , causing the
+learn the generation mechanism of the data x ∈ Xi , we                                                                  discriminator D to assign a score of 0.5 to all x. Therefore,
+first divide the real data equally into k subsets based on                                                              to create a reasonable reference distribution, more potential
+their similar output values D(x). Due to the inverse of                                                                 outliers need to be generated for the less concentrated sub-
+space smooth transitions, i.e., samples with similar outputs                                                            set. Fig. 6 describes the optimization process of MO-GAAL
+are more likely to be similar to each other in the sample                                                               on a multiple clusters dataset, and the overall algorithm is
+space, the data in each subset is likely to be similar to each                                                          presented in Algorithm 1.
+other. Then the generator gradually learns the generation                                                                   From Fig. 6, the performance and optimization process
+mechanism of the data x ∈ Xi by making the generated                                                                    of MO-GAAL is basically the same as that of SO-GAAL in
+potential outliers output similar values to them. That is, the                                                          the early iterations. But when the mini-max game reaches a
+target value of sub-generator D(Gi (z)) is converted from 1                                                             Nash equilibrium (during 300 to 400 iterations), the outlier
+to Ti , where Ti is a representative statistic of the data subset                                                       detection accuracy of MO-GAAL still remains at a relatively
+Xi , such as the minimum of output values D(Xi ). While the                                                             high level on the multiple clusters dataset. It proves that the
+discriminator still attempts to estimate the probability that                                                           integrated sub-generators G1:k generate a reasonable refer-
+a sample came from the real data. The overall optimization                                                              ence distributions for the whole real data. Finally, we stop
+framework is formulated as follows:                                                                                     training the sub-generator Gi when the Nash equilibrium
+                          n                                                                                             is reached, and then continue training the discriminator D
+                       1 X
+          max VD = [         log(D(x(j) ))                                                                              until its parameters are barely updated.
+           θd         2n j=1
+                         k X ni
+                                                              (8)
+                        X                         (j)                                                                   4        E XPERIMENTS
+                      +         log(1 − D(Gi (zi )))],
+                                                                                                                        4.1          Experimental Settings
+                                      i=1 j=1
+                                         n                                                                              In this section, we describe the datasets, evaluation metrics,
+                                    1X                   (j)                                                            baseline methods, and parameter settings for subsequent
+          min VGi = −                     [Ti log(D(Gi (zi )))
+           θ gi                     n j=1                                                                        (9)    experiments.
+                                                           (j)
+                                + (1 − Ti ) log(1 − D(Gi (zi )))],                                                      4.1.1 Datasets
+where ni is the number of potential outliers generated by i-                                                            To test the proposed algorithms, we conduct experiments
+th sub-generator. It is plausible to generate the same number                                                           on both synthetic and real-world datasets. The synthetic
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, 2019                                                                                          7
+
+Algorithm 1 MO-GAAL                                                 of synthetic datasets are listed in Table 1.
+Input: real data, X ; noise distribution, pz ; mini-batch size,
+    m; mini-batch size of i-th sub-generator, mi ; k
+Output: outlier score, OS(x)
+ 1: Initialize sub-generators, Gi:k ; discriminator, D
+ 2: repeat
+ 3:     Sample m samples {x(1) , . . . , x(m) } from X
+ 4:     for i = 1 to k do
+                                (1)         (m )                            (a)                 (b)               (c)               (d)
+ 5:         Sample mi noises {zi , . . . , zi i } from pz
+ 6:     end for                                                     Fig. 7. Illustration of four synthetic datasets. (a) single-cluster dataset,
+                                                                    (b) multi-cluster dataset, (c) multi-density dataset, and (d) multi-shaped
+ 7:     Update D by ascending its stochastic gradient:              dataset.
+
+            1 X
+                m                  k Xmi                                As for the real-world datasets, 10 benchmark datasets1
+                                                         (j)
+                                  X
+      ∇θ d    [   log(D(x(j) )) +         log(1 − D(Gi (zi )))]     that often appear in the outlier detection literature and
+           2m j=1                 i=1 j=1                           4 high-dimensional datasets2 (d ≥ 100) are used in the
+ 8:    Divide X equally into k subsets Xi based on their            following experiments. In addition, due to most datasets
+    similar D(x)                                                    are used for classification and clustering, we adopt the
+ 9:    for i = 1 to k do                                            procedure described in [47] to convert the datasets to outlier
+10:        Ti = minx∈Xi (D(x))                                      evaluation datasets. Details of the 14 real-world datasets are
+                             (1)          (m)                       shown in Table 2.
+11:        Sample m noises {zi , . . . , zi } from pz
+                                                                                                   TABLE 1
+12:        Update Gi by descending its stochastic gradient:                  Description of the Four Groups of Synthetic Datasets
+                   m
+                1 X                 (j)                               Synthetic       Cluster            Data Di-     Irrelev-        Data
+        ∇θg −        [Ti log(D(Gi (zi )))+(1 − Ti )                   Datasets        Type               mension      ant Ratio       Volume
+                m j=1                                                                 Single-cluster
+                                                        (j)           Cluster         Multi-cluster
+                                       log(1 − D(Gi (zi )))]                                             2            0%              1,000
+                                                                      Type            Multi-density
+                                                                                      Multi-shaped
+13:    end for                                                        Data            Multi-density      10-100       0%              1,000
+14: until the mini-max game reaches a Nash equilibrium                Dimension
+15: repeat                                                            Irrelevant      Multi-density      10           0%- 90%         1,000
+                                                                      Ratio
+16:    Sample m samples {x(1) , . . . , x(m) } from X                 Data            Multi-density      10           0%              1,000-
+17:    for i = 1 to k do                                              Volume                                                          100,000
+                              (1)          (m )
+18:        Sample mi noises {zi , . . . , zi i } from pz
+19:    end for                                                                                       TABLE 2
+                                                                                     Description of the Real-World Datasets
+20:    Update D by ascending its stochastic gradient:
+                                                                                      Description                   Number
+                m                  k Xmi                             Dataset                                                                  Dim.
+                                                                                      (Normal vs. Outlier)          Normal      Outlier
+            1 X                   X                      (j)
+      ∇θ d    [   log(D(x(j) )) +         log(1 − D(Gi (zi )))]      Pima             Healthy vs. Diabetes          500         268           8
+           2m j=1                 i=1 j=1                            Shuttle          Class’1’ vs. Others           1000        13            9
+                                                                     Stamps           Genuine vs. Forged            309         31            9
+21: until the parameters of D are barely updated                     PageBlocks       Text vs. Non-text             4883        510           10
+22: OS(x) = 1 − D(x)                                                 PenDigits        Other vs. Class’4’            9868        20            16
+                                                                     Annthyroid       Healthy vs. Hypothy-          6595        534           21
+23: return OS(x)                                                                      roidism
+                                                                     Waveform         Others vs. Class’0’           3343        100           21
+                                                                     WDBC             benign vs. malignant          357         10            30
+                                                                     Ionosphere       Class’g’ vs. Class’b’         225         126           32
+datasets are generated by considering four different aspects.        SpamBase         Spam vs. Non-spam             2528        1679          57
+The first one is cluster type, which is used to evaluate the         APS              negative vs. positive         59000       1000          170
+                                                                     Arrhythmia       Healthy vs. Arrhythmia        244         206           259
+accuracy of outlier detectors on a group of datasets with dif-       HAR              walking vs. Others            2830        30            561
+ferent cluster types, e.g., single-cluster, multi-cluster, multi-    p53Mutant        inactive vs. active           16449       143           5408
+density and multi-shaped (shown in Fig. 7(a)-Fig. 7(d)).
+The middle two aspects, data dimension and irrelevant               4.1.2 Evaluation Measures
+variable ratio, are designed to explore their influence on the
+                                                                    We use the ROC curve and corresponding AUC to measure
+performance of different algorithms. Therefore, for a certain
+                                                                    the detection accuracy, which are insensitive to the number
+cluster type (e.g., multi-density) and a fixed number of
+                                                                    of outliers. In addition, to fairly compare multiple models on
+examples, we generate two groups of datasets with varying
+                                                                    multiple datasets, we perform a non-parametric statistical
+data dimension (from 10 to 100) and irrelevant ratio (from
+                                                                    test (i.e., Friedman). The null hypothesis of Friedman is that
+0% to 90%), respectively. The last one is data volume, which        there is no significant difference between all algorithms.
+is used to assess the computational complexity of different
+                                                                    If the statistic exceeds the critical value of the specified
+outlier detection methods. In particular, we generate 19
+                                                                    significance level, the null hypothesis is rejected, and a post-
+datasets with different numbers of samples (from 1, 000 to
+                                                                    hoc test (i.e., Nemenyi) is carried out.
+100, 000) when other aspects are determined. Note that all
+outliers are sampled from a Uniform distribution with the             1. http://www.dbs.ifi.lmu.de/research/outlier-evaluation/
+same percentage of anomalies (2%). Details of the four types          2. http://archive.ics.uci.edu/ml
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, 2019                                                                                                                                          8
+
+4.1.3 State-of-the-art Outlier Detection Methods and Pa-             equal to 1). However, as clusters get more complex, the
+rameterization                                                       performance of GMM, k -means and OC-SVM drops. To
+We compare MO-GAAL with nine representative outlier                  clarify the details, we provide a visual representation of the
+detection algorithms. They can be divided into seven cate-           division boundary described by MO-GAAL and the three
+gories: (i) two density-based methods, LOF [18] and KDEOS            methods (shown in Fig. 9). The correct numbers of clusters
+[38]; (ii) two density estimators, GMM [11] and Parzen               (i.e., k = 1, 4, 3, 5, respectively) are used by GMM and k -
+[17]; (iii) a typical distance-based approach, k NN [37];            means. However, due to the assumptions of GMM and k -
+(iv) an angle-based model, FastABOD [38]; (v) a cluster-             means cannot be satisfied by the multi-shaped dataset, they
+based model, k -means; (vi) a popular one-class classification       describe the wrong division boundaries. Although OC-SVM
+model, OC-SVM [35] and (vii) the Active-Outlier detection            can characterize a complex boundary, it may be more sus-
+model, AO [24]. In addition, AGPO and SO-GAAL are                    ceptible to outliers in face of complex cluster type because
+also compared on real-world datasets to demonstrate the              there is only one global kernel width. Whereas MO-GAAL
+necessity of using multiple generators with different ob-            and other algorithms that explicitly or implicitly follow the
+jectives. The implementation of our methods is based on              assumption of outlier is non-concentrated have significant
+Keras3 . The outlier detection toolbox4 is used to evaluate the      advantages in handling above problems.
+performance of Parzen and AO, and all remaining outlier
+methods are implemented on a common outlier detection                                 !"#$%&'(%)*+&, -)%+"'(%)*+&,
+
+framework ELKI5 .                                                            !#+
+                                                                                      -)%+"'.&#*"+/ -)%+"'*012&.
+
+
+    In order to arrive at a convincing conclusion, the op-                         !
+                                                                                   !
+                                                                                   !
+                                                                                             !
+                                                                                             !
+                                                                                             "#$$%(             "#$$%%
+                                                                                                                                            !
+                                                                                                                                            "#$$$%
+                                                                                                                                            "#$$('
+                                                                              !
+                                                                                   !
+
+
+timal parameters of competing methods are searched in a                                                                   "#&&"'                     "#%!'+
+                                                                             "#%
+                                                                                                      "#'$(*
+                                                                                                                         "#&)))
+range of values. For k NN, FastABOD, LOF and KDEOS,
+                                                                       AUC                                                                                       AUC
+                                                                                                                                   "#))+!
+since their performance will be dramatically affected by                     "#'
+
+
+the size of neighborhood         nset,
+                                      we tune it in the range of            "#(
+
+{2, 4, 6, 8, 10, 20, 30, . . . , 100  }, where n is the number of            "#+
+
+data points. Similar setting applies to Parzen. For the num-                  "
+ber of clusters in k -means and GMM, we adjust it from                           &,-./     .00               /12340 5206,73
+
+                   n                                                                          Algorithm                                                                     Data Dimension
+1 to max (10, 100      ). The OC-SVM is computed using five
+different kernel functions, and the number of learners of the          (a) Results on cluster type datasets                                                   (b) Results on data dimension datasets
+AO is selected from 10 to 100. For our proposed algorithms,
+we use a relatively stringent parameter setting: (i) one
+generator against one discriminator for SO-GAAL, and ten
+sub-generators against one discriminator for MO-GAAL; (ii)
+a three-layer neural network (d ∗ d ∗ d) for each   √ generator,
+and single hidden layer neural network (d ∗ n ∗ 1) for the                                                                                                     Time (ms)
+                                                                       AUC
+discriminator; (iii) the Orthogonal initializer for generator,
+and the Variance-Scaling initializer for discriminator; (iv)
+the Sigmoid activation function for the output layer of dis-
+criminator, and ReLU for the remaining layers; (v) the SGD
+optimizer with the learning rate of 0.0001 for generator, and                              Irrelevant Ratio                                                                  Data Volume
+
+0.01 for discriminator (except p53Mutant); (vi) a mini-batch         (c) Results on irrelevant ratio datasets (d) Results on data volume datasets
+size m = min (500, n) for training; and (vii) stop training
+                                                                     Fig. 8. The experimental results on four types of synthetic datasets.
+generator when the downward trend of its loss tends to be            7ALGO represents seven algorithms (MO-GAAL, AO, kNN, FastABOD,
+slow.                                                                LOF, PARZEN and KDEOS) that have the similar results on cluster type
+                                                                     datasets. Some prior algorithms (e.g., FastABOD, LOF, KDEOS and
+                                                                     Parzen) do not scale to large data volume datasets since of the ”out-
+4.2     Experimental Results                                         of-memory”.
+
+In this section, we present results with the aim of (i) giving           From the perspective of dimensions and irrelevant vari-
+some insights into their local performance (such as flexi-           ables, the effects of ”curse of dimensionality” are illus-
+bility, noise immunity and computational complexity), and            trated in Fig. 8(b) and Fig. 8(c), respectively. When the
+(ii) demonstrating the global performance of MO-GAAL on              all variables are correlated, all models can achieve a de-
+real-world datasets.                                                 sirable result (AUC is equal to 1) as shown in Fig. 8(b).
+                                                                     Although a slight concentration effect exists on the distance
+4.2.1    Experiments on Synthetic Datasets                           measure between near and far neighbors, all methods can
+                                                                     obtain an accurate ranking of outlier scores more easily
+Experimental results of the proposed MO-GAAL and nine
+                                                                     and steadily with the increasing dimension. This is be-
+competitors on cluster type datasets are shown in Fig. 8(a).
+                                                                     cause the added relevant variable has significantly differ-
+It can be seen that almost all algorithms can obtain good
+                                                                     ent behaviors between outliers and normal data, which
+results on the single-cluster dataset (AUC is approximately
+                                                                     contribute to the outlier identification by providing more
+  3. https://keras.io/                                               discriminative information. However, in the case of a fixed
+  4. https://bitbucket.org/gokererdogan/outlier-detection-toolbox/   dimension, the performance of all algorithms decreases as
+  5. https://elki-project.github.io/                                 the ratio of irrelevant variable increases, as shown in Fig.
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, 2019                                                                                9
+
+                                                                           fatal flaw with increasing computing power. And the com-
+                                                                           puting requirement of MO-GAAL increases linearly with
+                                                                           the increasing n on a large dataset, which is completely
+                                                                           acceptable.
+
+                                                                           4.2.2   Experiments on Real-World Datasets
+                                                                           Experimental results on real-world datasets are shown in
+                                                                           Table 3. For each dataset, the best result is highlighted in
+                                                                           bold. MO-GAAL achieves the highest accuracy on six of the
+                                                                           fourteen datasets. Especially as the number of dimensions
+                                                                           increases, superior results are more easily obtained by MO-
+                                                                           GAAL. But it is not enough to just compare the number of
+                                                                           optimal results. In order to comprehensively compare these
+                                                                           methods on multiple datasets, we introduce the Friedman
+                                                                           test presented in Section 4.1.2.
+                                                                               The null hypothesis of Friedman test assumes that there
+   !"#$%&'(%)*&
+                   -..         /01&,2$     3!045.       .30-667            is no significantly different between all comparison algo-
+     +,%,$&%                                                                                                            1 PN      j
+Fig. 9. Illustration of the division boundary described by GMM, k-means,   rithms. That is, the average ranks Rj = N         i=1 ri of k
+OC-SVM and MO-GAAL. GMM and k-means are executed with the                  algorithms on N datasets should be similar to each other,
+correct number of clusters (i.e., k = 1, 4, 3, 5, respectively), and OC-            j
+                                                                           where ri is the ranking of j -th algorithm on i-th dataset.
+SVM uses the best performing kernel width within a certain range. MO-
+GAAL follows the parameter setting presented in Section 4.1.3 (i.e.,
+                                                                           If an algorithm did not yield a result on a dataset due
+ten sub-generators against one discriminator). The meaning of color        to its size, that dataset (e.g., APS and p53Mutant) is not
+is same as that of Fig. 4. Also note that color comparisons only make      taken into account in computing the average ranks. For each
+sense in their own pictures and OC-SVM is treated as a hard classifier.    competitor, the average rank is provided in the last row
+8(c). And the methods involving the calculation of distance                of Table 3. Friedman statistic is calculated as follows, and
+are decreased more rapidly, e.g., k -means, k NN, FastABOD,                its distribution is according to χ2F with k − 1 degrees of
+LOF and KDEOS. This is because the relevant attributes                     freedom.
+                                                                                                                     
+are masked by plenty of irrelevant variables in neighbor                                           k
+                                                                                         12N X 2 k(k + 1)2 
+                                                                                  2
+query results, i.e., the irrelevant variable is at core of the                  χF =                  R −               = 47.68     (10)
+                                                                                       k(k + 1) j=1 j           4
+”curse of dimensionality” problem for outlier detection [20].
+Whereas AGPO-based outlier detection algorithms (such as
+                                                                               The critical value of χ2F (11) for 95% confidence is 19.68,
+MO-GAAL and AO), which evaluate the concentration of
+                                                                           which indicates the null hypothesis is rejected. Then the
+samples without distance calculation and shape restrictions,
+                                                                           Nemenyi test is carried out to evaluate whether the perfor-
+show obvious advantages in countering noise caused by
+                                                                           mance of the two algorithms is significantly different. The
+irrelevant variables.
+                                                                           critical difference (CD) of Nemenyi is as follow,
+     Fig. 8(d) displays the runtime of different outlier detec-                                            s
+tion algorithms on data volume datasets. Obviously, MO-
+                                                                                                             k(k + 1)
+GAAL has no advantage for small datasets (shown with                                            CD = qα               .               (11)
+the red line). The reason is that MO-GAAL needs to per-                                                         6N
+form a number of iterations to optimize the discriminator                       The critical value of qα for α = 0.1 and α = 0.05 are
+and sub-generators, and calculate the target Ti of the sub-                3.030 and 3.268, and the corresponding CD are 4.460 and
+generator Gi during each iteration. As a result, when n                    4.810. Afterwards, we compare the average ranks of two
+is small, the number of basic operations of MO-GAAL                        algorithms, and display some significant results of Nemenyi
+T (n) = c1 Im + c2 In  n2 , where c1 and c2 are constants                 test in Table 4. Note that the signs ’+’ and ’++’ indicate the
+in the case of fixed dimension, and I represents the number                column algorithm is better than the row algorithm with 90%
+of mini-batch iterations. However, since I mainly depends                  and 95% confidence, the signs ’−’ and ’−−’ are opposite.
+on the characteristics of data distribution rather than n,                      From Table 4, several observations can be obtained: (i)
+T (n) increases linearly as the amount of data increases                   MO-GAAL, which gets the best average rank, is statistically
+(i.e., O(n)). Therefore, compare to other algorithms (e.g.,                better than the other three competitors (i.e., AO, KDEOS and
+k NN, FastABOD, LOF, KDEOS and OC-SVM) that require                        OC-SVM) at the 95% confidence level, and is better than
+O(n2 ) distance computations and O(n2 ) space complexity,                  GMM at the 90% confidence level. From this local perspec-
+the computational advantages of MO-GAAL will begin to                      tive, MO-GAAL can be regarded as a winner. In particular,
+emerge when n > c2 I . As for the other model-based                        MO-GAAL, which directly generates informative potential
+algorithms (e.g., GMM, k -means and AO), due to their as-                  outliers, shows a clear advantage over AO, which selects
+sumptions and detection mechanisms, they have significant                  informative potential outliers by a version of uncertainty
+computational advantages for all datasets.                                 sampling. (ii) There is no significant difference between
+     Overall, compared with the nine representative algo-                  MO-GAAL and the other five outlier detection algorithms
+rithms, MO-GAAL is effective to handle dataset with vari-                  (i.e., k NN, LOF, FastABOD, Parzen and k -means). However,
+ous cluster types or high irrelevant variable ratio. Although              their results may vary widely depending on the parameters
+its runtime has no advantage for small datasets, it is not a               (as shown in Fig. 10), and the best result may not always be
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, 2019                                                                                             10
+
+                                                                     TABLE 3
+                                   Experimental Results of Outlier Detection Algorithms on Real-World Datasets
+                       MO-      SO-
+       Dataset                            AGPO       AO      kNN      FastABOD         LOF     KDEOS      GMM       Parzen     OC-SVM       k-means
+                       GAAL     GAAL
+       Pima            0.758    0.669     0.588      0.575   0.731    0.758            0.665   0.537      0.674     0.729      0.569        0.681
+       Shuttle         0.907    0.902     0.273      0.701   0.989    0.838            0.989   0.812      0.964     0.970      0.672        0.969
+       Stamps          0.908    0.654     0.922      0.791   0.901    0.733            0.740   0.546      0.856     0.896      0.705        0.877
+       PageBlocks      0.903    0.821     0.627      0.796   0.888    0.692            0.926   0.572      0.915     0.889      0.798        0.921
+       PenDigits       0.976    0.934     0.810      0.768   0.985    0.961            0.926   0.514      0.808     0.969      0.365        0.977
+       Annthyroid      0.699    0.607     0.465      0.586   0.649    0.623            0.674   0.604      0.546     0.586      0.560        0.595
+       Waveform        0.836    0.841     0.819      0.587   0.779    0.677            0.753   0.668      0.573     0.795      0.582        0.744
+       WDBC            0.964    0.033     0.947      0.946   0.923    0.939            0.912   0.553      0.908     0.938      0.025        0.919
+       Ionosphere      0.874    0.732     0.789      0.786   0.927    0.911            0.904   0.655      0.922     0.912      0.752        0.929
+       SpamBase        0.627    0.380     0.616      0.599   0.574    0.432            0.503   0.571      0.549     0.599      0.590        0.578
+       APS             0.966    0.947     0.740      0.872   0.977    na               0.865   0.785      0.790     na         0.537        0.972
+       Arrhythmia      0.751    0.729     0.743      0.636   0.751    0.742            0.737   0.539      0.473     0.751      0.707        0.746
+       HAR             0.972    0.971     0.882      0.842   0.964    0.442            0.965   0.647      0.012     0.962      0.976        0.969
+       p53Mutant       0.727    0.714     0.565      na      0.698    na               0.616   0.500      na        na         na           0.710
+       Average Ranks   2.58     7.42      6.83       8.17    3.67     6.83             5.83    10.17      7.17      4.50       9.33         4.83
+
+                              TABLE 4                        and the learning ability of neural networks (includes hidden
+ Comparison Results of Outlier Detection Algorithms by Nemenyi Test
+                                                             layers and the number of hidden layer neurons), different
+  Algorithm   MO- SO- AO     kNN KDEOS GMM Parzen OC-    k-  models may reach their peak performance by different
+              GAAL GAAL                            SVM means
+                                                             selection strategies. Therefore, this section focuses on the
+  MO-GAAL     =    −− −−          −−     −         −−
+  SO-GAAL     ++ =                                           robustness test of network structure.
+  AO          ++        =    +                                   As we introduced in Section 3, the number of sub-
+  kNN                   −    =    −−               −−        generators k is the key to improving performance from SO-
+  KDEOS       ++             ++ =             ++         ++
+  GMM         +                          =
+                                                             GAAL to MO-GAAL and thus tuning such hyper-parameter
+  Parzen                          −−          =    −−        is one of our major concerns. We set k in the range of 1 to
+  OC-SVM      ++             ++               ++ =       +   25, and the results of MO-GAAL with different k on the
+  k-means                         −−               −     =   real-world datasets are shown in Fig. 11(a). When there is
+                                                             only a single generator in the model, which is exactly the
+guaranteed. Whereas, in most cases, MO-GAAL can achieve SO-GAAL, the average result of the model is significantly
+a good result (shown with the bold red line in Fig. 10). lower than other models with multiple sub-generators since
+(iii) MO-GAAL is better than SO-GAAL at the 95% con- of the mode collapse problem. And then, as k increases, the
+fidence level. Although SO-GAAL outperforms MO-GAAL performance of the model increases from 0.7 to 0.84 and
+on Waveform (see Table 3), it does not perform well on some remains stable when k reaches a certain size. That is, MO-
+other datasets. It depends on whether the generator stops GAAL is not sensitive to large k .
+training before falling into the mode collapsing problem.
+This demonstrates the necessity of multiple generators with
+different objectives, which can provide more friendly and
+stable results.
+
+
+                                                                                 AUC                                 AUC
+
+
+
+
+ AUC
+
+                                                                                               (a)                                 (b)
+
+                                                                              Fig. 11. Experimental results of different network structures on real-
+                                                                              world datasets. Vertical axis represents the average result of a particular
+                                                                              network structure on all above real-world datasets.
+Fig. 10. Performance fluctuations of different outlier detectors with dif-
+ferent parameters. The fluctuations are demonstrated by the mean and              As for the learning ability of neural networks, we adjust
+standard deviation of all experimental results.                               the number of layers of the generator (from 2 to 7) and the
+                                                                              number
+                                                                              √          of hidden layer neurons of the discriminator (from
+                                                                                n      √
+                                                                               2   to 3   n), respectively. The results are shown in Fig. 11(b),
+4.3       Robustness Experiment on Network Structure                          where V1 − V7 represent the parameter variation of G or
+GAAL-based outlier detection involves several hyper-                          D. It can be seen that the 2-layer generator (shown with
+parameters, such as the number of sub-generators and hid-                     the red line) achieves a slightly worse detection capability
+den layer neurons, hidden layers, activation function, initial-               because the insufficient generator cannot generate enough
+izer, and optimizer. Among them, some hyper-parameters                        informative potential outliers. And excessive hidden layers
+have no material impact on the results, and some have been                    (e.g., 7-layer generator) may also have a slight impact on
+carefully researched. As for the number of sub-generators                     model performance due to the relatively weak discrimina-
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, 2019                                                                                           11
+
+tor. As regards the discriminator (shown with the blue line),                [6]  H. Soleimani and D. J. Miller, “Atd: Anomalous topic discovery
+when its hidden layer has a small number of neurons, the                          in high dimensional discrete data,” IEEE Transactions on Knowledge
+                                                                                  and Data Engineering, vol. 28, no. 9, pp. 2267–2280, 2016.
+performance slightly lower than other models with enough                     [7] Y. Q. Miao, A. K. Farahat, and M. S. Kamel, “Locally adaptive
+neurons since of the under-fitting. That is, MO-GAAL is                           density ratio for detecting novelty in twitter streams,” in WWW:
+robust as long as the network structure of generator and                          International World Wide Web Conference, 2015, pp. 799–804.
+discriminator changes within a reasonable range.                             [8] T. Schlegl, P. Seebck, S. M. Waldstein, U. Schmidt-Erfurth, and
+                                                                                  G. Langs, “Unsupervised anomaly detection with generative ad-
+                                                                                  versarial networks to guide marker discovery,” in International
+5     C ONCLUSIONS AND F UTURE W ORKS                                             Conference on Information Processing in Medical Imaging, 2017, pp.
+                                                                                  146–157.
+This paper proposes a novel outlier detection algorithm SO-                  [9] L. Zhang, X. Li, H. Liu, J. Mei, G. Hu, J. Zhao, Y. Zou, B. Xie,
+GAAL, which can directly generate informative potential                           and G. Xie, “Probabilistic-mismatch anomaly detection: Do ones
+                                                                                  medications match with the diagnoses,” in IEEE International
+outliers, to solve the lack of information caused by the                          Conference on Data Mining, 2016, pp. 659–668.
+curse of dimensionality. Moreover, we expand the structure                   [10] C. C. Aggarwal, Outlier Analysis. Springer International Publish-
+of GAAL from a single generator (SO-GAAL) to multiple                             ing, 2017.
+generators with different objectives (MO-GAAL) to prevent                    [11] X. Yang, L. J. Latecki, and D. Pokrajac, “Outlier detection with
+                                                                                  globally optimal exemplar-based gmm,” in SIAM International
+the generator from falling into the mode collapsing problem.                      Conference on Data Mining, 2009, pp. 145–154.
+Compared to several state-of-the-art outlier detection meth-                 [12] M. R. M. W. C. C. L. D. C. Bo Zong, Qi Song and H. Chen, “Deep
+ods, MO-GAAL achieves the best average ranking on the                             autoencoding gaussian mixture model for unsupervised anomaly
+real-world datasets, and shows strong robustness to varying                       detection,” in International Conference on Learning Representations,
+                                                                                  2018.
+parameters. Besides, MO-GAAL can easily handle various                       [13] H. Paulheim and R. Meusel, “A decomposition of the outlier
+cluster types and high irrelevant variable ratio, which can be                    detection problem into a set of supervised learning problems,”
+illustrated by experiment results on the synthetic datasets.                      Machine Learning, vol. 100, no. 2-3, pp. 509–531, 2015.
+Although its runtime has no advantage for small datasets, it                 [14] E. Manzoor, S. M. Milajerdi, and L. Akoglu, “Fast memory-efficient
+                                                                                  anomaly detection in streaming heterogeneous graphs,” in ACM
+is not a fatal flaw with increasing computing power. More-                        SIGKDD International Conference on Knowledge Discovery and Data
+over, the computing requirement of MO-GAAL increases                              Mining, 2016, pp. 1035–1044.
+linearly with the data size, which is completely acceptable.                 [15] C. O’Reilly, A. Gluhak, and M. A. Imran, “Distributed anomaly
+                                                                                  detection using minimum volume elliptical principal component
+In future, we attempt to introduce ensemble learning into                         analysis,” IEEE Transactions on Knowledge and Data Engineering,
+either the iterative optimization or the feature selection                        vol. 28, no. 9, pp. 2320–2333, 2016.
+of GAAL to achieve more satisfactory and stable results,                     [16] C. Zhou and R. C. Paffenroth, “Anomaly detection with robust
+and more intensive research on the network structures for                         deep autoencoders,” in ACM SIGKDD International Conference on
+                                                                                  Knowledge Discovery and Data Mining, 2017, pp. 665–674.
+different data types will be conducted.                                      [17] G. Cohen, H. Sax, and A. Geissbuhler, “Novelty detection using
+                                                                                  one-class parzen density estimator. an application to surveillance
+                                                                                  of nosocomial infections.” Studies in Health Technology & Informat-
+ACKNOWLEDGMENTS                                                                   ics, vol. 136, no. 136, pp. 21–26, 2008.
+This work is supported by the Major Program of the                           [18] M. M. Breunig, “Lof: identifying density-based local outliers,”
+                                                                                  in ACM SIGMOD International Conference on Management of Data,
+National Natural Science Foundation of China (91846201,                           2000, pp. 93–104.
+71490725), the Foundation for Innovative Research Groups                     [19] E. Schubert, A. Zimek, and H. P. Kriegel, “Generalized outlier de-
+of the National Natural Science Foundation of China                               tection with flexible kernel density estimates,” in ACM SIGMOD
+(71521001), the National Natural Science Foundation of                            International Conference on Management of Data, 2014.
+                                                                             [20] M. Radovanovic, A. Nanopoulos, and M. Ivanovic, “Reverse near-
+China (71722010, 91546114, 91746302, 71872060), the Na-                           est neighbors in unsupervised distance-based outlier detection,”
+tional Key Research and Development Program of China                              IEEE Transactions on Knowledge and Data Engineering, vol. 27, no. 5,
+(2017YFB0803303), and the Project of Thousand Youth Talent                        pp. 1369–1382, 2015.
+2018. The authors warmly thank all of the anonymous                          [21] M. Salehi, C. Leckie, J. C. Bezdek, T. Vaithianathan, and X. Zhang,
+                                                                                  “Fast memory efficient local outlier detection in data streams,”
+reviewers for their time and efforts.                                             IEEE Transactions on Knowledge and Data Engineering, vol. 28, no. 12,
+                                                                                  pp. 3246–3260, 2016.
+                                                                             [22] M. H. Chehreghani, “K-nearest neighbor search and outlier detec-
+R EFERENCES                                                                       tion via minimax distances,” in SIAM International Conference on
+[1]   J. Mao, T. Wang, C. Jin, and A. Zhou, “Feature grouping-based               Data Mining, 2016, pp. 405–413.
+      outlier detection upon streaming trajectories,” IEEE Transactions      [23] K. Hempstalk, E. Frank, and I. H. Witten, “One-class classifica-
+      on Knowledge and Data Engineering, vol. 29, no. 12, pp. 2696–2709,          tion by combining density and class probability estimation,” in
+      2017.                                                                       European Conference on Machine Learning and Knowledge Discovery
+[2]   P. Banerjee, P. Yawalkar, and S. Ranu, “Mantra: A scalable ap-              in Databases, 2008, pp. 505–519.
+      proach to mining temporally anomalous sub-trajectories,” in ACM        [24] N. Abe, B. Zadrozny, and J. Langford, “Outlier detection by active
+      SIGKDD International Conference on Knowledge Discovery and Data             learning,” in ACM SIGKDD International Conference on Knowledge
+      Mining, 2016, pp. 1415–1424.                                                Discovery and Data Mining, 2006, pp. 504–509.
+[3]   J. Mao, P. Sun, C. Jin, and A. Zhou, “Outlier detection over           [25] I. J. Goodfellow, J. Pouget-Abadie, M. Mirza, B. Xu, D. Warde-
+      distributed trajectory streams,” in IEEE International Conference on        Farley, S. Ozair, A. Courville, and Y. Bengio, “Generative adver-
+      Data Mining, 2018, pp. 64–72.                                               sarial networks,” Advances in Neural Information Processing Systems,
+[4]   U. Fiore, A. D. Santis, F. Perla, P. Zanetti, and F. Palmieri, “Us-         vol. 3, pp. 2672–2680, 2014.
+      ing generative adversarial networks for improving classification       [26] J. Zhu and J. Bento, “Generative adversarial active learning,”
+      effectiveness in credit card fraud detection,” Information Sciences,        arXiv:1702.07956, 2017.
+      2017.                                                                  [27] I. Goodfellow, “Nips 2016 tutorial: Generative adversarial net-
+[5]   V. S. Tseng, J. C. Ying, C. W. Huang, Y. Kao, and K. T. Chen,               works,” 2016.
+      “Fraudetector: A graph-mining-based framework for fraudulent           [28] M. Gupta, J. Gao, C. C. Aggarwal, and J. Han, “Outlier detection
+      phone call detection,” in ACM SIGKDD International Conference on            for temporal data: A survey,” IEEE Transactions on Knowledge and
+      Knowledge Discovery and Data Mining, 2015, pp. 2157–2166.                   Data Engineering, vol. 26, no. 9, pp. 2250–2267, 2014.
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, 2019                                                                                           12
+
+[29] K. Yu, X. Dang, H. Bart, and Y. Chen, “Robust model-based                                         Yezheng Liu is a professor of Electronic Com-
+     learning via spatial-em algorithm,” IEEE Transactions on Knowledge                                merce at Hefei University of Technology. He re-
+     and Data Engineering, vol. 27, no. 6, pp. 1670–1682, 2015.                                        ceived his PhD in Management Science and
+[30] C. Oreilly, A. Gluhak, and M. A. Imran, “Adaptive anomaly                                         Engineering from Hefei University of Technol-
+     detection with kernel eigenspace splitting and merging,” IEEE                                     ogy in 2001. His main research interests include
+     Transactions on Knowledge and Data Engineering, vol. 27, no. 1, pp.                               data mining, decision science, electronic com-
+     3–16, 2015.                                                                                       merce, and intelligent decision support systems.
+[31] L. Xiong, X. Chen, and J. Schneider, “Direct robust matrix factor-                                His current research focuses on big data ana-
+     izatoin for anomaly detection,” in IEEE International Conference on                               lytics, online social network, personalized rec-
+     Data Mining, 2012, pp. 844–853.                                                                   ommendation system and outlier detection. He
+[32] X. He, H. Zhang, M. Y. Kan, and T. S. Chua, “Fast matrix fac-                                     is the author and coauthor of numerous papers
+     torization for online recommendation with implicit feedback,” in          in scholarly journals, including Marketing Science, Decision Support
+     ACM SIGIR Special Interest Group on Information Retrival, 2016, pp.       Systems, International Journal of Production Economics, Knowledge-
+     549–558.                                                                  Based Systems, Journal of Management Sciences in China. He is a
+[33] J. Chen, S. Sathe, C. Aggarwal, and D. Turaga, “Outlier detection         national member of New Century Talents Project.
+     with autoencoder ensembles,” in SIAM International Conference on
+     Data Mining, 2017.
+[34] X. He, L. Liao, H. Zhang, L. Nie, X. Hu, and T. Chua, “Neural
+     collaborative filtering,” in WWW: International World Wide Web
+     Conference, 2016, pp. 173–182.                                                                   Zhe Li is working toward the PhD degree in Man-
+[35] B. Schlkopf, J. C. Platt, J. Shawetaylor, A. J. Smola, and R. C.                                 agement Science and Engineering from Hefei
+     Williamson, “Estimating the support of a high-dimensional dis-                                   University of Technology. She received her BE
+     tribution.” Neural Computation, vol. 13, no. 7, pp. 1443–1471, 2001.                             degree in Information Management and Infor-
+[36] S. M. Erfani, S. Rajasegarar, S. Karunasekera, and C. Leckie, “High-                             mation System from Hefei University of Technol-
+     dimensional and large-scale anomaly detection using a linear one-                                ogy, Hefei, China. Her research interests include
+     class svm with deep learning,” Pattern Recognition, vol. 58, no. C,                              machine learning and data mining, especially
+     pp. 121–134, 2016.                                                                               outlier detection, class imbalance learning, and
+[37] S. Ramaswamy, R. Rastogi, and K. Shim, “Efficient algorithms for                                 ensemble learning.
+     mining outliers from large data sets,” in ACM SIGMOD Interna-
+     tional Conference on Management of Data, 2000, pp. 427–438.
+[38] N. Pham and R. Pagh, “A near-linear time approximation algo-
+     rithm for angle-based outlier detection in high-dimensional data,”
+     in ACM SIGKDD International Conference on Knowledge Discovery
+     and Data Mining, 2012, pp. 877–885.                                                              Chong Zhou received a Bachelor of Engineer-
+[39] W. Fan, M. Miller, S. Stolfo, W. Lee, and P. Chan, “Using artificial                             ing degree in Computer Science from Southwest
+     anomalies to detect unknown and known network intrusions,” in                                    University and a Master of Science degree in
+     IEEE International Conference on Data Mining, 2001, pp. 123–130.                                 Data Science from Worcester Polytechnic Insti-
+[40] C. Dsir, S. Bernard, C. Petitjean, and L. Heutte, “One class random                              tute, in 2016. Currently, he is a PhD candidate
+     forests,” Pattern Recognition, vol. 46, no. 12, pp. 3490–3506, 2013.                             in Data Science and focuses on solving network
+[41] W. Fu, M. Wang, S. Hao, and X. Wu, “Scalable active learning                                     threatens through machine learning techniques.
+     by approximated error reduction,” in ACM SIGKDD International
+     Conference on Knowledge Discovery and Data Mining, 2018, pp. 1396–
+     1405.
+[42] H. Zenati, C. S. Foo, B. Lecouat, G. Manek, and V. R. Chan-
+     drasekhar, “Efficient gan-based anomaly detection,” in The Work-
+     shop on International Conference on Learning Representations, 2018.
+[43] J. Donahue, P. Krhenbhl, and T. Darrell, “Adversarial feature
+     learning,” in International Conference on Learning Representations,                               Yuanchun Jiang is a professor at School of
+     2017.                                                                                             Management, Hefei University of Technology. He
+[44] S. Akcay, A. Atapourabarghouei, and T. P. Breckon, “Ganomaly:                                     received his PhD in Management Science and
+     Semi-supervised anomaly detection via adversarial training,”                                      Engineering from Hefei University of Technol-
+     arXiv:1805.06725, 2018.                                                                           ogy, Hefei, China. He teaches electronic com-
+[45] L. Deecke, R. Vandermeulen, L. Ruff, S. Mandt, and M. Kloft,                                      merce, business intelligence and business re-
+     “Anomaly detection with generative adversarial networks,” 2018.                                   search methods. His research interests include
+     [Online]. Available: https://openreview.net/forum?id=S1EfylZ0Z                                    electronic commerce, online marketing and data
+[46] I. Steinwart, “A classification framework for anomaly detection,”                                 mining. He has published papers in journals
+     Journal of Machine Learning Research, vol. 6, no. 1, pp. 211–232, 2005.                           such as Marketing Science, Decision Support
+[47] G. O. Campos, A. Zimek, J. Sander, R. J. G. B. Campello, B. Mi-                                   Systems, IEEE Transaction on Software Engi-
+     cenkov, E. Schubert, I. Assent, and M. E. Houle, “On the evaluation       neering, International Journal of Production Economics, Journal of Sys-
+     of unsupervised outlier detection: measures, datasets, and an             tems and Software, Knowledge-Based Systems, International Journal of
+     empirical study,” Data Mining & Knowledge Discovery, vol. 30, no. 4,      Information Technology and Decision Making, amongst others.
+     pp. 891–927, 2016.
+
+
+
+                                                                                                     Jianshan Sun is an associate professor of Elec-
+                                                                                                     tronic Commerce at the Hefei University of Tech-
+                                                                                                     nology. He received his PhD in Information Sys-
+                                                                                                     tems from City University of Hong Kong in 2014.
+                                                                                                     His research interests include big data analytics,
+                                                                                                     personalized recommendation and social net-
+                                                                                                     work analysis. His research has been presented
+                                                                                                     at international conferences such as ICIS,HICSS
+                                                                                                     and PACIS and published in several journals
+                                                                                                     including: Tourism Management, Journal of the
+                                                                                                     Association for Information Science and Tech-
+                                                                               nology, Decision Support Systems, International Journal of Production
+                                                                               Economics, Information Processing and Management ,amongst others.
+IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING, 2019                 13
+
+                       Meng Wang is a professor with the Hefei Univer-
+                       sity of Technology. He received his BE and PhD
+                       degrees from the Special Class for the Gifted
+                       Young, Department of Electronic Engineering
+                       and Information Science, University of Science
+                       and Technology of China (USTC), Hefei, China,
+                       in 2003 and 2008, respectively. His current
+                       research interests include multimedia content
+                       analysis, computer vision, and pattern recogni-
+                       tion. He has authored more than 200 book chap-
+                       ters, and journal and conference papers in these
+areas. He received the ACM SIGMM Rising Star Award 2014. He is
+an associate editor of the IEEE Transactions on Knowledge and Data
+Engineering and the IEEE Transactions on Circuits and Systems for
+Video Technology. He is a member of the IEEE and ACM.
+
+
+                     Xiangnan He is currently a professor with the
+                     University of Science and Technology of China
+                     (USTC). He received his PhD in Computer
+                     Science from National University of Singapore
+                     (NUS) in 2016, and did postdoctoral research
+                     in NUS until 2018. His research interests span
+                     information retrieval, data mining, and multi-
+                     media analytics. He has over 50 publications
+                     appeared in several top conferences such as
+                     SIGIR, WWW, and MM, and journals including
+                     TKDE, TOIS, and TMM. His work on recom-
+mender systems has received the Best Paper Award Honourable Men-
+tion in WWW 2018 and ACM SIGIR 2016. Moreover, he has served
+as the PC member for several top conferences including SIGIR, WWW,
+MM, KDD etc., and the regular reviewer for journals including TKDE,
+TOIS, TMM, TNNLS etc.
+

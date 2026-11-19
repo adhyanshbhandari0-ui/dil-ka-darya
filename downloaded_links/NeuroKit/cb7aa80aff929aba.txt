@@ -1,0 +1,205 @@
+==========================================
+Barry Warsaw's Personal Coding Style Guide
+==========================================
+
+Copyright (C) 2002-2025 Barry Warsaw
+
+*NOTE*: The canonical version of this style guide can be found at:
+
+http://barry.warsaw.us/software/STYLEGUIDE.txt
+
+Yes, I should format this guide for the web, but there are so many links to the txt file I don't want
+to break, that for now I'm leaving it as is.
+
+==========================================
+
+This document contains my personal style guide for Python programming, as it's evolved from use in
+GNU Mailman to my own personal Python projects.  PEP 8 is the basis for this style guide so it's
+recommendations should be followed except for the differences outlined here.
+This document assumes the use of Python 3.
+
+* Imports are always put at the top of the file, just after any module comments and
+  docstrings, and before module globals and constants, but after any ``__future__``
+  imports, or ``__metaclass__`` and ``__all__`` definitions.
+
+  In general, I use my ``atpublic`` library than explicit ``__all__`` settings.
+  https://pypi.org/project/atpublic/
+
+  Imports should be grouped, with the order being:
+
+  1. non-from imports for standard and third party libraries
+  2. non-from imports from the application
+  3. from-imports from the standard and third party libraries
+  4. from-imports from the application
+
+  From-imports should follow non-from imports.  Dotted imports should follow non-dotted imports.
+  Non-dotted imports should be grouped by increasing length, while dotted imports should be grouped
+  alphabetically.
+
+  The ruff auto-formatter supports this style with the following settings:
+
+  [tool.ruff.lint.isort]
+  case-sensitive = true
+  length-sort-straight = true
+  lines-after-imports = 2
+  lines-between-types = 1
+  order-by-type = true
+  section-order = ['standard-library', 'third-party', 'local-folder', 'first-party']
+
+* In general, there should be one class per module.  Keep files small, but it's okay to group related
+  code together.  List everything exported from the module in the ``__all__`` via ``@public``.
+
+* Right hanging comments are discouraged, in favor of preceding comments.  E.g. bad::
+
+    foo = frob(bar)  # Frobbing the bar first lowers it.
+
+  Good::
+
+    # Frobbing the bar first lowers it.
+    foo = blarzigop(bar)
+
+  Comments should always be complete sentences, with proper capitalization and full stops at the end.
+
+  Don't comment what you're doing; that should be obvious from the code.  Comment *why* you're doing
+  it, and even better, explain why you're doing it this way rather than any other way you might have
+  tried which didn't work.
+
+  Be kind to your future self!
+
+  One day, you'll read this code and ask yourself "why did I do it this way and not that other way?"
+
+* Put two blank lines between any top level construct or block of code (e.g. after import blocks).
+  Put only one blank line between methods in a class.  No blank lines between the class definition
+  and the first method in the class.  No blank lines between a class/method and its docstrings.
+
+  Generally, ruff does this out of the box.
+
+* Try to minimize the vertical whitespace in a class or function.  If you're inclined to separate
+  stanzas of code for readability, consider putting a comment in describing what the next stanza's
+  purpose is.  Don't put obvious or placeholder comments in just to avoid vertical whitespace though.
+
+  Code highlighting really helps with the visual separation, so lean on it.
+
+* Unless internal quote characters would mess things up, the general rule is that single quotes
+  should be used for short strings, double quotes for triple-quoted multi-line strings and docstrings.
+  E.g.::
+
+    foo = 'a foo thing'
+    warn = "Don't mess things up"
+    notice = """Our three chief weapons are:
+             - surprise
+             - deception
+             - an almost fanatical devotion to the pope
+             """
+
+  Why?  Because on US ASCII keyboards, single quotes are easier to type than double quotes.
+  The former is a single key chord while the latter requires you to hold the left shift key
+  while you hit the quote key.  If you're battling RSI, consider this easy change.
+
+  Ruff, unlike black, supports this:
+
+  [tool.ruff.format]
+  quote-style = 'single'
+
+  If I could rant about one bad thing black has imposed on the Python world, it is this.  If you're
+  forced to use double quotes everywhere, just use single quotes when writing the code and let your
+  auto-formatter change it for you.
+
+  Funny aside: this is why PEP 401 advocates for the diamond operator <> for inequality instead of !=
+  but oh well!  (Python 2 supported both, Python 3 dropped the diamond operator).
+
+* Write docstrings for modules, functions, classes, and methods.  Docstrings can be omitted for
+  special methods (e.g. __init__() or __str__()) where the meaning is obvious.  I usually avoid
+  docstrings for test functions, but will include comments when useful to explain what the test
+  is *trying* to do.
+
+* PEP 257 describes good docstrings conventions.  Note that most importantly, the """ that ends a
+  multi-line docstring should be on a line by itself, e.g.:
+
+  """Return a foobang
+
+  Optional plotz says to frobnicate the bizbaz first.
+  """
+
+  ruff supports this:
+
+  [tool.ruff.lint.pydocstyle]
+  convention = 'pep257'
+
+* For one liner docstrings, keep the closing """ on the same line.
+
+* PEP 8 specifies a maximum line length of 79, and I used to use an Emacs `fill-column` of 78.  I've
+  evolved my preferences here over the years, as monitors -- even on laptops -- have gained more
+  real-estate.  So I agree that 79 characters is too short for modern coding styles.  Even PEP 8's
+  recommendation of 72 characters for docstrings and comments feels too short these days.
+
+  This has to be balanced against several factors.  Lines that are too long are more difficult to
+  read.  At least my eyes have a difficult time scanning text in lines that are too long.
+  Programming languages tend to put the most significant things on the left side, e.g. keywords,
+  and cramming too much important stuff too far right can obscure the meaning or make it difficult
+  to parse.  Let's also acknowledge that as you get older, your eyesight usually gets worse and you'll
+  need to increase your font size.  Again, be kind to your future self (and your colleagues across the
+  age spectrum!).
+
+  I now use a line length of 100 on most of my code bases.  That seems like a good, general compromise.
+
+  ruff supports this:
+
+  [tool.ruff]
+  line-length = 100
+
+* When testing the emptiness of sequences, use
+
+  ``if len(seq) == 0``
+
+  instead of relying on the falseness of empty sequences.  However, if a variable can be one of
+  several false values, it's okay to just use
+
+  ``if seq``
+
+  though a preceding comment is usually in order.  Always using the latter feels lazy to me, and it's
+  harder to understand the intent of the code, so always use the narrowest comparison that makes sense.
+  Tools like type checkers help but don't alleviate this problem.
+
+* Use the narrowest exception handling that you can.  I mean this in two senses.
+
+  a) keep your ``try`` blocks short.  It's best to only include the code that could raise the exception
+     you want to handle.  Don't put setup code that can't fail in your try block.  E.g.
+
+     try:
+         mydict['foo'] = 7
+         configure(mydict)
+     except ConfigurationFailureError:
+        log.exception('Bad configuration')
+
+     The mydict item setter call almost can't possibly fail, so do this instead:
+
+     mydict['foo'] = 7
+     try:
+         configure(mydict)
+     except ConfigurationFailureError:
+        log.exception('Bad configuration')
+
+  b) Use the narrowest exception handler you can.  I.e. avoid things like blanket `except Exception`
+     handlers, unless you really do mean to handle all exceptions.  Watch out for swallowing too much
+     here.  Avoid bare excepts, although they can be handy in some situations, almost always paired with
+     a re-raise:
+
+     try:
+         do_transaction()
+     except:
+         abort_transaction()
+         raise
+
+* Always decide whether a class's methods and instance variables should be public or non-public.
+
+  Single leading underscores are generally preferred for non-public attributes.  Use double leading
+  underscores only in classes designed for inheritance to ensure that truly private attributes will
+  never name clash.  These should be rare.  I generally consider
+  double-leading-underscores-no-trailing-underscores as a failed experiment.
+
+  Public attributes should have no leading or trailing underscores unless they conflict with reserved
+  words, in which case, a single trailing underscore is preferable to a leading one, or a corrupted
+  spelling, e.g. ``class_`` rather than ``klass``.
+
+  Most modern linters support these rules.

@@ -1,0 +1,459 @@
+     Cardiac Dysrhythmia Detection with GPU-Accelerated Neural Networks
+
+
+Albert Haque                                                                                                                                                       AHAQUE @ CS . STANFORD . EDU
+Computer Science Department, Stanford University
+
+
+                                                                                                                         QRS
+                          Abstract                                                                                                                                x1
+
+
+                                                                    ECG Signal
+     Cardiac dysrhythmia is responsible for over half                                                      P
+                                                                                                                                    ST
+                                                                                                                                                T
+                                                                                                                                                          U                                         Class=1
+                                                                                                                                                                  x2
+     a million deaths in the United States annually. In                          PR Interval
+                                                                                      QRS Interval
+     this work, we evaluate the performance of neu-                                                                              QT Interval
+                                                                                                                                                                  x3
+                                                                                                                                                                                                    Class=2
+
+
+
+     ral networks on classifying electrocardiogram                  Additional             0.2
+
+
+                                                                                           0.1
+                                                                                                 PCA
+                                                                                                                                                                                              Layer 4
+                                                                                                                                                                  x4
+     (ECG) sequences as normal or abnormal (ar-                                              0
+
+
+                                                                                          −0.1
+                                                                                                                                                                                    Layer 3
+                                                                     Features
+                                                                                          −0.2
+
+
+                                                                                          −0.3
+
+
+                                                                                                                                                                          Layer 2
+     rhythmia). Using neural networks as our primary
+                                                                                         −0.07
+                                                                                                 −0.06
+                                                                                                         −0.05
+                                                                                                                 −0.04
+                                                                                                                         −0.03   −0.2
+                                                                                                                                         −0.1
+                                                                                                                                                0
+                                                                                                                                                    0.1
+                                                                                                                                                          0.2
+                                                                                                                                                                Layer 1
+
+     learning model, we explain our model’s perfor-
+                                                                    Figure 1. Proposed Neural Network Classifier. The original ECG
+     mance and discuss hyperparameter tuning. Com-
+                                                                    record and hand-crafted features are used as inputs.
+     paring the results of our model to SVMs, ran-
+     dom forests, and logistic regression, we find that
+     our neural network outperforms the other three                 (Song et al., 2005). The second category of approaches
+     models with a binary classification accuracy of                are centered around time series analysis. Time series ap-
+     91.9%. For the multi-class classification task, we             proaches use wavelet transforms and attempt to minimize
+     achieve an accuracy of 75.7%. The use of GPUs                  the noise present in the data (Thakor & Zhu, 1991). Some
+     accelerates the neural network training process                models note the periodic interval between the QRS com-
+     up to an order of magnitude over CPUs.                         plex and PR/QT intervals (see Figure 1). Autoregressive
+                                                                    neural networks have also been proposed for forecasting
+                                                                    time series data (Zhang, 2001).
+1. Introduction
+                                                                    In this work, we are concerned with two problems. First,
+The human heart is controlled by an electrical system               we want to classify a record into binary classes (normal or
+which stimulates blood movement via contractions. Car-              abnormal). Second, we want to classify a record into mul-
+diac dysrhythmia (or arrhythmia) occurs when the electri-           tiple classes, depending on the specific case of arrhythmia
+cal activity of the heart is irregular. Effects of arrhythmia       present (multi-class classification). We construct a neural
+range from discomfort to cardiac arrest. Although most              network topology using significant hyperparameter tuning
+arrhythmias are harmless, Arrhythmia is still responsible           and leverage the parallel computing power of GPUs to ac-
+for about 500,000 deaths in the US, annually. Early detec-          celerate the training process.
+tion and treatment of arrhythmia can reduce the number of
+deaths by 25% (Hoefman et al., 2010).
+                                                                    2. Dataset and Feature Extraction
+Identifying patterns in arrhythmia has been studied for sev-
+eral years and many statistical approaches have been at-            We use the arrhythmia dataset found at the UCI Machine
+tempted. These approaches can be grouped into two cate-             Learning Repository (Bache & Lichman, 2013; Guvenir,
+gories: (i) statistical learning based on explicit feature ex-      1997). It consists of 452 records with 279 attributes per
+traction and (ii) recognizing patterns from the raw time se-        record. Each record is assigned to 1 of 16 classes: a class
+ries data.                                                          label of 1 indicates normal ECG patterns while a class label
+                                                                    between 2 to 16 indicates “abnormal ECG patterns” or ar-
+Most attempts fall into the first category of extracting fea-       rhythmia of varying types. The dataset’s class distribution
+tures using human intuition. Many studies use classical ma-         is shown in Figure 3.
+chine learning algorithms such as support vector machines
+                                                                    In our experiment, we use principal component analysis to
+This document is part of a term project for CS 229 Machine Learn-   extract features from the dataset and is detailed in Section
+ing, Stanford University (Autumn 2014) and was created on De-       4.1. Using these principal components, we train several
+cember 13, 2014.
+                                                                    models and compare their results.
+                                                Cardiac Dysrhythmia Detection with GPU-Accelerated Neural Networks
+
+
+Figure 2. Regularized cost function for multi-layer neural networks. Let Θ(`) contain the network parameters for layer `, hΘ (x) ∈ RK
+be the output probabilities where K is the number of classes, (hΘ (x))i denotes the ith output, L denotes the number of layers and s`
+denotes the number of neurons in layer `.
+                                                                                                    L−1 s s`+1
+                                        " m K                                                 #
+                                       1 X X (i)          (i)         (i)               (i)       λ X X̀ X (`) 2
+                              J(Θ) = −        yk log(hΘ (x )k + (1 − yk ) log(1 − (hΘ (x )k )) +               (Θij )
+                                       m i=1                                                     2m    i=1 j=1
+                                                 k=1                                                                                                             `=1
+
+
+
+
+                                                                                         Mean Squared Error (MSE)
+                        250                                                                                         0.12
+
+
+
+
+  Number of Instances
+                        200                                                                                          0.1
+
+                        150                                                                                         0.08
+
+                        100                                                                                         0.06
+
+                         50                                                                                         0.04                                                       Binary Classifer
+                                                                                                                                                                               Multi−class Classifier
+                          0                                                                                         0.02
+                           0     2    4     6      8     10   12    14   16                                             0               500         1000         1500                                   2000
+                                                Class Label                                                                               Number of Layer 1 Neurons
+
+                                     Figure 3. Class Distribution                                                               Figure 4. Number of Neurons vs MSE
+
+3. Models                                                                                         1.00                                                               1.00
+                                                                                                                                         Binary (Test)                                           Multi (Train)
+                                                                                                  0.90                                   Multi (Test)                                            Multi (Test)
+We compare our neural network model to three commonly                                                                                                                0.90
+
+                                                                                   Accuracy                                                               Accuracy
+used approaches: (i) support vector machines, (ii) logistic                                       0.80
+
+regression, and (iii) random forests. For support vector ma-                                      0.70
+                                                                                                                                                                     0.80
+chines and logistic regression, we use a one-vs-all classifier                                    0.60
+
+for the multi-class classification problem.                                                       0.50
+                                                                                                      0                        100        200       300
+                                                                                                                                                                     0.70 −4
+                                                                                                                                                                        10                10
+                                                                                                                                                                                            −2
+                                                                                                                                                                                                             10
+                                                                                                                                                                                                                 0
+
+                                                                                                                            Principal Components                                Regularization Parameter
+
+3.1. Neural Networks                                                                                                          (a) PCA                                       (b) Regularization
+                                                                                                                              Figure 5. Hyperparameter Tuning Results
+We employ a multi-layer neural network for both binary
+and multi-class classification. The output of each neuron is
+the sigmoid function:                                                              Instead of using features from the raw dataset, we use prin-
+                                                                                   cipal components as inputs into our neural network. As
+                                                  
+                                  x0             θ0
+                 1              x1                                               shown in Figure 5(a), we analyze the number of princi-
+                                      , θ =  θ1  (1)
+                                                    
+  hθ (x) =           Tx, x = 
+                               
+                                                                                   pal components versus the classification accuracy. Too few
+            1+e   −θ               :            :  
+                                  xn             θn                                (less than 50) or too many (greater than 200) principal com-
+                                                                                   ponents result in poor performance across all models (only
+We train the network using back propagation and stochastic                         NN results are shown). Based on these results, we use 100
+gradient descent to minimize the cost function in Figure 2.                        principal components for our final model.
+Due to the large number of hyperparameters, a significant
+portion of this project was devoted to exploring the effect                        The regularization parameter λ attempts to prevent overfit-
+of hidden layer size, depth, learning rate, and regularization                     ting by reducing the magnitude of parameters in Θ. Fixing
+parameters.                                                                        all other parameters, we vary λ for various values (see Fig-
+                                                                                   ure 5(b)), and set λ = 0.01.
+Perhaps the most important hyperparameter, we analyze the
+effect of the number of neurons on performance. Figure 4                           In summary, we use the following hyperparameters:
+shows the effect of the number of neurons on mean squared                                1. Regularization parameter, λ = 0.01
+error (MSE). As the number of neurons grows, the per-                                    2. Two hidden layers L = 2
+formance decreases. This is apparent for both the binary                                 3. One hundred neurons at each layer H1 = H2 = 100
+and multi-class case. Based on these results, we use 100                                 4. First 100 principal components are used as features
+neurons at each layer. Although the analysis is not shown,
+deeper networks do not necessarily produce better results.
+                                                                                   3.2. Support Vector Machines
+Most often, performance suffered as the number of hidden
+layers increased. Based on this analysis, we select two hid-                       Due to its popularity in practice, we evaluate the perfor-
+den layers for our network topology.                                               mance of SVMs on our dataset. The SVM attempts to find
+                              Cardiac Dysrhythmia Detection with GPU-Accelerated Neural Networks
+
+the maximum-margin hyperplane that separates the dataset         Before we began training of our models, we performed a
+in a higher dimensional feature space. Finding this optimal      singular value decomposition over the dataset, extracted the
+margin reduces to solving the following convex optimiza-         first 100 principal components, and used these as input fea-
+tion problem:                                                    tures int our models.
+                                     m
+                        1           X
+                                                                 4.1. Results
+                  min     ||w||2 +C     ξi                 (2)
+                  γ,w,b 2
+                                    i=1                          Surprisingly, our neural network outperforms the SVM,
+Subject to the constraints:                                      random forest, and logistic regression model in the binary
+                                                                 classification problem (see Table 1). In the multi-class case,
+       s.t. y (i) (wT x(i) + b) ≥ 1 − ξi , i = 1, ..., m   (3)   our neural network still outperforms SVMs and logistic re-
+            ξi ≥ 0, i = 1, ..., m                          (4)   gression with a test accuracy of 75.7%.
+
+Where the ξi above allows for “slack” in the event the
+dataset is not linearly separable.                                                                       Table 1. Classification Accuracy
+                                                                                                                    Binary             Multi-Class
+                                                                                            Model             Training        Test Training      Test
+3.3. Logistic Regression                                                                    Neural Network     100.0% 91.9%          100.0% 75.7%
+                                                                                            SVM                  92.4% 87.5%          96.6% 65.1%
+Closely related to our neural network, logistic regression                                  Random Forest        99.7% 72.0%          97.0% 76.0%
+aims to minimize the cost function:                                                         Logistic Regr.     100.0% 77.6%          100.0% 69.0%
+                         m
+                      1 X                     
+             J(θ) =         hθ (x(i) ) − y (i)             (5)   Because the cost of false diagnoses can be expensive, in
+                      2 i=1
+                                                                 monetary terms, we wanted to see our model’s false posi-
+where h(x) = θT x and θ is defined in (1). To learn the          tive rate. Figure 8 shows our model’s ROC curves. On the
+parameters θ, we minimize J(θ) using stochastic gradient         test set, our network is able to achieve a true positive rate of
+descent.                                                         0.8 with a false positive rate of about 0.2. After that, higher
+                                                                 false positive rates provide marginal gains in true positive
+                                                                 detections.
+3.4. Random Forests
+Random forests apply the technique of bootstrap aggregat-        5. Discussion
+ing (i.e. bagging) to learn a model. B decision trees are
+created where each decision tree is trained on a random          As indicated by the training accuracies, the neural network,
+sample of the training data. Equation (6) shows how y is         random forest, and logistic regression tend to fit (or closely
+computed for an unseen example in a regression problem.          fit) the training data perfectly. However, we know these
+                                                                 models are not memorizing the input data since the test ac-
+                                 B
+                             1 X                                 curacies are above 70% and 65% in the binary and multi-
+                      ŷ =       ŷb (x)                   (6)   class case, respectively.
+                             B
+                                b=1
+                                                                 We wanted to further analyze the performance of our neural
+where ŷb is the prediction for decision tree b. For classi-     network by looking at the convergence rate. Figure 6 shows
+fication problems, the majority vote of all B trees is taken     the mean squared error as a function of number of iterations
+(instead of the average) to output the predicted label.          for different training sizes.
+
+4. Experiment                                                                               0.12                                                              0.6
+
+
+
+
+                                                                 Mean Squared Error (MSE)                                          Mean Squared Error (MSE)
+                                                                                                                            50                                                                   50
+We separated the dataset into a training set consisting of                                   0.1                            100
+                                                                                                                            150
+                                                                                                                                                              0.5                                100
+                                                                                                                                                                                                 150
+316 records and a hold-out test set containing 135 randomly                                 0.08                            200
+                                                                                                                            250
+                                                                                                                                                              0.4                                200
+                                                                                                                                                                                                 250
+selected records. Both Matlab and Python were used for                                      0.06
+                                                                                                                            300
+                                                                                                                                                              0.3
+                                                                                                                                                                                                 300
+
+preprocessing, training, and testing.                                                       0.04                                                              0.2
+
+Our dataset consists of 452 records. Of these, 32 records                                   0.02
+                                                                                                0     10      20       30     40
+                                                                                                                                                              0.1
+                                                                                                                                                                 0         10               20     30
+                                                                                                           Iteration                                                            Iteration
+are incomplete and missing at least one feature (excluding
+the “vector angle to J feature”). Because we do not want                                            (a) Binary Task                                                  (b) Multi-Class Task
+to discard these records, we instead impute the values by        Figure 6. Convergence Rate of the Neural Network Model (Train-
+using the feature’s mean value as this tends to improve per-     ing). Because the neural network was trained on 1,000 iterations,
+formance (Jerez, 2010).                                          only the first few iterations are shown above.
+                                                   Cardiac Dysrhythmia Detection with GPU-Accelerated Neural Networks
+                                                                                                                           Training ROC                                                     Test ROC
+
+
+
+
+       Training Time (seconds)
+                                 50                                                                             1                                                              1
+                                                    GPU@1.2GHz (640 cores)                                                                Class 1
+                                 40                 CPU@3.4GHz (6 cores)                                                                  Class 2
+                                                                                                              0.8                                                            0.8
+                                 30
+
+
+
+                                                                                         True Positive Rate                                             True Positive Rate
+                                                                                                              0.6                                                            0.6
+                                 20
+
+                                 10                                                                           0.4                                                            0.4
+
+                                 0                                                                            0.2                                                            0.2                             Class 1
+                                         Binary                Multi−Class
+                                               Classification Task                                                                                                                                           Class 2
+                                                                                                                0                                                              0
+                                                                                                                    0           0.5                 1                              0           0.5                     1
+                                      Figure 7. CPU vs GPU Runtime                                                      False Positive Rate                                            False Positive Rate
+                                                                                      Figure 8. ROC Curves for the Binary Classification Task. Class 1
+                                                                                      corresponds to the normal ECG case and class 2 corresponds to
+As previously mentioned, we used both CPUs and GPUs                                   arrhythmia is present.
+for training our neural network. SVMs, logistic regres-
+sion, and random forests were trained using CPUs only.
+Due to the large number of cores available on GPUs, GPUs                              in Figure 8. We do not plot the multi-class case as some
+are able to quickly train neural networks – especially those                          classes contain one or two training examples and this skews
+with a large number of neurons. We used a GeForce GTX                                 the ROC curves for these labels.
+750 Ti GPU with 640 CUDA cores clocked at 1.2 GHz with                                Figure 8 shows a perfect ROC curve for the training phase,
+2 GiB of GDDR5 memory. The CPU used was an Intel i7-                                  as expected. Looking at the test ROC curve, if we are will-
+4930K 6 core processor clocked at 3.4 GHz and 32 GiB of                               ing to tolerate a false positive rate of about 0.1, we are able
+DDR3 memory.                                                                          to achieve a true positive rate of 0.9. In this particular ap-
+The plot shown in Figure 7 show the results of our multi-                             plication (in the domain of medical practice and arrhythmia
+class classification task by training on a neural network                             detection), early detection has the potential to save lives.
+with two hidden layers containing 100 neurons each. The                               As a result, the cost of a false negative is greater than the
+training phase consisted of 1,000 iterations. For GPUs, the                           cost of a false positive. If a patient is diagnosed as arrhyth-
+bottleneck is the data transfer to and from the device. Once                          mia present (predicts positive), we can perform further tests
+the training data has been transferred to the GPU, the com-                           to correctly label this patient.
+putation is very fast. Because our training data is so small
+(on the order of a few MiB), the GPU runtime does not                                 6. Conclusion
+experience long initial or post-processing delays. For net-
+works with more hidden nodes, we can expect the GPU                                   Due to the time-series nature of ECG data, future work
+vs CPU runtime margin to increase (Juang et al., 2011;                                can explore recurrent and autoregressive neural networks
+Steinkrau et al., 2005).                                                              (Zhang, 2001). These networks are well suited for predict-
+                                                                                      ing future time series and can be applied to ECG signals.
+                                                                                      Additionally, as with any learning problem, more (train-
+5.1. Error Analysis
+                                                                                      ing) data would benefit our research. A longer-term project
+To visualize the results from all models, we generated con-                           would aim to utilize smart health sensors (FitBit, Jawbone,
+fusion matrices depicted as heat maps in Figure 9. Both                               Microsoft Band, etc.) for real-time cardiac monitoring.
+logistic regression and neural networks achieved a training
+                                                                                      In this work, we used principal component analysis to
+accuracy of 100%. This is denoted by values present only
+                                                                                      transform the original 279 features from the dataset. We
+on the diagonal. For SVMs and random forests, we see
+                                                                                      then analyzed the effect of number of principal compo-
+incorrect classifications present on the off-diagonal entries.
+                                                                                      nents, hyperparameter tuning, and the runtime effect of
+Looking at the test set, we see that SVMs tend to incor-                              GPUs. Results show that our neural network outperforms
+rectly categorize normal heartbeats (label=1) with labels                             other methods on the binary classification task. For multi-
+2-16. This results in a high false positive rate. Our neu-                            class Arrhythmia classification, our neural network per-
+ral network has few errors on the test as stated in Table                             forms well and is beaten only by random forests. Future
+1; this is confirmed in the confusion matrix above as most                            work can explore the use of ECG time series data and let
+true/predicted labelings lie along the diagonal.                                      the neural network extract features from the raw time series
+                                                                                      data on its own.
+Confusion matrices are a good indicator of false positive
+and false negative rates. Depending on the application, one                           As previously mentioned, the cost of false negatives is very
+can be more expensive (in monetary terms) than the other.                             high. Building a classifier to minimize the false negative
+To analyze these rates, we plotted receiver operating char-                           rate can bring many benefits to the medical and healthcare
+acteristic (ROC) curves for the binary classification case                            industry. This work allowed us to deeply analyze learning
+                                                            Cardiac Dysrhythmia Detection with GPU-Accelerated Neural Networks
+
+                                                             1.0                                                             1.0                                                                     1.0                                                           1.0
+     1167 0     0   0   0   0   0   0   0   0   0   0   0           1166 0      0   0   0   0   0   0   0   1   0   0   0           1 167    0    0    0    0   0    0   0   0   0    0    0    0           1167 0     0   0   0   0   0   0   0   0   0   0   0
+                                                             0.9                                                             0.9                                                                     0.9                                                           0.9
+     2 9 28 0       0   0   0   0   0   0   0   0   0   0           2 0 37 0        0   0   0   0   0   0   0   0   0   0           2   0    37   0    0    0   0    0   0   0   0    0    0    0           2 0 33 0       0   0   0   0   0   0   0   0   0   0
+
+    3 2     0   8   0   0   0   0   0   0   0   0   0   0    0.8   3 0      0 10 0      0   0   0   0   0   0   0   0   0    0.8    3   0    0    10   0    0   0    0   0   0   0    0    0    0    0.8   3 0     0   12 0    0   0   0   0   0   0   0   0   0   0.8
+
+    4   0   0   0   12 0    0   0   0   0   0   0   0   0          4    0   0   0   12 0    0   0   0   0   0   0   0   0           4   0    0    0    12   0   0    0   0   0   0    0    0    0          4   0   0   0   9   0   0   0   0   0   0   0   0   0
+                                                             0.7                                                             0.7                                                                     0.7                                                           0.7
+     5 0    0   0   0   8   0   0   0   0   0   0   0   0           5 2     0   0   0   6   0   0   0   0   0   0   0   0           5   0    0    0    0    8   0    0   0   0   0    0    0    0           5 0    0   0   0   8   0   0   0   0   0   0   0   0
+                                                             0.6                                                             0.6                                                                     0.6                                                           0.6
+    6 4     0   0   0   0   15 0    0   0   0   0   0   0          6 0      0   0   0   0 19 0      0   0   0   0   0   0           6   0    0    0    0    0   19   0   0   0   0    0    0    0          6 0     0   0   0   0   17 0    0   0   0   0   0   0
+
+     7 1    0   0   0   0   0   1   0   0   0   0   0   0    0.5    7 0     0   0   0   0   0   2   0   0   0   0   0   0    0.5    7   0    0    0    0    0   0    2   0   0   0    0    0    0    0.5    7 0    0   0   0   0   0   2   0   0   0   0   0   0   0.5
+
+    8 0     0   0   0   0   0   0   1   0   0   0   0   0          8 0      0   0   0   0   0   0   1   0   0   0   0   0           8   0    0    0    0    0   0    0   1   0   0    0    0    0          8 0     0   0   0   0   0   0   1   0   0   0   0   0
+                                                             0.4                                                             0.4                                                                     0.4                                                           0.4
+    9 0     0   0   0   0   0   0   0   7   0   0   0   0          9 0      0   0   0   0   0   0   0   7   0   0   0   0           9   0    0    0    0    0   0    0   0   7   0    0    0    0          9 0     0   0   0   0   0   0   0   5   0   0   0   0
+                                                             0.3                                                             0.3                                                                     0.3                                                           0.3
+    10 1    0   0   0   0   0   0   0   0 32 0      0   0          10 0     0   0   0   0   0   0   0   0 33 0      0   0          10   0    0    0    0    0   0    0   0   0   33   0    0    0          10 0    0   0   0   0   0   0   0   0 39 0      0   0
+
+    14 0    0   0   0   0   0   0   0   0   0   2   0   0    0.2   14 0     0   0   0   0   0   0   0   0   0   2   0   0    0.2   14   0    0    0    0    0   0    0   0   0   0    2    0    0    0.2
+                                                                                                                                                                                                           14 0    0   0   0   0   0   0   0   0   0   3   0   0   0.2
+
+    15 0    0   0   0   0   0   0   0   0   0   0   2   0          15 0     0   0   0   0   0   0   0   0   0   0   2   0          15   0    0    0    0    0   0    0   0   0   0    0    2    0          15 0    0   0   0   0   0   0   0   0   0   0   4   0
+                                                             0.1                                                             0.1                                                                     0.1                                                           0.1
+    16 2    0   0   0   0   0   0   0   0   0   0   0 14           16 1     0   0   0   0   0   0   0   0   0   0   0   15         16   0    0    0    0    0   0    0   0   0   0    0    0    16         16 0    0   0   0   0   0   0   0   0   0   0   0 16
+                                                             0.0                                                             0.0                                                                     0.0                                                           0.0
+        1           4   5       7                                                                                                       1    2    3    4    5   6    7   8   9   10   14   15   16
+            2   3           6       8   9 10 14 15 16                   1   2   3   4   5   6   7   8   9 10 14 15 16                                                                                          1   2   3   4   5   6   7   8   9 10 14 15 16
+
+
+                    SVM (Train)                                     Random Forest (Train)                                          Logistic Regression (Train)                                             Neural Network (Train)
+                                                                                                (a) Confusion Matrices (Training Set)
+                                                             1.0                                                             1.0                                                                     1.0                                                           1.0
+     1 65 6     0   1   0   4   0   0   0   2   0   0   0           1 77 1      0   0   0   0   0   0   0   0   0   0   0           1   66   6    0    1    0   2    0   0   0   3    0    0    0           1 75 6     2   2   1   0   0   0   1   0   0   0   0
+                                                             0.9                                                             0.9                                                                     0.9                                                           0.9
+     2 1    2   0   1   0   0   0   1   1   0   0   0   1           2 3     3   0   0   0   0   0   0   0   0   0   0   1           2   3    2    0    1    0   0    0   1   0   0    0    0    0           2 2    4   0   1   1   0   0   1   1   1   0   0   0
+
+    3   1   0   4   0   0   0   0   0   0   0   0   0   0    0.8    3   1   1   3   0   0   0   0   0   0   0   0   0   0    0.8    3   0    0    5    0    0   0    0   0   0   0    0    0    0    0.8   3 0     0   1   0   0   0   0   0   0   0   0   0   0   0.8
+
+    4   1   2   0   0   0   0   0   0   0   0   0   0   0           4   2   0   0   0   0   0   0   0   0   1   0   0   0           4   2    0    0    1    0   0    0   0   0   0    0    0    0          4   0   1   0   3   1   0   0   0   0   0   0   0   0
+                                                             0.7                                                             0.7                                                                     0.7                                                           0.7
+     5 2    2   0   0   1   0   0   0   0   0   0   0   0           5 4     0   0   0   0   0   0   0   0   1   0   0   0           5   3    2    0    0    0   0    0   0   0   0    0    0    0           5 1    0   0   0   0   0   0   0   0   0   0   0   0
+                                                             0.6                                                             0.6                                                                     0.6                                                           0.6
+    6   3   1   0   0   0   1   0   0   0   1   0   0   0           6 6     0   0   0   0   0   0   0   0   0   0   0   0           6   3    1    0    0    0   1    0   0   0   1    0    0    0          6   1   0   0   0   0   6   0   0   0   1   0   0   0
+
+     7 1    0   0   0   0   0   0   0   0   0   0   0   0    0.5    7 1     0   0   0   0   0   0   0   0   0   0   0   0    0.5    7   1    0    0    0    0   0    0   0   0   0    0    0    0    0.5    7 1    0   0   0   0   0   0   0   0   0   0   0   0   0.5
+
+    8   1   0   0   0   0   0   0   0   0   0   0   0   0           8   1   0   0   0   0   0   0   0   0   0   0   0   0           8   1    0    0    0    0   0    0   0   0   0    0    0    0          8   1   0   0   0   0   0   0   0   0   0   0   0   0
+                                                             0.4                                                             0.4                                                                     0.4                                                           0.4
+    9 0     0   0   0   0   1   0   0   1   0   0   0   0           9 0     0   0   0   0   0   0   0   2   0   0   0   0           9   0    0    0    0    0   1    0   0   1   0    0    0    0          9 0     0   0   0   0   0   0   0   1   0   0   0   0
+                                                             0.3                                                             0.3                                                                     0.3                                                           0.3
+    10 2    0   0   0   0   0   0   0   0   15 0    0   0          10 8     0   0   0   0   0   0   0   0   9   0   0   0          10   2    0    0    0    0   0    0   0   0   14   0    0    1          10 0    0   0   0   2   2   1   0   1   9   0   0   1
+
+    14 1    0   0   0   0   1   0   0   0   0   0   0   0    0.2   14 2     0   0   0   0   0   0   0   0   0   0   0   0    0.2   14   1    0    0    0    0   0    0   0   0   1    0    0    0    0.2
+                                                                                                                                                                                                           14 0    0   0   0   0   0   0   0   0   0   0   0   1   0.2
+
+    15 0    1   1   0   0   0   0   0   0   1   0   0   0          15 0     2   0   0   0   0   0   0   0   0   0   1   0          15   0    1    1    0    0   0    0   0   0   1    0    0    0          15 1    0   0   0   0   0   0   0   0   0   0   0   0
+                                                             0.1                                                             0.1                                                                     0.1                                                           0.1
+    16 4    0   0   0   0   1   0   0   0   0   0   1   0          16 5     1   0   0   0   0   0   0   0   0   0   0   0          16   3    1    0    0    0   2    0   0   0   0    0    0    0          16 0    0   0   0   0   0   0   0   0   0   1   1   4
+                                                             0.0                                                             0.0                                                                     0.0                                                           0.0
+        1           4   5       7                                                                                                       1    2    3    4    5   6    7   8   9   10   14   15   16
+            2   3           6       8   9 10 14 15 16                   1   2   3   4   5   6   7   8   9 10 14 15 16                                                                                          1   2   3   4   5   6   7   8   9 10 14 15 16
+
+
+                    SVM (Test)                                          Random Forest (Test)                                       Logistic Regression (Test)                                                  Neural Network (Test)
+                                                                                                    (b) Confusion Matrices (Test Set)
+
+Figure 9. Confusion matrices for all models for the multi-class classification problem. Predicted labels are on the y-axis and true labels
+are on the x axis. Numbers indicate the number of records with a specific true/predicted labeling. Labels 11, 12, and 13 are not shown
+because these labels do not appear in the dataset.
+
+
+algorithms using real data. We hope future researchers and                                                                          Song, Mi Hye, Lee, Jeon, Cho, Sung Pil, Lee, Ky-
+students can build on this work.                                                                                                      oung Joung, and Yoo, Sun Kook. Support vector ma-
+                                                                                                                                      chine based arrhythmia classification using reduced fea-
+References                                                                                                                            tures. International Journal of Control Automation and
+                                                                                                                                      Systems, 3(4):571, 2005.
+Bache, K. and Lichman, M. UCI machine learning repos-
+  itory, 2013. URL http://archive.ics.uci.                                                                                          Steinkrau, Dave, Simard, Patrice Y, and Buck, Ian. Using
+  edu/ml.                                                                                                                             gpus for machine learning algorithms. In Proceedings of
+                                                                                                                                      the Eighth International Conference on Document Anal-
+Guvenir, H Altay et al. A supervised machine learning al-                                                                             ysis and Recognition, pp. 1115–1119. IEEE Computer
+  gorithm for arrhythmia analysis. In Computers in Cardi-                                                                             Society, 2005.
+  ology 1997, pp. 433–436. IEEE, 1997.                                                                                              Thakor, Nitish V and Zhu, Yi-Sheng. Applications of
+                                                                                                                                      adaptive filtering to ecg analysis: noise cancellation and
+Hoefman, Emmy, Bindels, Patrick JE, and van Weert,                                                                                    arrhythmia detection. Biomedical Engineering, IEEE
+  Henk CPM. Efficacy of diagnostic tools for detect-                                                                                  Transactions on, 38(8):785–794, 1991.
+  ing cardiac arrhythmias: systematic literature search.
+  Netherlands Heart Journal, 18(11):543–551, 2010.                                                                                  Zhang, Guoqiang Peter. An investigation of neural net-
+                                                                                                                                      works for linear time-series forecasting. Computers &
+Jerez, José M et al. Missing data imputation using statisti-                                                                         Operations Research, 28(12):1183–1202, 2001.
+   cal and machine learning methods in a real breast cancer
+   problem. Artificial intelligence in medicine, 50(2):105–
+   115, 2010.
+
+Juang, Chia-Feng, Chen, Teng-Chang, and Cheng, Wei-
+  Yuan. Speedup of implementing fuzzy neural networks
+  with high-dimensional inputs through parallel process-
+  ing on graphic processing units. Fuzzy Systems, IEEE
+  Transactions on, 19(4):717–728, 2011.
+

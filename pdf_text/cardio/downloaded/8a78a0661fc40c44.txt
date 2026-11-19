@@ -1,0 +1,514 @@
+                                                                                     Deep Pyramidal Residual Networks
+
+                                                            Dongyoon Han∗                      Jiwhan Kim∗                         Junmo Kim
+                                                             EE, KAIST                         EE, KAIST                           EE, KAIST
+                                                         dyhan@kaist.ac.kr                 jhkim89@kaist.ac.kr              junmo.kim@kaist.ac.kr
+
+
+
+                                                                    Abstract
+
+
+
+
+arXiv:1610.02915v4 [cs.CV] 6 Sep 2017
+                                                                                                            VGG [25], GoogleNet [31], Residual Networks [7, 8], and
+                                                                                                            Inception Residual Networks [30] were successively pro-
+                                           Deep convolutional neural networks (DCNNs) have                  posed to demonstrate advances in network architectures.
+                                        shown remarkable performance in image classification                In particular, Residual Networks (ResNets) [7, 8] leverage
+                                        tasks in recent years. Generally, deep neural network ar-           the concept of shortcut connections [29] inside a proposed
+                                        chitectures are stacks consisting of a large number of con-         residual unit for residual learning, to make it possible to
+                                        volutional layers, and they perform downsampling along              train much deeper network architectures. Deeper network
+                                        the spatial dimension via pooling to reduce memory us-              architectures are known for their superior performance, and
+                                        age. Concurrently, the feature map dimension (i.e., the num-        these network architectures commonly have deeply stacked
+                                        ber of channels) is sharply increased at downsampling lo-           convolutional filters with nonlinearity [25, 31].
+                                        cations, which is essential to ensure effective performance             With respect to feature map dimension, the conventional
+                                        because it increases the diversity of high-level attributes.        method of stacking several convolutional filters is to in-
+                                        This also applies to residual networks and is very closely          crease the dimension while decreasing the size of feature
+                                        related to their performance. In this research, instead of          maps by increasing the strides of the filters or poolings.
+                                        sharply increasing the feature map dimension at units that          This is the widely adopted method of controlling the size
+                                        perform downsampling, we gradually increase the feature             of feature maps, because extracting the diversified high-
+                                        map dimension at all units to involve as many locations as          level attributes with the increased feature map dimension
+                                        possible. This design, which is discussed in depth together         is very effective for classification tasks. Architectures such
+                                        with our new insights, has proven to be an effective means          as those of AlexNet [13] and VGG [25] utilize this method
+                                        of improving generalization ability. Furthermore, we pro-           of increasing the feature map dimension to construct their
+                                        pose a novel residual unit capable of further improving the         network architectures. The most successful deep neural net-
+                                        classification accuracy with our new network architecture.          work, ResNets [7, 8], which was introduced by He et al. [7],
+                                        Experiments on benchmark CIFAR-10, CIFAR-100, and Im-               also follows this approach for filter stacking.
+                                        ageNet datasets have shown that our network architecture
+                                                                                                               According to the research of Veit et al. [33], ResNets
+                                        has superior generalization ability compared to the original
+                                                                                                            are considered to behave as ensembles of relatively shallow
+                                        residual networks.
+                                                                                                            networks. These researchers showed that the deletion of an
+                                           Code is available at https://github.com/jhkim89/PyramidNet       individual residual unit from ResNets, i.e., such that only a
+                                                                                                            shortcut connection remains, does not significantly affect
+                                                                                                            the overall performance, proving that deleting a residual
+                                        1. Introduction                                                     unit is equivalent to deleting some shallow networks in the
+                                                                                                            ensemble networks. Contrary to this, deleting a single layer
+                                            The emergence of deep convolutional neural networks
+                                                                                                            in plain network architectures such as a VGG-network [25]
+                                        (DCNNs) has greatly contributed to advancements in solv-
+                                                                                                            damages the network by causing additional severe errors.
+                                        ing complex tasks [13, 23, 2, 3, 19] in computer vision
+                                        with significantly improved performance. Since the pro-                 However, in the case of ResNets, it was found that delet-
+                                        posal of LeNet [16], which introduced the use of deep neu-          ing the building blocks in a residual unit with downsam-
+                                        ral network architectures for computer vision tasks, the ad-        pling, where the feature map dimension is doubled, still in-
+                                        vanced architecture AlexNet [13] was selected as the win-           creases the classification error by a significant margin. In-
+                                        ner of the 2012 ImageNet competition [22] by a large mar-           terestingly, when the residual net is trained using a stochas-
+                                        gin over traditional methods. Subsequently, ZF-net [35],            tic depth [10], it was found that deleting the blocks with
+                                                                                                            downsampling does not degrade the classification perfor-
+                                          ∗ These two authors contributed equally.                          mance, as shown in Figure 8 in [33]. One may think that
+
+
+                                                                                                        1
+Figure 1. Schematic illustration of (a) basic residual units [7], (b) bottleneck residual units [7], (c) wide residual units [34], (d) our pyramidal
+residual units, and (e) our pyramidal bottleneck residual units.
+
+
+this phenomenon is related to the overall improvement in                     residual unit that can further improve ResNet. Section 3
+the classification performance enabled by stochastic depth.                  closely analyzes our PyramidNets via several discussions.
+   Motivated by the ensemble interpretation of residual net-                 Section 4 presents experimental results and comparisons
+works in Veit et al. [33] and the results with stochastic                    with several state-of-the-art deep network architectures.
+depth [10], we devised another method to handle the phe-                     Section 5 concludes our paper with suggestions for future
+nomenon associated with deleting the downsampling unit.                      works.
+In the proposed method, the feature map dimensions are in-
+creased at all layers to distribute the burden concentrated at               2. Network Architecture
+locations of residual units affected by downsampling, such
+that it is equally distributed across all units. It was found                   In this section, we introduce the network architectures of
+that using the proposed new network architecture, deleting                   our PyramidNets. The major difference between Pyramid-
+the units with downsampling does not degrade the perfor-                     Nets and other network architectures is that the dimension
+mance significantly. In our paper, we refer to this network                  of channels gradually increases, instead of maintaining the
+architecture as a deep “pyramidal” network and a “pyrami-                    dimension until a residual unit with downsampling appears.
+dal” residual network with a residual-type network archi-                    A schematic illustration is shown in Figure 1 (d) to facilitate
+tecture. This reflects the fact that the shape of the network                understanding of our network architecture.
+architecture can be compared to that of a pyramid. That is,
+                                                                             2.1. Feature Map Dimension Configuration
+the number of channels gradually increases as a function
+of the depth at which the layer occurs, which is similar to a                   Most deep CNN architectures [7, 8, 13, 25, 31, 35] uti-
+pyramid structure of which the shape gradually widens from                   lize an approach whereby feature map dimensions are in-
+the top downwards. This structure is illustrated in compar-                  creased by a large margin when the size of the feature map
+ison to other network architectures in Figure 1. The key                     decreases, and feature map dimensions are not increased
+contributions are summarized as follows:                                     until they encounter a layer with downsampling. In the case
+                                                                             of the original ResNet for CIFAR datasets [12], the number
+  • A deep pyramidal residual network (PyramidNet) is in-                    of feature map dimensions Dk of the k-th residual unit that
+    troduced. The key idea is to concentrate on the feature                  belongs to the n-th group can be described as follows:
+    map dimension by increasing it gradually instead of by                                    (
+    increasing it sharply at each residual unit with down-                                      16,               if n(k) = 1,
+    sampling. In addition, our network architecture works                               Dk =                                         (1)
+                                                                                                16 · 2n(k)−2 ,    if n(k) ≥ 2,
+    as a mixture of both plain and residual networks by
+    using zero-padded identity-mapping shortcut connec-
+                                                                             in which n(k) ∈ {1, 2, 3, 4} denotes the index of the group
+    tions when increasing the feature map dimension.
+                                                                             to which the k-th residual unit belongs. The residual units
+  • A novel residual unit is also proposed, which can fur-                   that belong to the same group have an equal feature map
+    ther improve the performance of ResNet-based archi-                      size, and the n-th group contains Nn residual units. In the
+    tectures (compared with state-of-the-art network archi-                  first group, there is only one convolutional layer that con-
+    tectures).                                                               verts an RGB image into multiple feature maps. For the
+                                                                             n-th group, after Nn residual units have passed, the feature
+   The remainder of this paper is organized as follows. Sec-                 size is downsampled by half and the number of dimensions
+tion 2 presents our PyramidNets and introduces a novel                       is doubled. We propose a method of increasing the feature
+                                                                         Group     Output size               Building Block
+                                                                         conv 1     32×32                     [3 × 3, 16]   
+                                                                                                   3 × 3, b16 + α(k − 1)/N c
+                                                                         conv 2      32×32                                     × N2
+                                                                                                  3 × 3, b16 + α(k − 1)/N c 
+                                                                                                   3 × 3, b16 + α(k − 1)/N c
+                                                                         conv 3      16×16                                     × N3
+                                                                                                  3 × 3, b16 + α(k − 1)/N c 
+                                                                                                   3 × 3, b16 + α(k − 1)/N c
+                                                                         conv 4       8×8                                      × N4
+                                                                                                   3 × 3, b16 + α(k − 1)/N c
+                                                                        avg pool      1×1                   [8 × 8, 16 + α]
+        (a)                  (b)                       (c)
+                                                                      Table 1. Structure of our PyramidNet for benchmarking with
+Figure 2. Visual illustrations of (a) additive PyramidNet, (b) mul-   CIFAR-10 and CIFAR-100 datasets. α denotes the widening fac-
+tiplicative PyramidNet, and (c) a comparison of (a) and (b).          tor, and Nn signifies the number of blocks in a group. Downsam-
+                                                                      pling is performed at conv3 1 and conv4 1 with a stride of 2.
+map dimension as follows:
+           (                                                          Figure 6, the layers can be stacked in various manners to
+             16,            if k = 1,
+     Dk =                                                      (2)    construct a single building block. We found the building
+             bDk−1 + α/N c, if 2 ≤ k ≤ N + 1,                         block shown in Figure 6 (d) to be the most promising, and
+in which N denotes                                                    therefore we included this structure as building block in our
+               P4 the total number of residual units, de-             PyramidNets. The discussion of this matter is continued in
+fined as N = n=2 Nn . The dimension is increased by a
+step factor of α/N , and the output dimension of the final            the following section.
+unit of each group becomes 16 + (n − 1)α/3 with same                     In terms of shortcut connections, many researchers ei-
+number of residual units in each group. The details of our            ther use those based on identity mapping, or those employ-
+network architecture are presented in Table 1.                        ing convolution-based projection. However, as the feature
+   The above equations are based on an addition-based                 map dimension of PyramidNet is increased at every unit,
+widening step factor α for increasing dimensions. However,            we can only consider two options: zero-padded identity-
+of course, multiplication-based widening (i.e., the process           mapping shortcuts, and projection shortcuts conducted by
+of multiplying by a factor to increase the channel dimen-             1×1 convolutions. However, as mentioned in the work of
+sion geometrically) presents another possibility for creating         He et al. [8], the 1×1 convolutional shortcut produces a
+a pyramid-like structure. Then, eq.(2) can be transformed             poor result when there are too many residual units, i.e., this
+as follows:                                                           shortcut is unsuitable for very deep network architectures.
+              (                                                       Therefore, we select zero-padded identity-mapping short-
+                16,               if k = 1,                           cuts for all residual units. Further discussions about the
+        Dk =                1                             (3)
+                bDk−1 · α N c, if 2 ≤ k ≤ N + 1.                      zero-padded shortcut are provided in the following section.
+
+The main difference between additive and multiplicative               3. Discussions
+PyramidNets is that the feature map dimension of an ad-
+ditive network gradually increases linearly, whereas the di-             In this section, we present an in-depth study of the ar-
+mension of a multiplicative network increases geometri-               chitecture of our PyramidNet, together with the proposed
+cally. That is, the dimension slowly increases in input-side          novel residual units. The experiments we include here sup-
+layers and sharply increases in output-side layers. This pro-         port the study and confirm that insights obtained from our
+cess is similar to that of the original deep network architec-        network architecture can further improve the performance
+tures such as VGG [25] and ResNet [7]. The visual illustra-           of existing ResNet-based architectures.
+tions of additive and multiplicative PyramidNets are shown
+in Figure 2. In this paper, we compare the performance of
+                                                                      3.1. Effect of PyramidNet
+both of these dimension-increasing approaches by compar-                 According to the work of Veit et al. [33], ResNets can be
+ing an additive PyramidNet (eq. (2)) and a multiplicative             viewed as ensembles of relatively shallow networks, sup-
+PyramidNet (eq. (3)) in section 4.                                    ported by the observation that deleting an individual build-
+                                                                      ing block in a residual unit of ResNets incurs minor classi-
+2.2. Building Block
+                                                                      fication loss, whereas removing layers from plain networks
+   The building block (i.e., the convolutional filter stacks          such as VGG [25] severely reduces the classification rate.
+with ReLUs and BN layers) in a residual unit is the core              However, in both original and pre-activation ResNets [7, 8],
+of ResNet-based architectures. It is obvious that in order            another noteworthy aspect is that deleting the units with
+to maximize the capability of the network architecture, de-           downsampling (and doubling the feature dimension) still
+signing a good building block is essential. As shown in               degrades performance by a large margin [33]. Meanwhile,
+                                                                         Figure 4. Test error curves to study the extent to which residual
+                                                                         units contribute to the performance in different network architec-
+                                                                         tures by deleting their individual units. The dashed and solid lines
+                                                                         denote the test errors that occur when no units are deleted, and
+                                                                         when an individual unit is deleted, respectively. Bold vertical lines
+Figure 3. Performance comparison between the pre-activation              denote the location of residual units through downsampling.
+ResNet [8] and our PyramidNet, using CIFAR datasets. Dashed
+and solid lines denote the training loss and test error, respectively.
+                                                                         spectively. This result shows that the ensemble effect of
+                                                                         our PyramidNet becomes stronger than the original ResNet,
+                                                                         such that generalization ability is improved.
+when a stochastic depth [10] is applied, this phenomenon
+is not observed, and the performance is also improved, ac-               3.2. Zero-padded Shortcut Connection
+cording to the experiment of Veit et al. [33]. The objective
+of our PyramidNet is to resolve this phenomenon differ-                      ResNets and pre-activation ResNets [7, 8] were stud-
+ently, by attempting to gradually increase the feature map               ied several types of shortcuts, such as an identity-mapping
+dimension instead of doubling it at one of the residual units            shortcut or projection shortcut. The experimental results
+and to evenly distribute the burden of increasing the feature            in [8] showed that the identity-mapping shortcut is a much
+maps. We observed that our PyramidNet indeed resolves                    more appropriate choice than other shortcuts. Because an
+this phenomenon and at the same time improves overall per-               identity-mapping shortcut does not have parameters, it has a
+formance. We further analyze the effect of our PyramidNet                lower possibility of overfitting compared to the other types
+by comparing it against the pre-activation ResNet, with the              of shortcuts; this ensures improved generalization ability.
+following experimental results. First, we compare the train-             Moreover, it can purely pass through the gradient accord-
+ing and test error curves of our PyramidNet with those of                ing to the identity mapping, and therefore it provides more
+the pre-activation ResNet [8] in Figure 3. The standard pre-             stability in the training stage.
+activation ResNet with 110 layers is used for comparison.                    In the case of our PyramidNet, identity mapping alone
+For our PyramidNet, we used a depth of 110 layers with a                 cannot be used for a shortcut because the feature map di-
+widening factor of α = 48; it had the same number of pa-                 mension differs among individual residual units. Therefore,
+rameters (1.7M) as the pre-activation ResNet to allow for a              only a zero-padded shortcut or projection shortcut can be
+fair comparison. The results indicate that our PyramidNet                used for all the residual units. However, as discussed in [8],
+has superior test accuracy, thereby confirming its greater               a projection shortcut can hamper information propagation
+ability to generalize compared to existing deep networks.                and lead to optimization problems, especially for very deep
+   Second, we verify the ensemble effect of our Pyramid-                 networks. On the other hand, we found that the zero-padded
+Nets by evaluating the performance after deleting individ-               shortcut does not lead to the overfitting problem because no
+ual units, similar to the experiment of Veit et al. [33]. The            additional parameters exist, and surprisingly, it shows sig-
+results are shown in Figure 4. As mentioned by Veit et                   nificant generalization ability compared to other shortcuts.
+al. [33], removing individual units only causes a slight                     We now examine the effect of the zero-padded identity-
+performance loss, compared with a plain network such as                  mapping shortcut on the k-th residual unit that belongs to
+the VGG [25]. However, in the case of the pre-activation                 the n-th group with the reshaped vector xlk of the l-th fea-
+ResNet, removing the blocks subjected to downsampling                    ture map:
+tends to affect the classification accuracy by a relatively                       (
+large margin, whereas this does not occur with our Pyra-                    l       F(k,l) (xlk−1 ) + xlk−1 , if 1 ≤ l ≤ Dk−1
+                                                                          xk =                                                      (4)
+midNets. Furthermore, the mean average error differences                            F(k,l) (xlk−1 ),          if Dk−1 < l ≤ Dk
+between the baseline result and the result obtained when
+individual units were deleted from both the pre-activation               where F(k,l) (·) denotes the l-th residual function of the k-
+ResNet and our PyramidNet were 0.72% and 0.54%, re-                      th residual unit and Dk represents the pre-defined channel
+                                                                        Shortcut Types                                   CIFAR-10   CIFAR-100
+                                                                        (a) Identity mapping with projection shortcut      5.03       23.48
+                                                                        (b) Projection with zero-padded shortcut           6.84       31.29
+                                                                        (c) Only projection shortcut                       6.98       31.62
+                                                                        (d) Identity mapping with zero-padded shortcut     4.70       22.77
+
+                                                                      Table 2. Top-1 errors (%) on CIFAR datasets using our Pyramid-
+                                                                      Net with several combinations of shortcut connections.
+
+
+              (a)                               (b)                   tions and the number of ReLUs. This could be discussed
+                                                                      with original ResNets [7], for which it was shown that
+Figure 5. Structure of residual unit (a) with zero-padded identity-   the performance increases as the network becomes deeper;
+mapping shortcut, (b) unraveled view of (a) showing that the zero-    however, if the depth exceeds 1,000 layers, overfitting still
+padded identity-mapping shortcut constitutes a mixture of a resid-    occurs and the result is less accurate than that generated by
+ual network with a shortcut connection and a plain network.           shallower ResNets.
+                                                                         First, we note that using ReLUs after the addition of
+dimensions of the k-th residual unit. From eq.(4), zero-              residual units adversely affects performance:
+padded elements of the identity-mapping shortcut for in-
+                                                                                xlk = ReLU (F(k ,l) (xlk −1 ) + xlk −1 ),                   (5)
+creasing dimension let xlk contain the outputs of both resid-
+ual networks and plain networks. Therefore, we could con-             where the ReLUs seem to have the function of filtering non-
+jecture that each zero-padded identity-mapping shortcut can           negative elements. Gross and Wilber [5] found that simply
+provide a mixture of the residual network and plain net-              removing ReLUs from the original ResNet [7] after each
+work, as shown in Figure 5. Furthermore, our Pyramid-                 addition with the shortcut connection leads to small perfor-
+Net increases the channel dimension at every residual unit,           mance improvements. This could be understood by consid-
+and the mixture effect of the residual network and plain net-         ering that, after addition, ReLUs provide non-negative in-
+work increases markedly. Figure 4 supports the conclusion             put to the subsequent residual units, and therefore the short-
+that the test error of PyramidNet does not oscillate as much          cut connection is always non-negative and the convolutional
+as that of the pre-activation ResNet. Finally, we investigate         layers would take responsibility for producing negative out-
+several types of shortcuts including proposed zero-padded             put before addition; this may decrease the overall capability
+identity-mapping shortcut in Table 2.                                 of the network architecture as analyzed in [8]. The pre-
+3.3. A New Building Block                                             activation ResNets proposed by He et al. [8] also overcame
+                                                                      this issue with pre-activated residual units that place BN
+    To maximize the capability of the network, it is natural          layers and ReLUs before (instead of after) the convolutional
+to ask the following question: “Can we design a better                layers:
+building block by altering the stacked elements inside
+the building block in more principled way?”. The first                                xlk = F(k,l) (xlk−1 ) + xlk−1 ,                       (6)
+building block types were proposed in the original paper on
+ResNets [7], and another type of building block was subse-            where ReLUs are removed after addition to create an iden-
+quently proposed in the paper on pre-activation ResNets [8],          tity path. Consequently, the overall performance has in-
+to answer the question. Moreover, pre-activation ResNets              creased by a large margin without overfitting, even at depths
+attempted to solve the backward gradient flowing problem              exceeding 1,000 layers. Furthermore, Shen et al. [24] pro-
+[8] by redesigning residual modules; this proved to be suc-           posed a weighted residual network architecture, which lo-
+cessful in trials. However, although the pre-activation resid-        cates a ReLU inside a residual unit (instead of locating
+ual unit was discovered with empirically improved perfor-             ReLU after addition) to create an identity path, and showed
+mance, further investigation over the possible combinations           that this structure also does not overfit even at depths of
+is not yet performed, leaving a potential room for improve-           more than 1,000 layers.
+ment. We next attempt to answer the question from two                     Second, we found that the use of a large number of Re-
+points of view by considering Rectified Linear Units (Re-             LUs in the blocks of each residual unit may negatively af-
+LUs) [20] and Batch Normalization (BN) [11] layers.                   fect performance. Removing the first ReLU in the blocks
+                                                                      of each residual unit, as shown in Figure 6 (b) and (d), was
+                                                                      found to enhance performance compared with the blocks
+3.3.1   ReLUs in a Building Block
+                                                                      shown in Figure 6 (a) and (c). Experimentally, we found
+Including ReLUs [20] in the building blocks of residual               that removal of the first ReLU in the stack is preferable and
+units is essential for nonlinearity; however, we found empir-         that the other ReLU should remain to ensure nonlinearity.
+ically that the performance can vary depending on the loca-           Removing the second ReLU in Figure 6 (a) changes the
+                (a)                                (b)                                 (c)                                      (d)
+
+Figure 6. Various types of basic and bottleneck residual units. “BatchNorm” denotes a Batch Normalization (BN) layer. (a) original
+pre-activation ResNets [8], (b) pre-activation ResNets removing the first ReLU, (c) pre-activation ResNets with a BN layer after the final
+convolutional layer, and (d) pre-activation ResNets removing the fist ReLU with a BN layer after the final convolutional layer.
+
+
+                                                                              ResNet Architecture                    CIFAR-10    CIFAR-100
+blocks to BN-ReLU-conv-BN-conv, and it is clear that, in                      (a) Pre-activation [8]                   5.82        25.06
+these blocks, the convolutional layers are successively lo-                   (b) Removing the first ReLU              5.31        24.55
+                                                                              (c) BN after the final conv              5.74        24.54
+cated without ReLUs to weaken their representation pow-                       (d) (b) + (c)                            5.29        23.74
+ers of each other. However, when we remove the first                          PyramidNet Architecture                CIFAR-10    CIFAR-100
+ReLU, the blocks are changed to BN-conv-BN-ReLU-conv,                         (a) Pre-activation [8]                   5.15        24.40
+                                                                              (b) Removing the first ReLU              4.81        23.43
+in which case the two convolutional layers are separated by                   (c) BN after the final conv              4.96        23.89
+the second ReLU, thereby guaranteeing nonlinearity. The                       (d) (b) + (c)                            4.62        23.31
+results in Table 3 confirm that removing the first ReLU as                    PyramidNet (bottleneck) Architecture   CIFAR-10    CIFAR-100
+                                                                              (a) Pre-activation [8]                   4.61        21.10
+in (b) and (d) in Figure 6, enhances the performance. Con-                    (b) Removing the first ReLU              4.45        20.40
+sequently, provided that an appropriate number of ReLUs                       (c) BN after the final conv              4.56        20.44
+                                                                              (d) (b) + (c)                            4.26        20.32
+are used to guarantee the nonlinearity of the feature space
+manifold, the remaining ReLUs could be removed to im-                   Table 3. Top-1 errors (%) on CIFAR datasets for several build-
+prove network performance.                                              ing block combinations of ReLUs and BN layers shown in Fig-
+                                                                        ure 6 (a)–(d), using ResNet [8] (with original feature map dimen-
+3.3.2   BN Layers in a Building Block                                   sion configuration) and our PyramidNet.
+
+The main role of a BN layer is to normalize the activations             of freedom obtained by involving γ and β from the BN lay-
+for fast convergence and to improve performance. The ex-                ers could improve the capability of the network architecture.
+perimental results of the four structures provided in Table 3           The results in Table 3 support the conclusion that adding a
+show that the BN layer can be used to maximize the capabil-             BN layer at the end of each building block, as in type (c)
+ity of a single residual unit. A BN layer conducts an affine            and (d) in Figure 6, improves the performance. Note that
+transformation with the following equation:                             the aforementioned network removing the first ReLU is also
+                                                                        improved by adding a BN layer after the final convolutional
+                         y = γx + β,                          (7)       layer. Furthermore, the results in Table 3 show that both
+where γ and β are learned for every activation in feature               PyramidNet and a new building block improve the perfor-
+maps. We experimentally found that the learned γ and β                  mance significantly.
+could closely approximate 0. This implies that if the learned
+γ and β are both close to 0, then the corresponding acti-               4. Experimental Results
+vation is considered not to be useful. Weighted ResNets
+[24], in which the learnable weights occur at the end of                    We evaluate and compare the performance of our algo-
+their building blocks, are also similarly learned to determine          rithm with that of existing algorithms [7, 8, 18, 24, 34] using
+whether the corresponding residual unit is useful. Thus, the            representative benchmark datasets: CIFAR-10 and CIFAR-
+BN layers at the end of each residual unit are a generalized            100 [12]. CIFAR-10 and CIFAR-100 each contain 32×32-
+version including [24] to enable decisions to be made as to             pixel color images, consists of 50,000 training images and
+whether each residual unit is helpful. Therefore, the degrees           10,000 testing images. But in case of CIFAR-10, it includes
+    Network                              # of Params    Output Feat. Dim.    Depth     Training Mem.     CIFAR-10     CIFAR-100
+    NiN [18]                                   -                 -             -              -             8.81         35.68
+    All-CNN [27]                               -                 -             -              -             7.25         33.71
+    DSN [17]                                   -                 -             -              -             7.97         34.57
+    FitNet [21]                                -                 -             -              -             8.39         35.04
+    Highway [29]                               -                 -             -              -             7.72         32.39
+    Fractional Max-pooling [4]                 -                 -             -              -             4.50         27.62
+    ELU [29]                                   -                 -             -              -             6.55         24.28
+    ResNet [7]                               1.7M               64            110         547MB             6.43         25.16
+    ResNet [7]                              10.2M               64           1001        2,921MB              -          27.82
+    ResNet [7]                              19.4M               64           1202        2,069MB            7.93           -
+    Pre-activation ResNet [8]                1.7M               64            164         841MB             5.46         24.33
+    Pre-activation ResNet [8]               10.2M               64           1001        2,921MB            4.62         22.71
+    Stochastic Depth [10]                    1.7M               64            110         547MB             5.23         24.58
+    Stochastic Depth [10]                   10.2M               64           1202        2,069MB            4.91           -
+    FractalNet [14]                         38.6M            1,024            21              -             4.60         23.73
+    SwapOut v2 (width×4) [26]                7.4M              256            32              -             4.76         22.72
+    Wide ResNet (width×4) [34]               8.7M              256            40          775MB             4.97         22.89
+    Wide ResNet (width×10) [34]             36.5M              640            28         1,383MB            4.17         20.50
+    Weighted ResNet [24]                    19.1M               64           1192             -             5.10           -
+    DenseNet (k = 24) [9]                   27.2M            2,352            100        4,381MB            3.74         19.25
+    DenseNet-BC (k = 40) [9]                25.6M            2,190            190        7,247MB            3.46         17.18
+    PyramidNet (α = 48)                      1.7M               64            110         655MB          4.58±0.06    23.12±0.04
+    PyramidNet (α = 84)                      3.8M              100            110         781MB          4.26±0.23    20.66±0.40
+    PyramidNet (α = 270)                    28.3M              286            110        1,437MB         3.73±0.04    18.25±0.10
+    PyramidNet (bottleneck, α = 270)        27.0M            1,144            164        4,169MB         3.48±0.20    17.01±0.39
+    PyramidNet (bottleneck, α = 240)        26.6M            1,024            200        4,451MB         3.44±0.11    16.51±0.13
+    PyramidNet (bottleneck, α = 220)        26.8M              944            236        4,767MB         3.40±0.07    16.37±0.29
+    PyramidNet (bottleneck, α = 200)        26.0M              864            272        5,005MB         3.31±0.08    16.35±0.24
+
+Table 4. Top-1 error rates (%) on CIFAR datasets. All the results of PyramidNets are produced with additive PyramidNets, and α denotes
+the widening factor. “Output Feat. Dim.” denotes the feature dimension of just before the last softmax classifier. The best results are
+highlighted in red.
+
+
+10 classes, and CIFAR-100 includes 100 classes. The stan-
+dard data augmentation, horizontal flipping, and translation
+by 4 pixels are adopted in our experiments, following the
+common practice [18]. The results achieved by Pyramid-
+Nets are based on the proposed residual unit: placing a BN
+layer after the final convolutional layer, and removing the
+first ReLU as in Figure 6 (d). Our code is built on Torch
+open source deep learning framework [1].
+                                                                      Figure 7. Comparison of test error curves with error bars of ad-
+4.1. Training Settings                                                ditive PyramidNet and multiplicative PyramidNet on CIFAR-10
+                                                                      (left) and CIFAR-100 (right) datasets, according to the different
+    Our PyramidNets are trained using backpropagation [15]
+                                                                      number of parameters.
+by Stochastic Gradient Descent (SGD) with Nesterov mo-
+mentum for 300 epochs on CIFAR-10 and CIFAR-100
+datasets. The initial learning rate is set to 0.1 for CIFAR-10        both basic and pyramidal bottleneck residual units are used.
+and 0.5 for CIFAR-100, and is decayed by a factor of 0.1 at           The error rates are provided in Table 4 for ours and the state-
+150 and 225 epochs, respectively. The filter parameters are           of-the-art models. The experimental results show that our
+initialized by “msra” [6]. We use a weight decay of 0.0001,           network has superior generalization ability, in terms of the
+a dampening of 0, a momentum of 0.9, and a batch size of              number of parameters, showing the best results compared
+128.                                                                  with other models.
+                                                                         Figure 7 compares additive and multiplicative Pyramid-
+4.2. Performance Evaluation
+                                                                      Nets using CIFAR datasets. When the number of param-
+   In our work, we mainly use the top-1 error rate for evalu-         eters is low, both additive and multiplicative PyramidNets
+ating our network architecture. Additive PyramidNets with             show similar performance, because these two network ar-
+   Network                          # of Params    Output Feat. Dim.     Augmentation       Train Crop    Test Crop    Top-1     Top-5
+   ResNet-152 [7]                      60.0M            2,048                 scale          224×224      224×224       23.0      6.7
+   Pre-ResNet-152† [8]                 60.0M            2,048            scale+asp ratio     224×224      224×224       22.2      6.2
+   Pre-ResNet-200† [8]                 64.5M            2,048            scale+asp ratio     224×224      224×224       21.7      5.8
+   WRN-50-2-bottleneck [34]            68.9M            2,048            scale+asp ratio     224×224      224×224       21.9      6.0
+   PyramidNet-200 (α = 300)            62.1M            1,456            scale+asp ratio     224×224      224×224       20.5      5.3
+   PyramidNet-200 (α = 300)∗           62.1M            1,456            scale+asp ratio     224×224      224×224       20.5      5.4
+   PyramidNet-200 (α = 450)∗          116.4M            2,056            scale+asp ratio     224×224      224×224       20.1      5.4
+   ResNet-200 [7]                      64.5M            2,048                 scale          224×224      320×320       21.8      6.0
+   Pre-ResNet-200 [8]                  64.5M            2,048            scale+asp ratio     224×224      320×320       20.1      4.8
+   Inception-v3 [32]                      -             2,048            scale+asp ratio     299×299      299×299       21.2      5.6
+   Inception-ResNet-v1 [30]               -             1,792            scale+asp ratio     299×299      299×299       21.3      5.5
+   Inception-v4 [30]                      -             1,536            scale+asp ratio     299×299      299×299       20.0      5.0
+   Inception-ResNet-v2 [30]               -             1,792            scale+asp ratio     299×299      299×299       19.9      4.9
+   PyramidNet-200 (α = 300)            62.1M            1,456            scale+asp ratio     224×224      320×320       19.6      4.8
+   PyramidNet-200 (α = 300)∗           62.1M            1,456            scale+asp ratio     224×224      320×320       19.5      4.8
+   PyramidNet-200 (α = 450)∗          116.4M            2,056            scale+asp ratio     224×224      320×320       19.2      4.7
+
+Table 5. Comparisons of single-model, single-crop error (%) on the ILSVRC 2012 validation set. All the results of PyramidNets are
+produced with additive PyramidNets. “asp ratio” means the aspect ratio applied for data augmention, and “Output feat. dim.” denotes the
+feature dimension of just after the last global pooling layer. ∗ denotes the models which applied dropout method, and † denotes the results
+obtained from https://github.com/facebook/fb.resnet.torch.
+
+
+chitectures do not have significant structural differences.                 We train our models for 120 epochs with a batch size of
+As the number of parameters increases, they start to show               128, and the initial learning rate is set to 0.05, divided by 10
+a more marked difference in terms of the feature map di-                at 60, 90 and 105 epochs. We use the same weight decay,
+mension configuration. Because the feature map dimension                momentum, and initialization settings as those of CIFAR
+increases linearly in the case of additive PyramidNets, the             datasets. We train our model by using a standard data aug-
+feature map dimensions of the input-side layers tend to be              mentation with scale jittering and aspect ratio as suggested
+larger, and those of the output-side layers tend to be smaller,         in Szegedy et al. [31]. Table 5 shows the results of our
+compared with multiplicative PyramidNets as illustrated in              PyramidNets in ImageNet dataset compared with the state-
+Figure 2.                                                               of-the-art models. The experimental results show that our
+   Previous works [7, 25] typically set multiplicative scal-            PyramidNet with α = 300 has a top-1 error rate of 20.5%,
+ing of feature map dimension for downsampling modules,                  which is 1.2% lower than the pre-activation ResNet-200 [8]
+which is implemented to give a larger degree of freedom to              which has a similar number of parameters but higher out-
+the classification part by increasing the feature map dimen-            put feature dimension than our model. We also notice that
+sion of the output-side layers. However, for our Pyramid-               increasing α with an appropriate regularization method can
+Net, the results in Figure 7 implies that increasing the model          further improve the performance.
+capacity of the input-side layers would lead to a better per-               For comparison with the Inception-ResNet [30] that uses
+formance improvement than using a conventional way of                   a testing crop with 299 × 299 size, we test our model on a
+multiplicative scaling of feature map dimension.                        320 × 320 crop, by the same reason with the work of He et
+   We also note that, although the use of regularization                al. [8]. Our PyramidNet with α = 300 shows a top-1 error
+methods such as dropout [28] or stochastic depth [10] could             rate of 19.6%, which outperforms both the pre-activation
+further improve the performance of our model, we did not                ResNet [8] and the Inception-ResNet-v2 [30] models.
+involve those methods to ensure a fair comparison with
+other models.                                                           5. Conclusion
+
+4.3. ImageNet                                                               The main idea of the novel deep network architecture
+                                                                        described in this paper involves increasing the feature map
+   1,000-class ImageNet dataset [22] used for ILSVRC                    dimension gradually, in order to construct so-called Pyra-
+contains more than one million training images and 50,000               midNets along with the concept of ResNets. We also devel-
+validation images. We use additive PyramidNets with the                 oped a novel residual unit, which includes a new building
+pyramidal bottleneck residual units, deleting the first ReLU            block for a residual unit with a zero-padded shortcut; this
+and adding a BN layer at the last layer as described in Sec-            design leads to significantly improved generalization abil-
+tion 3.3 and shown in Figure 6 (d) for further performance              ity. In tests using CIFAR-10, CIFAR-100, and ImageNet-
+improvement.                                                            1k datasets, our PyramidNets outperform all previous state-
+of-the-art deep network architectures. Furthermore, the in-           [16] Y. LeCun, L. Bottou, Y. Bengio, and P. Haffner. Gradient-
+sights in this paper could be utilized by any network archi-               based learning applied to document recognition. Proceed-
+tecture, to improve their capacity for better performance.                 ings of the IEEE, 86(11):2278–2324, 1998. 1
+In future work, we will develop methods of optimizing pa-             [17] C.-Y. Lee, S. Xie, P. Gallagher, Z. Zhang, and Z. Tu. Deeply-
+rameters such as feature map dimensions in more principled                 supervised nets. In AISTATS, 2015. 7
+ways with proper cost functions that give insight into the na-        [18] M. Lin, Q. Chen, and S. Yan. Network in network. In ICLR,
+ture of residual networks.                                                 2014. 6, 7
+                                                                      [19] J. Long, E. Shelhamer, and T. Darrell. Fully convolutional
+Acknowledgements: This work was supported by the ICT
+                                                                           networks for semantic segmentation. In CVPR, 2015. 1
+R&D program of MSIP/IITP, 2016-0-00563, Research on
+                                                                      [20] V. Nair and G. E. Hinton. Rectified linear units improve re-
+Adaptive Machine Learning Technology Development for
+                                                                           stricted boltzmann machines. In ICML, 2010. 5
+Intelligent Autonomous Digital Companion.
+                                                                      [21] A. Romero, N. Ballas, S. E. Kahou, A. Chassang, C. Gatta,
+                                                                           and Y. Bengio. Fitnets: Hints for thin deep nets. In ICLR,
+References                                                                 2015. 7
+                                                                      [22] O. Russakovsky, J. Deng, H. Su, J. Krause, S. Satheesh,
+ [1] R. Collobert, K. Kavukcuoglu, and C. Farabet. Torch7: A
+                                                                           S. Ma, Z. Huang, A. Karpathy, A. Khosla, M. Bernstein,
+     matlab-like environment for machine learning. In BigLearn,
+                                                                           A. C. Berg, and L. Fei-Fei. ImageNet Large Scale Visual
+     NIPS Workshop, 2011. 7
+                                                                           Recognition Challenge. International Journal of Computer
+ [2] J. Donahue, Y. Jia, O. Vinyals, J. Hoffman, N. Zhang,                 Vision, 115(3):211–252, 2015. 1, 8
+     E. Tzeng, and T. Darrell. Decaf: A deep convolutional acti-      [23] P. Sermanet, D. Eigen, X. Zhang, M. Mathieu, R. Fergus,
+     vation feature for generic visual recognition. In ICML, 2014.         and Y. LeCun. Overfeat: Integrated recognition, localization
+     1                                                                     and detection using convolutional networks. In ICLR, 2014.
+ [3] R. Girshick, J. Donahue, T. Darrell, and J. Malik. Rich fea-          1
+     ture hierarchies for accurate object detection and semantic      [24] F. Shen and G. Zeng. Weighted residuals for very deep net-
+     segmentation. In CVPR, 2014. 1                                        works. arXiv preprint arXiv:1605.08831, 2016. 5, 6, 7
+ [4] B. Graham.        Fractional max-pooling.      arXiv preprint    [25] K. Simonyan and A. Zisserman. Very deep convolutional
+     arXiv:1412.6071, 2014. 7                                              networks for large-scale image recognition. In ICLR, 2015.
+ [5] S. Gross and M. Wilber. Training and investigating residual           1, 2, 3, 4, 8
+     nets. 2016. http://torch.ch/blog/2016/02/04/resnets.html. 5      [26] S. Singh, D. Hoiem, and D. Forsyth. Swapout: Learning an
+ [6] K. He, X. Zhang, S. Ren, and J. Sun. Delving deep into                ensemble of deep architectures. In NIPS, 2016. 7
+     rectifiers: Surpassing human-level performance on imagenet       [27] J. T. Springenberg, A. Dosovitskiy, T. Brox, and M. Ried-
+     classification. In ICCV, 2015. 7                                      miller. Striving for simplicity: The all convolutional net. In
+ [7] K. He, X. Zhang, S. Ren, and J. Sun. Deep residual learning           ICLR Workshop, 2015. 7
+     for image recognition. In CVPR, 2016. 1, 2, 3, 4, 5, 6, 7, 8     [28] N. Srivastava, G. Hinton, A. Krizhevsky, I. Sutskever, and
+ [8] K. He, X. Zhang, S. Ren, and J. Sun. Identity mappings in             R. Salakhutdinov. Dropout: A simple way to prevent neu-
+     deep residual networks. In ECCV, 2016. 1, 2, 3, 4, 5, 6, 7, 8         ral networks from overfitting. Journal of Machine Learning
+ [9] G. Huang, Z. Liu, and K. Q. Weinberger. Densely connected             Research, 15:1929–1958, 2014. 8
+     convolutional networks. arXiv preprint arXiv:1608.06993,         [29] R. K. Srivastava, K. Greff, and J. Schmidhuber. Training
+     2016. 7                                                               very deep networks. In NIPS, 2015. 1, 7
+[10] G. Huang, Y. Sun, Z. Liu, D. Sedra, and K. Weinberger. Deep      [30] C. Szegedy, S. Ioffe, and V. Vanhoucke. Inception-v4,
+     networks with stochastic depth. In ECCV, 2016. 1, 2, 4, 7, 8          inception-resnet and the impact of residual connections on
+                                                                           learning. In ICLR Workshop, 2016. 1, 8
+[11] S. Ioffe and C. Szegedy. Batch normalization: Accelerating
+     deep network training by reducing internal covariate shift. In   [31] C. Szegedy, W. Liu, Y. Jia, P. Sermanet, S. Reed,
+     ICML, 2015. 5                                                         D. Anguelov, D. Erhan, V. Vanhoucke, and A. Rabinovich.
+                                                                           Going deeper with convolutions. In CVPR, 2015. 1, 2, 8
+[12] A. Krizhevsky. Learning multiple layers of features from
+                                                                      [32] C. Szegedy, V. Vanhoucke, S. Ioffe, J. Shlens, and Z. Wojna.
+     tiny images. In Tech Report, 2009. 2, 6
+                                                                           Rethinking the inception architecture for computer vision. In
+[13] A. Krizhevsky, I. Sutskever, and G. E. Hinton. ImageNet               CVPR, 2016. 8
+     Classification with Deep Convolutional Neural Networks. In
+                                                                      [33] A. Veit, M. Wilber, and S. Belongie. Residual networks be-
+     NIPS, 2012. 1, 2
+                                                                           have like ensembles of relatively shallow networks. In NIPS,
+[14] G. Larsson, M. Maire, and G. Shakhnarovich. Fractalnet:               2016. 1, 2, 3, 4
+     Ultra-deep neural networks without residuals. arXiv preprint     [34] S. Zagoruyko and N. Komodakis. Wide residual networks.
+     arXiv:1605.07648, 2016. 7                                             In BMVC, 2016. 2, 6, 7, 8
+[15] Y. LeCun, B. Boser, J. S. Denker, D. Henderson, R. E.            [35] M. D. Zeiler and R. Fergus. Visualizing and understanding
+     Howard, W. Hubbard, and L. D. Jackel. Backpropagation                 convolutional networks. In ECCV, 2014. 1, 2
+     applied to handwritten zip code recognition. Neural compu-
+     tation, 1(4):541–551, 1989. 7
+

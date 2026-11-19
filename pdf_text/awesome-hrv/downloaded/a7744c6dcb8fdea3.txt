@@ -1,0 +1,1081 @@
+                                                                           FairOD: Fairness-aware Outlier Detection
+                                                      Shubhranshu Shekhar                                                      Neil Shah                                       Leman Akoglu
+                                                     shubhras@andrew.cmu.edu                                              nshah@snap.com                                 lakoglu@andrew.cmu.edu
+                                                     Carnegie Mellon University                                               Snap Inc.                                 Carnegie Mellon University
+                                                        Pittsburgh, PA, USA                                               Seattle, WA, USA                                  Pittsburgh, PA, USA
+
+                                         ABSTRACT                                                                                      surprisingly, fairness in the context of outlier detection (OD) is
+                                         Fairness and Outlier Detection (OD) are closely related, as it is ex-                         vastly understudied. OD is critical for numerous applications in
+                                         actly the goal of OD to spot rare, minority samples in a given pop-                           security [22, 53, 57], finance [27, 34, 50], healthcare [9, 38] etc. and
+                                         ulation. However, when being a minority (as defined by protected                              is widely used for detection of rare positive-class instances.
+
+
+
+
+arXiv:2012.03063v2 [cs.LG] 30 Aug 2021
+                                         variables, such as race/ethnicity/sex/age) does not reflect positive-                            Outlier detection for “policing”: In such critical systems, OD
+                                         class membership (such as criminal/fraud), OD produces unjust out-                            is often used to flag instances that reflect riskiness, which are then
+                                         comes. Surprisingly, fairness-aware OD has been almost untouched                              “policed” (or audited) by human experts. For example, law enforce-
+                                         in prior work, as fair machine learning literature mainly focuses on                          ment agencies might employ automated surveillance systems in
+                                         supervised settings. Our work aims to bridge this gap. Specifically,                          public spaces to spot suspicious individuals based on visual charac-
+                                         we develop desiderata capturing well-motivated fairness criteria                              teristics, who are subsequently stopped and frisked. Alternatively,
+                                         for OD, and systematically formalize the fair OD problem. Further,                            in the financial domain, analysts can police fraudulent-looking
+                                         guided by our desiderata, we propose FairOD, a fairness-aware                                 claims, and corporate trust and safety employees can police bad
+                                         outlier detector that has the following desirable properties: FairOD                          actors on social networks.
+                                         (1) exhibits treatment parity at test time, (2) aims to flag equal                               Group sample size disparity yields unfair OD: Importantly,
+                                         proportions of samples from all groups (i.e. obtain group fairness,                           outlier detectors are designed exactly to spot rare, statistical mi-
+                                         via statistical parity), and (3) strives to flag truly high-risk sam-                         nority samples1 with the hope that outlierness reflects riskiness,
+                                         ples within each group. Extensive experiments on a diverse set                                which prompts their bias against societal minorities (as defined by
+                                         of synthetic and real world datasets show that FairOD produces                                race/ethnicity/sex/age/etc.) as well, since minority group sample
+                                         outcomes that are fair with respect to protected variables, while                             size is by definition small.
+                                         performing comparable to (and in some cases, even better than)                                   However, when minority status (e.g. Hispanic) does not reflect
+                                         fairness-agnostic detectors in terms of detection performance.                                positive-class membership (e.g. fraud), OD produces unjust out-
+                                                                                                                                       comes, by overly flagging the instances from the minority gro-
+                                         CCS CONCEPTS                                                                                  ups as outliers. This conflation of statistical and societal minorities
+                                                                                                                                       can become an ethical matter.
+                                         • Computing methodologies → Machine learning algorithms;
+                                                                                                                                          Unfair OD leads to disparate impact: What would happen
+                                         Anomaly detection.
+                                                                                                                                       downstream if we did not strive for fairness-aware OD given the ex-
+                                         KEYWORDS                                                                                      istence of societal minorities? OD models’ inability to distinguish so-
+                                                                                                                                       cietal minorities (as induced by so-called protected variables (𝑃𝑉 s)),
+                                         fair outlier detection; outlier detection; anomaly detection; algo-                           from statistical minorities, contributes to the likelihood of minority
+                                         rithmic fairness; end-to-end detector; deep learning                                          group members being flagged as outliers (see Fig. 1). This is fur-
+                                         ACM Reference Format:                                                                         ther exacerbated by proxy variables which partially-redundantly
+                                         Shubhranshu Shekhar, Neil Shah, and Leman Akoglu. 2021. FairOD: Fairness-                     encode (i.e. correlate with) the 𝑃𝑉 (s), by increasing the number of
+                                         aware Outlier Detection. In Proceedings of the 2021 AAAI/ACM Conference on                    subspaces in which minorities stand out. The result is overpolicing
+                                         AI, Ethics, and Society (AIES ’21), May 19–21, 2021, Virtual Event, USA. ACM,                 due to over-representation of minorities in OD outcomes. Note
+                                         New York, NY, USA, 14 pages. https://doi.org/10.1145/3461702.3462517
+                                                                                                                                       that overpolicing the minority group also implies underpolicing
+                                                                                                                                       the majority group given limited policing capacity and constraints.
+                                         1     INTRODUCTION                                                                               Overpolicing can also feed back into a system when the policed
+                                         Fairness in machine learning (ML) has received a surge of atten-                              outliers are used as labels in downstream supervised tasks. Alarm-
+                                         tion in the recent years. The community has largely focused on                                ingly, this initially skewed sample (due to unfair OD), may be am-
+                                         designing different notions of fairness [4, 15, 51] mainly tailored                           plified through a feedback loop via predicting policing where more
+                                         towards supervised ML problems [21, 24, 52]. However, perhaps                                 outliers are identified in more heavily policed groups. Given that
+                                         Permission to make digital or hard copies of all or part of this work for personal or         OD’s use in societal applications has direct bearing on social well-
+                                         classroom use is granted without fee provided that copies are not made or distributed         being, ensuring that OD-based outcomes are non-discriminatory
+                                         for profit or commercial advantage and that copies bear this notice and the full citation     is pivotal. This demands the design of fairness-aware OD models,
+                                         on the first page. Copyrights for components of this work owned by others than ACM
+                                         must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,       which our work aims to address.
+                                         to post on servers or to redistribute to lists, requires prior specific permission and/or a      Prior research and challenges: Abundant work on algorithm
+                                         fee. Request permissions from permissions@acm.org.
+                                         AIES ’21, May 19–21, 2021, Virtual Event, USA
+                                                                                                                                       fairness has focused on supervised ML tasks [6, 24, 52]. Numerous
+                                         © 2021 Association for Computing Machinery.
+                                                                                                                                       1 In this work, the words sample, instance, and observation are used interchangeably
+                                         ACM ISBN 978-1-4503-8473-5/21/05. . . $15.00
+                                         https://doi.org/10.1145/3461702.3462517                                                       throughout text.
+                                           Inlier, P V = a                                   0.7
+                                                                                                             PV = a                        PV = b
+                                           Inlier, P V = b
+                                                                                                                                                                              1.0
+                                10         Outlier, P V = a
+                                                                                             0.6
+
+
+
+
+                                                                                                                                                            Flag rate ratio
+                                           Outlier, P V = b
+
+
+
+
+                                                                             Outlier score
+                                                                                                                                                                              0.8
+
+
+
+                   Feature 2
+                                 5
+                                                                                             0.5
+                                                                                                                                                                              0.6
+                                 0
+                                                                                             0.4                                                                              0.4
+
+                               −5
+                                                                                             0.3                                                                              0.2
+
+                               −10
+                                                                                                        1        2             4               8                                          1            2                         4           8
+                                     −10          −5          0     5   10
+                                                        Feature 1                                  Sample size ratio (|XP V =a|/|XP V =b|)                                          Sample size ratio (|XP V =a|/|XP V =b|)
+
+
+Figure 1: (left) Simulated 2-dim. data with equal sized groups i.e. |X𝑃𝑉 =𝑎 |=|X𝑃𝑉 =𝑏 |. (middle) Group score distributions induced
+by 𝑃𝑉 = 𝑎 and 𝑃𝑉 = 𝑏 are plotted by varying the simulated |X𝑃𝑉 =𝑎 |/|X𝑃𝑉 =𝑏 | ratio. Notice that minority group (𝑃𝑉 = 𝑏) re-
+ceives larger outlier scores as the size ratio increases. (right) Flag rate ratio of the groups for the varying sample size ratio
+|X𝑃𝑉 =𝑎 |/|X𝑃𝑉 =𝑏 |. As we increase size disparity, the minority group is “policed” (i.e. flagged) comparatively more.
+
+                                                                                                                                                                                              Ideal                                                                Ideal
+notions of fairness [4, 51] have been explored in such contexts, each                                                                    1.0                                                                                   1.0
+
+
+with their own challenges in achieving equitable decisions [15].                                                                         0.9                                                                                   0.9
+
+
+In contrast, there is little to no work on addressing fairness in
+                                                                                                                        Group Fidelity                                                                        Group Fidelity
+                                                                                                                                         0.8                                                                                   0.8
+
+
+unsupervised OD. Incorporating fairness into OD is challenging, in                                                                       0.7                                                                                   0.7
+
+
+
+
+                                                                                                                         (Average)                                                                            (6 datasets)
+the face of (1) many possibly-incompatible notions of fairness and,                                                                      0.6                                                                                   0.6
+
+
+(2) the absence of ground-truth outlier labels.                                                                                          0.5                                                                                   0.5
+
+
+   The two works tackling2 unfairness in the OD literature are                                                                           0.4                                                                                   0.4
+
+
+by P and Abraham [43] which proposes an ad-hoc procedure to                                                                              0.3                                                                                   0.3
+
+
+introduce fairness specifically to the LOF algorithm [10], and Zhang                                                                           0.2    0.4
+                                                                                                                                                              Fairness
+                                                                                                                                                                                    0.6        0.8    1.0                              0.2       0.4         0.6
+                                                                                                                                                                                                                                                       Fairness
+                                                                                                                                                                                                                                                                    0.8       1.0
+
+
+
+and Davidson [56] (concurrent to our work) which proposes an                                                                                         base                                     rw            dir                      lfr               arl                FairOD
+adversarial training based deep SVDD detector. Amongst other
+issues (see Sec. 5), the approach proposed in [43] invites disparate                                                    Figure 2: Fairness (statistical parity) vs. GroupFidelity (group-
+treatment, necessitating explicit use of 𝑃𝑉 at decision time, leading                                                   level rank preservation) of baselines and our proposed
+to taste-based discrimination [16] that is unlawful in several critical                                                 FairOD (red cross), (left) averaged across 6 datasets, and
+applications. On the other hand, the approach in [56] has several                                                       (right) on individual datasets. FairOD outperforms existing
+drawbacks (see Sec. 5), and in light of unavailable implementation,                                                     solutions (tending towards ideal), achieving fairness while
+we include a similar baseline called arl that we compare against                                                        preserving group fidelity from the base detector. See Sec. 4
+our proposed method.                                                                                                    for more details.
+   Alternatively, one could re-purpose existing fair representation
+learning techniques [7, 19, 54] as well as data preprocessing strate-
+gies [20, 28] for subsequent fair OD. However, as we show in Sec. 4
+and discuss in Sec. 5, isolating representation learning from the de-                                                          FairOD, a new detector which directly incorporates the pre-
+tection task is suboptimal, largely (needlessly) sacrificing detection                                                         scribed criteria into its training. Notably, FairOD (1) aims to
+performance for fairness.                                                                                                      equalize flag rates across groups, achieving group fairness
+   Our contributions: Our work strives to design a fairness-aware                                                              via statistical parity, while (2) striving to flag truly high-
+OD model to achieve equitable policing across groups and avoid an                                                              risk samples within each group, and (3) avoiding disparate
+unjust conflation of statistical and societal minorities. We summa-                                                            treatment. (Sec. 3)
+rize our main contributions as follows:                                                                                   (3) Effectiveness on Real-world Data: We apply FairOD on
+    (1) Desiderata & Problem Definition for Fair Outlier De-                                                                   several real-world and synthetic datasets with diverse ap-
+        tection: We identify 5 properties characterizing detection                                                             plications such as credit risk assessment and hate speech
+        quality and fairness in OD as desiderata for fairness-aware                                                            detection. Experiments demonstrate FairOD’s effectiveness
+        detectors. We discuss their justifiability and achievability,                                                          in achieving both fairness goals (Fig. 2) as well as accurate
+        based on which we formally define the (unsupervised) fairness-                                                         detection (Fig. 6, Sec. 4), significantly outperforming alterna-
+        aware OD problem (Sec. 2).                                                                                             tive solutions.
+    (2) Fairness Criteria & New, Fairness-Aware OD Model: We                                                              Reproducibility: All of our source code and datasets are shared
+        introduce well-motivated fairness criteria and give mathe-                                                      publicly at https://tinyurl.com/fairOD.
+        matical objectives that can be optimized to obey the desider-
+        ata. These criteria are universal, in that they can be embedded                                                 2                 DESIDERATA FOR FAIR OUTLIER
+        into the objective of any end-to-end OD model. We propose                                                                         DETECTION
+2 [17] aims to quantify fairness of OD model outcomes post hoc, which thus has a                                        Notation. We are given 𝑁 samples (also, observations or instances)
+different scope.                                                                                                                  𝑁 ⊆ R𝑑 as the input for OD where 𝑋 ∈ R𝑑 denotes
+                                                                                                                        X = {𝑋𝑖 }𝑖=1                                      𝑖
+        Table 1: Frequently used symbols and definitions.                                           (also, precision) is strictly larger than the base rate (also, prevalence),
+                                                                                                    that is,
+ Symbol    Definition
+                                                                                                                        𝑃 (𝑌 = 1 | 𝑂 = 1) > 𝑃 (𝑌 = 1) .                    (1)
+ 𝑋        𝑑-dimensional feature representation of an observation
+ 𝑌        true label of an observation, w/ values 0 (inlier), 1 (outlier)
+ 𝑃𝑉       binary protected (or sensitive) variable, w/ groups 𝑎 (majority), 𝑏 (minority)
+                                                                                                    This condition ensures that any policing effort concerted through
+ 𝑂        detector-assigned label to an observation, w/ value 1 (predicted/flagged outlier)         the employment of an OD model is able to achieve a strictly larger
+          base rate of/fraction of ground-truth outliers in group 𝑣, i.e. 𝑏𝑟 𝑣 = 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑣)
+ 𝑏𝑟 𝑣
+ 𝑓 𝑟𝑣     flag rate of/fraction of flagged observations in group 𝑣, i.e 𝑓 𝑟 𝑣 = 𝑃 (𝑂 = 1|𝑃𝑉 = 𝑣)
+                                                                                                    precision (LHS) as compared to random sampling, where policing
+                                                                                                    via the latter would simply yield a precision that is equal to the
+                                                                                                    prevalence of outliers in the population (RHS) in expectation. Note
+the feature representation for observation 𝑖. Each observation is                                   that our first condition in (1) is related to detection performance,
+additionally associated with a binary3 protected (also, sensitive)                                  and specifically, the usefulness of OD itself for policing applications.
+variable, PV = {𝑃𝑉𝑖 }𝑖=1 𝑁 , where 𝑃𝑉 ∈ {𝑎, 𝑏} identifies two groups
+                                        𝑖                                                              How-to: We can indirectly control for detection effectiveness
+– the majority (𝑃𝑉𝑖 = 𝑎) group and the minority (𝑃𝑉𝑖 = 𝑏) group. We                                 via careful feature engineering. Assuming domain experts assist
+              𝑁 , 𝑌 ∈ {0, 1}, to denote the unobserved ground-truth
+use Y = {𝑌𝑖 }𝑖=1    𝑖                                                                               in feature design, it would be reasonable to expect a better-than-
+binary labels for the observations where, for exposition, 𝑌𝑖 = 1                                    random detector that satisfies Eq. (1).
+denotes an outlier (positive outcome) and 𝑌𝑖 = 0 denotes an inlier                                     Next, we present fairness-related conditions for OD.
+(negative outcome). We use 𝑂 : 𝑋 ↦→ {0, 1} to denote the predicted
+outcome of an outlier detector, and 𝑠 : 𝑋 ↦→ R to capture the                                       D2. Treatment parity: OD should exhibit non-disparate treatment
+corresponding numerical outlier score as the estimate of the out-                                   that explicitly avoid the use of 𝑃𝑉 for producing a decision. In
+lierness. Thus, 𝑂 (𝑋𝑖 ), 𝑠 (𝑋𝑖 ) respectively indicate predicted outlier                            particular, OD decisions should obey
+label and outlier score for sample 𝑋𝑖 . We use O = {𝑂 (𝑋𝑖 )}𝑖=1 𝑁 and
+                                                                                                                𝑃 (𝑂 = 1 | 𝑋 ) = 𝑃 (𝑂 = 1 | 𝑋, 𝑃𝑉 = 𝑣), ∀𝑣 .               (2)
+             𝑁
+S = {𝑠 (𝑋𝑖 )}𝑖=1 to denote the set of all predicted labels and scores
+from a given model without loss of generality. Note that we can                                     In words, the probability that the detector outputs an outlier label
+derive 𝑂 (𝑋𝑖 ) from a simple thresholding of 𝑠 (𝑋𝑖 ). We routinely                                  𝑂 for a given feature vector 𝑋 remains unchanged even upon ob-
+drop 𝑖-subscripts to refer to properties of a single sample without                                 serving the value of the 𝑃𝑉 . In many settings (e.g. employment),
+loss of generality. We denote the group base rate (or prevalence)                                   explicit 𝑃𝑉 use is unlawful at inference.
+of outlierness as 𝑏𝑟𝑎 = 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎) for the majority group.                                       How-to: We can build an OD model using a disparate learning
+Finally, we let 𝑓 𝑟𝑎 = 𝑃 (𝑂 = 1|𝑃𝑉 = 𝑎) depict the flag rate of the                                 process [36] that uses 𝑃𝑉 only during the model training phase,
+detector for the majority group. Similar definitions extend to the                                  but does not require access to 𝑃𝑉 for producing a decision, hence
+minority group with 𝑃𝑉 = 𝑏. Table 1 gives a list of the notations                                   satisfying treatment parity.
+frequently used throughout the paper.                                                                  Treatment parity ensures that OD decisions are effectively “blind-
+   Having presented the problem setup and notation, we state our                                    folded” to the 𝑃𝑉 . However, this notion of fairness alone is not suffi-
+fair OD problem (informally) as follows.                                                            cient to ensure equitable policing across groups; namely, removing
+                                                                                                    the 𝑃𝑉 from scope may still allow discriminatory OD results for
+   Informal Problem 1 (Fair Outlier Detection). Given samples
+                                                                                                    the minority group (e.g., African American) due to the presence
+X and protected variable values PV, estimate outlier scores S and
+                                                                                                    of several other features (e.g., zipcode) that (partially-)redundantly
+assign outlier labels O, such that
+                                                                                                    encode the 𝑃𝑉 . Consequently, by default, OD will use the 𝑃𝑉 indi-
+    (i) assigned labels and scores are “fair” w.r.t. the 𝑃𝑉 , and
+                                                                                                    rectly, through access to those correlated proxy features. Therefore,
+   (ii) higher scores correspond to higher riskiness encoded by the
+                                                                                                    additional conditions follow.
+        underlying (unobserved) Y.
+                                                                                                    D3. Statistical parity (SP): One would expect the OD outcomes to
+   How can we design a fairness-aware OD model that is not biased
+                                                                                                    be independent of group membership, i.e. 𝑂 ⊥   ⊥ 𝑃𝑉 . In the context
+against minority groups? What constitutes a “fair” outcome in OD,
+                                                                                                    of OD, this notion of fairness (also, demographic parity, group
+that is, what would characterize fairness-aware OD? What specific
+                                                                                                    fairness, or independence) aims to enforce that the outlier flag rates
+notions of fairness are most applicable to OD?
+                                                                                                    are independent of 𝑃𝑉 and equal across the groups as induced by
+   To approach the problem and address these motivating ques-
+                                                                                                    𝑃𝑉 .
+tions, we first propose a list of desired properties that an ideal
+                                                                                                       Formally, an OD model satisfies statistical parity under a distri-
+fairness-aware detector should satisfy, and whether, in practice,
+                                                                                                    bution over (𝑋, 𝑃𝑉 ) where 𝑃𝑉 ∈ {𝑎, 𝑏} if
+the desired properties can be enforced followed by our proposed
+solution, FairOD.                                                                                                              𝑓 𝑟𝑎 = 𝑓 𝑟𝑏 or equivalently,
+                                                                                                                                                                           (3)
+                                                                                                                   𝑃 (𝑂 = 1|𝑃𝑉 = 𝑎) = 𝑃 (𝑂 = 1|𝑃𝑉 = 𝑏) .
+2.1       Proposed Desiderata
+D1. Detection effectiveness: We require an OD model to be accu-                                     SP implies that the fraction of minority (majority) members in the
+rate at detection, such that the scores assigned to the instances by                                flagged set is the same as the fraction of minority (majority) in the
+OD are well-correlated with the ground-truth outlier labels. Specif-                                overall population. Equivalently, one can show
+ically, OD benefits the policing effort only when the detection rate
+                                                                                                           𝑓 𝑟𝑎 = 𝑓 𝑟𝑏 (SP) ⇐⇒ 𝑃 (𝑃𝑉 = 𝑎|𝑂 = 1) = 𝑃 (𝑃𝑉 = 𝑎)
+3 For simplicity of presentation, we consider a single, binary protected variable (PV).
+We discuss extensions to multi-valued PV and multi-attribute PVs in Sec. 3.
+                                                                                                                       and 𝑃 (𝑃𝑉 = 𝑏 |𝑂 = 1) = 𝑃 (𝑃𝑉 = 𝑏) .                (4)
+   The motivation for SP derives from luck egalitarianism [31] – a                        How-to: The unsupervised OD task does not have access to Y,
+family of egalitarian theories of distributive justice that aim to coun-              therefore, group fidelity cannot be enforced directly. Instead, we
+teract the distributive effects of “brute luck”. By redistributing equal-             propose to enforce group-level rank preservation that maintains
+ity to those who suffer through no fault of their own choosing, me-                   fidelity to within-group ranking from the base model, where base
+diated via race, gender, etc., it aims to counterbalance the manifes-                 is a fairness-agnostic OD model. Our intuition is that rank preserva-
+tations of such “luck”. Correspondingly, SP ensures equal flag rates                  tion acts as a proxy for group fidelity, or more broadly Separation,
+across 𝑃𝑉 groups, eliminating such group-membership bias. There-                      via our assumption that within-group ranking in the base model is
+fore, it merits incorporation in OD since OD results are used for                     accurate and top-ranked instances within each group encode the
+policing or auditing by human experts in downstream applications.                     highest risk samples within each group.
+   How-to: We could enforce SP during OD model learning by com-                           Specifically, let 𝜋 base represent the ranking of instances based on
+paring the distributions of the predicted outlier labels 𝑂 amongst                    base OD scores, and let 𝜋𝑃𝑉    base and 𝜋 base denote the group-level
+                                                                                                                        =𝑎       𝑃𝑉 =𝑏
+groups, and update the model to ensure that these output distribu-                    ranked lists for majority and minority groups, respectively. Then,
+tions match across groups.                                                                                                          base = 𝜋
+                                                                                      the rank preservation is satisfied when 𝜋𝑃𝑉      =𝑣     𝑃𝑉 =𝑣 ; ∀𝑣 ∈ {𝑎, 𝑏}
+   SP, however, is not sufficient to ensure both equitable and ac-                    where 𝜋𝑃𝑉 =𝑣 is the ranking of group-𝑣 instances based on outlier
+curate outcomes as it permits so-called “laziness” [4]. Being an                      scores from our proposed OD model. Group rank preservation aims
+unsupervised quantity that is agnostic to the ground-truth labels Y,                  to address the “laziness” issue that can manifest while ensuring
+SP could be satisfied while producing decisions that are arbitrarily                  SP; we aim to not lose the within-group detection prowess of the
+inaccurate for any or all of the groups. In fact, an extreme scenario                 original detector while maintaining fairness. Moreover, since we
+would be random sampling; where we select a certain fraction of                       are using only a proxy for Separation, the mutual exclusiveness
+the given population uniformly at random and flag all the sampled                     of SP and Separation may no longer hold, though we have not
+instances as outliers. As evident via Eq. (4), this entirely random                   established this mathematically.
+procedure would achieve SP (!). The outcomes could be worse –
+                                                                                      D5. Base rate preservation: The flagged outliers from OD re-
+that is, not only inaccurate (put differently, as accurate as random)
+                                                                                      sults are often audited and then used as human-labeled data for
+but also unfair for only some group(s) – when OD flags mostly
+                                                                                      supervised detection (as discussed in previous section) which can
+the true outliers from one group while flagging randomly selected
+                                                                                      introduce bias through a feedback loop. Therefore, it is desirable
+instances from the other group(s), leading to discrimination despite
+                                                                                      that group-level base rates within the flagged population is reflec-
+SP. Therefore, additional criteria is required to explicitly penalize
+                                                                                      tive of the group-level base rates in the overall population, so as
+“laziness,” aiming to not only flag equal fractions of instances across
+                                                                                      to not introduce group bias of outlier incidence downstream. In
+groups but also those true outlier instances from both groups.
+                                                                                      particular, we expect OD outcomes to ideally obey
+D4. Group fidelity (also, Equality of Opportunity): It is desir-
+able that the true outliers are equally likely to be assigned higher                                     𝑃 (𝑌 = 1|𝑂 = 1, 𝑃𝑉 = 𝑎) = 𝑏𝑟𝑎 , and                 (6)
+scores, and in turn flagged, regardless of their membership to any                                       𝑃 (𝑌 = 1|𝑂 = 1, 𝑃𝑉 = 𝑏) = 𝑏𝑟𝑏 .                     (7)
+group as induced by 𝑃𝑉 . We refer to this notion of fairness as
+group fidelity, which steers OD outcomes toward being faithful to                     Note that group-level base rate within the flagged population (LHS)
+the ground-truth outlier labels equally across groups, obeying the                    is mathematically equivalent to group-level precision in OD out-
+following condition                                                                   comes, and as such, is also a supervised quantity which suffers the
+                                                                                      same caveat as in D4, regarding unavailability of Y.
+        𝑃 (𝑂 = 1|𝑌 = 1, 𝑃𝑉 = 𝑎) = 𝑃 (𝑂 = 1|𝑌 = 1, 𝑃𝑉 = 𝑏) .                    (5)       How-to: As noted, Y is not available to an unsupervised OD task.
+                                                                                      Importantly, provided an OD model satisfies D1 and D3, we show
+Mathematically, this condition is equivalent to the so-called Equal-                  that it cannot simultaneously also satisfy D5, i.e. per-group equal
+ity of Opportunity4 in the supervised fair ML literature, and is a                    base rate in OD results (flagged observations) and in the overall
+special case of Separation [24, 51]. In either case, it requires that                 population.
+all 𝑃𝑉 -induced groups experience the same true positive rate. Con-
+sequently, it penalizes “laziness” by ensuring that the true-outlier                     Claim 1. Detection effectiveness: 𝑃 (𝑌 = 1|𝑂 = 1) > 𝑃 (𝑌 = 1)
+instances are ranked above (i.e., receive higher outlier scores than)                 and SP: 𝑃 (𝑂 = 1|𝑃𝑉 = 𝑎) = 𝑃 (𝑂 = 1|𝑃𝑉 = 𝑏) jointly imply that
+the inliers within each group.                                                        𝑃 (𝑌 = 1|𝑂 = 1, 𝑃𝑉 = 𝑣) > 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑣), ∃𝑣.
+    The key caveat here is that (5) is a supervised quantity that re-
+quires access to the ground-truth labels Y, which are explicitly                         Proof. We prove the claim in Appendix5 A.1.                          □
+unavailable for the unsupervised OD task. What is more, various im-
+possibility results have shown that certain fairness criteria, includ-                  Claim 1 shows an incompatibility and states that, provided D1
+ing SP and Separation, are mutually exclusive or incompatible [4],                    and D3 are satisfied, the base rate in the flagged population cannot
+implying that simultaneously satisfying both of these conditions                      be equal to (but rather, is an overestimate of) that in the overall
+(exactly) is not possible.                                                            population for at least one of the groups. As such, base rates in OD
+                                                                                      outcomes cannot be reflective of their true values. Instead, one
+                                                                                      may hope for the preservation of the ratio of the base rates (i.e. it
+4 Opportunity, because positive-class assignment by a supervised model in many fair
+ML problems is often associated with a positive outcome, such as being hired or
+approved a loan.                                                                      5 https://tinyurl.com/fairOD
+is not impossible). As such, a relaxed notion of D5 is to preserve         3     FAIRNESS-AWARE OUTLIER DETECTION
+proportional base rates across groups in the OD results, that is,          In this section, we describe our proposed FairOD – an unsupervised,
+           𝑃 (𝑌 = 1|𝑂 = 1, 𝑃𝑉 = 𝑎) 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎)                        fairness-aware, end-to-end OD model that embeds our proposed
+                                  =                 .               (8)    learnable (i.e. optimizable) fairness constraints into an existing base
+           𝑃 (𝑌 = 1|𝑂 = 1, 𝑃𝑉 = 𝑏) 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏)
+                                                                           OD model. The key features of our model are that FairOD aims for
+Note that ratio preservation still cannot be explicitly enforced as (8)    equal flag rates across groups (statistical parity), and encourages
+is also label-dependent. Finally we show in Claim 2 that, provided         correct top group ranking (group fidelity), while not requiring 𝑃𝑉
+D1, D3 and Eq. (8) are all satisfied, then it entails that the base rate   for decision-making on new samples (non-disparate treatment). As
+in OD outcomes is an overestimation of the true group-level base           such, it aims to target the proposed desiderata D1 – D4 as described
+rate for every group.                                                      in Sec. 2.
+    Claim 2. Detection effectiveness: 𝑃 (𝑌 = 1|𝑂 = 1) > 𝑃 (𝑌 =
+1), SP: 𝑃 (𝑂 = 1|𝑃𝑉 = 𝑎) = 𝑃 (𝑂 = 1|𝑃𝑉 = 𝑏), and Eq. (8):                  3.1    Base Framework
+𝑃 (𝑌 =1|𝑂=1,𝑃𝑉 =𝑎)   𝑃 (𝑌 =1|𝑃𝑉 =𝑎)                                        Our proposed OD model instantiates a deep-autoencoder (AE)
+𝑃 (𝑌 =1|𝑂=1,𝑃𝑉 =𝑏) = 𝑃 (𝑌 =1|𝑃𝑉 =𝑏) jointly imply 𝑃 (𝑌 = 1|𝑃𝑉 =
+𝑣, 𝑂 = 1)>𝑃 (𝑌 = 1|𝑃𝑉 = 𝑣), ∀𝑣.                                            framework for the base outlier detection task. However, we re-
+                                                                           mark that the fairness regularization criteria introduced by FairOD
+                                                                           can be plugged into any end-to-end optimizable anomaly detec-
+  Proof. We prove the claim in Appendix A.2.                          □
+                                                                           tor, such as one-class support vector machines [48], deep anomaly
+                                                                           detector [12], variational AE for OD [3], and deep one-class classi-
+    Claim 1 and Claim 2 indicate that if we have both (𝑖) better-
+                                                                           fiers [47]. Our choice of AE as the base OD model stems from the
+than-random precision (D1) and (𝑖𝑖) SP (D3), interpreting the base
+                                                                           fact that AE-inspired methods have been shown to be state-of-the-
+rates in OD outcomes for downstream learning tasks would not be
+                                                                           art outlier detectors [14, 39, 58] and that our fairness-aware loss
+meaningful, as they would not be reflective of true population base
+                                                                           criteria can be optimized in conjunction with the objectives of such
+rates. Due to both these incompatibility results, and also feasibility
+                                                                           models. The main goal of FairOD is to incorporate our proposed
+issues given the lack of Y, we leave base rate preservation – despite
+                                                                           notions of fairness into an end-to-end OD model, irrespective of
+it being a desirable property – out of consideration.
+                                                                           the choice of the base model family.
+                                                                              AE consists of two main components: an encoder 𝐺 𝐸 : 𝑋 ∈
+2.2    Problem Definition                                                  R𝑑 ↦→ 𝑍 ∈ R𝑚 and a decoder 𝐺 𝐷 : 𝑍 ∈ R𝑚 ↦→ 𝑋 ∈ R𝑑 . 𝐺 𝐸 (𝑋 )
+Based on the definitions and enforceable desiderata, our fairness-         encodes the input 𝑋 to a hidden vector (also, code) 𝑍 that pre-
+aware OD problem is formally defined as follows:                           serves the important aspects of the input. Then, 𝐺 𝐷 (𝑍 ) aims to
+                                                                           generate 𝑋 ′ , a reconstruction of the input from the hidden vec-
+   Problem 1 (Fairness-Aware Outlier Detection). Given samples
+                                                                           tor 𝑍 . Overall, the AE can be written as 𝐺 = 𝐺 𝐷 ◦ 𝐺 𝐸 , such that
+X and protected variable values PV, estimate outlier scores S and
+                                                                           𝐺 (𝑋 ) = 𝐺 𝐷 (𝐺 𝐸 (𝑋 )). For a given AE based framework, the outlier
+assign outlier labels O, to achieve
+                                                                           score for 𝑋 is computed using the reconstruction error as
+    (i) 𝑃 (𝑌 = 1|𝑂 = 1) > 𝑃 (𝑌 = 1) ,
+                                             [Detection effectiveness]
+                                                                                                  𝑠 (𝑋 ) = ∥𝑋 − 𝐺 (𝑋 )∥ 22 .                   (9)
+   (ii) 𝑃 (𝑂 | 𝑋, 𝑃𝑉 = 𝑣) = 𝑃 (𝑂 | 𝑋 ), ∀𝑣 ∈ {𝑎, 𝑏} ,
+                                                   [Treatment parity]         Outliers tend to exhibit large reconstruction errors because they
+  (iii) 𝑃 (𝑂 = 1|𝑃𝑉 = 𝑎) = 𝑃 (𝑂 = 1|𝑃𝑉 = 𝑏) ,                              do not conform to to the patterns in the data as coded by an
+                                                    [Statistical parity]   auto-encoder, hence the use of reconstruction errors as outlier
+          base = 𝜋
+  (iv) 𝜋𝑃𝑉   =𝑣      𝑃𝑉 =𝑣 , ∀𝑣 ∈ {𝑎, 𝑏}, where base is a fairness-        scores [2, 44, 49]. This scoring function is general in that it applies
+        agnostic detector.                     [Group fidelity proxy]      to many reconstruction-based OD models, which have different
+   Given a dataset along with 𝑃𝑉 values, the goal is to design an          parameterizations of the reconstruction function 𝐺. We show in
+OD model that builds on an existing base OD model and satisfies            the following how FairOD regularizes the reconstruction loss from
+the criteria (𝑖)–(𝑖𝑣), following the proposed desiderata D1 – D4.          base through fairness constraints that are conjointly optimized
+                                                                           during the training process. The base OD model optimizes the
+2.3    Caveats of a Simple Approach                                        following
+
+A simple yet naïve fairness-aware OD approach to address Prob-                                           𝑁
+                                                                                                         ∑︁
+lem 1 can be designed as follows:                                                              Lbase =         ∥𝑋𝑖 − 𝐺 (𝑋𝑖 )∥ 22             (10)
+                                                                                                         𝑖=1
+                             base and 𝜋 base from base, and
+   (1) Obtain ranked lists 𝜋𝑃𝑉  =𝑎       𝑃𝑉 =𝑏
+   (2) Flag top instances as outliers from each ranked list at equal       and we denote its outlier scoring function as 𝑠 base (·).
+       fraction such that
+       𝑃 (𝑂 = 1|𝑃𝑉 = 𝑎) = 𝑃 (𝑂 = 1|𝑃𝑉 = 𝑏), 𝑃𝑉 ∈ {𝑎, 𝑏}                    3.2    Fairness-aware Loss Function
+This approach fully satisfies (𝑖𝑖𝑖) and (𝑖𝑣) in Problem 1 by design,       We begin with designing a loss function for our OD model that
+as well as (𝑖) given suitable features. However, it explicitly suffers     optimizes for achieving SP and group fidelity by introducing reg-
+from disparate treatment.                                                  ularization to the base objective criterion. Specifically, FairOD
+minimizes the following loss:                                                                We circumvent this challenge by replacing the indicator function
+                                                                                             by the (smooth) sigmoid approximation, following [46]. Then, the
+   L = 𝛼        Lbase         + (1 − 𝛼)        L𝑆𝑃             + 𝛾      L𝐺𝐹           (11)
+                |{z}                           |{z}                     |{z}                 group fidelity loss component L𝐺𝐹 is given as
+             Reconstruction               Statistical Parity         Group Fidelity
+
+where 𝛼 ∈ (0, 1) and 𝛾 > 0 are hyperparameters which govern                                                         ∑︁ ©            ∑︁ 2𝑠 base (𝑋𝑖 ) − 1 ª
+                                                                                                         L𝐺𝐹 =              ­1 −                                        (13)
+the balance between different fairness criteria and reconstruction
+                                                                                                                                                         ®
+                                                                                                                                             dnm
+                                                                                                                 𝑣 ∈ {𝑎,𝑏 } «    𝑋𝑖 ∈X𝑃𝑉 =𝑣
+quality in the loss function.                                                                                                                            ¬
+    The first term in Eq. (11) is the objective for learning the recon-                                             ∑︁
+struction (based on base model family) as given in Eq. (10), which
+                                                                                                                                                     
+                                                                                                dnm = log2 1 +                sigm(𝑠 (𝑋𝑘 ) − 𝑠 (𝑋𝑖 )) · 𝐼 𝐷𝐶𝐺 𝑃𝑉 =𝑣 ,
+quantifies the goodness of the encoding 𝑍 via the squared error                                                  𝑋𝑘 ∈X𝑃𝑉 =𝑣
+between the original input and its reconstruction generated from                                              exp(−𝑐𝑥)
+                                                                                                sigm(𝑥) = 1+exp(−𝑐𝑥) is the sigmoid function where 𝑐 > 0 is
+𝑍 . The second component in Eq. (11) corresponds to regularization                                                                           Í |X    |   base
+introduced to enforce the fairness notion of independence, or sta-                           the scaling constant, and, 𝐼𝐷𝐶𝐺 𝑃𝑉 =𝑣 = 𝑗=1𝑃𝑉 =𝑣 ((2𝑠 (𝑋 𝑗 ) − 1)
+tistical parity (SP) as given in Eq. (4). Specifically, the term seeks                       /log2 (1 + 𝑗)) is the ideal (hence 𝐼 ), i.e. largest DCG value attainable
+to minimize the absolute correlation between the outlier scores                              for the respective group. Note that IDCG can be computed per
+S (used for producing predicted labels O) and protected variable                             group apriori to model training via base outlier scores alone, and
+values PV. L𝑆𝑃 is given as                                                                   serves as a normalizing constant in Eq. (13).
+                       Í𝑁                  Í𝑁                                                 Note that having trained our model, scoring instances does not
+                         𝑖=1 𝑠 (𝑋𝑖 ) − 𝜇𝑠      𝑖=1 𝑃𝑉𝑖 − 𝜇𝑃𝑉                                 require access to the value of their 𝑃𝑉 , as 𝑃𝑉 is only used in Eq.
+             L𝑆𝑃 =                                                        (12)
+                                       𝜎𝑠 𝜎𝑃𝑉                                                (12) and (13) for training purposes. At test time, the anomaly score
+                                                                                             of a given instance 𝑋 is computed simply via Eq. (9). Thus, FairOD
+where 𝜇𝑠 = 𝑁1 𝑖=1        𝑠 (𝑋𝑖 ), 𝜎𝑠 = 𝑁1 𝑖=1      (𝑠 (𝑋𝑖 ) − 𝜇𝑠 ) 2 , 𝜇𝑃𝑉 =
+                    Í𝑁                       Í𝑁
+                                                                                             also fulfills the desiderata on treatment parity.
+ 1 Í𝑁 𝑃𝑉 , and 𝜎            1   Í𝑁                  2
+ 𝑁 𝑖=1        𝑖      𝑃𝑉 = 𝑁 𝑖=1 (𝑃𝑉𝑖 − 𝜇𝑃𝑉 ) .
+    We adapt this absolute correlation loss from [6], which proposed                         Optimization and Hyperparameter Tuning. We optimize the parame-
+its use in a supervised setting with the goal of enforcing statistical                       ters of FairOD by minimizing the loss function given in Eq. (11) by
+parity. As [6] mentions, while minimizing this loss does not guar-                           using the built-in Adam optimizer [30] implemented in PyTorch.
+antee independence, it performs empirically quite well and offers                               FairOD comes with two tunable hyperparameters, 𝛼 and 𝛾. We
+stable training. We observe the same in practice; it leads to minimal                        define a grid for these and pick the configuration that achieves the
+associations between OD outcomes and the protected variable (see                             best balance between SP and our proxy quantity for group fidelity
+details in Sec. 4).                                                                          (based on group-level ranking preservation). Note that both of these
+    Finally, the third component of Eq. (11) emphasizes that FairOD                          quantities are unsupervised (i.e., do not require access to ground-
+should maintain fidelity to within-group rankings from the base                              truth labels), therefore, FairOD model selection can be done in a
+model (penalizing “laziness”). We set up a listwise learning-to-rank                         completely unsupervised fashion. We provide further details about
+objective in order to enforce group fidelity. Our goal is to train                           hyperparameter selection in Sec. 4.
+FairOD such that it reflects the within-group rankings based on
+𝑠 base (·) from base. To that end, we employ a listwise ranking loss                         Generalizing to Multi-valued and Multiple Protected Attributes.
+criterion that is based on the well-known Discounted Cumulative                              Multi-valued 𝑃𝑉 . FairOD generalizes beyond binary 𝑃𝑉 , and easily
+Gain (DCG) [26] measure, often used to assess ranking quality in                             applies to settings with multi-valued, specifically categorical 𝑃𝑉
+information retrieval tasks such as search. For a given ranked list,                         such as race. Recall that L𝑆𝑃 and L𝐺𝐹 are the loss components
+DCG is defined as                                                                            that depend on 𝑃𝑉 . For a categorical 𝑃𝑉 , L𝐺𝐹 in Eq. (13) would
+                                  ∑︁ 2𝑟𝑒𝑙𝑟 − 1                                               simply remain the same, where the outer sum goes over all unique
+                         DCG =                                                               values of the 𝑃𝑉 . For L𝑆𝑃 , one could one-hot-encode (OHE) the
+                                       log2 (1 + 𝑟 )
+                                    𝑟                                                        𝑃𝑉 into multiple variables and minimize the correlation of outlier
+where 𝑟𝑒𝑙𝑟 depicts the relevance of the item ranked at the 𝑟 𝑡ℎ posi-                        scores with each variable additively. That is, an outer sum would be
+tion. In our setting, we use the outlier score 𝑠 base (𝑋 ) of an instance                    added to Eq. (12) that goes over the new OHE variables encoding
+𝑋 to reflect its relevance since we aim to mimic the group-level                             the categorical 𝑃𝑉 .
+ranking by base. As such, DCG per group can be re-written as                                 Multiple 𝑃𝑉 𝑠. FairOD can handle multiple different 𝑃𝑉 𝑠 simulta-
+                                           base                                              neously, such as race and gender, since the loss components Eq. (12)
+                    ∑︁                   2𝑠 (𝑋𝑖 ) − 1                                        and Eq. (13) can be used additively for each 𝑃𝑉 . However, the caveat
+   DCG𝑃𝑉 =𝑣 =
+                            log2 1 + 𝑋𝑘 ∈X𝑃𝑉 =𝑣 1 [𝑠 (𝑋𝑖 ) ≤ 𝑠 (𝑋𝑘 )]
+                                    Í                                 
+                 𝑋𝑖 ∈X𝑃𝑉 =𝑣                                                                  to additive loss is that it would only enforce fairness with respect to
+where X𝑃𝑉 =𝑎 and X𝑃𝑉 =𝑏 would respectively denote the set of ob-                             each individual 𝑃𝑉 , and yet may not exhibit fairness for the joint dis-
+servations from majority and minority groups, and 𝑠 (𝑋 ) is the                              tribution of protected variables [29]. Even when additive extension
+estimated outlier score from our FairOD model under training.                                may not be ideal, we avoid modeling multiple protected variables
+   A key challenge with DCG is that it is not differentiable, as it                          as a single 𝑃𝑉 that induces groups based on values from the cross-
+involves ranking (sorting). Specifically, the sum term in the denom-                         product of available values across all 𝑃𝑉 𝑠. This is because partition-
+inator uses the (non-smooth) indicator function 1 (·) to obtain the                          ing of the data based on cross-product may yield many small groups,
+position of instance 𝑖 as ranked by the estimated outlier scores.                            which could cause instability in learning and poor generalization.
+                                                     Table 2: Summary statistics of real-world and synthetic datasets used for evaluation.
+
+       Dataset                             N                     d                                   PV                              PV = b          |XPV=a |/|XPV=b |    % outliers                                Labels
+       Adult                     25262                  11                      gender                                    female                              4                5         {income ≤ 50𝐾, income > 50𝐾}
+       Credit                    24593                1549                         age                                  age ≤ 25                              4                5                     {paid, delinquent}
+       Tweets                     3982               10000               racial dialect                         African-American                              4                5                     {normal, abusive}
+       Ads                        1682                1558                  simulated                                          1                              4                5                           {non-ad, ad}
+       Synth1                       2400                         2                  simulated                                                    1            4                5                                      {0, 1}
+       Synth2                       2400                         2                  simulated                                                    1            4                5                                      {0, 1}
+
+
+                                                                                                                                                             • base: A deep anomaly detector that employs an autoencoder
+             20                                                                            4                                                                   neural network. The reconstruction error of the autoencoder
+                                                                                           2                                                                   is used as the anomaly score. base omits the protected vari-
+             15
+                                                                                           0                                                                   able from model training.
+ Feature 2                                                                    Feature 2
+             10                                                                           −2                                                            Preprocessing based methods:
+                                                                                          −4                                                                 • rw [28]: A preprocessing approach that assigns weights to
+              5
+                                                                                          −6                                                                   observations in each group differently to counterbalance the
+              0
+                                                                                          −8                                                                   under-representation of minority samples.
+                  120     140        160
+                                     Feature 1
+                                               180         200          220                    −10        −5           0
+                                                                                                                 Feature 1
+                                                                                                                                 5          10               • dir [20] A preprocessing approach that edits feature values
+                         Inlier, P V = a             Outlier, P V = a                                Inlier, P V = a         Outlier, P V = a
+                                                                                                                                                               such that protected variables can not be predicted based on
+                         Inlier, P V = b             Outlier, P V = b                                Inlier, P V = b         Outlier, P V = b                  other features in order to increase group fairness. It uses
+                                (a) Synth1                                                                (b) Synth2                                           𝑟𝑒𝑝𝑎𝑖𝑟 _𝑙𝑒𝑣𝑒𝑙 as a hyperparameter, where 0 indicates no re-
+                                                                                                                                                               pair, and the larger the value gets, the more obfuscation is
+Figure 3: Synthetic datasets. See Appendix B.1 for the details                                                                                                 enforced.
+of the data generating process.                                                                                                                              • lfr: This baseline is based on [54] that aims to find a la-
+                                                                                                                                                               tent representation of the data while obfuscating informa-
+                                                                                                                                                               tion about protected variables. In our implementation, we
+4                 EXPERIMENTS                                                                                                                                  omit the classification loss component during representation
+Our proposed FairOD is evaluated through extensive experiments                                                                                                 learning. It uses two hyperparameters – 𝐴𝑧 to control for SP,
+on a set of synthetic datasets as well as diverse real-world datasets.                                                                                         and 𝐴𝑥 to control for the quality of representation.
+In this section, we present dataset description and the experimental                                                                                         • arl: This is based on [7] that finds new latent representations
+setup, followed by key evaluation questions and results.                                                                                                       by employing an adversarial training process to remove infor-
+                                                                                                                                                               mation about the protected variables. In our implementation,
+4.1                     Dataset Description                                                                                                                    we use reconstruction error in place of the classification loss.
+Table 2 gives an overview of the datasets used in evaluation. A brief                                                                                          arl uses 𝜆 to control for the trade-off between accuracy (in
+summary follows, with details on generative process of synthetic                                                                                               our implementation, reconstruction quality) and obfuscat-
+data and detailed descriptions in Appendix B.1.                                                                                                                ing protected variable. This baseline optimizes an objective
+                                                                                                                                                               similar to that proposed in [56] which substitutes SVDD loss
+4.1.1 Synthetic. We illustrate the efficacy of FairOD on two syn-                                                                                              for reconstruction loss.
+thetic datasets, Synth1 and Synth2. These datasets present scenar-                                                                                         The OD task proceeds the preprocessing, where we employ the
+ios that mimic real-world settings, where we may have features that                                                                                     base detector on the modified data transformed or learned by each
+are uncorrelated with the outcome labels but partially correlated                                                                                       of the preprocessing based baselines. We do not compare to the
+with the 𝑃𝑉 (see Fig. 3a), or features which are correlated both to                                                                                     LOF-based fair detector in [43] as it exhibits disparate treatment
+outcome labels and 𝑃𝑉 (see Fig. 3b).                                                                                                                    and is inapplicable in settings that we consider.
+4.1.2 Real-world. We experiment on 4 real-world datasets from                                                                                              Hyperparameters The hyperparameter settings for the com-
+diverse domains that have various types of PV: specifically gender,                                                                                     peting methods are detailed in Appendix C.
+age, and race (see Table 2).
+                                                                                                                                                        4.3       Evaluation
+4.2                     Baselines                                                                                                                       We design experiments to answer the following questions:
+We compare FairOD to two classes of baselines: (𝑖) a fairness-                                                                                              • [Q1] Fairness: How well does FairOD (a) achieve fairness
+agnostic base detector that aims to solely optimize for detection                                                                                             as compared to the baselines, and (b) retain the within-group
+performance, and (𝑖𝑖) preprocessing methods that aim to correct                                                                                               ranking from base?
+for bias in the underlying distribution and generate a dataset ob-                                                                                          • [Q2] Fairness-accuracy trade-off: How accurately are the
+fuscating the 𝑃𝑉 .                                                                                                                                            outliers detected by FairOD as compared to fairness-agnostic
+Base detector model:                                                                                                                                          base detector?
+        • [Q3] Ablation study: How do different elements of FairOD                              In Fig. 2 (left), the average of Fairness and GroupFidelity for each
+          influence group fidelity and detector fairness?                                    method over datasets is reported. FairOD achieves 9× and 5× im-
+                                                                                             provement in Fairness as compared to base method and the nearest
+4.3.1     Evaluation Measures.
+                                                                                             competitor, respectively. For FairOD, Fairness is very close to 1,
+Fairness. Fairness is measured in terms of statistical parity. We                            while at the same time the group ranking from the base detector is
+                                  𝑃 (𝑂=1|𝑃𝑉 =𝑎)                                              well preserved where GroupFidelity also approaches 1. FairOD domi-
+use flag-rate ratio 𝑟 = 𝑃 (𝑂=1|𝑃𝑉 =𝑏) which measures the statisti-
+cal fairness of a detector based on the predicted outcome where                              nates the baselines (see Fig. 2 (right)) as it is on the Pareto frontier of
+𝑃 (𝑂 = 1|𝑃𝑉 = 𝑎) is the flag-rate of the majority group and 𝑃 (𝑂 =                           GroupFidelity and Fairness. Here, each point on the plot represents an
+1|𝑃𝑉 = 𝑏) is the flag-rate of the minority group. We define Fairness                         evaluated dataset. Notice that FairOD preserves the group ranking
+= min(𝑟, 1/𝑟 ) ∈ [0, 1]. For a maximally fair detector, Fairness = 1 as                      while achieving SP consistently across datasets. Fig. 4 reports Top-𝑘
+𝑟 = 1.
+                                                                                                                    1.0                                                                     1.0
+
+GroupFidelity. We use the Harmonic Mean (HM) of per-group
+NDCG to measure how well the group ranking of base detector is
+                                                                                             Top-k rank agreement                                                    Top-k rank agreement
+                                                                                                                    0.8                                                                     0.8
+
+
+preserved in the fairness-aware detectors. HM between two scalars
+𝑝 and 𝑞 is defined as 1/( 𝑝1 + 𝑞1 ). We use HM to report GroupFidelity
+                                                                                                                    0.6                                                                     0.6
+
+
+
+
+                                                                                                  (Average)                                                              (6 datasets)
+since it is (more) sensitive to lower values (than e.g. arithmetic                                                  0.4                                                                     0.4
+
+
+mean); as such, it takes large values when both of its arguments
+                                                                                                                    0.2                                                                     0.2
+have large values. We define GroupFidelity = HM(𝑁 𝐷𝐶𝐺 𝑃𝑉 =𝑎 ,
+𝑁 𝐷𝐶𝐺 𝑃𝑉 =𝑏 ), where                                                                                                      0.2    0.4       0.6     0.8   1.0                                        0.2   0.4         0.6   0.8       1.0
+                                                                                                                                       Fairness                                                                 Fairness
+                    | X∑︁
+                       𝑃𝑉 =𝑎 |                     𝑠 base (𝑋𝑖 )
+                                                  2               −1                                                            base              rw           dir                                lfr           arl               FairOD
+𝑁 𝐷𝐶𝐺 𝑃𝑉 =𝑎 =                                                                            ,
+                                                        1 (𝑠 (𝑋𝑖 ) ≤ 𝑠 (𝑋𝑘 ))) · 𝐼 𝐷𝐶𝐺
+                                         Í | X𝑃𝑉 =𝑎 |
+                      𝑖=1        log2 (1 + 𝑘=1
+|X𝑃𝑉 =𝑎 | is the number of instances in group with 𝑃𝑉 = 𝑎, 1 (𝑐𝑜𝑛𝑑)                          Figure 4: (left) FairOD achieves the best Top-𝑘 Rank Agreement
+is the indicator function that evaluates to 1 if 𝑐𝑜𝑛𝑑 is true and                            compared to the competitors (base is shown for reference) in
+0 otherwise, 𝑠 (𝑋𝑖 ) is the predicted score of the fairness-aware                            addition to the best overall Fairness, across datasets on aver-
+detector, 𝑠 base (𝑋𝑖 ) is the outlier score from base detector and                           age, and (right) measures are shown on individual datasets.
+            Í|X           base (𝑋 )
+                      | 𝑠
+𝐼𝐷𝐶𝐺 = 𝑗=1𝑃𝑉 =𝑎 2 log ( 𝑗+1)−1 . GroupFidelity ≈ 1 indicates that
+                                 𝑗
+
+                             2
+group ranking from the base detector is well preserved.
+                                                                                             Rank Agreement (computed at top-5% of ranked lists) of each method
+Top-𝑘 Rank Agreement. We also measure how well the final rank-                               evaluated across datasets. The agreement measures the degree of
+ing of the method aligns with the purely performance-driven base                             alignment of the ranked results by a method with the fairness-
+detector, as base optimizes only for reconstruction error. We com-                           agnostic base detector. In Fig. 4 (left), as averaged over datasets,
+pute top-𝑘 rank agreement as the Jaccard set similarity between                              FairOD achieves better rank agreement as compared to the com-
+the top-𝑘 observations as ranked by two methods. Let 𝜋 base     [1:𝑘 ]
+                                                                        de-                  petitors. In Fig. 4 (right), FairOD approaches ideal statistical parity
+note the top-𝑘 of the ranked list based on outlier scores 𝑠 base (𝑋𝑖 )’s,                    across datasets while achieving better rank agreement with the
+and 𝜋 𝑑𝑒𝑡𝑒𝑐𝑡𝑜𝑟   be the top-𝑘 of the ranked list for competing meth-                         base detector. Note that FairOD does not strive for a perfect Top-𝑘
+         [1:𝑘 ]
+ods where 𝑑𝑒𝑡𝑒𝑐𝑡𝑜𝑟 ∈{rw, dir, lfr, arl, FairOD }. Then the mea-                              Rank Agreement (=1) with base, since base is shown to fall short with
+                                            base ∩ 𝜋 𝑑𝑒𝑡𝑒𝑐𝑡𝑜𝑟 |/ |𝜋 base ∪
+sure is given as Top-𝑘 Rank Agreement = |𝜋 [1:𝑘                                              respect to our desired fairness criteria. Our purpose in illustrating it
+                                                ]    [1:𝑘 ]         [1:𝑘 ]
+                                                                                             is to show that the ranked list by FairOD is not drastically different
+  𝑑𝑒𝑡𝑒𝑐𝑡𝑜𝑟
+𝜋 [1:𝑘 ]      |.
+                                                                                             from base, which simply aims for detection performance.
+AUC-ratio and AP-ratio. Finally, we consider supervised parity                                   Next we evaluate the competing methods against supervised
+measures based on ground-truth labels, defined as the ratio of                               (label-aware) fairness metrics. Note that FairOD does not (by de-
+ROC AUC and Average Precision (AP) performances across groups;                               sign) optimize for these supervised fairness measures. Fig. 5a eval-
+AUC-ratio = AUC𝑃𝑉 =𝑎 /AUC𝑃𝑉 =𝑏 and AP-ratio = AP𝑃𝑉 =𝑎 /AP𝑃𝑉 =𝑏 .                             uates the methods against Fairness and label-aware parity crite-
+                                                                                             rion – specifically, group AP-ratio (ideal AP-ratio is 1). FairOD ap-
+[Q1] Fairness                                                                                proaches ideal Fairness as well as ideal AP-ratio across all datasets.
+In Fig. 2 (presented in Introduction), FairOD is compared against                            FairOD outperforms the competitors on the averaged metrics over
+base, as well as all the preprocessing baselines across datasets. The                        datasets (Fig. 5a (left)) and across individual datasets (Fig. 5a (right)).
+methods are evaluated using the best configuration of each method6                           In contrast, the preprocessing baselines are up to ∼5× worse than
+on each dataset. The best hyperparameters for FairOD are the ones                            FairOD over AP-ratio measure across datasets. Fig. 5b reports evalua-
+for which GroupFidelity and Fairness7 are closest to the “ideal” point                       tion of methods against Fairness and another label-aware parity mea-
+as indicated in Fig. 2.                                                                      sure – specifically, group AUC-ratio (ideal AUC-ratio = 1). As shown
+                                                                                             in Fig. 5b (left), FairOD outperforms all the baselines in expectation
+6 In Appendix D, for all methods and all datasets, we report detailed values for different
+                                                                                             as averaged over all datasets. Further, in Fig. 5b (right), FairOD
+metrics for each PV induced group.
+7 Note that we can do model selection in this manner without access to any labels,           consistently approaches ideal AUC-ratio across datasets, while the
+since both are unsupervised measures.                                                        preprocessing baselines are up to ∼1.9× worse comparatively.
+   We note that impressively, FairOD approaches parity across                                                                                                        In Fig. 6, we compare the AUC performance of FairOD to that of
+different supervised fairness measures despite not being able to                                                                                                  base detector for all datasets. Notice that each of the symbols (i.e.
+optimize for label-aware criteria explicitly.                                                                                                                     datasets) is slightly below the diagonal line indicating that FairOD
+                                                                                                                                                                  achieves equal or sometimes even better (!) detection performance
+[Q2] Fairness-accuracy trade-off                                                                                                                                  as compared to base. The explanation is that since FairOD enforces
+In the presence of ground-truth outlier labels, the performance of a                                                                                              SP and does not allow “laziness", it addresses the issue of falsely
+detector could be measured using a ranking accuracy metric such                                                                                                   or unjustly flagged minority samples by base, thereby, improving
+as area under the ROC curve (ROC AUC).                                                                                                                            detection performance.
+                                                                                                                                                                     From Fig. 6, we conclude that FairOD does not trade-off detec-
+                                                                                                                                                                  tion performance much, and in some cases it even improves perfor-
+                      5.0                                                                                    5.0                                                  mance by eliminating false positives from the minority group, as
+                      4.5                                                                                    4.5                                                  compared to the performance-driven, fairness-agnostic base.
+                      4.0                                                                                    4.0
+
+
+
+
+APP V =a/APP V =b                                                                      APP V =a/APP V =b                                                          [Q3] Ablation study
+                      3.5                                                                                    3.5
+
+
+                      3.0                                                                                    3.0
+
+                                                                                                                                                                  Finally, we evaluate the effect of various components in the design
+  (Average)                                                                             (6 datasets)
+                      2.5                                                                                    2.5
+
+
+                      2.0                                                                                    2.0                                                  of FairOD’s objective. Specifically, we compare to the results of
+                      1.5                                                                                    1.5                                                  two relaxed variants of FairOD, namely FairOD-L and FairOD-C,
+                      1.0                                                                                    1.0
+                                                                                                                                                                  described as follows.
+                            0.2    0.4                0.6      0.8         1.0                                          0.2     0.4         0.6   0.8       1.0
+                                          Fairness                                                                                    Fairness                    • FairOD-L: We retain only the SP-based regularization term from
+                                                            (a) Fairness vs. AP-ratio                                                                               FairOD objective along with the reconstruction error. This relax-
+                                  base                        rw                  dir                               lfr               arl               FairOD      ation of FairOD is partially based on the method proposed in [6],
+                                                                                                                                                                    which minimizes the correlation between model prediction and
+                      1.8                                                                                    1.8
+                                                                                                                                                                    group membership to the 𝑃𝑉 . In FairOD-L, the reconstruction
+
+AUCP V =a/AUCP V =b                                                                    AUCP V =a/AUCP V =b
+                      1.6                                                                                    1.6
+                                                                                                                                                                    error term substitutes the classification loss used in the opti-
+                                                                                                                                                                    mization criteria in [6]. Note that FairOD-L concerns itself with
+                                                                                                                                                                    only group fairness to attain SP which may suffer from “laziness”
+   (Average)                                                                             (6 datasets)
+                      1.4                                                                                    1.4
+
+
+
+
+                      1.2                                                                                    1.2
+                                                                                                                                                                    (hence, FairOD-L) (see Sec. 2).
+                                                                                                                                                                  • FairOD-C: Instead of training with NDCG-based group fidelity
+                      1.0                                                                                    1.0
+                                                                                                                                                                    regularization, FairOD-C utilizes a simpler regularization, aim-
+                            0.2    0.4                0.6      0.8         1.0                                          0.2     0.4         0.6   0.8       1.0     ing to minimize the correlation (hence, FairOD-C) of the outlier
+                                          Fairness                                                                                    Fairness
+                                  base                        rw                  dir                               lfr               arl               FairOD
+                                                                                                                                                                    scores per-group with the corresponding scores from base detec-
+                                                                                                                                                                    tor. Thus, FairOD-C attempts to maintain group fidelity over the
+                                                          (b) Fairness vs. AUC-ratio                                                                                entire ranking within a group, in contrast to FairOD’s NDCG-
+                                                                                                                                                                    based regularization which emphasizes the quality of the ranking
+Figure 5: FairOD outperforms all competitors on averaged                                                                                                            at the top. Specifically, FairOD-C substitutes L𝐺𝐹 in Eq. (11) with
+label-aware parity metrics over datasets (left) and for indi-                                                                                                       the following.
+vidual datasets (right): we report Fairness against (a) Group
+                                                                                                                                                                                                                Í                                 
+AP-ratio and (b) Group AUC-ratio.                                                                                                                                                                                                base (𝑋 )−𝜇
+                                                                                                                                                                                        Í
+                                                                                                                                                                                 Í       𝑋𝑖 ∈X𝑃𝑉 =𝑣 𝑠 (𝑋𝑖 )−𝜇𝑠      𝑋𝑖 ∈X𝑃𝑉 =𝑣 𝑠        𝑖   𝑠 base
+                                                                                                                                                                   L𝐺𝐹 = −                                      𝜎𝑠 𝜎 base
+                                                                                                                                                                                                                    𝑠
+                                                                                                                                                                               𝑣 ∈ {𝑎,𝑏 }
+
+                                                                                                                                                                    where 𝑣 ∈ {𝑎, 𝑏}, and 𝜇𝑠 base , 𝜎𝑠 base are defined similar to 𝜇𝑠 , 𝜎𝑠
+                                                    1.0
+                                                                                                                                                                    respectively.
+                                                    0.8                                                                                                              Fig. 7 presents the comparison of FairOD and its variants. In
+                                                                                                                                                                  Fig. 7 (left), we report the evaluation against GroupFidelity and Fair-
+
+                                         base AUC
+                                                    0.6                                                                                                           ness averaged over datasets, and in Fig. 7 (right), the metrics are
+                                                                                                                                                                  reported for each individual dataset. FairOD-L approaches SP and
+                                                    0.4
+                                                                                                                                                                  achieves comparable Fairness to FairOD except on one dataset as
+                                                                     y=x                                           Credit-defaults
+                                                                     Synthetic-1                                   Abusive tweets                                 shown in Fig. 7 (right). This results in lower Fairness compared to
+                                                    0.2
+                                                                     Synthetic-2                                   Internet ads                                   FairOD when averaged over datasets as shown in Fig. 7 (left). How-
+                                                                     Adult
+                                                                                                                                                                  ever, FairOD-L suffers with respect to GroupFidelity as compared to
+                                                                   0.2           0.4                 0.6              0.8       1.0                               FairOD. This is because FairOD-L may randomly flag instances to
+                                                                          FairOD AUC
+                                                                                                                                                                  achieve SP since it does not include any group ranking criterion
+                                                                                                                                                                  in its objective. On the other hand, FairOD-C improves Fairness
+Figure 6: ROCAUC of FairOD vs. base: FairOD matches the                                                                                                           when compared to base, while under-performing on the majority
+performance of base detector, while enforcing fairness crite-                                                                                                     of datasets compared to FairOD across metrics. Since FairOD-C
+ria (maintaining good performance with fairness).                                                                                                                 tries to preserve group-level ranking, it trades-off on Fairness as
+                 1.0                                                         1.0                                       label-aware loss terms with unsupervised reconstruction loss can
+                                                                                                                       plausibly extend such methods to OD (by using masked represen-
+                 0.9                                                         0.9
+                                                                                                                       tations as inputs to a detector). However, a common shortcoming
+Group Fidelity   0.8                                        Group Fidelity   0.8                                       is that statistical parity (SP) is employed as the primary fairness
+ (Average)                                                  (6 datasets)
+                                                                                                                       criterion in these methods, e.g. in fair principal component analy-
+                 0.7                                                         0.7
+                                                                                                                       sis [42] and fair variational autoencoder [37]. To summarize, fair
+                 0.6                                                         0.6                                       representation learning techniques exhibit two key drawbacks for
+                 0.5                                                         0.5
+                                                                                                                       unsupervised OD: (i) they only employ SP, which may be prone
+                       0.2   0.4      0.6
+                                   Fairness
+                                              0.8     1.0                          0.2   0.4      0.6
+                                                                                               Fairness
+                                                                                                          0.8    1.0
+                                                                                                                       to “laziness", and (ii) isolating embedding from detection makes
+                                                                                                                       embedding oblivious to the task itself, and therefore can yield poor
+                                     base           FairOD-L                        FairOD-C            FairOD
+                                                                                                                       detection performance (as shown in experiments in Sec. 4).
+                                                                                                                       Strategies for Data De-Biasing Some of the popular de-biasing
+Figure 7: FairOD compared to its variants FairOD-L and                                                                 methods [28, 33] draw from topics in learning with imbalanced
+FairOD-C across datasets, to evaluate the effect of differ-                                                            data [25] that employ under- or over-sampling or point-wise weight-
+ent regularization components. FairOD-L achieves compa-                                                                ing of the instances based on the class label proportions to obtain
+rable Fairness to FairOD while compromising GroupFidelity.                                                             balanced data. These methods apply preprocessing to the data in a
+FairOD-C improves Fairness as compared to base, but is ill-                                                            manner that is agnostic to the subsequent or downstream task and
+suited to optimizing for GroupFidelity.                                                                                consider only the fairness notion of SP, which is prone to “laziness.”
+
+
+measured against FairOD-L. We also observe that FairOD outper-
+forms FairOD-C on all datasets, which suggests that preserving the
+                                                                                                                       6    CONCLUSIONS
+entire group-level rankings may be a harder task than preserving                                                       Although fairness in machine learning has become increasingly
+top of the rankings; it is also a needlessly ill-suited one since what                                                 prominent in recent years, fairness in the context of unsupervised
+matters for outlier detection is the top of the ranking.                                                               outlier detection (OD) has received comparatively little study. OD
+                                                                                                                       is an integral data-driven task in a variety of domains including
+5                RELATED WORK                                                                                          finance, healthcare and security, where it is used to inform and
+                                                                                                                       prioritize auditing measures. Without careful attention, OD as-is
+A majority of work on algorithmic fairness focuses on supervised
+                                                                                                                       can cause unjust flagging of societal minorities (w.r.t. race, sex, etc.)
+learning problems. We refer to [5, 41] for an excellent overview.
+                                                                                                                       because of their standing as statistical minorities, when minority
+We organize related work in three sub-areas related to fairness in
+                                                                                                                       status does not indicate positive-class membership (crime, fraud,
+outlier detection, fairness-aware representation learning, and data
+                                                                                                                       etc.). This unjust flagging can propagate to downstream supervised
+de-biasing strategies.
+                                                                                                                       classifiers and further exacerbate the issues. Our work tackles the
+Outlier Detection and Fairness Outlier detection (OD) is a well-
+                                                                                                                       problem of fairness-aware outlier detection. Specifically, we first
+studied problem in the literature [2, 13, 23], and finds numerous
+                                                                                                                       introduce guiding desiderata for, and concrete formalization of the
+applications in high-stakes domains like health-care [38], secu-
+                                                                                                                       fair OD problem. We next present FairOD, a fairness-aware, princi-
+rity [22], and finance [45]. However, only a few studies focus on
+                                                                                                                       pled end-to-end detector which addresses the problem, and satisfies
+OD’s fairness aspects. P and Sam Abraham [43] propose a detector
+                                                                                                                       several appealing properties: (i) detection effectiveness: it is effective,
+called FairLOF that applies an ad-hoc procedure to introduce fair-
+                                                                                                                       and maintains high detection accuracy, (ii) treatment parity: it does
+ness specifically to the LOF algorithm [10]. This approach suffers
+                                                                                                                       not suffer disparate treatment at decision time, (iii) statistical parity:
+from several drawbacks: (i) it mandates disparate treatment, which
+                                                                                                                       it maintains group fairness across minority and majority groups,
+may be at times infeasible/unlawful, e.g. in domains like housing
+                                                                                                                       and (iv) group fidelity: it emphasizing flagging of truly high-risk
+or employment, (ii) only prioritizes SP, which as we discussed in
+                                                                                                                       samples within each group, aiming to curb detector “laziness”. Fi-
+Sec. 2, can permit “laziness,” (iii) it is heuristic, and cannot be con-
+                                                                                                                       nally, we show empirical results across diverse real and synthetic
+cretely optimized end-to-end. Concurrent to our work, Zhang and
+                                                                                                                       datasets, demonstrating that our approach achieves fairness goals
+Davidson [56] introduce a deep SVDD based detector employing
+                                                                                                                       while providing accurate detection, significantly outperforming un-
+adversarial training to obfuscate protected group membership, sim-
+                                                                                                                       supervised fair representation learning and data de-biasing based
+ilar to our arl baseline. This approach also has issues: (i) it only
+                                                                                                                       baselines. We hope that our expository work yields further studies
+considers SP, and (ii) it suffers from well-known instability due to
+                                                                                                                       in this area.
+adversarial training [11, 32, 40]. A related work by Davidson and
+Ravi [18] focuses on quantifying the fairness of an OD model’s
+outcomes after detection, which thus has a different scope.
+Fairness-aware Representation Learning Several works aim to                                                            ACKNOWLEDGMENTS
+map input samples to an embedding space, where the representa-                                                         This research is sponsored by NSF CAREER 1452425. In addition, we
+tions are indistinguishable across groups [37, 54]. Most recently, ad-                                                 thank Dimitris Berberidis for helping with the early development of
+versarial training has been used to obfuscate PV association in repre-                                                 the ideas and the preliminary code base. Conclusions expressed in
+sentations while preserving accurate classification [1, 7, 19, 40, 55].                                                this material are those of the authors and do not necessarily reflect
+Most of these methods are supervised. Substituting classification or                                                   the views, expressed or implied, of the funding parties.
+REFERENCES                                                                                  [31] Carl Knight. 2009. Luck Egalitarianism: Equality, Responsibility, and Justice.
+ [1] Tameem Adel, Isabel Valera, Zoubin Ghahramani, and Adrian Weller. 2019. One-                Edinburgh University Press. http://www.jstor.org/stable/10.3366/j.ctt1r2483
+     network adversarial fairness. In AAAI, Vol. 33. 2412–2420.                             [32] Naveen Kodali, Jacob Abernethy, James Hays, and Zsolt Kira. 2017. On conver-
+ [2] Charu C Aggarwal. 2015. Outlier analysis. In Data mining. Springer, 237–263.                gence and stability of gans. arXiv preprint arXiv:1705.07215 (2017).
+ [3] Jinwon An and Sungzoon Cho. 2015. Variational autoencoder based anomaly                [33] Emmanouil Krasanakis, Eleftherios Spyromitros-Xioufis, Symeon Papadopoulos,
+     detection using reconstruction probability. Special Lecture on IE 2, 1 (2015), 1–18.        and Yiannis Kompatsiaris. 2018. Adaptive sensitive reweighting to mitigate
+ [4] Solon Barocas, Moritz Hardt, and Arvind Narayanan. 2017. Fairness in machine                bias in fairness-aware classification. In Proceedings of the 2018 World Wide Web
+     learning. NIPS Tutorial 1 (2017).                                                           Conference. 853–862.
+ [5] Solon Barocas, Moritz Hardt, and Arvind Narayanan. 2019. Fairness and Machine          [34] Meng-Chieh Lee, Yue Zhao, Aluna Wang, Pierre Jinghong Liang, Leman Akoglu,
+     Learning. fairmlbook.org. http://www.fairmlbook.org.                                        Vincent S Tseng, and Christos Faloutsos. 2020. AutoAudit: Mining Accounting
+ [6] Alex Beutel, Jilin Chen, Tulsee Doshi, Hai Qian, Allison Woodruff, Christine                and Time-Evolving Graphs. arXiv preprint arXiv:2011.00447 (2020).
+     Luu, Pierre Kreitmann, Jonathan Bischof, and Ed H Chi. 2019. Putting fairness          [35] Moshe Lichman et al. 2013. UCI machine learning repository.
+     principles into practice: Challenges, metrics, and improvements. In Proceedings        [36] Zachary Lipton, Julian McAuley, and Alexandra Chouldechova. 2018. Does
+     of the 2019 AAAI/ACM Conference on AI, Ethics, and Society. 453–459.                        mitigating ML’s impact disparity require treatment disparity?. In Advances in
+ [7] Alex Beutel, Jilin Chen, Zhe Zhao, and Ed H Chi. 2017. Data decisions and                   Neural Information Processing Systems. 8125–8135.
+     theoretical implications when adversarially learning fair representations. arXiv       [37] Christos Louizos, Kevin Swersky, Yujia Li, Max Welling, and Richard Zemel. 2015.
+     preprint arXiv:1707.00075 (2017).                                                           The variational fair autoencoder. arXiv preprint arXiv:1511.00830 (2015).
+ [8] Su Lin Blodgett, Lisa Green, and Brendan O’Connor. 2016. Demographic dialectal         [38] Wei Luo and Marcus Gallagher. 2010. Unsupervised DRG upcoding detection in
+     variation in social media: A case study of African-American English. arXiv                  healthcare databases. In 2010 IEEE ICDM Workshops. IEEE, 600–605.
+     preprint arXiv:1608.08868 (2016).                                                      [39] Yunlong Ma, Peng Zhang, Yanan Cao, and Li Guo. 2013. Parallel auto-encoder
+ [9] Marcel Bosc, Fabrice Heitz, Jean-Paul Armspach, Izzie Namer, Daniel Gounot,                 for efficient outlier detection. In 2013 IEEE International Conference on Big Data.
+     and Lucien Rumbach. 2003. Automatic change detection in multimodal serial                   IEEE, 15–17.
+     MRI: application to multiple sclerosis lesion evolution. NeuroImage 20, 2 (2003),      [40] David Madras, Elliot Creager, Toniann Pitassi, and Richard Zemel. 2018. Learning
+     643–656.                                                                                    adversarially fair and transferable representations. arXiv preprint arXiv:1802.06309
+[10] Markus M Breunig, Hans-Peter Kriegel, Raymond T Ng, and Jörg Sander. 2000.                  (2018).
+     LOF: identifying density-based local outliers. In Proceedings of the 2000 ACM          [41] Ninareh Mehrabi, Fred Morstatter, Nripsuta Saxena, Kristina Lerman, and Aram
+     SIGMOD international conference on Management of data. 93–104.                              Galstyan. 2019. A survey on bias and fairness in machine learning. arXiv preprint
+[11] George Cevora. 2020. Fair Adversarial Networks. arXiv preprint arXiv:2002.12144             arXiv:1908.09635 (2019).
+     (2020).                                                                                [42] Matt Olfat and Anil Aswani. 2019. Convex formulations for fair principal com-
+[12] Raghavendra Chalapathy, Aditya Krishna Menon, and Sanjay Chawla. 2018.                      ponent analysis. In Proceedings of the AAAI Conference on Artificial Intelligence,
+     Anomaly Detection using One-Class Neural Networks.                  arXiv preprint          Vol. 33. 663–670.
+     arXiv:1802.06360 (2018).                                                               [43] Deepak P and Savitha Sam Abraham. 2020.                   Fair Outlier Detection.
+[13] Varun Chandola, Arindam Banerjee, and Vipin Kumar. 2009. Anomaly detection:                 arXiv:2005.09900 [cs.LG]
+     A survey. ACM computing surveys (CSUR) 41, 3 (2009), 1–58.                             [44] Guansong Pang, Chunhua Shen, Longbing Cao, and Anton van den Hengel. 2020.
+[14] Jinghui Chen, Saket Sathe, Charu Aggarwal, and Deepak Turaga. 2017. Outlier de-             Deep learning for anomaly detection: A review. arXiv preprint arXiv:2007.02500
+     tection with autoencoder ensembles. In Proceedings of the 2017 SIAM international           (2020).
+     conference on data mining. SIAM, 90–98.                                                [45] Clifton Phua, Vincent Lee, Kate Smith, and Ross Gayler. 2010. A compre-
+[15] Sam Corbett-Davies and Sharad Goel. 2018. The Measure and Mismeasure of                     hensive survey of data mining-based fraud detection research. arXiv preprint
+     Fairness: A Critical Review of Fair Machine Learning. CoRR abs/1808.00023                   arXiv:1009.6119 (2010).
+     (2018). http://dblp.uni-trier.de/db/journals/corr/corr1808.html#abs-1808-00023         [46] Tao Qin, Tie-Yan Liu, and Hang Li. 2010. A general approximation framework
+[16] Sam Corbett-Davies and Sharad Goel. 2018. The measure and mismeasure of                     for direct optimization of information retrieval measures. Information retrieval
+     fairness: A critical review of fair machine learning. arXiv:1808.00023 (2018).              13, 4 (2010), 375–397.
+[17] Ian Davidson and Selvan Suntiha Ravi. 2020. A framework for determining the            [47] Lukas Ruff, Robert A. Vandermeulen, Nico Görnitz, Lucas Deecke, Shoaib A.
+     fairness of outlier detection. In Proceedings of the 24th European Conference on            Siddiqui, Alexander Binder, Emmanuel Müller, and Marius Kloft. 2018. Deep
+     Artificial Intelligence (ECAI2020), Vol. 2029.                                              One-Class Classification. In Proceedings of the 35th International Conference on
+[18] Ian Davidson and Selvan Suntiha Ravi. 2020. A framework for determining the                 Machine Learning, Vol. 80. 4393–4402.
+     fairness of outlier detection. In Proceedings of the 24th European Conference on       [48] Bernhard Schölkopf, John C Platt, John Shawe-Taylor, Alex J Smola, and Robert C
+     Artificial Intelligence (ECAI2020), Vol. 2029.                                              Williamson. 2001. Estimating the support of a high-dimensional distribution.
+[19] Harrison Edwards and Amos Storkey. 2015. Censoring representations with an                  Neural computation 13, 7 (2001), 1443–1471.
+     adversary. arXiv preprint arXiv:1511.05897 (2015).                                     [49] Neil Shah, Alex Beutel, Brian Gallagher, and Christos Faloutsos. 2014. Spotting
+[20] Michael Feldman, Sorelle A Friedler, John Moeller, Carlos Scheidegger, and Suresh           suspicious link behavior with fbox: An adversarial perspective. In 2014 IEEE
+     Venkatasubramanian. 2015. Certifying and removing disparate impact. In pro-                 International Conference on Data Mining. IEEE, 959–964.
+     ceedings of the 21th ACM SIGKDD. 259–268.                                              [50] Véronique Van Vlasselaer, Cristián Bravo, Olivier Caelen, Tina Eliassi-Rad, Le-
+[21] Naman Goel, Mohammad Yaghini, and Boi Faltings. 2018. Non-discriminatory                    man Akoglu, Monique Snoeck, and Bart Baesens. 2015. APATE: A novel approach
+     machine learning through convex fairness criteria. In AIES. 116–116.                        for automated credit card transaction fraud detection using network-based ex-
+[22] Prasanta Gogoi, DK Bhattacharyya, Bhogeswar Borah, and Jugal K Kalita. 2011. A              tensions. Decision Support Systems 75 (2015), 38–48.
+     survey of outlier detection methods in network anomaly identification. Comput.         [51] Sahil Verma and Julia Rubin. 2018. Fairness definitions explained. In 2018
+     J. 54, 4 (2011), 570–588.                                                                   IEEE/ACM International Workshop on Software Fairness (FairWare). IEEE, 1–7.
+[23] Manish Gupta, Jing Gao, Charu C Aggarwal, and Jiawei Han. 2013. Outlier                [52] Muhammad Bilal Zafar, Isabel Valera, Manuel Gomez Rodriguez, and Krishna P
+     detection for temporal data: A survey. IEEE TKDE 26, 9 (2013), 2250–2267.                   Gummadi. 2017. Fairness beyond disparate treatment & disparate impact: Learn-
+[24] Moritz Hardt, Eric Price, and Nati Srebro. 2016. Equality of opportunity in                 ing classification without disparate mistreatment. In Proceedings of the 26th
+     supervised learning. In Advances in neural information processing systems. 3315–            international conference on world wide web. 1171–1180.
+     3323.                                                                                  [53] Sultan Zavrak and Murat İskefiyeli. 2020. Anomaly-based intrusion detection
+[25] Haibo He and Edwardo A Garcia. 2009. Learning from imbalanced data. IEEE                    from network flow features using variational autoencoder. IEEE Access 8 (2020),
+     Transactions on knowledge and data engineering 21, 9 (2009), 1263–1284.                     108346–108358.
+[26] K. Järvelin and J. Kekäläinen. 2002. Cumulated gain-based evaluation of IR             [54] Rich Zemel, Yu Wu, Kevin Swersky, Toni Pitassi, and Cynthia Dwork. 2013.
+     techniques. ACM Transactions on Information Systems (TOIS) 20 (2002), 422–446.              Learning fair representations. In ICML. 325–333.
+[27] Justin M Johnson and Taghi M Khoshgoftaar. 2019. Medicare fraud detection              [55] Brian Hu Zhang, Blake Lemoine, and Margaret Mitchell. 2018. Mitigating un-
+     using neural networks. Journal of Big Data 6, 1 (2019), 63.                                 wanted biases with adversarial learning. In AIES. 335–340.
+[28] Faisal Kamiran and Toon Calders. 2012. Data preprocessing techniques for               [56] Hongjing Zhang and Ian Davidson. 2020. Towards Fair Deep Anomaly Detection.
+     classification without discrimination. Knowledge and Information Systems 33, 1              arXiv preprint arXiv:2012.14961 (2020).
+     (2012), 1–33.                                                                          [57] Jiong Zhang and Mohammad Zulkernine. 2006. Anomaly based network intru-
+[29] Michael Kearns, Seth Neel, Aaron Roth, and Zhiwei Steven Wu. 2018. Prevent-                 sion detection with unsupervised outlier detection. In 2006 IEEE International
+     ing fairness gerrymandering: Auditing and learning for subgroup fairness. In                Conference on Communications, Vol. 5. IEEE, 2388–2393.
+     International Conference on Machine Learning. PMLR, 2564–2572.                         [58] Chong Zhou and Randy C Paffenroth. 2017. Anomaly detection with robust deep
+[30] Diederik P Kingma and Jimmy Ba. 2014. Adam: A method for stochastic opti-                   autoencoders. In Proceedings of the 23rd ACM SIGKDD. 665–674.
+     mization. arXiv preprint arXiv:1412.6980 (2014).
+A PROOFS                                                               𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1) ≥ 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏).
+A.1 Proof of Claim 1
+                                                                         Case 2: When 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1) = 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏)
+   Proof. We want OD to exhibit detection effectiveness i.e. 𝑃 (𝑌 =
+1|𝑂 = 1) > 𝑃 (𝑌 = 1).                                                          𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1) = 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏)
+       Now,     𝑃 (𝑌 = 1|𝑂 = 1) =𝑃 (𝑃𝑉 = 𝑎|𝑂 = 1)·                         =⇒ 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1) = 𝑟 · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎)
+                                 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎, 𝑂 = 1)+                  =⇒ 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1) < 𝑟 · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎, 𝑂 = 1),
+                                 𝑃 (𝑃𝑉 = 𝑏 |𝑂 = 1)·                                   [∵ 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎, 𝑂 = 1) > 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎)]
+                                                                          This contradicts our assumption that 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 =
+                                 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1)
+                                                                       1) = 𝑟 · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎, 𝑂 = 1), therefore it must be that
+                                                                       𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1) > 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏).
+  Given SP, we have
+                                                                           Case 3: When 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1) > 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏) i.e.
+                 𝑃 (𝑂 = 1|𝑃𝑉 = 𝑎) = 𝑃 (𝑂 = 1|𝑃𝑉 = 𝑏)                   (𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1) = 𝐿 · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏); 𝐿 > 1)
+             =⇒ 𝑃 (𝑃𝑉 = 𝑎|𝑂 = 1) = 𝑃 (𝑃𝑉 = 𝑎), and                     Now, we know that,
+                 𝑃 (𝑃𝑉 = 𝑏 |𝑂 = 1) = 𝑃 (𝑃𝑉 = 𝑏)
+  Therefore, we have
+      Now, 𝑃 (𝑌 = 1|𝑂 = 1) =𝑃 (𝑃𝑉 = 𝑎)·                                            𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎) · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1)
+                                 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎, 𝑂 = 1)+                           = 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏) · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎, 𝑂 = 1)
+                                                                (14)
+                                 𝑃 (𝑃𝑉 = 𝑏)·                                   =⇒ 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎) · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1)
+                                 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1)                            = 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏) · 𝐾 · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎)
+  Now,                                                                         =⇒ 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1) = 𝐾 · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏)
+            𝑃 (𝑌 = 1) =𝑃 (𝑃𝑉 = 𝑎) · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎)+                          =⇒ 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1) > 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏)
+                       𝑃 (𝑃𝑉 = 𝑏) · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏)
+  Therefore, if we want 𝑃 (𝑌 = 1|𝑂 = 1) > 𝑃 (𝑌 = 1), then
+              𝑃 (𝑃𝑉 = 𝑎) · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎, 𝑂 = 1)+                    And, for ratio to be preserved, it must be that 𝐿 = 𝐾.
+              𝑃 (𝑃𝑉 = 𝑏) · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1)                        Hence, enforcing preservation of ratios implies base-rates in
+                                                                       flagged observations are larger than their counterparts in the pop-
+                   >                                            (15)   ulation.                                                         □
+              𝑃 (𝑃𝑉 = 𝑎) · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎)+
+              𝑃 (𝑃𝑉 = 𝑏) · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏)
+                                                                       B DATA DESCRIPTION
+           =⇒ ∃𝑣 ∈ {𝑎, 𝑏} 𝑠.𝑡 . 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑣, 𝑂 = 1)                B.1 Synthetic data
+                                  >                                    We illustrate the effectiveness of FairOD on two synthetic datasets,
+                                 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑣)                      namely Synth1 and Synth2 (as illustrated in Fig. 3). These datasets
+                                                                       are constructed to present scenarios that mimic real-world settings,
+                                                                  □
+                                                                       where we may have features which are uncorrelated with respect to
+A.2    Proof of Claim 2                                                outcome labels but partially correlated with 𝑃𝑉 , or features which
+                                                                       are correlated both to outcome labels and 𝑃𝑉 .
+   Proof. Without loss of generality, assume that 𝑃 (𝑌 = 1|𝑃𝑉 =
+𝑎, 𝑂 = 1) > 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎) i.e. ( i.e. 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎, 𝑂 =
+                                                𝑃 (𝑌 =1|𝑃𝑉 =𝑎)         • Synth1: In Synth1, we simulate a 2-dimensional dataset com-
+1) = 𝐾 · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎); 𝐾 > 1), and let 𝑃 (𝑌 =1|𝑃𝑉 =𝑏) =
+𝑃 (𝑌 =1|𝑃𝑉 =𝑎,𝑂=1)   1
+                                                                         prised of samples 𝑋 = [𝑥 1, 𝑥 2 ] where 𝑥 1 is correlated with the
+𝑃 (𝑌 =1|𝑃𝑉 =𝑏,𝑂=1) = 𝑟 then                                              protected variable 𝑃𝑉 , but does not offer any predictive value
+Case 1: When 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1) < 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏)                  with respect to ground-truth outlier labels Y, while 𝑥 2 is corre-
+                                                                         lated with these labels Y (see Fig. 3a). We draw 2400 samples,
+         𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1) < 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏)                      of which 𝑃𝑉 = 𝑎 (majority) for 2000 points, and 𝑃𝑉 = 𝑏 (mi-
+                                                                         nority) for 400 points. 120 (5%) of these points are outliers. 𝑥 1
+    =⇒ 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1) < 𝑟 · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎)
+                                                                         differs in terms of shifted means, but equal variances, for both
+    =⇒ 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 = 1) < 𝑟 · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎, 𝑂 = 1),            majority and minority groups. 𝑥 2 is distributed similarly for both
+               [∵ 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎, 𝑂 = 1) > 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎)]            majority and minority groups, drawn from a normal distribution
+   This contradicts our assumption that 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑏, 𝑂 =             for outliers, and an exponential for inliers. The detailed gener-
+1) = 𝑟 · 𝑃 (𝑌 = 1|𝑃𝑉 = 𝑎, 𝑂 = 1), therefore it must be that              ative process for the data is below, and Fig. 3a shows a visual.
+    Synth1
+                                                                            with delinquent payment status as outliers (𝑌 = 1). The age > 25
+    Simulate samples 𝑋 = [𝑥 1, 𝑥 2 ] by...                                  to age ≤ 25 imbalance ratio is 4:1 and contains 5% outliers across
+    𝑃𝑉 ∼ Bernoulli(4/5)                                                     groups induced by the protected variable.
+      𝑌 ∼ Bernoulli(1/20)
+                                                                               • Abusive Tweets [8] (Tweets). The dataset is a collection of
+           Normal(−1, 1.44) if 𝑌 = 0, 𝑃𝑉 = 1 [a, majority; inlier]
+                                                                            Tweets along with annotations indicating whether a tweet is abu-
+          
+          
+          
+          
+     𝑥 1 ∼ Normal(1, 1.44) if 𝑌 = 0, 𝑃𝑉 = 0 [b, minority; inlier]
+          
+           2 × Exponential(1)(1 − 2 × Bernoulli(1/2)) if 𝑌 = 1 [outlier]
+                                                                           sive or not. The data are not annotated with any protected variable
+                                                                           by default; therefore, to assign protected variable to each Tweet,
+          
+          
+           Normal(−1, 1) if 𝑌 = 0, 𝑃𝑉 = 1 [a, majority; inlier]            we employ the following process: We predict the racial dialect —
+          
+          
+     𝑥 2 ∼ Normal(1, 1) if 𝑌 = 0, 𝑃𝑉 = 0 [b, minority; inlier]
+                                                                           African-American or Mainstream — of the tweets in the corpus us-
+           2 × Exponential(1)(1 − 2 × Bernoulli(1/2)) if 𝑌 = 1 [outlier]
+          
+                                                                           ing the language model proposed by [8]. The dialect is assigned to
+                                                                            a Tweet only when the prediction probability is greater than 0.7,
+• Synth2: In Synth2, we again simulate a 2-dimensional dataset              and then the predicted racial dialect is used as protected variable
+  comprised of samples 𝑋 = [𝑥 1, 𝑥 2 ] where 𝑥 1, 𝑥 2 are partially         where African-American dialect represents the minority group. In
+  correlated with both the protected variable 𝑃𝑉 as well as ground-         this setting, abusive tweets are labeled as outliers (𝑌 = 1) for the
+  truth outlier labels Y (see Fig. 3b). We draw 2400 samples, of            task of flagging abusive content on Twitter. The group sample size
+  which 𝑃𝑉 = 𝑎 (majority) for 2000 points, and 𝑃𝑉 = 𝑏 (minority)            ratio of racial dialect = African-American to racial dialect = Main-
+  for 400 points. 120 (5%) of these points are outliers. For inliers,       stream is set to 4:1. We further sample data points to ensure equal
+  both 𝑥 1, 𝑥 2 are normally distributed, and differ across major-          percentage (5%) of outliers across dialect groups.
+  ity and minority groups only in terms of shifted means, but
+  equal variances. Outliers are drawn from a product distribution              • Internet ads [35] (Ads). This is a collection of possible ad-
+  of an exponential and linearly transformed Bernoulli distribu-            vertisements on web-pages. The features characterize each ad by
+  tion (product taken for symmetry). The detailed generative pro-           encoding phrases occurring in the ad URL, anchor text, alt text,
+  cess for the data is below (right), and Fig. 3b shows a visual.           and encoding geometry of the ad image. We assign observations
+    Synth2                                                                  with class label ad as outliers (𝑌 = 1) and downsample the data to
+                                                                            get an outlier rate of 5%. There exists no demographic information
+    Simulate samples 𝑋 = [𝑥 1, 𝑥 2 ] by...                                  available, therefore we simulate a binary protected variable by ran-
+    𝑃𝑉 ∼ Bernoulli(4/5)
+                                                                            domly assigning each observation to one of two values (i.e. groups)
+      𝑌 ∼ Bernoulli(1/20)                                                   ∈ {0, 1} such that the group sample size ratio is 4:1.
+          (
+            Normal(180, 10) if 𝑃𝑉 = 1 [a, majority]
+     𝑥1 ∼
+            Normal(150, 10) if 𝑃𝑉 = 0 [b, minority]                         C    HYPERPARAMETERS
+          (
+            Normal(10, 3) if 𝑌 = 1 [outlier]                                We choose the hyperparameters of FairOD from 𝛼 ∈ {0.01, 0.5, 0.9}×
+     𝑥2 ∼                                                                   𝛾 ∈ {0.01, 0.1, 1.0} by evaluating the Pareto curve for fairness
+            Exponential(1) if 𝑌 = 0 [inlier]
+                                                                            and group fidelity criteria. The base and FairOD methods both
+B.1.1 Real-world data. We conduct experiments on 4 real-world               use an auto-encoder with two hidden layers. We fix the num-
+datasets and select them from diverse domains that have different           ber of hidden nodes in each layer to 2 if 𝑑 ≤ 100, and 8 oth-
+types of (binary) protected variables, specifically gender, age, and        erwise. The representation learning methods lfr and arl use
+race. Detailed descriptions are as follows.                                 the model configurations as proposed by their authors. The hy-
+                                                                            perparameter grid for the preprocessing baselines are set as fol-
+    • Adult [35] (Adult). The dataset is extracted from the 1994            lows: 𝑟𝑒𝑝𝑎𝑖𝑟 _𝑙𝑒𝑣𝑒𝑙 ∈ {0.0001, 0.001, 0.01, 0.1, 1.0} for dir, 𝐴𝑧 ∈
+Census database where each data point represents a person. The              {0.0001, 0.001, 0.01, 0.1, 0.9} and 𝐴𝑥 = 1 − 𝐴𝑧 for lfr, and 𝜆 ∈
+dataset records income level of an individual along with features en-       {0.0001, 0.001, 0.01, 0.1, 0.9} for arl. We pick the best model for the
+coding personal information on education, profession, investment            preprocessing baselines using Fairness as they only optimize for
+and family. In our experiments, gender ∈ {male, female} is used as          statistical parity. The best base model is selected based on recon-
+the protected variable where female represents minority group and           struction error through cross validation upon multiple runs with
+high earning individuals who exceed an annual income of 50,000              different random seeds.
+i.e. annual income > 50, 000 are assigned as outliers (𝑌 = 1). We
+further downsample female to achieve a male to female sample size           D    SUPPLEMENTAL RESULTS
+ratio of 4:1 and ensure that percentage of outliers remains the same        In this section, we report Flag-rate, GroupFidelity, AUC and AP (see
+(at 5%) across groups induced by the protected variable.                    Table 3) for the competing methods on a set of datasets (see Appen-
+   • Credit-defaults [35] (Credit). This is a risk management               dix B.1.1) w.r.t groups induced by 𝑃𝑉 = 𝑣; 𝑣 ∈ {𝑎, 𝑏} to supplement
+dataset from the financial domain that is based on Taiwan’s credit          the experimental results presented in Sec. 4. Notice that in most
+card clients’ default cases. The data records information of credit         cases (see Table 3a through Table 3f), FairOD outperforms the base
+card customers including their payment status, demographic factors,         model on label-aware parity metrics (AUC-ratio, AP-ratio) and, fur-
+credit data, historical bill and payments. Customer age is used as          thermore, outperforms base on at least one of the performance met-
+the protected variable where age > 25 indicates the majority group          rics (e.g. AUC, AP); fairness need not imply worse OD performance.
+and age ≤ 25 indicates the minority group. We assign individuals
+   Table 3: Evaluation measures are reported for the competing methods on the datasets presented in Appendix B.1.
+
+                                     (a) Synth1                                                                                             (b) Synth2
+
+                Flag-rate          GroupFidelity               AUC                      AP                             Flag-rate          GroupFidelity              AUC                      AP
+  Method    𝑃𝑉 = 𝑎    𝑃𝑉 = 𝑏    𝑃𝑉 = 𝑎     𝑃𝑉 = 𝑏     𝑃𝑉 = 𝑎     𝑃𝑉 = 𝑏       𝑃𝑉 = 𝑎         𝑃𝑉 = 𝑏      Method    𝑃𝑉 = 𝑎    𝑃𝑉 = 𝑏     𝑃𝑉 = 𝑎      𝑃𝑉 = 𝑏     𝑃𝑉 = 𝑎    𝑃𝑉 = 𝑏     𝑃𝑉 = 𝑎         𝑃𝑉 = 𝑏
+     base    0.0262    0.1282        1.0        1.0    0.9594        0.9168    0.8819         0.5849        base    0.0361    0.0811        1.0          1.0    0.6153     0.5464     0.273        0.2335
+      rw      0.033     0.135    0.9299     0.9309     0.9794        0.9168    0.8819         0.5849         rw     0.0205    0.1975    0.9242       0.6313     0.7544     0.5586    0.3973        0.2064
+      dir    0.0445    0.0775    0.3953     0.9281     0.9742        0.9138    0.8814         0.7529         dir    0.0465    0.0675    0.4224       0.9164     0.7892     0.7089    0.3921         0.317
+      lfr    0.0330    0.1350    0.9299     0.9309     0.9794        0.9168    0.8819         0.5849         lfr    0.0205    0.1975    0.9242       0.6313     0.7544     0.5586    0.3973        0.2064
+      arl    0.0520    0.0400    0.9136     0.3955     0.9786        0.5565     0.886         0.1842         arl    0.0520    0.0400    0.1801       0.1386     0.9786     0.5165     0.886        0.1842
+  FairOD     0.0500    0.0500    0.9639     0.9671     0.9666        0.9634    0.8166         0.7557     FairOD     0.0500    0.0500    0.9339       0.9201     0.6357     0.6419    0.2726        0.2918
+FairOD-L     0.0495    0.0525    0.9149     0.9295     0.9017        0.8714     0.599         0.5214   FairOD-L     0.0500    0.0500    0.8984       0.8843     0.6385     0.6472    0.2742        0.2838
+FairOD-C     0.0480    0.0600    0.8929     0.9082     0.9499        0.9284    0.7542         0.6501   FairOD-C     0.0450    0.0750    0.8997       0.9095     0.5957     0.5419    0.2665        0.2339
+
+
+                                      (c) Adult                                                                                             (d) Credit
+
+                Flag-rate         GroupFidelity             AUC                         AP                             Flag-rate         GroupFidelity              AUC                      AP
+  Method    𝑃𝑉 = 𝑎    𝑃𝑉 = 𝑏    𝑃𝑉 = 𝑎     𝑃𝑉 = 𝑏     𝑃𝑉 = 𝑎     𝑃𝑉 = 𝑏       𝑃𝑉 = 𝑎         𝑃𝑉 = 𝑏      Method    𝑃𝑉 = 𝑎    𝑃𝑉 = 𝑏     𝑃𝑉 = 𝑎      𝑃𝑉 = 𝑏     𝑃𝑉 = 𝑎    𝑃𝑉 = 𝑏     𝑃𝑉 = 𝑎        𝑃𝑉 = 𝑏
+     base    0.0358    0.0433        1.0        1.0    0.6344     0.6449       0.1105        0.0898        base    0.0445       0.064       1.0         1.0    0.7376     0.7512    0.1938         0.1582
+      rw     0.0515    0.0391    0.8399     0.8479     0.6323     0.6351       0.1303        0.1141         rw     0.0467    0.06627    0.8399      0.8409     0.7376     0.7512    0.1938         0.1582
+      dir    0.0515    0.0391    0.9299     0.9309     0.6323     0.6351       0.1303        0.1141         dir    0.0467    0.06627    0.6899      0.6809     0.7376     0.7512    0.1938         0.1582
+      lfr    0.0515    0.0391    0.8099     0.8099     0.6323     0.6351       0.1303        0.1141         lfr    0.0467    0.06627    0.7299      0.7309     0.7376     0.7512    0.1938         0.1582
+      arl    0.0507    0.0444    0.9147     0.5765     0.5951     0.6009       0.0987        0.0848         arl    0.0471     0.0645    0.5533      0.6118     0.7242     0.7263    0.1396         0.1054
+  FairOD     0.0497    0.0511    0.9646     0.9616     0.6374     0.6404       0.1085        0.0912     FairOD     0.0468       0.066   0.9235      0.9421     0.7368     0.7494    0.2134         0.1725
+FairOD-L     0.0513    0.0403    0.9178     0.9005     0.6425     0.6312       0.1213        0.1048    FairOD-L    0.0475      0.062    0.7147      0.6564     0.7276     0.7394    0.1246         0.1025
+FairOD-C     0.0527    0.0302    0.8119     0.7877     0.6533     0.6229       0.1872        0.1435    FairOD-C    0.0467     0.0662    0.7871      0.8029     0.7327     0.7484    0.1333         0.1091
+
+
+                                     (e) Tweets                                                                                                   (f) Ads
+
+                Flag-rate         GroupFidelity            AUC                         AP                              Flag-rate          GroupFidelity              AUC                      AP
+  Method    𝑃𝑉 = 𝑎    𝑃𝑉 = 𝑏    𝑃𝑉 = 𝑎     𝑃𝑉 = 𝑏     𝑃𝑉 = 𝑎    𝑃𝑉 = 𝑏        𝑃𝑉 = 𝑎        𝑃𝑉 = 𝑏       Method    𝑃𝑉 = 𝑎    𝑃𝑉 = 𝑏     𝑃𝑉 = 𝑎      𝑃𝑉 = 𝑏     𝑃𝑉 = 𝑎    𝑃𝑉 = 𝑏     𝑃𝑉 = 𝑎         𝑃𝑉 = 𝑏
+    base    0.0369    0.1015        1.0        1.0    0.5739     0.5476        0.061         0.0539         base    0.0286    0.0318        1.0          1.0    0.7077     0.7234    0.2555        0.2124
+     rw     0.0479    0.0571    0.2882     0.3312     0.5583      0.582       0.0466         0.0334          rw     0.0491    0.0523    0.8236       0.7813     0.7286     0.7672    0.4227        0.5183
+     dir    0.0494    0.0507     0.388     0.4178     0.5552     0.5307       0.0454         0.0345          dir    0.0491    0.0523    0.6236       0.5813     0.7286     0.7672    0.4296        0.5253
+     lfr    0.0479    0.0571    0.4082     0.4422     0.5583      0.582       0.0466         0.0334          lfr    0.0491    0.0523    0.7236       0.6813     0.7286     0.7672    0.4257        0.5253
+     arl    0.0482    0.0558    0.5432     0.5762     0.4912     0.5146       0.0504         0.0442          arl    0.0499    0.0500    0.5028       0.2181     0.6572     0.6487    0.0885        0.0525
+ FairOD     0.0488    0.0532    0.9668     0.9671      0.569     0.5699       0.0617         0.0617      FairOD     0.0499    0.0500    0.9698       0.9699     0.7179     0.7216    0.2592        0.2163
+FairOD-L    0.0331    0.1167    0.9137     0.8986     0.5091     0.4237       0.0574         0.0425    FairOD-L     0.0683    0.0588    0.5551       0.8684     0.7179     0.7345    0.0005        0.0005
+FairOD-C    0.0501    0.0488    0.6753     0.6903     0.5592     0.5891       0.0627         0.1002    FairOD-C     0.0499    0.0500    0.6611       0.6966     0.7007     0.7251    0.2636        0.2455
+

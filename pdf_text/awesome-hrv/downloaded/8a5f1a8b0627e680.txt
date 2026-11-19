@@ -1,0 +1,783 @@
+                                                       A3 : Activation Anomaly Analysis
+
+                                                  Philip Sperl? , Jan-Philipp Schulze? , and Konstantin Böttinger
+
+                                                        Fraunhofer Institute for Applied and Integrated Security
+                                                               {philip.sperl, jan-philipp.schulze,
+                                                           konstantin.boettinger}@aisec.fraunhofer.de
+
+
+
+
+arXiv:2003.01801v3 [cs.CR] 7 Apr 2020
+                                                Abstract. Inspired by recent advances in coverage-guided analysis of
+                                                neural networks, we propose a novel anomaly detection method. We show
+                                                that the hidden activation values contain information useful to distin-
+                                                guish between normal and anomalous samples. Our approach combines
+                                                three neural networks in a purely data-driven end-to-end model. Based on
+                                                the activation values in the target network, the alarm network decides if
+                                                the given sample is normal. Thanks to the anomaly network, our method
+                                                even works in strict semi-supervised settings. Strong anomaly detection
+                                                results are achieved on common data sets surpassing current baseline
+                                                methods. Our semi-supervised anomaly detection method allows to in-
+                                                spect large amounts of data for anomalies across various applications.
+
+                                                Keywords: anomaly detection · deep learning · intrusion detection ·
+                                                semi-supervised learning · coverage analysis · data mining · IT security
+
+
+                                        1     Introduction
+
+                                        Anomaly detection is the task of identifying data points that differ in their
+                                        behavior compared to the majority of samples. Reliable anomaly detection is of
+                                        great interest in many real-life scenarios, especially in the context of security-
+                                        sensitive systems. Here, anomalies can indicate attacks on the infrastructure,
+                                        fraudulent behavior, or general points of interest. In recent years, the number
+                                        of machine learning (ML) applications using deep learning (DL) concepts has
+                                        steadily grown. DL methods allow to analyze highly complex data for patterns
+                                        that are useful to minimize a certain loss function. Anomaly detection tasks are
+                                        especially challenging for DL methods due to the inherent class imbalance. In
+                                        research, anomaly detection is often only seen as unsupervised task, thus ignoring
+                                        the information gain when anomaly-related samples are available. In our work,
+                                        we develop a new DL-based anomaly detection method showing superior results
+                                        with only a handful of anomaly examples – and motivate that the very same
+                                        method also works without any anomaly examples at all.
+                                            In DL-based anomaly detection, a popular idea is to use an autoencoder
+                                        (AE) to preprocess, or reconstruct the input. This type of neural network (NN)
+                                        generates an output that is close to the given input under the constraint of small
+                                        ?
+                                            Philip Sperl and Jan-Philipp Schulze are co-first authors.
+2         Philip Sperl, Jan-Philipp Schulze, and Konstantin Böttinger
+
+hidden dimensions. Intuitively, when trained on normal samples only, the AE will
+miss important features that distinguish anomalous samples, thus increasing the
+reconstruction error. Clearly, this method assumes that the overall error is large
+– however, anomalies may be too subtle to be detected based on the output only.
+In our paper, we consider the entire system context by analyzing more subtle
+patterns. We show that the hidden activations of autoencoders, but also other
+types of NNs, are useful to judge if the current input is normal, or anomalous. By
+combining the information of three interrelated NNs, we achieve strong detection
+results even in semi-supervised settings.
+    During the conceptual phase, we were inspired by coverage-guided neural
+network testing methods. In this new and promising research direction, software
+testing concepts are transferred to DL models. The goal is to identify faulty
+regions in NNs responsible for unusual behavior, or errors during run-time. Pei
+et al. [23] first introduced the idea of neuron coverage to guide a testing process.
+Since then, further improvements and modifications have been proposed, e.g., by
+Ma et al. [16] and Sun et al. [38]. Recently, Sperl et al. [31] used this concept to
+detect adversarial examples fed to NNs. The authors analyze the activation val-
+ues while processing benign and adversarial inputs – a second network classifies
+if the recorded patterns resemble normal behavior or an attack. In this paper,
+we profit from this insight and further generalize the concept by adapting it
+to the constraints of anomaly detection. Whereas samples for benign as well as
+adversarial inputs are plentiful in adversarial ML, anomaly detection is a semi-
+supervised setting with only a few anomaly-related labels available. However,
+also here we assume that NNs behave in a special and distinguishable manner,
+when confronted with anomalous data. We show, this behavior is detectable by
+analyzing the activation values during run-time. When observing the neuron
+activations of NNs while processing normal inputs and synthetic anomalies, we
+train another NN to distinguish the nature of the analyzed data points. Our anal-
+ysis shows that even artificial anomalies train an anomaly detection model, that
+performs well across multiple domains, and generalizes to yet unseen anomalies.
+    Applying our concept, we empirically show that anomalous samples cause
+different hidden activations compared to normal ones. We analyze the hidden
+layers of a so-called target network by an auxiliary network, called the alarm
+network. With our anomaly network, we automatically generate samples used
+during the training of the alarm network to distinguish between normal and
+anomalous samples. Our evaluation shows strong results on common data sets,
+and we report superior performance to common baseline methods. In summary,
+we make the following contributions:
+
+    – We propose a purely data-driven semi-supervised anomaly detection method
+      based on the analysis of the hidden activations of NNs which we call A3 .
+    – Based on our thoroughly selected set of experiments across five different data
+      sets, we show that these patterns generalize to new anomaly types even with
+      only a few anomaly examples available.
+    – We motivate that our method works in settings where no anomaly samples
+      are available when using a generative model as anomaly network.
+                                           A3 : Activation Anomaly Analysis       3
+
+2     Background and Related Work
+2.1   Nomenclature
+Neural networks approximate an input-output mapping f (x; θ) = ŷ based on
+the learned parameters θ. The overall function f = fL ◦ . . . ◦ f1 consists of
+multiple layers fi . For easier readability, we summarize the input-output relation
+as f : x 7→ ŷ. Generally, we denote the output, or activation, of the ith layer as
+hi = σ(Wi,i−1 · hi−1 + bi ). Here σ(·) is a non-linear activation function, Wi,j and
+bi the mapping parameters learned in layer i with respect to layer j. The input
+corresponds to x = h0 . Thus, the activations simply become a function hi (x; θ)
+dependent on the input and the network parameters up to the respective layer.
+    The weights θ i are determined by an optimization algorithm minimizing the
+expected loss between the desired and estimated output, L(y, ŷ). Our entire
+data set D = {(xk , yk )}, xk ∈ X , yk ∈ Y is split into three parts: training,
+validation, and test. The network weights are adapted to the training set while
+evaluating the performance on the validation set. We consider categorical data,
+y ∈ {1, 2, . . . |Y|}, where Y denotes the set of available labels. Among other
+things, we evaluate the transferability of A3 , i.e., the performance of the model
+evaluated on more labels than it was trained on, Ytrain ⊂ Ytest .
+
+2.2   Related Work
+Anomaly detection is a topic of active research with a diversity of use-cases
+and applied methods. For instance, in network intrusion detection [18], power
+grids [30], or industrial control systems [10], automated mechanisms can improve
+the security of the overall system. A good overview on anomaly detection in
+general and deep learning based systems in particular is given in the surveys [4]
+and [3], respectively. Note that the term “semi-supervised” is often ambiguous in
+anomaly detection. We follow the surveys’ notation, thus calling any knowledge
+about the underlying labels semi-supervised, e.g., also when the training data is
+assumed to be normal. Famous unsupervised methods include OC-SVMs [27],
+or Isolation Forests [15].
+    In DL-based anomaly detection systems, a popular choice are architectures
+incorporating an AE, often used as feature extractor. AEs are combined with
+classical machine learning classifiers like k-nearest neighbor [35], OC-SVMs for
+anomaly detection [2], NN-based classifiers [25], or Gaussian Mixture Models
+[39]. Similarly, other feature extraction networks like recurrent NNs have been
+evaluated [17, 20, 28]. To detect anomalies, AEs may also be used in their purest
+form: to restore the input under the constraint of small hidden layers, similar to
+classical dimensionality reduction methods like PCA. The reconstruction error
+of samples can then be used to discriminate between normal and anomalous
+data points [35, 37]. Research has further analyzed how to improve the anomaly
+detection results, e.g., by iteratively adding human feedback [9, 34].
+    Over the past decades, computing power and data storage have steadily risen.
+DL methods profit from the increased amount of training samples. Recent re-
+search [21, 26] has studied ways to incorporate known anomalies into DL-based
+4        Philip Sperl, Jan-Philipp Schulze, and Konstantin Böttinger
+
+anomaly detection. They show that even a few anomaly labels, which are usually
+available in practice, improve the overall detection performance. In our work, we
+extend this research area by showing that the activations of NNs differ for nor-
+mal and anomalous samples. Using our method, we are able to detect known and
+even new, yet unseen types of anomalies in different scenarios with high confi-
+dence. With our framework, we significantly improve NN-based semi-supervised
+anomaly detection systems.
+
+
+3     Methodology
+
+Based on the activations of a neural network f , we present the following hypoth-
+esis building the foundation of our paper:
+
+      Evaluating the activations hi of a neural network trained on the data
+      set Dtrain , we observe special patterns that allow to distinguish between
+      classes the network has been trained on, and unknown classes yi ∈  / Ytrain .
+
+We argue that this setting is analog to anomaly detection. An anomaly is defined
+as a sample different to normal data in some unspecified behavior. When Dtrain
+describes the normal data, then any point of a yet unknown class yi ∈   / Ytrain
+defines an anomaly, i.e., a sample that does not belong to a normal class.
+
+
+3.1     Architecture
+
+Our goal is to map the input to a binary output; either the sample is normal
+(label 0) or anomalous (label 1). We achieve this with our new anomaly detection
+method comprising three parts. Whereas the target, and alarm network are
+closely related to the adversarial example detection method of Sperl et al. [31],
+we additionally add an anomaly network.
+
+ 1. The target network performs a task unrelated to anomaly detection. In ac-
+    cordance to our assumption, the classes the target was trained on are con-
+    sidered normal. Several architectures of the target are possible – we evaluate
+    fully-connected as well as convolutional autoencoders and classifiers.
+ 2. The anomaly network generates counterexamples based on the inputs, used
+    to train the alarm network. We show that even a random number generator
+    as anomaly network gives state-of-the art results. Furthermore, we motivate
+    that a generative model eliminates the need for anomaly-related labels.
+ 3. The alarm network evaluates if the given sample is normal or anomalous by
+    observing the hidden activations of the target network. While training, the
+    activations of the inputs as well as synthetic anomalies from the anomaly
+    network are considered.
+
+    Both parts are combined to one connected architecture. In the scope of this
+paper, we fix the target network to its pretrained state. We consider its acti-
+vations caused by the input, htarget,i (x; θ target ). Our assumption is that these
+                                                   A3 : Activation Anomaly Analysis              5
+
+                      Target Network
+
+
+
+
+                                                                    Alarm Network
+      x & x̄                                         x̂
+
+                                                              xalarm               Normal /
+                                                                                  Anomalous
+
+
+
+Fig. 1: A3 consists of three parts: 1) a target network unrelated to anomaly
+detection (e.g., an autoencoder), 2) the anomaly network providing anomalous
+counterexamples x̄, and 3) the alarm network judging if the input x is normal.
+The three parts are connected to one overall network.
+
+
+
+activations show particular patterns for samples the target network was trained
+on (i.e., normal samples), and for other samples (i.e., anomalous samples). The
+alarm network then finds anomaly-related patterns in the target network’s acti-
+vations. A high level overview is given in Figure 1.
+
+3.2    Training Phase
+Target Network The target network performs a task unrelated to anomaly
+detection on the input x. We evaluate autoencoders, ftarget : x 7→ x̂, and classi-
+fiers, ftarget : x 7→ ŷ ∈ {1, . . . , |Y|}. According to our fundamental assumption,
+all samples used in the training are considered normal.
+
+Anomaly Network The anomaly network transforms the inputs to an anomaly,
+not resembling the normal data, fanomaly : x 7→ x̄. Thus, in accordance with
+the semi-supervised setting, no information about the distribution of anomalous
+samples is necessary. The here generated samples are fed in the target network.
+In our evaluation, we transform the input to a random realization of a normal
+distribution of the same dimension, i.e., x̄ ∼ N (µ, σ 2 ). As further outlook, we use
+a variational autoencoder (VAE) [13], i.e., an autoencoder encoding the input to
+the inner states hµ and hσ forming Gaussian posteriors. Here, anomaly samples
+are generated by adding Gaussian noise N (0, 5) to hµ , i.e., by generating highly
+improbable samples based on the learned distribution.
+
+Alarm Network The alarm network maps the input to its anomaly probabil-
+ity. However, it does not operate on the input directly, but observes the target
+network’s activations caused by the input:
+
+       falarm : [htarget,1 (x; θ target ), . . . , htarget,L−1 (x; θ target )] 7→ ŷ ∈ [0, 1].
+6        Philip Sperl, Jan-Philipp Schulze, and Konstantin Böttinger
+
+    Train Target Network              Train Alarm Network                 Anomaly Detection
+
+    Normal         Anomaly            Normal           Anomaly
+                                                                          Data
+     Data            Net               Data              Net
+
+             Target                             Target                            Target
+              Net                                Net                               Net
+
+                                      Hidden             Alarm          Hidden              Alarm
+                                     Activations          Net          Activations           Net
+
+                                                                                          Normal /
+                                                                                         Anomalous
+
+Fig. 2: We train the target network on the training data deemed as normal. To
+train the alarm network, the target’s hidden activations caused by the input as
+well as the anomaly network’s output are used. For new data points, the target’s
+activations are evaluated by the alarm network.
+
+
+
+Hence, the output is implicitly dependent on the input and the network weights
+of the target and alarm model, ŷ(x; θ target , θ alarm ). Thanks to the combination
+of the target, anomaly, and alarm network A3 even works when there are only a
+few anomalous samples available. Further we motivate, with a suitable generative
+anomaly model, no anomaly samples at all is necessary.
+
+Loss Function The alarm network is optimized on predicting the respective
+training labels, and classifying the anomaly network’s output x̄ as anomalous.
+We fixed the weight parameter between these objectives to λ = 1.0. Let Lx (y, ŷ)
+denote the binary cross-entropy, the overall loss becomes:
+        L(y, ŷ) = Lx (y, ŷ(x; θ target , θ alarm )) + λ · Lx (1, ŷ(x̄; θ target , θ alarm )).
+
+3.3    Prediction Phase
+During the prediction phase, the target and the alarm network act as one com-
+bined system, mapping the input to a confidence interval: fdetect : x 7→ ŷ ∈ [0, 1].
+The input is transformed by the very same pipeline: x gives rise to particular
+activations in the target, htarget,i (x; θ target ). Based on the target’s activations,
+the alarm network decides whether the input is more likely to be normal, or
+anomalous. Figure 2 gives an overview about the training and prediction phase.
+
+4     Experiments
+4.1    Data Sets
+To evaluate the performance of our anomaly detection system we chose pub-
+licly available and commonly used data sets allowing the comparison to related
+                                          A3 : Activation Anomaly Analysis       7
+
+work. Furthermore, we considered real world data sets and thus evaluated the
+applicability in complex scenarios. We chose the following five data sets:
+ 1. MNIST [14]: common image data set for ML problems with 70 000 images
+    showing ten handwritten digits.
+ 2. EMNIST [8]: extension to MNIST with handwritten letters.
+ 3. NSL-KDD [33]: common data set with around 150 000 samples. We use
+    KDDTest+ for testing containing new anomalies unseen in the training set.
+ 4. Credit Card Transactions [24]: anonymized credit card data of around
+    285 000 transactions of which 492 being fraudulent.
+ 5. CSE-CIC-IDS2018 [29]: large network data set. We omit the DDoS data
+    due to the high resource demands. Around five million samples remain.
+We limit the preprocessing to minmax-scaling numerical and 1-Hot-encoding cat-
+egorical data. Samples still containing non-numerical values are omitted. Gener-
+ally, we took 80% of the data for training, 5% for validation, and 15% for testing.
+If a test set is given, we used it instead.
+
+4.2   Baseline Methods
+We compared the performance of A3 to four common baseline methods. Note
+that we only considered baseline methods that scale to the large amount of data.
+
+Autoencoder Reconstruction Threshold When trained on normal data only, there
+is a measurable difference in the reconstruction error of autoencoders when an
+anomalous sample is fed in. We calculate the mean squared error, i.e., L(x, x̂) =
+        2
+kx̂ − xk2 , to quantify this difference. As some target networks use an autoen-
+coder architecture, we take the very same models for this baseline.
+
+Isolation Forest (IF) IF is a commonly used unsupervised anomaly detection
+method by Liu et al. [15]. Based on the given data, an ensemble of random
+trees is built. The average path length results in an anomaly score. We use the
+implementation provided by scikit-learn [22] along with the default parameters.
+
+Deep Autoencoding Gaussian Mixture Model (DAGMM) DAGMM is a state-of-
+the-art unsupervised DL-based anomaly detection method by Zong et al. [39].
+The authors combine information of an autoencoder with a Gaussian mixture
+model. In accordance with their first set of experiments, we take normal samples
+for the training. For all experiments, we use the implementation by Nakae [19],
+and the architecture recommended for the KDDCUP data set.
+
+Deviation Networks (DevNet) DevNet is a state-of-the-art semi-supervised DL-
+based anomaly detection method by Pang et al. [21]. The anomaly detection is
+split between a feature learner and an anomaly score learner, both implemented
+as an NN. The anomaly scorer learns to score normal samples close to a Gaussian
+prior distribution, and enforces a minimum distance to anomalous samples. As
+recommended by the authors, we use their default architecture.
+8          Philip Sperl, Jan-Philipp Schulze, and Konstantin Böttinger
+
+
+Table 1: Experiments exploring the detection of known & unknown anomalies.
+
+              Data      Normal      Train Anomaly       ⊆         Test Anomaly
+    1a&4a MNIST         0, . . . , 5     6, 7                            6, 7
+    1b&4c MNIST         4, . . . , 9     0, 1                            0, 1
+      1c NSL-KDD        Normal       DoS, Probe                      DoS, Probe
+      1d NSL-KDD        Normal       R2L, U2R                        R2L, U2R
+      1e   IDS           Benign BF, Web, DoS, Infil.            BF, Web, DoS, Infil.
+      1f   IDS           Benign Bot, Infil., Web, DoS           Bot, Infil., Web, DoS
+      1g   CC           Normal       Fraudulent                      Fraudulent
+    2a&4b MNIST         0, . . . , 5     6, 7                         6, 7, 8, 9
+    2b&4d MNIST         4, . . . , 9     0, 1                         0, 1, 2, 3
+      2c NSL-KDD        Normal       DoS, Probe               DoS, Probe, R2L, U2R
+      2d NSL-KDD        Normal       R2L, U2R                 R2L, U2R, DoS, Probe
+      2e   IDS           Benign BF, Web, DoS, Infil.         BF, Web, DoS, Infil., Bot
+      2f   IDS           Benign Bot, Infil., Web, DoS        Bot, Infil., Web, DoS, BF
+     3a    (E-)MNIST 0, . . . , 9    A, B, C, D, E                 A, B, C, D, E
+     3b    (E-)MNIST 0, . . . , 9    A, B, C, D, E          A, B, C, D, E, V, W, X, Y, Z
+     3c    (E-)MNIST 0, . . . , 9    V, W, X, Y, Z                 V, W, X, Y, Z
+     3d    (E-)MNIST 0, . . . , 9    V, W, X, Y, Z          A, B, C, D, E, V, W, X, Y, Z
+
+
+
+
+4.3       Anomaly Detection Constraints
+
+Special constraints apply in the setting of anomaly detection. With our experi-
+ments, we show that A3 performs well nonetheless.
+
+1. Scarcity of anomaly samples. Generally, many samples are required for strong
+   performance using DL frameworks. However, there is a natural imbalance
+   in anomaly detection scenarios: most data samples are normal, only a few
+   examples of anomalies were found manually. We show that our anomaly
+   detection algorithm performs well in this semi-supervised setting.
+2. Variable extend of abnormality. Anomalous samples are not bound by a com-
+   mon behavior or magnitude of abnormality. By definition, the only difference
+   is that anomalies do not resemble normal samples. We show the transferabil-
+   ity of our algorithm, i.e., known anomalies during training also reveal yet
+   unknown anomalies during testing.
+3. Driven by data, not expert knowledge. A suitable anomaly detection algo-
+   rithm should be applicable to multiple settings, even when no expert knowl-
+   edge is available. Performance that is only achievable using domain knowl-
+   edge, may result in inferior results in other settings. We show that our al-
+   gorithm generalizes to other settings, i.e., uses the data itself to distinguish
+   between normal and anomalous behavior.
+                                          A3 : Activation Anomaly Analysis       9
+
+4.4   Experimental Setup
+We designed multiple experiments to show that A3 works under all three con-
+straints. An overview is given in Table 1.
+
+Experiment 1: Detection of Known Anomalies Considering constraint 1, we eval-
+uated the fundamental assumption of our method, i.e.: the activation values
+of the target network contain information to distinguish between normal and
+anomalous samples. It is important to remember that only the alarm network,
+not the target, is trained on the anomaly detection task. We limited the train
+anomaly samples to {5, 25, 50, 100} randomly selected instances in accordance
+with the semi-supervised setting. Note, this limitation may cause some classes
+not to be present during training.
+
+Experiment 2: Transferability to Unknown Anomalies Considering constraints 1
+and 2, we evaluated the transferability of our fundamental assumption, i.e.: the
+activation values of the target network are inherently different for normal and
+anomalous samples. Similar to experiment 1, we evaluated the detection perfor-
+mance bound by the scarcity of anomaly labels. Furthermore, the test data set
+contained more anomaly classes than the alarm network has been trained on. In
+other words, we tried to find anomalies that follow a different nature and data
+distribution than the one of the few known samples.
+
+Experiment 3: Generality of the Method Considering constraints 1, 2, and 3,
+we evaluated the generality of our fundamental assumption, i.e.: the activation
+values of any type of target network contain information to distinguish between
+normal and anomalous samples. We used a publicly available classifier as target,
+extracted the activation values, and tested whether these can be used to detect
+known as well as unknown anomalies. Hence, we motivate that our anomaly
+detection mechanism can be applied to already existing target networks and
+environments of any type.
+
+Experiment 4: Outlook to Unsupervised Anomaly Detection Considering the ex-
+treme case of constraint 1, we made first evaluations of the detection performance
+when no labeled anomalies are available during training. We solely used normal
+samples, as well as the output of a generative anomaly network to train A3 .
+
+4.5   Experiment Overview
+An overview about the used architectures for each experiment is found in Ta-
+ble 2. For the symmetric AE-based target models, we chose the first layer to be
+slightly larger than the dimension of the input vectors, whereas the hidden repre-
+sentation should be smaller. For the sake of simplicity, we used a common alarm
+model architecture throughout this paper. Note that for the MNIST-related ex-
+periments, we considered two publicly available architectures from Keras [7], i.e.,
+a convolutional AE [6] extended by a dropout layer for experiment 1 and 4, as
+well as a CNN [5] for experiment 3. This underlines the generality of our method.
+All layers are activated by ReLUs.
+10        Philip Sperl, Jan-Philipp Schulze, and Konstantin Böttinger
+
+
+      Table 2: Dimensionality of the layers. All layers are activated by ReLUs.
+
+             Data Set          Target Architecture        Alarm Architecture
+            MNIST             according to [6]             1000, 500, 200, 75, 1
+           NSL-KDD     200, 100, 50, 25, 50, 100, 200      1000, 500, 200, 75, 1
+              IDS       150, 80, 40, 20, 40, 80, 150       1000, 500, 200, 75, 1
+           CreditCard     50, 25, 10, 5, 10, 25, 50        1000, 500, 200, 75, 1
+        MNIST & EMNIST        according to [5]             1000, 500, 200, 75, 1
+
+
+
+
+Parameter Choices Based on a non-exhaustive parameter search on MNIST, we
+chose the following global optimizer settings: Adam [12] with a learning rate of
+0.001 for the target network, and 0.00001 for the alarm network was used. The
+training was stopped after 30 and 60 epochs, respectively. No other regularizer
+than 10% dropout [32] before the last layer was used. We ran our experiments
+on an Intel Xeon E5-2640 v4 server accelerated by an NVIDIA Titan X GPU.
+
+Anomaly Network For experiments 1, 2, & 3, we used a simple Gaussian noise
+generator as anomaly network. As all inputs are within [0, 1], we fixed the noise
+parameters to N (.5, 1). For experiment 4, we chose a VAE with the dense hidden
+layers 800, 400, 100, 25, 100, 400, 800. During the training of the target network,
+it was adapted to reconstruct the normal samples.
+
+
+5      Results and Evaluation
+
+In the following, we present and evaluate the results measured during our exper-
+iments. We show the receiver operating characteristic (ROC) curve, i.e., the true
+positive rate (TPR) as a function of the false positive rate (FPR), evaluated on
+the validation sets. For the final results, evaluated on the test sets, we use the
+average precision (AP), and the area under the ROC curve (AUC) as metrics to
+be consistent with the related work [21]. Whereas the AP quantifies the trade-off
+between precision and recall, the AUC measures the trade-off between the TPR
+and FPR. Both metrics are independent of the chosen detection threshold, and
+thus give a good overview about the general detection performance.
+
+
+5.1     Validation Results
+
+In Figure 3, we show the ROC curves of the first experiments for each validation
+data set. To simulate real-life conditions, where usually just a few anomaly sam-
+ples are available, we restricted the known anomalies to {5, 25, 50, 100} for A3 .
+Note, these anomalies are sampled randomly from all available training anomaly
+samples – it could well be that they are restricted to one class. We report that
+A3 generally follows an intuitive behavior: the more known anomalies are used,
+                                                 A3 : Activation Anomaly Analysis            11
+
+
+        A3 , 100, N       A3 , 50, N        A3 , 25, N       A3 , 5, N         A3 , 0, VAE
+             IF               AE            DAGMM           DevNet, 100         Random
+             MNIST, 1a&4a               MNIST, 2a&4b               NSL-KDD, 1c
+        1                          1                          1
+      0.75                       0.75                       0.75
+       0.5                        0.5                        0.5
+             0 0.25 0.5 0.75 1          0 0.25 0.5 0.75 1          0 0.25 0.5 0.75 1
+              NSL-KDD, 2c                   IDS, 1e                    IDS, 2e
+        1                          1                          1
+      0.75                       0.75                       0.75
+       0.5                        0.5                        0.5
+             0 0.25 0.5 0.75 1          0 0.25 0.5 0.75 1          0 0.25 0.5 0.75 1
+                 CC, 1g                  EMNIST, 3a                 EMNIST, 3c
+        1                          1                          1
+      0.75                       0.75                       0.75
+       0.5                        0.5                        0.5
+             0 0.25 0.5 0.75 1          0 0.25 0.5 0.75 1          0 0.25 0.5 0.75 1
+
+Fig. 3: ROC curves showing the true positive rate vs. the false positive rate evalu-
+ated on the validation set for several experiments. For A3 , we capped the amount
+of anomaly samples during training. We used a noise generator (N ) as anomaly
+network, and for experiment 4 a VAE.
+
+
+
+the better the anomaly detection performance. Even for 5 samples an adequate
+performance is possible on most data sets. As little as 25 samples are needed to
+surpass the performance of the state-of-the-art unsupervised anomaly detection
+methods.
+    Moreover, A3 surpasses, or matches the performances of the state-of-the-art
+semi-supervised anomaly detection method. An important feature is the steep
+rise of the TPR, thus less false positives are seen resulting in a strong detection
+performance. To choose a suitable detection threshold in practice, a very low
+FPR has to be tolerated using our method. This significantly reduces manual
+work, and builds trust in the detection results.
+
+
+5.2     Test Results
+
+In Table 3, we summarize the results averaged over four passes using the test data
+sets. To simulate real-life conditions, we limit the amount of available anomalies
+to 100 randomly chosen samples of the training set. We report that A3 performs
+well even under this strict setting. It well surpasses the unsupervised baseline
+methods, and on most experiments also the semi-supervised baseline method.
+The performance remains strong across all data sets and experiments. We con-
+12      Philip Sperl, Jan-Philipp Schulze, and Konstantin Böttinger
+
+
+       Table 3: Test results given all normal, and 100 anomaly samples.
+
+           A3              AE              IF          DAGMM            DevNet
+      AP        AUC   AP     AUC      AP        AUC    AP AUC          AP   AUC
+1a .98±.00 .99±.00 .44±.04 .69±.03 .27±.02 .56±.02 .71±.01 .85±.01 .96±.01 .98±.00
+1b .99±.00 1.0±.00 .25±.03 .40±.04 .42±.02 .53±.01 .34±.03 .64±.04 .98±.01 .99±.01
+1c .96±.01 .96±.01 .96±.01 .96±.00 .98±.00 .97±.00 .90±.04 .94±.01 .95±.01 .96±.01
+1d .76±.04 .88±.05 .51±.04 .81±.02 .48±.02 .84±.00 .59±.03 .90±.01 .78±.03 .88±.04
+1e .89±.03 .94±.01 .73±.12 .83±.14 .17±.01 .46±.03 .63±.13 .87±.08 .89±.01 .93±.00
+1f .90±.01 .94±.01 .57±.11 .84±.06 .13±.00 .35±.03 .43±.16 .73±.13 .73±.04 .90±.00
+1g .78±.09 .96±.01 .52±.09 .97±.00 .15±.04 .96±.01 .38±.25 .96±.02 .76±.04 .98±.01
+2a .87±.03 .88±.03 .63±.02 .72±.02 .40±.01 .54±.02 .69±.01 .75±.02 .82±.02 .82±.03
+2b .92±.02 .92±.02 .61±.01 .63±.01 .61±.01 .64±.01 .61±.01 .72±.02 .90±.03 .90±.04
+2c .94±.01 .92±.02 .94±.01 .93±.01 .96±.00 .94±.00 .91±.03 .93±.01 .94±.00 .92±.01
+2d .94±.03 .92±.03 .94±.01 .93±.01 .96±.00 .94±.00 .91±.03 .93±.01 .89±.02 .88±.03
+2e .87±.02 .90±.03 .80±.05 .91±.02 .19±.01 .44±.02 .48±.12 .73±.11 .83±.02 .90±.01
+2f .90±.03 .93±.02 .81±.07 .90±.03 .19±.01 .44±.02 .57±.06 .81±.05 .82±.02 .92±.00
+3a .98±.01 .99±.01     -       -    .85±.01 .93±.00 .83±.03 .93±.01 .99±.01 .99±.00
+3b .97±.01 .96±.01     -       -    .89±.01 .91±.01 .93±.01 .95±.00 .98±.00 .98±.00
+3c .99±.00 .99±.00     -       -    .79±.02 .89±.01 .90±.01 .96±.00 .96±.01 .98±.01
+3d .95±.02 .95±.02     -       -    .89±.01 .91±.01 .93±.01 .95±.00 .95±.03 .94±.04
+
+
+
+
+clude that our main fundamental assumption, i.e., the hidden activations of NNs
+carry information useful to anomaly detection, is well supported.
+    Moreover, we see strong evidence for the hypotheses made throughout the ex-
+periments. In experiment 1, we tried to find known anomalies. The test results
+show the highest results for this setting, thus our method very well identifies
+suitable patterns for this task. These patterns generalize well to yet unseen pat-
+terns as shown in experiment 2. Although, only parts of the test anomalies are
+known during training, strong results are achieved. Whereas the aforementioned
+experiments used deep & convolution autoencoders as target network, we gen-
+eralize the setting to deep classifiers in experiment 3. Also here, superior results
+are achieved. We conclude that A3 is able to detect known, and yet unknown
+anomalies with high confidence, and is flexible enough to adapt to a wide range
+of environments.
+
+
+5.3   Outlook to Unsupervised Anomaly Detection
+
+In the supplementary experiment 4, we further motivate that A3 performs well
+even when no anomaly sample is available. For this, we chose a generative model
+as anomaly network, a VAE in our case. In Figure 3, we see a superior perfor-
+mance on the validation set compared to other unsupervised anomaly detection
+methods. We assume that sampling from the improbable distribution regions,
+                                          A3 : Activation Anomaly Analysis        13
+
+
+Table 4: Test result for exp. 4, where no anomaly samples were used to train A3 .
+
+    4a-AP 4a-AUC       4b-AP 4b-AUC         4c-AP 4c-AUC        4d-AP 4d-AUC
+    .95±.01 .98±.00    .94±.02 .95±.02     .55±.07 .67±.06      .60±.09 .62±.10
+
+
+
+
+which the VAE has learned, is a suitable way to generate counterexamples use-
+ful to the alarm network. In Table 4, we summarize our results on the test set.
+Whereas, experiment 4a&b show very promising results improving on the ba-
+sic anomaly network, the variance for 4c&d is relatively high. We are confident
+that more parameter tuning will lead to consistent performance over all data
+sets. Future research may leverage these results to a more general setting. We
+are happy to report consistently strong results when using a simple noise gen-
+erator as anomaly network shown in experiment 1, 2, & 3. With this setting,
+we provide a ready-to-use end-to-end anomaly detection framework achieving
+state-of-the-art performance even in strict semi-supervised environments for a
+variety of use-cases.
+
+
+
+
+6     Discussion & Future Work
+
+
+In this paper, we built an anomaly detection method based on the analysis of
+hidden activations. By observing the activations of an NN that was trained on
+a task unrelated to anomaly detection, we take all context information it has
+learned into consideration. Future research may leverage this method to other
+use-cases, and further formalize the explored theory. A3 shows strong anomaly
+detection results for all five analyzed data sets across all experiments. We mo-
+tivate that the activation analysis generalizes to yet unseen anomalies across
+different network architectures. Thanks to the modularity of our concept, var-
+ious architectures may be used as target, alarm or anomaly networks covering
+numerous types of data and use-cases. Future work may integrate other power-
+ful architectures, e.g., generative adversarial networks [11] as already applied to
+other anomaly detection settings [1, 36]. We emphasize the real-life applicability
+by limiting the amount of anomaly samples during training. In practice, often a
+few known anomalies are available, e.g., by manual exploration, or unsupervised
+methods. Good performance was already achieved with a handful of anomaly
+samples. During our research, we saw further improvements with a shifted out-
+put regularizer, e.g., Lreg (y) = λ · |1 − y|, favoring the detection of anomalies.
+With this set of regularizers, and the presented outlook to generative anomaly
+networks, we leave developers the ability to further tune the performance of A3
+in their implementation.
+14      Philip Sperl, Jan-Philipp Schulze, and Konstantin Böttinger
+
+7    Conclusion
+We introduce a novel approach for anomaly detection called A3 based on the
+hidden activation patterns of NNs. Our architecture comprises three parts: a
+target network unrelated to the anomaly detection task, an anomaly network
+generating anomalous training samples, and an alarm network analyzing the re-
+sulting activations of the target. Our framework works under common assump-
+tions and constraints typically found in anomaly detection tasks. We assume
+that anomalous training samples are scarce, and new types of anomalies exist
+during deployment. With our evaluation, we provide strong evidence that our
+method works on different target network architectures, and generalizes to yet
+unseen anomalous samples. Furthermore, we detect anomalies across different
+data types with just a few or even no labeled anomalies at all available during
+training. We present a valuable semi-supervised DL-based anomaly detection
+framework providing a purely data-driven solution for a variety of use-cases.
+
+
+References
+ 1. Akcay, S., Atapour-Abarghouei, A., Breckon, T.P.: GANomaly: Semi-Supervised
+    Anomaly Detection via Adversarial Training. In: Computer Vision - ACCV 2018.
+    pp. 622–637 (2019). https://doi.org/10.1007/978-3-030-20893-6 39
+ 2. Andrews, J.T.A., Morton, E.J., Griffin, L.D.: Detecting Anomalous Data Using
+    Auto-Encoders. International Journal of Machine Learning and Computing 6(1),
+    21–26 (2016). https://doi.org/10.18178/ijmlc.2016.6.1.565
+ 3. Chalapathy, R., Chawla, S.: Deep Learning for Anomaly Detection: A Survey.
+    arXiv:1901.03407 (2019), http://arxiv.org/abs/1901.03407
+ 4. Chandola, V., Banerjee, A., Kumar, V.: Anomaly Detection: A Survey. ACM Com-
+    puting Surveys 41(3), 1–58 (2009). https://doi.org/10.1145/1541880.1541882
+ 5. Chollet, F.: Keras Documentation (2015), https://keras.io/examples/mnist_
+    cnn/
+ 6. Chollet, F.: Building Autoencoders in Keras (2016), https://blog.keras.io/
+    building-autoencoders-in-keras.html
+ 7. Chollet, F., others: Keras (2015), https://keras.io
+ 8. Cohen, G., Afshar, S., Tapson, J., Van Schaik, A.: EMNIST: Extending MNIST
+    to handwritten letters. 2017 International Joint Conference on Neural Networks
+    (IJCNN) pp. 2921–2926 (2017). https://doi.org/10.1109/IJCNN.2017.7966217
+ 9. Das, S., Wong, W.K., Dietterich, T., Fern, A., Emmott, A.: Incorporat-
+    ing Expert Feedback into Active Anomaly Discovery. In: 2016 IEEE 16th
+    International Conference on Data Mining (ICDM). pp. 853–858 (2017).
+    https://doi.org/10.1109/icdm.2016.0102
+10. Feng, C., Palleti, V.R., Mathur, A., Chana, D.: A Systematic Framework to Gen-
+    erate Invariants for Anomaly Detection in Industrial Control Systems. In: Net-
+    work and Distributed Systems Security (NDSS) Symposium 2019 (2019), https:
+    //dx.doi.org/10.14722/ndss.2019.23265
+11. Goodfellow, I.J., Pouget-Abadie, J., Mirza, M., Xu, B., Warde-Farley, D., Ozair,
+    S., Courville, A., Bengio, Y.: Generative Adversarial Nets. In: Advances in Neural
+    Information Processing Systems 27, pp. 2672–2680. Curran Associates, Inc. (2014),
+    http://papers.nips.cc/paper/5423-generative-adversarial-nets.pdf
+                                            A3 : Activation Anomaly Analysis        15
+
+12. Kingma, D.P., Ba, J.L.: Adam: A Method for Stochastic Optimization.
+    arXiv:1412.6980 (2014), http://arxiv.org/abs/1412.6980
+13. Kingma, D.P., Welling, M.: Auto-Encoding Variational Bayes. arXiv:1312.6114
+    (2013), https://arxiv.org/abs/1312.6114
+14. Lecun, Y., Bottou, L., Bengio, Y., Haffner, P.: Gradient-based learning applied
+    to document recognition. Proceedings of the IEEE 86(11), 2278–2324 (1998).
+    https://doi.org/10.1109/5.726791
+15. Liu, F.T., Ting, K.M., Zhou, Z.H.: Isolation Forest. In: 2008 Eighth
+    IEEE International Conference on Data Mining. pp. 413–422 (2008).
+    https://doi.org/10.1109/ICDM.2008.17
+16. Ma, L., Liu, Y., Zhao, J., Wang, Y., Juefei-Xu, F., Zhang, F., Sun, J., Xue,
+    M., Li, B., Chen, C., Su, T., Li, L.: DeepGauge: Multi-granularity Testing Cri-
+    teria for Deep Learning Systems. In: Proceedings of the 33rd ACM/IEEE In-
+    ternational Conference on Automated Software Engineering. pp. 120–131 (2018).
+    https://doi.org/10.1145/3238147.3238202
+17. Malhotra, P., Ramakrishnan, A., Anand, G., Vig, L., Agarwal, P., Shroff, G.:
+    LSTM-based Encoder-Decoder for Multi-sensor Anomaly Detection. In: ICML
+    2016 Anomaly Detection Workshop (2016), http://arxiv.org/abs/1607.00148
+18. Mirsky, Y., Doitshman, T., Elovici, Y., Shabtai, A.: Kitsune: An Ensemble of
+    Autoencoders for Online Network Intrusion Detection. In: Network and Dis-
+    tributed Systems Security (NDSS) Symposium 2018 (2018), http://dx.doi.org/
+    10.14722/ndss.2018.23204
+19. Nakae, T.: DAGMM TF Implementation, https://github.com/tnakae/DAGMM
+20. Nguyen, T.D., Marchal, S., Miettinen, M., Fereidooni, H., Asokan, N., Sadeghi,
+    A.R.: DÏoT: A Federated Self-learning Anomaly Detection System for IoT. In: Pro-
+    ceedings of the 39th IEEE International Conference on Distributed Computing Sys-
+    tems (ICDCS). Dallas, USA (7 2019). https://doi.org/10.1109/ICDCS.2019.00080
+21. Pang, G., Shen, C., Hengel, A.v.d.: Deep Anomaly Detection with Devi-
+    ation Networks. In: Proceedings of the ACM SIGKDD International Con-
+    ference on Knowledge Discovery and Data Mining. pp. 353–362 (11 2019).
+    https://doi.org/10.1145/3292500.3330871
+22. Pedregosa, F., Varoquaux, G., Gramfort, A., Michel, V., Thirion, B., Grisel, O.,
+    Blondel, M., Prettenhofer, P., Weiss, R., Dubourg, V., Vanderplas, J., Passos, A.,
+    Cournapeau, D., Brucher, M., Perrot, M., Duchesnay, E.: Scikit-learn: Machine
+    Learning in Python. Journal of Machine Learning Research 12, 2825–2830 (2011)
+23. Pei, K., Cao, Y., Yang, J., Jana, S.: Deepxplore: Automated whitebox testing
+    of deep learning systems. In: Proceedings of the 26th Symposium on Operating
+    Systems Principles. pp. 1–18 (2017). https://doi.org/10.1145/3132747.3132785
+24. Pozzolo, A.D., Caelen, O., Johnson, R.A., Bontempi, G.: Calibrating Prob-
+    ability with Undersampling for Unbalanced Classification. In: 2015 IEEE
+    Symposium Series on Computational Intelligence. pp. 159–166. IEEE (2015).
+    https://doi.org/10.1109/SSCI.2015.33
+25. Qureshi, A.S., Khan, A., Shamim, N., Durad, M.H.: Intrusion detection using deep
+    sparse auto-encoder and self-taught learning. In: Neural Computing and Applica-
+    tions. pp. 1–13 (2019). https://doi.org/10.1007/s00521-019-04152-6
+26. Ruff, L., Vandermeulen, R.A., Görnitz, N., Binder, A., Müller, E., Müller, K.R.,
+    Kloft, M.: Deep Semi-Supervised Anomaly Detection. In: International Conference
+    on Learning Representations (ICLR) (2020), https://openreview.net/forum?id=
+    HkgH0TEYwH
+16      Philip Sperl, Jan-Philipp Schulze, and Konstantin Böttinger
+
+27. Schölkopf, B., Williamson, R., Smola, A., Shawe-Taylor, J., Piatt, J.: Sup-
+    port vector method for novelty detection. Advances in Neural Informa-
+    tion Processing Systems pp. 582–588 (2000), https://papers.nips.cc/paper/
+    1723-support-vector-method-for-novelty-detection.pdf
+28. Schulze, J.P., Mrowca, A., Ren, E., Loeliger, H.A., Böttinger, K.: Con-
+    text by Proxy: Identifying Contextual Anomalies Using an Output Proxy.
+    In: Proceedings of the 25th ACM SIGKDD International Conference on
+    Knowledge Discovery & Data Mining - KDD ’19. pp. 2059–2068 (2019).
+    https://doi.org/10.1145/3292500.3330780
+29. Sharafaldin, I., Lashkari, A.H., Ghorbani, A.A.: Toward generating a new intru-
+    sion detection dataset and intrusion traffic characterization. In: ICISSP 2018 -
+    Proceedings of the 4th International Conference on Information Systems Security
+    and Privacy. pp. 108–116 (2018). https://doi.org/10.5220/0006639801080116
+30. Shekari, T., Bayens, C., Cohen, M., Graber, L., Beyah, R.: RFDIDS: Radio
+    Frequency-based Distributed Intrusion Detection System for the Power Grid.
+    In: Network and Distributed Systems Security (NDSS) Symposium 2019 (2019),
+    https://dx.doi.org/10.14722/ndss.2019.23462
+31. Sperl, P., Kao, C.Y., Chen, P., Böttinger, K.: DLA: Dense-Layer-Analysis for Ad-
+    versarial Example Detection. arXiv:1911.01921 (2019), http://arxiv.org/abs/
+    1911.01921
+32. Srivastava, N., Hinton, G., Krizhevsky, A., Sutskever, I., Salakhutdinov, R.:
+    Dropout: A Simple Way to Prevent Neural Networks from Overfitting. Journal
+    of Machine Learning Research 15, 1929–1958 (2014)
+33. Tavallaee, M., Bagheri, E., Lu, W., Ghorbani, A.A.: A detailed analysis
+    of the KDD CUP 99 data set. In: 2009 IEEE Symposium on Computa-
+    tional Intelligence for Security and Defense Applications. pp. 1–6 (2009).
+    https://doi.org/10.1109/CISDA.2009.5356528
+34. Veeramachaneni, K., Arnaldo, I., Korrapati, V., Bassias, C., Li, K.: AIˆ2: Train-
+    ing a Big Data Machine to Defend. In: 2016 IEEE 2nd International Confer-
+    ence on Big Data Security on Cloud (BigDataSecurity), IEEE International Con-
+    ference on High Performance and Smart Computing (HPSC), and IEEE Inter-
+    national Conference on Intelligent Data and Security (IDS). pp. 49–54 (2016).
+    https://doi.org/10.1109/BigDataSecurity-HPSC-IDS.2016.79
+35. Yousefi-Azar, M., Varadharajan, V., Hamey, L., Tupakula, U.: Autoencoder-
+    based feature learning for cyber security applications. In: Proceedings of the
+    International Joint Conference on Neural Networks. pp. 3854–3861 (2017).
+    https://doi.org/10.1109/IJCNN.2017.7966342
+36. Zenati, H., Romain, M., Foo, C.S., Lecouat, B., Chandrasekhar, V.R.: Adversarially
+    Learned Anomaly Detection. In: 2018 IEEE International Conference on Data
+    Mining (ICDM). pp. 727–736 (2018). https://doi.org/10.1109/ICDM.2018.00088
+37. Zhou, C., Paffenroth, R.C.: Anomaly Detection with Robust Deep Autoencoders.
+    In: Proceedings of the 23rd ACM SIGKDD International Conference on Knowledge
+    Discovery and Data Mining (2017). https://doi.org/10.1145/3097983.3098052
+38. Zhou, Z., Zhou, W., Lv, X., Huang, X., Wang, X., Li, H.: Progressive Learning of
+    Low-Precision Networks. arXiv:1905.11781 (2019), http://arxiv.org/abs/1905.
+    11781
+39. Zong, B., Song, Q., Min, M.R., Cheng, W., Lumezanu, C., Cho, D., Chen, H.:
+    Deep Autoencoding Gaussian Mixture Model for Unsupervised Anomaly Detec-
+    tion. In: International Conference on Learning Representations (2018), https:
+    //openreview.net/forum?id=BJJLHbb0-
+

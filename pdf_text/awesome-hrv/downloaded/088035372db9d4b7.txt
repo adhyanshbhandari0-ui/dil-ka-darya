@@ -1,0 +1,524 @@
+          IEEE TRANSACTIONS ON BIOMEDICAL ENGINEERING, VOL. 69, NO. 1, JANUARY 2022                                                        119
+
+
+
+
+  Robust R-Peak Detection in Low-Quality Holter
+  ECGs Using 1D Convolutional Neural Network
+            Muhammad Uzair Zahid , Serkan Kiranyaz , Senior Member, IEEE, Turker Ince ,
+               Ozer Can Devecioglu , Muhammad E. H. Chowdhury , Senior Member, IEEE,
+         Amith Khandakar , Senior Member, IEEE, Anas Tahir, and Moncef Gabbouj , Fellow, IEEE
+
+
+   Abstract—Objective: Noise and low quality of ECG sig-                     Index Terms—1D convolutional neural network, R-peak
+nals acquired from Holter or wearable devices deteriorate                  detection, ECG monitoring, holter registers.
+the accuracy and robustness of R-peak detection algo-
+rithms. This paper presents a generic and robust system
+for R-peak detection in Holter ECG signals. While many pro-                                       I. INTRODUCTION
+posed algorithms have successfully addressed the problem
+of ECG R-peak detection, there is still a notable gap in the                      CCURATE detection of R-peaks is essential for the diag-
+performance of these detectors on such low-quality ECG
+records. Methods: In this study, a novel implementation
+of the 1D Convolutional Neural Network (CNN) is used in-
+                                                                           A      nosis of cardiovascular diseases (CVD) in electrocardio-
+                                                                           gram (ECG)) signals. The QRS complex, which is dependent
+tegrated with a verification model to reduce the number                    on the accurate detection of R-peak, is the most important
+of false alarms. This CNN architecture consists of an en-                  feature in the diagnosis of several cardiac pathologies. Although
+coder block and a corresponding decoder block followed                     a wide variety of modalities such as blood tests, stress tests,
+by a sample-wise classification layer to construct the 1D                  echocardiograms, and chest X-rays have been used for CVD
+segmentation map of R-peaks from the input ECG signal.
+Once the proposed model has been trained, it can solely be
+                                                                           diagnosis; Electrocardiography is perhaps the most significant
+used to detect R-peaks possibly in a single channel ECG                    process for non-invasively monitoring and clinical diagnosis.
+data stream quickly and accurately, or alternatively, such a               ECG records the time evolution of the heart’s electrical activity
+solution can be conveniently employed for real-time moni-                  and helps in the diagnosis of numerous cardiovascular abnor-
+toring on a lightweight portable device. Results: The model                malities such as premature ventricular contraction (PVC or V
+is tested on two open-access ECG databases: The China
+Physiological Signal Challenge (2020) database (CPSC-DB)
+                                                                           beats) and supraventricular premature beats (SPB or S beats).
+with more than one million beats, and the commonly used                    The introduction of low-cost wearable ECG monitors gives us
+MIT-BIH Arrhythmia Database (MIT-DB). Experimental re-                     a significant motive to investigate highly accurate and robust
+sults demonstrate that the proposed systematic approach                    automated detection of R-peaks in single-lead ECG signals.
+achieves 99.30% F1-score, 99.69% recall, and 98.91% pre-                      Although many R-peak detection methods have been pro-
+cision in CPSC-DB, which is the best R-peak detection per-
+formance ever achieved. Results also demonstrate similar
+                                                                           posed throughout the last several decades, robust and accurate
+or better performance than most competing algorithms on                    peak detection is still a challenging problem, especially in
+MIT-DB with 99.83% F1-score, 99.85% recall, and 99.82%                     noisy, degraded, and dynamically varying rhythms, particularly
+precision. Significance: Compared to all competing meth-                   common in Holter registers. Holter monitor is an ambulatory
+ods, the proposed approach can reduce the false-positives                  ECG device, for portable cardiac monitoring and frequently, it
+and false-negatives in Holter ECG signals by more than 54%
+and 82%, respectively. Conclusion: Finally, the simple and
+                                                                           is corrupted by a substantial proportion of motion artifacts [1].
+invariant nature of the parameters leads to a highly generic               Thus, R-peak detection is severely affected by the ECG signals
+system and therefore applicable to any ECG dataset.                        with such poor signal quality and high noise levels [2].
+                                                                              R-peak detection (segmentation) is the base of arrhythmia
+  Manuscript received December 30, 2020; revised May 6, 2021 and           detection and classification. ECG-based applications are gener-
+June 4, 2021; accepted June 6, 2021. Date of publication June 10,          ally divided into four phases: preprocessing (filtering), ECG sig-
+2021; date of current version December 23, 2021. This work was sup-
+ported in part by Qatar National Research Fund, project under Grant        nal segmentation (QRS complex detection), feature extraction,
+NPRP11S-0108-180228 and in part by the Academy of Finland under            and classification algorithms. Poor segmentation performance
+Project AWcHA. (Corresponding author: Moncef Gabbouj.)                     propagates the error to subsequent steps and directly reduces
+  Muhammad Uzair Zahid, Serkan Kiranyaz, Muhammad E. H. Chowd-
+hury, Amith Khandakar, and Anas Tahir are with the Electrical Engineer-    classification efficiency. Much of the work in the literature
+ing, College of Engineering, Qatar University, Qatar.                      focuses on minimizing the number of false positives during
+  Turker Ince is with the Electrical and Electronics Engineering Depart-   the classification step, ignoring the fact that the error started
+ment, Izmir University of Economics, Turkey.
+  Ozer Can Devecioglu is with the Department of Computing Sciences,        to spread during the segmentation step [3], [4].
+Tampere University, Finland.                                                  One of the most widely used R-peak detection algorithms
+  Moncef Gabbouj is with the Department of Computing Sci-                  was developed by Pan and Tompkins (P&T) [5], which served
+ences, Tampere University, 33101 Tampere, Finland (e-mail:
+moncef.gabbouj@tuni.fi, moncef.gabbouj@tut.fi).                            as the benchmark for more than three decades. Hamilton algo-
+  Digital Object Identifier 10.1109/TBME.2021.3088218                      rithm emerged as a modification to the classical P&T method
+This work is licensed under a Creative Commons Attribution 4.0 License. For more information, see https://creativecommons.org/licenses/by/4.0/
+120                                                         IEEE TRANSACTIONS ON BIOMEDICAL ENGINEERING, VOL. 69, NO. 1, JANUARY 2022
+
+
+
+based on an optimized decision rule process [6]. There are           system for cardiac arrhythmias [33]. Two parallel 1D residual
+several other popular methods for R-peak detection based on          neural networks were proposed by Wang et al. which can obtain
+various signal processing techniques such as Wavelet transform       the time domain characteristics of QRS waveform and attained
+[7], Hilbert transform [8] as well as their modifications with       99.98% positive predictive value and 99.92% sensitivity on
+improved detection thresholds [9], Phasor transform [10], and        MIT-BIH Arrhythmia dataset (MIT-DB) [34]. Laitala et al. have
+ensemble empirical mode decomposition [11], [12]. Discrete           proposed R-peak detection using Long Short-Term Memory
+wavelet transform (DWT) decomposes a signal into different           (LSTM) network which excels at temporal modeling tasks that
+frequency components, each with distinct coefficients, which         include long-term dependencies, making it suitable for ECG
+contain sufficient information of the original signal [13]. Sa-      analysis [35]. Similarly, Vijayrangan et al. have proposed a deep
+hoo et al. have reported 99.87% sensitivity in QRS complex           learning-based method using U-Net combined with Inception
+detection using DWT [14]. Similarly, other techniques such as        and Residual blocks on a combination of datasets and have
+empirical mode decomposition (EMD) have helped in removing           achieved around 98.37% accuracy [36]. A two-level CNN was
+baseline wandering in ECG signals [15], Kabir and Shahnaz            proposed by Xiang et al. with a precision and sensitivity of
+have provided better time resolution in removing noise from          99.91% and 99.77%, respectively over the MIT-DB [37]. Oh
+ECG using the combination of EMD and DWT [16]. Digital               et al. tried to use UNET for “sample-wise classification” of
+filters along with EMD have also been used to improve R-peak         ECG into R and Non-R peak labels. A major drawback of this
+detection [17]. Slimange and Ali in [12] have used a nonlinear       proposed approach is that it has suffered too many false positives,
+transformation technique based on EMD to achieve 99% sensi-          caused by the misclassification of surrounding samples at the R
+tivity and specificity. Hilbert and wavelet transform with varying   peak, with a sensitivity level as low as 29.55% despite the fact
+thresholds have also been used for R-peak detection [18].            that ECG quality is high [38].
+    Many of the aforementioned algorithms depend on two main            All of the abovementioned algorithms were only tested on the
+stages: R-peak enhancement and detection. The first stage in-        high-quality clinical ECG records such as in the MIT-DB with a
+volves preprocessing techniques such as filter banks and spectral    limited number of beats, i.e., the total number of beats of about
+analysis, which are sometimes referred to as feature extraction      100K. A faster regional CNN was proposed by Yang et al. by
+to enhance the R-peak as compared to other ECG waves (P and          turning a 1D ECG signal into a 2D image. The model was tested
+T waves). The detection stage involves decision making based         on the 24 hours wearable ECG recordings and showed promising
+on a threshold to define the onset and offset of the R-wave. Such    results with 98.52% positive predictively and 98.76% sensitivity
+algorithms are lightweight and can be used easily with wearable      [39]. This was the first study that evaluated noisy and low-quality
+or embedded devices. However, they usually perform well only         ECG records acquired by a wearable ECG sensor. Another major
+for high quality and clean ECG signals and are not robust to         issue in using deep learning methods for R-peak detection is the
+noise [19], [20]. Thus, many proposed algorithms evaluate their      limited number of ECG beats partitioned further for training,
+detectors on MIT-BIH arrhythmia or similar datasets that contain     validation, and test sets. Besides, most of these methods test their
+high-quality ECG signals in standard clinical settings. Most         robustness by artificially adding noise, i.e., baseline wanders and
+of the QRS detection algorithms had high detection sensitiv-         motion artifacts to ECG records in the MIT-DB. Such artificial
+ity and positive predictivity in the MIT-BIH arrhythmia data         artifact creation may not represent the actual variations and
+set. (>99%) [21], [22]. The performance of such algorithms           degradations that occur in Holter and mobile ECG devices.
+significantly deteriorates when tested in a highly dynamic and       Thus, the performance of these algorithms would deteriorate
+noisy ECG dataset with severe artifacts. Even the basic QRS          in practice specifically on Holter devices where the signal is
+detection can be invalid in the low signal quality ECG analysis.     corrupted with a high level of noise and frequent artifacts and
+There are some public datasets [23], [24] that contain noisy         ECG baseline level varies drastically and abruptly. The chal-
+ECG signals with R-peak annotations, but they contain a limited      lenges for accurate peak detection in Holter devices include
+number of ECG beats, and hence they are not suitable for a proper    powerline interference, baseline wandering, amplitude variabil-
+performance evaluation in general.                                   ity, multi-source PVC, noise, and other abnormal interference
+    The applications of machine learning, e.g., sigmoid radial       such as atrial fibrillation (AF) and electrode sliding interference.
+basis functions [25], Hidden Markov model (HMM) [26], and            Fig. 1 shows typical ECG signals from the CPSC-DB where the
+artificial neural network-based QRS analysis [27] have also been     benchmark Pan-Tompkins method yields many false-positives
+investigated for peak detection and classification of ECG signals.   (FPs) and false-negatives (FNs). Therefore, there is a need for a
+Rodriguez et al. have proposed a novel QRS complex detection         robust and highly accurate R-peak detector for low-quality ECG
+method [28] using adaptive threshold with Hilbert transform and      signals.
+Principal component analysis (PCA). Deep learning has been              To address the aforementioned limitations and drawbacks,
+very successful in speech recognition, natural language pro-         in this study, we propose a novel and robust peak detection
+cessing, and computer vision. In recent years, one-dimensional       technique that can specifically be used for Holter devices or any
+convolutional neural network (1D-CNN) has also been inten-           other ECG acquisition system in non-clinical settings. For this
+sively studied for its speed and efficiency in managing complex      purpose, first, we labeled the R-peak locations of the largest ECG
+tasks, that have been demonstrated in several signal processing      Holter dataset with more than 1M beats. Then, we formulate
+applications [29], [30] motor fault detection [31] and classifi-     R-peak detection as a 1D segmentation problem to enable the
+cation of electrocardiogram signals [32] and advance warning         detection of the precise localization of R peaks with minimal
+ZAHID et al.: ROBUST R-PEAK DETECTION IN LOW-QUALITY HOLTER ECGS USING 1D CONVOLUTIONAL NEURAL NETWORK                               121
+
+
+
+
+Fig. 1. Typical Holter ECG segments from the record of patient 6 in the CPSC dataset. Red circles represent the R-peaks detected by the
+Pan-Tompkins method where several false-positives (FPs) and false-negatives (FNs) are visible.
+
+
+
+post-processing. To accomplish this, the 1D Encoder-Decoder                 MIT dataset and achieved a state-of-the-art performance
+CNN model is constructed for the peak detection in a 20-second              level without even training over this dataset.
+normalized ECG segment that outputs a reconstructed signal of             r We provide ground truth peak locations for the largest
+equal length with a 1D segmentation map where a 5-sample                    Holter ECG dataset with more than 1M beats and this
+pulse is centered at the location of each R-peak. It is also                dataset will be released with R-peak annotations.
+desirable to minimize (or suppress) false alarm rate especially           r Finally, this is the first study that has been quantitatively
+when patients are in the intensive care unit (ICU) as higher false          evaluated over the largest Holter ECG dataset for R peak
+alarms decrease the quality of care by increasing patient delir-            detection. In particular, the proposed algorithm achieved
+ium through noise pollution and slowing staff response times                enhanced sensitivity performance for detecting abnormal
+[19], [40], [41]. Thus, the proposed approach further improves              S and V beats specifically.
+the accuracy with a verification model that can approximately            The rest of the paper is organized as follows: Section II
+reduce 21% of the false alarms.                                       outlines the ECG datasets used in this study. The detailed R-peak
+   We evaluate the proposed approach on both benchmark                detection approach is presented in Section III. In Section IV,
+datasets, MIT-DB and CPSC-DB, and thus, this becomes the              the performance and robustness of the proposed approach are
+first method that has ever been evaluated with more than 1M           evaluated over the two benchmark datasets using the standard
+annotated beats (N, S, and V type beats). An extensive set of ex-     performance metrics and the results are compared with the
+perimental results show that the proposed approach outperforms        previous state-of-the-art works. Finally, Section V concludes
+all state-of-the-art R-peak detection methods in CPSC-DB with         the paper and suggests topics for future work.
+a significant performance gap while it achieves a similar or better
+result in MIT-DB without explicit training in this dataset. The                                 II. DATASETS
+proposed method is further evaluated specifically for the R-peak
+                                                                         This section talks in detail about the two databases that are
+detection of abnormal beats (e.g., S and V beats). This is indeed
+                                                                      used for training and evaluation of the novel R-peak detection
+a challenging task compared to the detection of normal beats. In
+                                                                      algorithm.
+short, the novelty and significant contributions of the study are
+as follows:
+     r We propose a robust algorithm for the R-peak detection in      A. China Physiological Signal Challenge-2020
+       low-quality Holter ECGs. Despite numerous classification          The China Physiological Signal Challenge (2020) dataset
+       methods in this domain, we approach this as a regression       (CPSC-DB) consists of 10 single-lead ECG recordings which
+       problem for utmost robustness and detection performance.       are collected from arrhythmia patients, each of the recordings
+       From each ECG segment, a pulse train is produced from          lasts for about 24 hours (shown in Table I) [42].
+       which the R-peaks can be detected through minimal post-           Table I also indicates if the patient has undergone atrial
+       processing.                                                    fibrillation (AF) or not. All ECG data were acquired by a unified
+     r We propose a novel verification model to reduce the num-       wearable ECG device with a sampling frequency of 400 Hz and
+       ber of false alarms in R peak detection with a significant     the total number of beats is 1026095. The recordings include
+       margin.                                                        irregular heart rhythms as well as SPB (S) and PVC (V) type
+     r We demonstrate the generalization capacity of the pro-         beats. All recordings are provided in MATLAB format with
+       posed algorithm by evaluating it on the gold benchmark         corresponding S and V beats annotations. R-peak annotations
+122                                                         IEEE TRANSACTIONS ON BIOMEDICAL ENGINEERING, VOL. 69, NO. 1, JANUARY 2022
+
+
+
+                            TABLE I                                  a width of 5 samples and is centered at the R-peak location.
+      DETAILED INFORMATION ON THE ECG DATA FROM CPSC-DB
+                                                                     The dataset consists of the ith input ECG signal, x(i) linearly
+                                                                     normalized between +1 and -1, and a 1D segmentation map,
+                                                                     y(i) that was obtained from R-peak locations. The proposed
+                                                                     network is based on the implementation of the 1D convolutional
+                                                                     encoder-decoder model. The encoder block takes a 20-second
+                                                                     ECG segment as input, downsamples it after passing through
+                                                                     convolutional kernels, and produces the compressed discrimina-
+                                                                     tive feature representation, z(i). This compressed feature vector
+                                                                     is then mapped reversely using the decoder block that upsamples
+                                                                     the obtained features from the encoder to construct the output
+                                                                     segmentation map ŷ (i) using Eq. (1).
+                                                                                                                       
+                                                                                z (i) = E x(i) , θ1 ŷ (i) = D z (i) , θ2          (1)
+
+                                                                     where E and D represent the encoder and decoder blocks. The
+for each ECG cycle were annotated by a team of biomedical re-        weight vectors θ1 and θ2 in Eq. (1) are optimized by minimizing
+searchers. To show the robustness of the R-peak detector against     the binary cross-entropy (BCE) loss between the predicted and
+noise and other artifacts, CPSC-DB presents a real-world Holter      the actual R peak segmentation map.
+dataset containing numerous ECG containments and artifacts.                           N
+                                                                                  1 
+                                                                       Loss =           yi × log ŷ + (1 − yi ) × log (1 − yi ) (2)
+B. MIT-BIH Arrhythmia Dataset                                                     N i=1
+   The second benchmark dataset used for evaluation and per-
+formance comparisons is the MIT-BIH arrhythmia dataset that          B. Data Augmentation
+consists of 48 two-lead ECGs from 47 subjects which are                 Data augmentation is an essential step when dealing with
+sampled at 360 Hz and each record covers 30 minutes [43].            limited training examples, to teach the network the desired
+This dataset has been widely used as a benchmark and it is the       robustness and invariance. In the case of the CPSC dataset,
+most popular clinical ECG database for the evaluation of peak        arrhythmia beats are significantly scarcer than the normal beats.
+detection algorithms. The signals in this dataset are relatively     To make the S- (Supraventricular ectopic beat) and V- (Ventric-
+clean and of high-quality, collected in clinical settings. The       ular ectopic beat) beat detection more accurate and robust, we
+modified lead II ECG was used in this study and the total number     generate augmented arrhythmic beats from the 20 second ECG
+of beats is 109475.                                                  segments containing one or more arrhythmia beats by adding
+                                                                     baseline wander and motion artifacts from the Noise Stress Test
+                      III. METHODOLOGY                               Database (NST-DB) [23]. The effect of augmentation on detector
+   The proposed method is illustrated in Fig. 2. The raw ECG         performance specifically for S- and V-beats has been discussed
+segment of 20 seconds is fed into the proposed 1D CNN model.         in detail in Section IV. Further implicit data augmentation is
+The model’s output is further verified by another (verification)     done by using Dropout layers at the end of the encoding layers.
+model that detects the false alarms. Unlike other approaches
+[35], [36], all beats including arrhythmia beats were used for       C. Network Architecture
+training and detection as the detection of arrhythmic beats is the
+                                                                        The architecture of the proposed model is adapted from the
+most challenging problem.
+                                                                     UNet model [44], which is commonly used in 2D medical image
+                                                                     segmentation. 1D E-D CNN models were used both with and
+A. Problem Formulation
+                                                                     without skip connections. To show the effectiveness of skip
+   Encoder-Decoder (E-D) CNN models are popularly used in            connections that is the core idea in the UNet architecture, we
+biomedical image segmentation applications. The model con-           also performed experiments without the skip connections. The
+sists of a contracting as well as an expanding path. The con-        proposed architecture of the model is illustrated in Fig. 2. The
+tracting path consists of the repeated application of convolutions   proposed model is based on multiple hidden layers to learn
+each followed by a Rectified Linear Unit (ReLU) and max              high-level feature representations of ECG data.
+pooling operation for downsampling. In contrast, the expanding          The input layer of both models accepts input with variable
+path consists of the feature map upsampling, which is followed       sizes. We choosed 20 second ECG windows for the selected
+by a convolution (“up-convolution”) after concatenation with         model architecture and parameters. However, the proposed
+the corresponding feature map from the contracting path, each        method can be performed in any practical (e.g., 5s – 30s) window
+followed by a ReLU.                                                  size. The model is designed for signal-to-signal mapping and it
+   We formulated peak detection as a 1D segmentation problem         contains 6 layers in the encoder block as well as 6 layers in
+to segment R-peaks that involve signal to signal transformation      the decoder block with 1 output layer having a total of 38209
+and maps the input ECG to a pulse train where each pulse has         trainable parameters. The input is downsampled by the encoder
+ZAHID et al.: ROBUST R-PEAK DETECTION IN LOW-QUALITY HOLTER ECGS USING 1D CONVOLUTIONAL NEURAL NETWORK                                 123
+
+
+
+
+Fig. 2.   The proposed systematic approach and network architecture.
+
+
+
+through 6 layers of convolutions with a downsampling factor            TensorFlow, a highly productive platform for solving machine
+of 2. The kernel size is set to be 9, 6, and 3 for every two           problems. To train both variants (UNET and E-D CNN), Adam
+consecutive layers. The number of filters starting from 16 is          optimizer is used with a learning rate of 10−3 , and the network
+increased by a factor of two after every two consecutive layers.       parameters of the model were initialized randomly in the range
+Each convolution is followed by batch normalization and Relu           of [−0.1, 0.1].
+activation. In the decoder block, the compressed feature vector is        The models are trained for 50 epochs with a batch size of 64.
+upsampled by the same number of transpose convolutions with            10-folds cross-validation is used, i.e., for each fold ECG records
+a reverse configuration of the encoder block.                          of the 9 patients were used to train the model, and the remaining
+   The two main reasons to employ the batch normalization layer        one was used for evaluation. Data augmentation techniques
+after the convolution layer are: improved generalization and           over the abnormal beats such as adding Gaussian noise with
+speeding up the training process. To down-sample the 1D feature        random variance, combining a sinusoidal signal with random
+map while retaining important information, the max-pooling             initial phase and amplitude were used. Finally, as the objective
+layer connected to the batch normalization layer is used. The          function for training the network, we used the cross-entropy loss
+features were downsampled by a factor of 2 in each encoding            [2] and the loss is summed up over all the available samples in
+layer. Finally, the output 1-D segmentation mask is generated          a mini-batch.
+by using a filter size of 1 for convolution operation in the last
+layer. All convolutional layers in this architecture use the ReLU
+activation function, except for the final one. The last layer uses     E. Verification Model
+SoftMax activation to get a one-dimensional segmentation map              Once R-peak locations with their occurrence probabilities
+for R peaks.                                                           have been obtained from the 1D segmentation map, they are
+                                                                       then passed through a verification model to remove any unlikely
+                                                                       R-peak based on a timing criterion, i.e., if the predicted locations
+D. Training
+                                                                       of the two beats fall within a window of 300 milliseconds, one
+  The proposed CNN model for each fold is implemented                  of the beats is identified as a false alarm. The window length
+in Python by using Keras which is the high-level API of                of 300 milliseconds is chosen to avoid the removal of actual
+124                                                               IEEE TRANSACTIONS ON BIOMEDICAL ENGINEERING, VOL. 69, NO. 1, JANUARY 2022
+
+
+
+
+Fig. 3. Illustration of the verification model. Red dotted lines represent the R peak predictions of the proposed model. Two closely predicted beats
+(B 1 and B 2 ) are visible. B 1 will be detected as false peak by the verification model due to a low beat score and it will be removed automatically.
+
+
+
+beats as FPs in AF patients. In AF, heart rate can go up to                 MIT-DB, the proposed model was trained only on the CPSC-DB
+125-150 beats per minute due to the rapid rate of fibrillatory              data and tested on MIT-DB. For the proposed method, ECG
+impulses [45]. Firstly, to capture the morphology of the whole              records from MIT-DB were resampled at 400 Hz to match the
+QRS complex, 60 samples window is extracted from both beats                 sampling frequency of the training data (CPSC-DB).
+by taking the predicted R-peak location as the midpoint of the
+beat. Then, the two reference beats of the same sample size                 A. Evaluation Metrics
+are extracted. The criteria for choosing these reference beats is
+that the probability of the beats must be greater than 0.5. The                Quantitative performance of the different models and ap-
+first beat that satisfies this criterion before and after two closely       proaches are compared using three performance measures that
+located beats are selected. The beat similarity score (SBi ) for            are commonly used: Precision, Recall, and F1-score. Note that,
+the consecutive beats, i = 12 is expressed by the formula as                the measurement of True Positives (TP), False Negatives (FN),
+follows:                                                                    and False Positives (FP) were taken within a tolerance of ±75
+                                                                            ms [2] of the truth peak location.
+                SBi = ρ (Bi , BP ) × ρ (Bi , BN )                    (3)
+                                                                                                     TP
+where BP and BN are previous and next reference beats, re-                           Recall (%) =            × 100                                (5)
+                                                                                                  TP + FN
+spectively. The Pearson product-moment correlation coefficient
+                                                                                                     TP
+(ρ) can be expressed as,                                                         P recision (%) =            × 100                                (6)
+                                                                                                  TP + FP
+                                cov (X, Y )
+                        ρX,Y =                               (4)                                  2 × P recision × Recall
+                                 σX × σY                                                F 1 (%) =                         × 100                   (7)
+                                                                                                    P recision + Recall
+where cov is covariance and σ is the standard deviation.
+   The beat with a minimum similarity score (SBi ) is assumed                 Since this is an R-peak detection operation, True Negatives
+to be a false beat and hence, removed from the R-peak locations.            (TN) do not exist as a performance measure.
+The verification model is illustrated in Fig. 3.
+                                                                            B. Results on CPSC-DB
+                   IV. EXPERIMENTAL RESULTS                                    Table II exhibits the R-peak detection performance of CPSC-
+   In this section, we will first present the experimental setup            DB. From the results, it is evident that the proposed model
+used for testing and evaluation of the proposed R-peak detector             achieved the top performance on CPSC-DB with a top F1 score
+on 1D E-D CNN. An extensive set of peak detection experiments               of 99.30%. Moreover, the proposed approach is very effective
+and comparative evaluations against the five state-of-the-art               in detecting S and V type beats as it only misses less than 1%
+classifiers from the literature over both datasets will be presented        of total arrhythmia beats while most of the competing methods
+next. For CPSC-DB we performed 10-fold cross-validation. For                do not even consider the arrhythmia beats in their experiments.
+ZAHID et al.: ROBUST R-PEAK DETECTION IN LOW-QUALITY HOLTER ECGS USING 1D CONVOLUTIONAL NEURAL NETWORK                              125
+
+
+
+                                                                TABLE II
+                      PEAK DETECTION PERFORMANCES OF THE PROPOSED APPROACHES AND COMPETING ALGORITHMS ON CPSC-DB
+
+
+
+
+                                                                TABLE III
+                        PEAK DETECTION PERFORMANCES OF THE PROPOSED APPROACHES AND COMPETING ALGORITHMS ON MIT-DB
+
+
+
+
+   The best results are highlighted in bold.
+
+
+Compared to all competing methods, the proposed approach             evaluated on MIT-DB. The results presented in Table III show
+reduced the FPs and FNs on R-peak detection by more than 54%         that the proposed model achieves better detection performance
+and 82%, respectively. Such a substantial reduction especially       than the state-of-the-art methods except one where the perfor-
+on FNs over all competing methods shows that the proposed            mance gap is insignificant. Such a “similar or better” perfor-
+approach with 1D CNNs can indeed accomplish a superior               mance is achieved even though the proposed model is trained
+learning capability and robustness to detect the actual peaks on     only on CPSC-DB data while all the MIT-DB ECG records were
+such low-quality ECG signal.                                         unseen and used solely for testing.
+   The peak location of S and V beats is crucial because peak           The contribution of data augmentation and verification on the
+detection is the prior operation to an automated ECG beat            detection performance can be seen from the results presented in
+classification and arrhythmia detection. This aim cannot be          Table IV. By data augmentation, we were able to reduce 40% of
+fulfilled if the peak detector fails on an abnormal beat. As shown   missed detections (FNs). The tradeoff for this reduction is the
+in Table II, once again the proposed approach has achieved a         9% increase in the number of false alarms (FPs). As a solution,
+significant performance gap on detecting both S and V beats          by applying the verification model, 21% of the false alarms were
+over the competing methods, i.e., the proposed approach reduced      reduced and the state-of-the-art performance level is achieved.
+the missed S and V beats (FNs) by more than 80% and 95%,                Some typical ECG records from different patients and their
+respectively.                                                        corresponding R-peaks detected by the proposed approach are
+   On the other hand, the poor performance of the competing          shown in Fig. 4. As in the cases shown in Fig. 1, it is hard for an
+models is because most of them are designed for high-quality         untrained human eye to detect some of the R-peaks accurately.
+clinical ECGs, whereas several artifacts and other variations        Even though extreme baseline variations, structural artifacts, and
+present in the Holter ECG database significantly deteriorated        noise are present, the proposed approach can detect almost all R-
+their performances. There are also other morphological varia-        peaks accurately. Finally, it is worth mentioning that the R-peak
+tions in Holter ECGs that are not present in ECGs acquired in        locations perfectly align with the ground truth positions.
+clinical settings.
+                                                                     D. Computation Time
+C. Results on MIT-DB
+                                                                       We implemented the proposed peak detection algorithm using
+  The proposed 1D CNN model with skip connections (UNET)             Python and Keras machine learning libraries. All the experi-
+was trained over the 10 records of CPSC-DB and was solely            ments reported in this paper were performed on a 2.2GHz Intel
+126                                                                        IEEE TRANSACTIONS ON BIOMEDICAL ENGINEERING, VOL. 69, NO. 1, JANUARY 2022
+
+
+
+                                                                              TABLE IV
+                                                  EFFECT OF AUGMENTATION AND VERIFICATION ON THE PROPOSED APPROACH
+
+
+
+
+      The best results are highlighted in bold.
+
+
+
+
+Fig. 4. Some typical R-peak detection results of the proposed algorithm. Green lines represent the ground truth location of R-peaks and red
+dotted lines represent the peaks detected by the model.
+
+
+
+
+Core i7-8750H with 16 GB of RAM and an NVIDIA GeForce                              segment of a signal to obtain the peak locations is about 202
+GTX 1060 graphic card. The training phase of the model was                         msec and this indicates around 100-times the real-time speed.
+processed by CUDA kernels whereas the testing phase is im-                         This might be slower when using in Holter devices with a
+plemented without a parallelized (CUDA) version with a single                      low-configuration processor, but it will still be several times
+CPU. It takes about 191 msec to compute the segmentation mask                      faster than real-time processing speed.
+for a 20s ECG segment. P&T method takes around 73 msec to
+process an ECG segment of the same length. The verification
+model only takes 11 msec to validate the detected peaks for                                                V. CONCLUSION
+false detections. The most important advantage of the proposed                       This study describes a novel approach for R-peak detection
+system is its fast processing for beat detection. Specifically, for                especially in low-quality Holter ECGs using 1-D CNN along
+the single-CPU implementation, the total time for a 20s ECG                        with a verification model. The R-peak detection is approached
+ZAHID et al.: ROBUST R-PEAK DETECTION IN LOW-QUALITY HOLTER ECGS USING 1D CONVOLUTIONAL NEURAL NETWORK                                                              127
+
+
+
+as a 1D segmentation problem; hence the R-peaks are detected                       [14] S. Sahoo et al., “Multiresolution wavelet transform based fea-
+with minimal post-processing. We performed 10-fold compara-                             ture extraction and ECG classification to detect cardiac abnormali-
+                                                                                        ties,” Meas. J. Int. Meas. Confed., vol. 108, pp. 55–66, Oct. 2017,
+tive evaluations over the benchmark CPSC-DB with more than                              doi: 10.1016/j.measurement.2017.05.022.
+1M beats. Against the competing state-of-the-art methods, the                      [15] S. Pal, and M. Mitra, “Empirical mode decomposition based ECG enhance-
+proposed approach not only achieved the highest detection per-                          ment and QRS detection,” Comput. Biol. Med., vol. 42, no. 1, pp. 83–92,
+                                                                                        Jan. 2012, doi: 10.1016/j.compbiomed.2011.10.012.
+formances, but it further reduced both FPs and FNs significantly.                  [16] M. A. Kabir, and C. Shahnaz, “Denoising of ECG signals based on
+The most crucial advantage over the competing methods is that                           noise reduction algorithms in EMD and wavelet domains,” Biomed.
+the proposed approach can reduce the number of missed S and                             Signal Process. Control, vol. 7, no. 5, pp. 481–489, Sep. 2012,
+                                                                                        doi: 10.1016/j.bspc.2011.11.003.
+V beats (FNs) by more than 80% and 95%, respectively. Over                         [17] A. J. Nimunkar, and W. J. Tompkins, “R-peak detection and sig-
+the MIT-DB dataset with high-quality ECG records, it also                               nal averaging for simulated stress ECG using EMD,” in Proc.
+achieves similar or better performance than the competitors.                            Annu. Int. Conf. IEEE Eng. Med. Biol., 2007, pp. 1261–1264,
+                                                                                        doi: 10.1109/IEMBS.2007.4352526.
+Finally, since the proposed 1D CNN model performs only 1D                          [18] H. Rabbani et al., “R peak detection in electrocardiogram signal based
+convolutions, it achieved 100-times of the real-time speed in a                         on an optimal combination of wavelet transform, hilbert transform, and
+standard computer, and thus, especially for low-power, mobile                           adaptive thresholding,” J. Med. Signals Sens., vol. 1, no. 2, pp. 91–98,
+                                                                                        May 2011, doi: 10.4103/2228-7477.95292.
+devices such as Holter monitors, the proposed approach can                         [19] G. D. Clifford et al., “False alarm reduction in critical care,” Physiol. Meas.,
+conveniently be used as an R-peak detector in real-time. In                             vol. 37, no. 8, pp. E5–E23, Aug. 2016, doi: 10.1088/0967-3334/37/8/E5.
+future work, we aim to explore robust quantization and model                       [20] S. Parsons, and J. Huizinga, “Robust and fast heart rate variability analysis
+                                                                                        of long and noisy electrocardiograms using neural networks and images,”
+compression techniques to further reduce the model parameters                           Feb. 2019. Accessed: Dec. Oct., 2020. [Online]. Available: http://arxiv.
+and accelerate the inference process. Using a new-generation                            org/abs/1902.06151
+heterogeneous network model such as 1D Operational Neural                          [21] M. Elgendi, “Fast QRS detection with an optimized knowledge-based
+                                                                                        method: Evaluation on 11 standard ECG databases,” PLoS One, vol. 8,
+Networks [50]–[54] instead of 1D CNNs is also planned to                                no. 9, pp. 73557, Sep. 2013, doi: 10.1371/journal.pone.0073557.
+further improve the performance and to reduce the complexity.                      [22] M. Elgendi et al., “Revisiting QRS detection methodologies for portable,
+                                                                                        wearable, battery-operated, and wireless ECG systems,” PLoS One, vol. 9,
+                              REFERENCES                                                no. 1, Jan. 2014, Art. no. e84018, doi: 10.1371/journal.pone.0084018.
+                                                                                   [23] G. B. Moody, W. E. Muldrow, and M. RG, “The MIT-BIH noise
+ [1] J. Behar et al., “ECG signal quality during arrhythmia and its application         stress test database,” in Proc. Comput. Cardiol., 1984, pp. 381–384,
+     to false alarm reduction,” IEEE Trans. Biomed. Eng., vol. 60, no. 6,               doi: 10.13026/C2HS3T.
+     pp. 1660–1666, Jun. 2013, doi: 10.1109/TBME.2013.2240452.                     [24] B. Porr, and L. Howell, “R-peak detector stress test with a new noisy ECG
+ [2] F. Liu et al., “Performance analysis of ten common QRS detectors on                database reveals significant performance differences amongst popular
+     different ECG application cases,” J. Healthc. Eng., vol. 2018, May 2018,           detectors,” bioRxiv, pp. 722397, Aug. 2019, doi: 10.1101/722397.
+     Art. no. 9050812, doi: 10.1155/2018/9050812.                                  [25] K. Arbateni, and A. Bennia, “Sigmoidal radial basis function ANN for QRS
+ [3] J. Behar et al., “ECG signal quality during arrhythmia and its application         complex detection,” Neurocomputing, vol. 145, pp. 438–450, Dec. 2014,
+     to false alarm reduction,” IEEE Trans. Biomed. Eng., vol. 60, no. 6,               doi: 10.1016/j.neucom.2014.05.009.
+     pp. 1660–1666, Jun. 2013, doi: 10.1109/TBME.2013.2240452.                     [26] A. S. A. Huque et al., “HMM-based supervised machine learning frame-
+ [4] Q. Li, R. G. Mark, and G. D. Clifford, “Robust heart rate estimation               work for the detection of fECG R-R peak locations,” IRBM, vol. 40, no. 3,
+     from multiple asynchronous noisy sources using signal quality indices              pp. 157–166, Jun. 2019, doi: 10.1016/j.irbm.2019.04.004.
+     and a Kalman filter,” Physiol. Meas., vol. 29, no. 1, pp. 15–32, Jan. 2008,   [27] G. Vijaya et al., “ANN-based QRS-complex analysis of ECG A’-based
+     doi: 10.1088/0967-3334/29/1/002.                                                   QRS-complex analysis of ECG∗,” Technol., vol. 22, no. 4, pp. 160–167,
+ [5] J. Pan, and W. J. Tompkins, “A real-time QRS detection algorithm,” IEEE            Jul./Aug. 1998, doi: 10.3109/03091909809032534.
+     Trans. Biomed. Eng., vol. BME-32, no. 3, pp. 230–236, Mar. 1985.              [28] R. Rodríguez et al., “Feature extraction of electrocardiogram sig-
+ [6] P. S. Hamilton, and W. J. Tompkins, “Quantitative investigation of                 nals by applying adaptive threshold and principal component analy-
+     QRS detection rules using the MIT/BIH arrhythmia database,” IEEE                   sis,” J. Appl. Res. Technol., vol. 13, no. 2, pp. 261–269, Apr. 2015,
+     Trans. Biomed. Eng., vol. BME-33, no. 12, pp. 1157–1165, Dec. 1986,                doi: 10.1016/j.jart.2015.06.008.
+     doi: 10.1109/TBME.1986.325695.                                                [29] S. Kiranyaz et al., “1-D Convolutional neural networks for signal process-
+ [7] M. Jia et al., “Robust QRS detection using high-resolution wavelet                 ing applications,” in Proc. ICASSP, IEEE Int. Conf. Acoust., Speech Signal
+     packet decomposition and time-attention convolutional neural                       Process., 2019, pp. 8360–8364, doi: 10.1109/ICASSP.2019.8682194.
+     network,” IEEE Access, vol. 8, pp. 16979–16988, 2020, doi: 10.1109/AC-        [30] S. Kiranyaz et al., “1D convolutional neural networks and applications: A
+     CESS.2020.2967775.                                                                 survey,” Mech. Syst. Signal Process., vol. 151, Apr. 2021, Art. no. 107398,
+ [8] D. S. Benitez et al., “New QRS detection algorithm based on the                    doi: 10.1016/j.ymssp.2020.107398.
+     hilbert transform,” in Proc. Comput. Cardiol., 2000, pp. 379–382,             [31] T. Ince et al., “Real-Time motor fault detection by 1-D convolutional neural
+     doi: 10.1109/cic.2000.898536.                                                      networks,” IEEE Trans. Ind. Electron., vol. 63, no. 11, pp. 7067–7075,
+ [9] N. M. Arzeno, Z. De Deng, and C. S. Poon, “Analysis of first-derivative            Nov. 2016, doi: 10.1109/TIE.2016.2582729.
+     based QRS detection algorithms,” IEEE Trans. Biomed. Eng., vol. 55,           [32] S. Kiranyaz, T. Ince, and M. Gabbouj, “Real-Time patient-specific
+     no. 2, pp. 478–484, Feb. 2008, doi: 10.1109/TBME.2007.912658.                      ECG classification by 1-D convolutional neural networks,” IEEE
+[10] A. Martínez, R. Alcaraz, and J. J. Rieta, “Application of the phasor               Trans. Biomed. Eng., vol. 63, no. 3, pp. 664–675, Mar. 2016,
+     transform for automatic delineation of single-lead ECG fiducial points,”           doi: 10.1109/TBME.2015.2468589.
+     Physiol. Meas., vol. 31, no. 11, pp. 1467–1485, Nov. 2010,                    [33] S. Kiranyaz, T. Ince, and M. Gabbouj, “Personalized monitoring and
+     doi: 10.1088/0967-3334/31/11/005.                                                  advance warning system for cardiac arrhythmias,” Sci. Rep., vol. 7, no. 1,
+[11] B. Hossain et al., “An accurate QRS complex and P wave detection                   Dec. 2017, Art. no. 9270, doi: 10.1038/s41598-017-09544-z.
+     in ECG signals using complete ensemble empirical mode decomposi-              [34] X. Wang, and Q. Zou, “QRS detection in ECG signal based on residual
+     tion with adaptive noise approach,” vol. 7, pp. 128869–128880, 2019,               network,” in Proc. IEEE 11th Int. Conf. Commun. Softw. Netw., 2019,
+     doi: 10.1109/ACCESS.2019.2939943.                                                  pp. 73–77, doi: 10.1109/ICCSN.2019.8905308.
+[12] Z. E. Hadj Slimane, and A. Naït-Ali, “QRS complex detection using             [35] J. Laitala et al., “Robust ECG R-peak detection using LSTM,”
+     empirical mode decomposition,” Digit. Signal Process. A Rev. J., vol. 20,          in Proc. ACM Symp. Appl. Comput., 2020, pp. 1104–1111,
+     no. 4, pp. 1221–1228, Jul. 2010, doi: 10.1016/j.dsp.2009.10.017.                   doi: 10.1145/3341105.3373945.
+[13] V. Kalidas, and L. Tamil, “Real-time QRS detector using stationary wavelet    [36] S. Vijayarangan et al., “RPnet: A deep learning approach for robust R peak
+     transform for automated ECG analysis,” in Proc IEEE 17th Int. Conf.                detection in noisy ECG,” in Proc. Annu. Int. Conf. IEEE Eng. Med. Biol.
+     Bioinf. Bioeng., 2017, pp. 457–461, doi: 10.1109/BIBE.2017.00-12.                  Soc., 2020, pp. 345–348, doi: 10.1109/EMBC44109.2020.9176084.
+128                                                                       IEEE TRANSACTIONS ON BIOMEDICAL ENGINEERING, VOL. 69, NO. 1, JANUARY 2022
+
+
+
+[37] Y. Xiang, Z. Lin, and J. Meng, “Automatic QRS complex detection using          [46] J. Pan, and W. J. Tompkins, “A real-time QRS detection algorithm,”
+     two-level convolutional neural network,” Biomed. Eng. Online, vol. 17,              IEEE Trans. Biomed. Eng., vol. BME-32, no. 3, pp. 230–236, Mar. 1985,
+     no. 1, pp. 1–17, Jan. 2018, doi: 10.1186/s12938-018-0441-4.                         doi: 10.1109/TBME.1985.325532.
+[38] S. L. Oh et al., “Automated beat-wise arrhythmia diagnosis using modified      [47] P. S. Hamilton, and E. P. Limited, “Open source ECG analysis software
+     U-net on extended electrocardiographic recordings with heterogeneous                documentation,” 2002. Accessed: Dec. 10, 2020. [Online]. Available: http:
+     arrhythmia types,” Comput. Biol. Med., vol. 105, pp. 92–101, Feb. 2019,             //www.eplimited.com/
+     doi: 10.1016/j.compbiomed.2018.12.012.                                         [48] M. Elgendi, M. Jonkman, and F. De Boer, “Frequency bands effects on
+[39] H. Yang et al., “A faster r CNN-based Real-time QRS detector,” in Proc.             QRS detection,” Institute for Systems and Technologies of Information,
+     Comput. Cardiol. Conf., 2019, pp. 1–4, doi: 10.22489/cinc.2019.053.                 Control and Communication (INSTICC), pp. 428–431, 2010, Accessed:
+[40] N. Sadr et al., “Reducing false arrhythmia alarms in the ICU using                  Dec. 10, 2020. [Online]. Available: https://researchers.cdu.edu.au/en/
+     multimodal signals and robust QRS detection,” Physiol. Meas., vol. 37,              publications/frequency-bands-effects-on-qrs-detection
+     no. 8, pp. 1340–1354, Jul. 2016, doi: 10.1088/0967-3334/37/8/1340.             [49] V. Kalidas and L. Tamil, “Real-time QRS detector using stationary
+[41] L. M. Eerikäinen et al., “Decreasing the false alarm rate of arrhythmias            wavelet transform for automated ECG analysis,” in Proc. 2017 IEEE
+     in intensive care using a machine learning approach,” in Proc. Comput.              17th Int. Conf. Bioinformat. Bioeng. (BIBE), 2017, pp. 457–461, doi:
+     Cardiol., 2015, pp. 293–296, doi: 10.1109/CIC.2015.7408644.                         10.1109/BIBE.2017.00-12.
+[42] Z.P. Cai et al., “An open-access long-term wearable ECG database for           [50] S. Kiranyaz et al., “Operational neural networks,” Neural Comput. Appl.,
+     premature ventricular contractions and supraventricular premature beat              vol. 32, no. 11, pp. 6645–6668, Jun. 2020, doi: 10.1007/s00521-020-
+     detection,” J. Med. Imag. Health Inf., vol. 10, no. 11, pp. 2663–2667,              04780-3.
+     2020.                                                                          [51] S. Kiranyaz et al., “Exploiting heterogeneity in operational neural net-
+[43] G.B. Moody and R.G. Mark, “The impact of the MIT-BIH arrhythmia                     works by synaptic plasticity,” Aug. 2020, Accessed: Dec. 27, 2020.
+     database,” IEEE Eng. Med. Biol. Mag., vol. 20, no. 3, pp. 45–50, May/Jun.,          [Online]. Available: arxiv.org/abs/2009.08934
+     2001, doi: 10.1109/51.932724.                                                  [52] J. Malik, S. Kiranyaz, and M. Gabbouj, “FastONN – Python based open-
+[44] O. Ronneberger, P. Fischer, and T. Brox, “U-net: Convolutional networks             source GPU implementation for operational neural networks,” Jun. 2020,
+     for biomedical image segmentation,” in Medical Image Computing and                  Accessed: Dec. 27, 2020. [Online]. Available: arxiv.org/abs/2006.02267
+     Computer-Assisted Intervention, Lecture Notes in Computer Science (in-         [53] S. Kiranyaz et al., “Self-Organized operational neural networks with gen-
+     cluding subseries Lecture Notes in Artificial Intelligence and Lecture Notes        erative neurons,” Apr. 2020. Accessed: Dec. 27, 2020. [Online]. Available:
+     in Bioinformatics), P. Fischer and T. Brox, Eds. Switzerland AG: Springer           http://arxiv.org/abs/2004.11778
+     Nature, 2015, pp. 234–241, doi: 10.1007/978-3-319-24574-4_28.                  [54] J. Malik, S. Kiranyaz, and M. Gabbouj, “Self-Organized operational neural
+[45] A. C. “Guyton, and J. E Hall. Textbook of Medical Physiology, 11th ed.              networks for severe image restoration problems,” Aug. 2020, Accessed:
+     vol. 11. Philadelphia, PA, USA: Elsevier, Saunders; 2006.                           Dec. 27, 2020. [Online]. Available: arxiv.org/abs/2008.12894
+

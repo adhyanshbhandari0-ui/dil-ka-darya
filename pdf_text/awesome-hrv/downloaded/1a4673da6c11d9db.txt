@@ -1,0 +1,686 @@
+L. Guo et al.: Inter-Patient ECG Classification with Convolutional and Recurrent Neural Networks                                                    9
+
+
+
+
+        Inter-Patient ECG Classification with
+    Convolutional and Recurrent Neural Networks
+                                                Li Guo, Gavin Sim and Bogdan Matuszewski
+
+
+                                                                                    handling them. Such a trend imposes the requirements for true
+   Abstract— The recent advances in ECG sensor devices                               generic and data-driven ECG signal analysis methods and
+provide opportunities for user self-managed auto-                                    models (patient and device independent) to be developed.
+diagnosis and monitoring services over the internet. This                            The analysis of ECG signals has been extensively researched
+imposes the requirements for generic ECG classification
+                                                                                     over many decades [4][5][6][7][8]. Many attempts have been
+methods that are inter-patient and device independent. In
+this paper, we present our work on using the densely                                 made for classifying abnormal ECG beats using various
+connected convolutional neural network (DenseNet) and                                methods. Even though the existing efforts do contribute as
+gated recurrent unit network (GRU) for addressing the                                firm foundations to the domain, the problem of inter-patient
+inter-patient ECG classification problem. A deep learning                            ECG signal classifications has not been addressed adequately.
+model architecture is proposed and is evaluated using the                            This is due to the largely varied morphological characteristics
+MIT-BIH Arrhythmia and Supraventricular Databases. The                               from patient to patient, different ECG hardware
+results obtained show that without applying any                                      implementations, and the changing measuring conditions.
+complicated data pre-processing or feature engineering                               Traditionally, a typical machine learning based approach for
+methods, both of our models have considerably
+                                                                                     ECG signal classification consists of three main steps, namely,
+outperformed the state-of-the-art performance for
+supraventricular (SVEB) and ventricular (VEB) arrhythmia                             data pre-processing, feature extraction and classification.
+classifications on the unseen testing dataset (with the F1                           Following such a process, various noises and artefacts (i.e.
+score improved from 51.08 to 61.25 for SVEB detection                                baseline wondering, muscle contraction and powerline
+and from 88.59 to 89.75 for VEB detection respectively). As                          interferences) are eliminated first [9][10]. Then a set of hand-
+no patient-specific or device-specific information is used                           crafted features are extracted from the pre-processed
+at the training stage in this work, it can be considered as a                        waveforms and are fed into the next classification stage.
+more generic approach for dealing with scenarios in which                            However, the time-varying dynamics and the morphological
+varieties of ECG signals are collected from different                                characteristics of ECG signals from different patients under
+patients using different types of sensor devices.
+                                                                                     different temporal and physical conditions make it difficult to
+                                                                                     extract useful features manually. For instance, even for an
+  Index Terms— ECG Classification, Convolutional Neural
+Network, Recurrent Neural Network, Big Data, Deep Learning                           ECG waveform from a healthy subject, the shapes of QRS
+                                                                                     complex, P waves, and R–R intervals will not be the same
+                              I. Introduction                                        from one beat to the other under different circumstances [11].
+                                                                                     In fact, most researchers have chosen to use patient-specific
+T   The Electrocardiogram (ECG) signal is a non-invasive
+    screening tool that has been widely used for various
+cardiac abnormality detections. A careful inspection of ECG
+                                                                                     data [7][9][15] at the training stage to ensure that classifiers
+                                                                                     are aware of the variances that exist in testing data, but not in
+                                                                                     the training data. This is reasonably understandable as it is
+signal is essential for detect underlying heart conditions                           almost impossible to hand-craft all features or to be confident
+particularly in long-term recordings (usually over a period of                       enough that a set of pre-defined features can cover the full
+24 hours). The recent advances in body sensor devices provide                        spectrum of any ECG signal.
+opportunities for user directed auto-diagnosis, self-monitoring
+                                                                                     In this paper, we present our work on using the densely
+and self-management services over the internet. There has
+                                                                                     connected convolutional neural network (DenseNet) [14] and
+been a significant increase in the number and variety of
+                                                                                     gated recurrent unit network (GRU) [15] with attention [16]
+wearable ECG monitoring devices [1][2] in the last decade,
+                                                                                     mechanism for inter-patient ECG classification problem. This
+which leads to the generation of massive volumes of inter-
+                                                                                     work aims to evaluate and verify a hypothesis: with a deep
+patient/device ECG signals and cloud-based services[3] for
+                                                                                     learning model-based approach, it is possible to achieve better
+                                                                                     ECG classification performance without using either feature
+  Li Guo is with the School of Physical Sciences & Computing, the
+University of Central Lancashire, Preston, United Kingdom (e-
+                                                                                     extraction methods or patient/device-specific information. The
+mail:lguo@uclan.ac.uk).                                                              main contributions of this work are:
+  Gavin Sim is with the School of Physical Sciences & Computing, the                      1. We developed a generic and feature-free deep learning
+University of Central Lancashire, Preston, United Kingdom (e-mail:
+GRSim@uclan.ac.uk).
+                                                                                               model that outperforms the current state-of-the-art
+  Bogdan Matuszewski is with the School of Engineering, the                                    methods [7] [17] for inter-patient ECG classification.
+University of Central Lancashire, Preston, United Kingdom (e-mail:                        2. We show that without changing model architecture or
+BMatuszewski1@uclan.ac.uk).                                                                    parameters, the performance of this method remains
+L. Guo et al.: Inter-Patient ECG Classification with Convolutional and Recurrent Neural Networks                                                     9
+
+
+
+          stable on different datasets with different properties,                    automatic ECG feature extraction using Deep Belief Network.
+          thus having better scalability and applicability.                          For the automatic ECG classification, researchers [26] have
+     3. We also compared the proposed architecture with other                        proposed using a combination of SVM and DBN, in which
+          architectures to show its effectiveness.                                   DBN is used for feature learning and SVM is then applied for
+The remainder of this paper is organised as follows. In section                      the classification tasks using the learned features. With the
+II, related work on ECG classification is surveyed and                               same principle, Rahlal et al.[7] has used auto-encoders for
+discussed, followed by a demonstration of our methodology in                         feature learning. In this work, ECG data from several cardio
+section III. Experiments, evaluation and results comparison                          databases have been utilised for effective ECG feature
+are presented in section IV as well as some discussions.                             learning. The learned features are then applied for
+Conclusion and future work are given in section V.                                   classification on unseen data.
+                                                                                     Along with the development of deep learning models, the
+                           II. RELATED W ORK
+                                                                                     more recent trend has been focused on using convolutional
+A. Feature Engineering Based Approaches                                              neural network models for direct ECG signal classification. In
+Before deep learning became applicable, feature extraction                           [36], a CNN based classification system was introduced for
+based methods have dominated the ECG signal recognition                              automatically learning feature representations from ECG data,
+domain over several decades. Those methods include wave                              hence eliminating the hand-crafted feature extraction stage. In
+shape functions [17][18][19][20], wavelet-based feature                              another work [37], segmented ECGs are processed by an
+extractions [21][22][23], frequency-based feature extraction                         eleven-layer convolutional neural network that achieved
+[24] and statistical feature [25]. Methods used for classifying                      maximum accuracy of 93.18%. Kiranyaz et al. [13] studied the
+these extracted features include support vector machines [17]                        patient-specific ECG monitoring system using three-layer
+[26], decision trees [26], artificial neural networks [27], linear                   CNN with only R-peak wave. They also result in good
+discriminants[17][18][20], self-organising maps with learning                        accuracy in the detection of supraventricular ectopic beats and
+vector quantisation [28] and active learning framework [12].                         ventricular ectopic beats. A deep residual neuron network [38]
+However, the success of such methods often relies on the                             has been developed by [39], where a 34 layer deep CNN is
+outputs from the feature extraction stage. Many of these                             applied directly, without adopting any complex pre-processing
+frameworks treat ECG signals as a sequence of stochastic                             and feature engineering steps, for classifying arrhythmia. The
+patterns. Therefore, complex feature extraction process and                          researchers have shown that this approach achieved
+high sampling rates are required. Even though, due to the large                      cardiologist-level performance using a dataset that’s 500 times
+intra-class variation, the robustness of many existing ECG                           larger than others of its kinds.
+classification techniques remains limited. A major limitation                        Despite the progress the ECG community has achieved, it is
+of current approaches is that they are highly dependent on the                       evident from the literature [27][13][6][17] that researchers
+pre-extracted features from the training dataset, and perform                        have used a small number of selected patient-specific data that
+inadequately while dealing with unseen ECG records. In                               is usually in length between 2.5 minutes and 5 minutes for
+addition, extracting complex features in the frequency                               model training. Although this data is then excluded from the
+domains when combined with dimensionality reduction                                  testing data for performance evaluation, the inclusion of them
+algorithms significantly upsurge the computational complexity                        in the training stage largely reduces the variants that may be
+of the overall process. Moreover, many classifiers have not                          encountered in some real-world applications. In other words,
+performed well in case of inter-patient variations of the ECG                        if we are expecting similar performance as reported in the
+signals, thereby demonstrating a common shortcoming of                               literature when applying those methods to an application,
+having an inconsistent performance while classifying a new                           patient-specific data needs to be collected for the
+patients ECG signal.                                                                 “personalised models” training. While such a constraint may
+B. Deep Learning Based Approaches                                                    hold true in some of the medical setups (e.g. where 24 hours
+                                                                                     Holters are used and experts can partially label recordings), in
+The development of deep learning methods for feature                                 a free-living environment where each patient only produces
+learning[29] yields to automatic learning of good features                           very short ECG waveforms (e.g. users self-monitor themselves
+from the raw input data. Typical deep learning architectures
+                                                                                     using body sensors for less than a few minutes [40]), this does
+include deep belief networks (DBN)[30], stacked auto-encoder
+                                                                                     not seem to be feasible. In addition, it is particularly difficult
+(SAE) [31] and convolutional neural networks (CNN)[32][33].
+                                                                                     or even impossible to ask experts to manually label small
+The success of applying deep learning in other domains, such
+                                                                                     chunks of data from all stored records when the volume of
+as image recognition and language processing, has drawn the                          data becomes overwhelming. The research presented in this
+attention of ECG classification community. In the last few                           paper aims to present an effective approach to mitigating this
+years, researchers have focused their efforts on using deep
+                                                                                     problem.
+learning models for ECG signal analysis.
+In [34], researchers have developed algorithms based on                                                    III. METHODOLOGY
+Restricted Boltzmann Machine (RBM) for two-lead heartbeat                            Giving the current landscape of literature, the hypophysis we
+classification where the RSM model helps mine the large set                          hold for this work is that with careful study and a right
+of unlabelled ECG beats in the heart healthcare monitoring                           architecture, a single deep learning model is capable of
+applications. Similar work has been carried by [35] for                              learning generic ECG waveform features, hence performing
+                                                                                     better on ECG classification tasks. The development of such a
+L. Guo et al.: Inter-Patient ECG Classification with Convolutional and Recurrent Neural Networks                                                     9
+
+
+
+model should require a minimal level of prior knowledge in                           information is lost, and the performance of the model heavily
+the traditional feature engineering/signal processing domain                         replies on whether the model can reconstruct “close-enough”
+thus providing a neater/simpler solution. For instance, we                           signals using features learnt. The work was done by Rajpurkar
+believe there is no need to carry R-peak detection or QRS                            et al.[39] is precisely one of the kinds. With an extensive
+complex identification (as many of the previous work have                            dataset and a deep architecture, a network surely has a better
+adopted as an essential step) since they are, in fact, features                      chance to learn good features and use them for classification
+from the ECG signals.                                                                without considering time variances. A possible bottleneck of
+                                                                                     using such approaches is that there may be a need to prepare a
+A. The Problem
+                                                                                     super-sized dataset to only use features for compensating the
+Generally, the abnormalities of the ECG signals mainly come                          lost temporal information in the original inputs. Thus, it is
+from two aspects, namely the ill-shaped ECG beat                                     natural to think of using a combination of both CNN and RNN
+morphology and the temporal variance between ECG beats as                            for solving the ECG classification problem.
+illustrated in Figure 1, where Fig 1.a shows regular sinus
+beats, Fig 1.b shows a premature beat (temporal variance                             B. The Model
+between R peaks) and Fig 1.c shows ill-shaped QRS
+complexes (morphological variance). If a model is capable of
+handling both of the above cases, it needs to 1> contain a set
+of good enough features for reconstructing as many ECG
+waveforms (standard and ill-shaped) as possible; 2> have the
+ability for analysing sequential data. In the realm of deep
+learning, there are two widely used networks, namely,
+convolutional neural network[32] and recurrent neural
+network [41] with the former focusing on feature extraction
+and the latter on sequence analysis.
+
+
+
+
+                                                                                              Figure 2: Model Architecture: a) Branched b) Stacked
+                    Figure 1: Examples of ECG Beats
+                                                                                     We have implemented a deep learning model as illustrated in
+There has been some research either on using stacked/deep
+                                                                                     Figure 2.a. The model, in brief, has a convolutional block for
+RNN [25][29] or on using deep CNN [8][42] alone for ECG
+                                                                                     feature extraction, a recurrent network block for temporal
+classification. It is difficult to evaluate whether these works
+                                                                                     variance analysis and Softmax layers for classification. Unlike
+have fully utilised the power of these models. For example,
+                                                                                     a standard stacked architecture, as shown in Figure 2.b, our
+using stacked RNNs/LSTMs alone, it is based on the
+                                                                                     model has a branched-out structure after the convolutional
+assumption that these stacked LSTM layers can extract good
+                                                                                     block. One branch is built with recurrent layers followed by a
+features. However, it is challenging for an LSTM layer to
+                                                                                     Softmax layer, and another is directly wired to a Softmax
+learn local features of input unless the model goes really deep
+                                                                                     layer. Outputs from both Softmax layers are then merged with
+and extensive, which ends up with almost infinite training
+                                                                                     equal weights as the final output of the model. Although there
+time. In fact, the work presented in [42] has deployed wavelet
+                                                                                     have been some other efforts on using CNN and recurrent
+sequence (WS) layers on top of the LSTM layers in their
+                                                                                     network together[43], it is conjectured that the branched
+network architecture. These WS layers essentially are feature
+                                                                                     architecture will work better.
+extraction layers with specific focuses on wavelet
+                                                                                     For a stacked architecture, during the training process, the
+transformation. On the other hand, using CNN alone is
+                                                                                     recurrent layers receive the full back-propagated errors. These
+effective in learning good local features (as well as the
+                                                                                     errors are digested by them first before getting further
+combinations of them). However, the time variance
+L. Guo et al.: Inter-Patient ECG Classification with Convolutional and Recurrent Neural Networks                                                             9
+
+
+
+propagated to the dense blocks. After many steps of
+processing, the error gets smaller and smaller before they
+come out from the recurrent units. The recurrent layers only
+have local views and try to minimise those errors without
+considering how the minimisation will affect the lower dense
+block layers. This leads to a model with better optimised top
+layers but less optimised lower layers. In contrast, with our
+branched architecture, the errors are first split equally between
+the recurrent block and the convolutional block. Therefore, the
+lower convolutional block receives higher gradients values
+than that of a stacked architecture, and are trained more                            Figure 4: Internal Look of a Dense Block. All the values in this
+sufficiently. The trade-off, however, is the recurrent branch                        diagram are for demonstration purpose only. In the 24@8
+receive fewer gradient values comparing to the stacked one.                          annotation, 24 is the filter number and 8 is the filter size used for that
+Since for ECG classification, we equally care about temporal                         conv layer. The example growth rate used for this dense block is 12,
+variance and morphological information of a signal, the                              which means the successive conv layer always has 12 more filters in
+                                                                                     addition to the concatenated filters from its last two layers. Taking
+branched architecture is favoured over another one. The
+                                                                                     the 3rd conv layer as an example, the concatenated filters are 60 from
+primary model components and the details of each are                                 the last two layers. As the growth rate is 12, it has 70 filters in total.
+explained below.                                                                     The growth rate does not apply to the last transition layer. For a
+    1) Densely connected convolutional network block                                 compression rate of 0.8, it has 221 (276*0.8) filters.
+This component is used for extracting different levels of
+                                                                                     Figure 4 shows the internal look of a dense block. With such a
+features from the input ECG signals. DenseNet is a special
+                                                                                     structure, filters learnt from the previous layers are pushed
+kind of convolutional neural network with direct connections
+                                                                                     towards to the end of the chain along with the new filters from
+from one layer to all its subsequent layers. In other words, a
+                                                                                     the later layers. Outputs from each layer are batch normed[44],
+layer in DenseNet receives outputs from all its previous layers
+                                                                                     first for removing covariate shifts before they go into rectified
+and “forwards” them to the next layer together with its own
+                                                                                     linear units (ReLU) for activations. The transition layer (the
+output. This property is beneficial for ECG signal
+                                                                                     last layer coloured in yellow in the diagram) plays a
+classifications. ECG diagnosis normally involves uses of
+                                                                                     compression role to ensure the size of the network does not
+several key clinical features, e.g. R-R interval, P wave
+                                                                                     explode. It takes activations from all the filters in a dense
+duration, QRS duration, S-T-U duration, by cardiologists.
+                                                                                     block and compresses them by using a smaller number of
+                                                                                     filters and pooling operations.
+                                                                                          2) Gated recurrent unit block with attention
+                                                                                     This component receives activations from the last dense block
+                                                                                     and analyses them sequentially for learning temporal features
+                                                                                     of the inputs. The key elements in this component are the
+                                                                                     gated recurrent network layers. GRU can be considered as a
+                                                                                     variation of long-short-term-memory(LSTM) [45] because
+                                                                                     both are designed similarly and, in some cases, produce
+                                                                                     equally excellent results[15]. For this work, we choose GRU
+                                                                                     purely based on the consideration of training time. As the
+                                                                                     GRU does not introduce the forget gate, it reduces the
+                                                                                     computation time accordingly.
+           Figure 3: DenseNet Layer vs Normal CNN Layer
+
+With such an architecture, low and high-level features are
+combined (concatenated) together at each convolutional layer
+(as shown in Figure 3.a). In contrast, with a “vanilla” version
+of CNN, low-level features can only contribute to the final
+classification through several layers of transformation (as
+sown in Figure 3.b). Since we do not know what feature and at
+what level, has a positive impact on the final classification                                      Figure 5: Gated Recurrent Unit with Attention
+result, it is sensible to treat them in a flat manner, instead of
+using them hierarchically. For our work, we have used dense                          Inspired by the work from image recognition and the language
+blocks each with 4 convolutional layers inside, followed by a                        translation domain, we also implemented the attention
+transition layer.                                                                    mechanism[16] for the GRU layer. The attention mechanism,
+                                                                                     in short, is to make the GRU layer focus on and learn (pay
+                                                                                     more attention) specific parts/features of the inputs and
+                                                                                     produce results accordingly. Taking the two abnormal ECG
+                                                                                     waves from Figure 1 as examples, when a standard GRU layer
+L. Guo et al.: Inter-Patient ECG Classification with Convolutional and Recurrent Neural Networks                                                   9
+
+
+
+sees them, every data point in the signal is analysed one by
+one sequentially, and the final state of the GRU is used for
+producing the final results. More specifically, the network
+only uses the final state of the GRU for its output as shown in
+Figure 5.a. An attention enabled GRU unit as shown in Figure
+5.b, instead, takes the sum of the weighted combination of all
+the GRU internal states and use it for final classification.
+Therefore, the most significant parts of the input (in our case,
+the ill-shaped waves) receives more updates at the network
+back-propagation stage.
+
+         IV. EXPERIMENTS AND EVALUATION RESULTS
+A. Dataset
+To work with real device independent and inter-patient data,
+we chose to use ECG records from two open-source
+PhysioBank databases, namely the MIT-BIH Arrhythmia
+database and the MIT-BIH Supraventricular Arrhythmia                                 Table 1: Mapping the MIT-BIH Arrhythmia Database Heartbeat
+database [46].                                                                       Types to the AAMI Heartbeat Classes[17]
+    1) The MIT-BIH Arrhythmia Database (mitdb)
+                                                                                     B. Data Pre-processing and Segmentation
+This database consists of a 48-half-hour long ECG recording
+from 47 patients. Each record is sampled at 360Hz and was                            Baseline-wondering of all the ECG records is first removed
+interpreted, validated and annotated by at least two                                 using 200ms and 600ms median filter, followed by applying a
+cardiologists. This dataset contains 23 recordings that were                         uniform moving average with window size 7 for removing
+randomly selected from a set of 4000 ambulatory 24-hours                             high-frequency powerline and muscle noises. Finally, to speed
+ECGs and were collected from a mixed cohort of inpatients                            up the training process, all records are resampled from their
+and outpatients at the medical centre. The other 25 recordings                       original sample rate (360Hz for mitdb, 128Hz for svdb) to
+were selected from the same 4000 set which includes less                             180Hz.
+common but clinically symbolic arrhythmias. Signals from                             To ensure the model to be trained with enough information of
+mitdb have two channels, and we used data from the MLII[46]                          both temporal variance and morphological structures, we
+channel for generating our datasets.                                                 choose to use 10 seconds length data segmentation that
+   2) The MIT-BIH Supraventricular Arrhythmia database                               contains at least 6 heartbeats (40 heartbeats per minute for the
+(svdb)                                                                               worst case scenario), as the input for our model. Training data
+                                                                                     segments are generated by taking 10 seconds data points from
+This database includes 78 half-hour ECG recordings chosen to                         ECG records using their beat annotation indexes (shifted one
+supplement the examples of supraventricular arrhythmias in                           by one from the beginning). The corresponding target data is
+the MIT-BIH Arrhythmia Database. Records in this database                            encoded using the one-hot-encoding vector. The class label of
+are all sampled at 128Hz and have two channels as well.                              target data is determined by the most occurred annotation in
+ECG1 [46] channel is used in this work.                                              the corresponding training data segment. N annotations are
+    3) Classes Mapping to AAMI Standard                                              excluded if annotations of other classes exist.
+To compare the classification results with the state-of-the-art                      In order to compare the performance of our work with the
+                                                                                     others’, data segments from a 22 patients subset (referred as
+works, the preparation of dataset closely follows the
+                                                                                     DS1 later) is chosen as the first training set: DS1 = { 101,
+recommendations of the Association for the Advancement of
+                                                                                     106,108, 109, 112, 114, 115, 116, 118, 119, 122, 124, 201,
+Medical Instrumentation (AAMI) [47] for class labelling and
+                                                                                     203, 205, 207, 208, 209, 215, 220, 223, 230}, while segments
+results in the presentation. More specifically, the AAMI
+standard defines five classes of interest: normal (N),                               from another subset (referred as DST1) of 22 patients are
+                                                                                     chosen as the testing set: DST1 ={ 100, 103, 105, 111, 113,
+ventricular (VEB), supraventricular (SVEB), fusion of normal
+                                                                                     117, 121, 123, 200, 202, 210, 212, 213, 214, 219, 221, 222,
+and ventricular (F) and unknown beats (Q). Regardless of the
+                                                                                     228, 231, 232, 233, 234}. The remaining 4 patient recordings
+class definition, this standard essentially recommends for
+                                                                                     from the mitdb are not considered as they are on pacemakers
+performance evaluation of inter-patient scenario (i.e., training
+and test ECG beats are extracted from different patients). The                       and are consisted of only paced, (unknown type) heartbeats.
+ECG records from the MIT-BIH database for example,                                   We also generated another training set DS2 and testing set
+                                                                                     DST2 that includes all the records from the svdb. As a result,
+however, have 15 different beat types and therefore need to be
+                                                                                     we generated 51,912 samples from DS1, 92,724 samples from
+mapped to these five classes accordingly. The beat type
+                                                                                     DS2 for training, and 50,900 samples from DST1, 94,130
+mappings between the AAMI recommended class types and
+                                                                                     samples from DST2 for testing. Table 2 shows the breakdown
+MIT-BIH beat type are shown in Table 1.
+                                                                                     of the 5 classes of beat subtypes in the generated datasets.
+                                                                                     Training and testing datasets are standardised with a mean of 0
+                                                                                     and a standard deviation of 1 separately.
+L. Guo et al.: Inter-Patient ECG Classification with Convolutional and Recurrent Neural Networks                                                      9
+
+
+
+           N            SVEB        VEB         F          Q          Total             length. The input length for the GRU layer is therefore set
+                                                                                        to 28. This also indicates that the output from the lower
+DS1        30,966       4,854       15,648      409        35         51,912
+                                                                                        dense block has to be 28.
+DST1       29,980       4,225       15,373      1,251      71         50,900         4. Pool size and pool stride for transition layers: Because we
+                                                                                        are not able to perform pooling operations inside a dense
+DS2        39,669       30,064      22,672      137        182        92,724
+                                                                                        block, it has to be done at the transition layer. To reduce
+DST2       48,690       22,997      22,329      17         97         94,130            the sequence length from 1800 (180*10) to 30, we will
+Total      149,305      62,140      76,022      1,814      385        289,666
+                                                                                        need 6 pooling operations for the stride value of 2, so are 6
+                                                                                        transition layers and 6 dense blocks. Alternatively, we
+   Table 2: Breakdown of Beat Subtypes in the Generated Dataset                         could have 4 pooling operations with the stride value of 4,
+                                                                                        which leads to 4 dense blocks and 4 transition layers. In
+C. Evaluation Metrics, Model Parameters and Training                                    order to determine the best stride value for all transition
+The measurement metrics used for evaluating classification                              layers, we carried a simple parameter search experiment in
+performance are as follows:                                                             which we used a small dataset (10% class-balanced data
+Accuracy: Acc = (TP+TN)/(T P+FP+TN+FN),                                                 from DS1) for training models with all possible stride value
+Sensitivity: Sen = TP/(TP+FN),                                                          ranging from 2 to 8 and used the F1 score for SVEB
+                                                                                        classification as the performance metric. The result shows
+Specificity: Spe=TN/(FP+TN),
+                                                                                        that when we set the stride value to 2 in all transition layers,
+Positive Predictivity: Ppr=TP /(FP+TP).                                                 the model achieved the best performance at 51.23, whereas
+The above four metrics are computed by the quantity of true                             50.13 when the stride value is 4. We choose to use the latter
+positive (TP), false positive (FP), true negative (TN), and false                       one in our final model as giving the close performance, a
+negative (FN). F1 Score=2(Sen*Ppr) /(Sen+Ppr) is used as the                            larger stride value helps reduce the total model parameters.
+combined metric for performance comparison.
+                                                                                     As we applied batch normalisation after each convolution
+There are a few key model parameters that need to be set
+                                                                                     layer, a small dropout value 0.25 is adopted for model
+before model training. Some of them are chosen using specific
+                                                                                     regularisation. We train our model for 500 epochs with a batch
+clinical knowledge for ECG analysis, and some of them are set
+                                                                                     size of 50 using an early stop monitor on validation loss with
+via parameter searching. Each of the four strategies is
+                                                                                     50-epochs patience. The optimiser we use is Adam[48] with
+explained below:
+                                                                                     an initial learning rate set to 5e-4. The training is carried on
+1. Filter/kernel size for convolutional layers: Filter size for the
+                                                                                     NVIDIA GTX 1080i GPUs and the average training time for
+   initial convolutional layer is set to 8 and remains
+                                                                                     each epoch of the full DS1 training set is around 230 seconds.
+   unchanged in all convolutional layers. This is because, for
+                                                                                     Table 3 summarises the values of key model parameters used
+   our 180Hz sampled data segment, 8 data points represent
+                                                                                     in this study.
+   44ms (5.6ms each data point) in time that is sufficiently
+                                                                                       Parameter                                             Values
+   small for composing most of the ECG features (e.g. QRS
+   complexes normally have the shortest duration, around                               Filter size of conv layers:                           8
+   60ms).                                                                              No. of filters & growth rate for conv layers:         48&24
+2. Number of convolutional layers in a dense block: Due to the
+   concatenation operations required in the dense blocks, the                          No. of conv layers in each dense block:               4
+   first dimension (signal length) of adjacent layers have to be                       No. of dense blocks:                                  4
+   the same. Therefore, it is not possible to perform pooling
+                                                                                       Transition layer pool size:                           4
+   operations inside a dense block, which means the stride size
+   for each convolutional layer has to be exactly one. As a                            Transition layer stride size:                         4
+   consequence, the depth of a dense block actually is                                 Transition layer compression rate:                    0.8
+   determined by the filter size of the final convolutional layer
+   inside it. Since a regular P-R interval from an ECG QRS                             Input sequence length of GRU layer:                   28
+   complex has the largest value (around 120ms-200ms)                                  Units of GRU layer:                                   64
+   amongst all the important ECG waves and intervals, for a
+   single filter that can cover this, we need to make the size of                      Dropout value:                                        0.25
+   it to 40 data samples. This, as a result, leads to a dense                          Mini-batch size:                                      50
+   block with 5 convolutional layers (filter size 8 for the first
+                                                                                       Initial learning rate:                                5e-4
+   layer and 40 for the last layer).
+3. Input length for the GRU layers: Since GRU layers use                                           Table 3: Values of Key Model Parameters
+   outputs from the dense block components and use them for
+   time variance analysis. It is rational to decide the input                        D. Model Performance Evaluation
+   length for GRU layer first as this decision will affect how                       To evaluate the performance of the proposed work, we
+   many dense blocks we will need on the top. For a 10                               compare the results of our work with existing methods that
+   seconds ECG segment, we know there are around 8-30                                also comply with the AAMI standard. According to AAMI
+   QRS complexes. For the extreme case (28 QRS                                       recommendations, the SVEB and VEB detections are
+   complexes), we will need 28 input features to cover the full                      considered separately. The performance evaluation results for
+L. Guo et al.: Inter-Patient ECG Classification with Convolutional and Recurrent Neural Networks                                                         9
+
+
+
+Methods         SVEB                                                                       VEB
+                T1: Classification results using all training data in DS1 and all testing data DST1 (mitdb)
+                Acc (%)        Sen (%)        Spe (%)        Ppv (%)        F1             Acc (%)     Sen (%)      Spe (%)      Ppv (%)       F1
+Chazel          94.6           75.9           N/A            38.5           51.08          97.4        77.7         N/A          81.9          79.74
+et al. [17]
+Matthew         93.4           75.12          N/A            32.84          45.7           93.51       76           N/A          49.97         65.13
+et al. [49]
+Matthew         93.78          88.39          N/A            33.63          48.72          96.63       77.74        N/A          69.2          80.53
+et al.[4]
+Rahlal          94.9           37.8           97.5           40.5           39.1           97.8        90.1         98.6         87.1          88.57
+et al. [7]
+Jiang           96.6           50.6           98.8           67.9           57.99          98.1        86.6         99.3         93.3          89.82
+ el al [27]
+Ince            96.1           62.1           98.5           56.7           59.28          97.6        83.4         98.1         87.4          85.21
+el al.[21]
+Raj        et   89.79          38.79          94.41          38.58          38.6           87.12       88.57        88.57        73.93         80.59
+al.[39]*
+Stacked*        93.82          72.99          95.71          60.61          66.23          90.08       89.57        90.30        79.98         84.50
+This work       93.61          62.70          96.40          61.21          61.94          93.71       91.25        94.77        88.30         89.75
+                T2: Classification results using random training data in DS 1&DS2 and all testing data in DST1 (mitdb)
+This work       92.54         69.82        94.60         53.92        60.85        93.54        91.23         94.54       87.85                89.51
+                T3.a: Classification results using the full mitdb (DS1+DST1) for training and testing data in DST2 (svdb)
+Rahlal
+                90.61          8.80           96.32          14.31          10.90          66.27       65.19        66.32        6.31          11.51
+et al. [7]
+This work       68.73          7.90           97.91          64.50          14.08          81.92       86.81        80.33        58.82         70.13
+                T3.b: Classification results using pre-trained model from T2 and all testing data in DST2 (svdb)
+This work       88.54          71.29          94.12          79.66          75.24          92.17       79.96        95.96        86.03         82.89
+                T4: Classification results using pre-trained model from T2 and all testing data in DST1 & DST2 (mitdb+svdb)
+ This work 88.99             69.35        94.38       77.20        73.07        91.71        81.80         95.93        89.52        85.49
+Table 4: Classification results in terms of SVEB and VEB using the testing records of MIT-BIH. 1) Work that is marked with * is implemented
+by us for comparison purposes as we are interested in them but cannot find literature that uses the same testing dataset. For instance, the
+original work in Raj et al. [46]* has used the PhysioNet/CiC Challenge 2017 dataset for testing. To evaluate the effectiveness of the model, we
+had to implement the model as described in the original paper and applied it to our testing dataset with a few parameter tunings. However, this
+should not de-value the author’s original work. Stacked* is the model shown in Figure 2.b and is fine-tuned using similar approaches applied
+to the branched architecture. 2) The two work that is greyed out has used 300 beats for each record from the testing set.
+all our experiments are given in Table 4. The works [5][6][22]                       performance drop on the chart for SVEB and F classes with
+that have used a good number of annotated beats from the                             full training data DST1.
+testing records for training purposes are not included in this
+study. Although those beats are not used in the testing stage,
+they do help the model learn patient or even record specific
+patterns thus leading to a better performance when given the
+rests of the “already seen” record.
+    1) Performance Evaluation using mitdb Data
+To evaluate how training data size affects the model
+performance, the model is first trained with datasets of
+different sizes from DS1 and then evaluated using the full
+testing records DST1. Training data is randomly drawn from
+DS1 with balanced loads for all classes with a gradual size
+increase in the dataset. Performances of the model for
+different training data sizes are given in Figure 6. It can be                       Figure 6: Classification Performances with Different Sizes of
+seen that the overall performance of the model does increase                         Training Data from DS1. The above performance figure for each data
+along with the training data size except for the F class which is                    size is the aggregated mean of multiple testing results using non-
+largely under-represented in DS1. The model achieved its best                        replacement data sampling. As the data size increases, when the
+performance for SVEB and F classes (F1=65.49 for SVEB                                required sample number of a class exceeds its maximum in DS 1, the
+                                                                                     non-replacement sampling only applies to the rests of classes. This
+class and F1=60.73 for F class) with training datasets of size                       process is repeated until the data are fully sampled from the DS1 in a
+40946, whereas for Normal class and VEB class, the best                              single go.
+performance is achieved with the full DS1 data (F1=90.54 for
+SVEB class and F1=89.75 for F class). There is a noticeable
+L. Guo et al.: Inter-Patient ECG Classification with Convolutional and Recurrent Neural Networks                                                     9
+
+
+
+As shown in Table 4, for experiment T1, this proposed work                           In T3.a, we re-trained the model from T 1 using the full mitdb
+(branched      architecture)  has     achieved      considerable                     data (DS1+DST1) and applied the final model to the DST2
+performance improvement on SVEB detection. The F1 score is                           (svdb) testing data. In this experiment, the model has not seen
+improved by almost 21% from 51.08 (the current state-of-the-                         any svdb data in training and can only use features learnt from
+art) to 66.23/61.94 (stacked/branched). It also performs better                      the mitdb for classifications. Even for such an extreme case, it
+on the VEB detection with (F1=89.75) than the current state-                         has successfully (comparing to the work presented in [7])
+of-the-art performance (F1=88.57). Even for the work [21][27]                        scored F1=70.13 for VEB detection. This can further prove
+that have used beats from the testing data in their training, our                    that the model has learnt generic morphological features.
+model still outperforms on SVEB detection and with a very                            Despite the fact that the SVEB detection result is also better
+close performance on VEB detection (F1=89.75 vs F1=89.82).                           than another work [7] (F1=14.08 vs F1=10.90), the low value
+                                                                                     indicates that the temporal variant information is very data
+                                                                                     dependent and cannot be easily generalised from a small
+                                                                                     dataset with varied properties. In T3.b, we tested the pre-
+                                                                                     trained model from T2 using DST2 testing data. We use this
+                                                                                     experiment to simulate a practical scenario where a pre-trained
+                                                                                     model is used for classifying new data. The model
+                                                                                     performance was boosted to F1=75.24 for SVEB detection and
+                                                                                     F1=82.89 in this case.
+                                                                                     In the last experiment T4, the scalability of the model was
+                                                                                     investigated further via testing the pre-trained model from T2
+                                                                                     on classifying the full testing data from DST1 and DST2. The
+                                                                                     results (N: 92.70, SVEB: 73.07, VEB: 85.49, F: 59.85) are, in
+                                                                                     fact, very close to the weighted (based on the number of class
+Figure 7: Classification Performances for 4 classes (Stacked vs                      samples in the testing data from each database) averages of T 2
+Branched).                                                                           and T3.b’s results. This suggests that the model’s performance
+It can be noticed that from the results, the stacked architecture                    and stability are not affected by the heterogeneities of different
+achieved the highest score on SVEB detection with F 1=66.23.                         data sources, but are only dependent on whether such
+However, if we look at the overall classification performances,                      heterogeneities are represented sufficiently in the training
+clearly the branched architecture performs better. From                              data.
+Figure 7, it can be seen that the stacked network is only more
+effective on SVEB detection, whereas it performs worse on N,                         E. Discussion
+VEB and F classes. This is consistent with the discussion in                         Although from the experiments, the proposed architecture has
+section III.2.                                                                       been approved to deliver consistent performance, it is still
+                                                                                     interesting and necessary for us to understand what the model
+   2) Model Performance and Scalability Evaluation Using                             has learnt. To gain insight into the model, it is necessary to
+mitdb and svdb Data                                                                  visualise the activations of the last Conv layer before the GRU
+To verify the scalability of the model, additional training and                      layer, and the activations of the GRU layer after the attention
+testing of the model was conducted using both mitdb and svdb                         mechanism is applied.
+data.                                                                                Figure 9 shows the activations of a group of correctly
+Experiment T2 aims to test that with a relatively larger, more                       classified and misclassified input signals. The high spikes in
+balanced but heterogeneous dataset, whether there would be                           the activation map show what the model focus on when it sees
+improvements in the model performance or not. Firstly, 5 new                         the signal. For those correctly classified samples, we can see
+training datasets were constructed, each with the 51763 data                         that both conv layer and GRU layer have the right focus (high
+via non-replacement sampling from DS1 (mitdb) and DS2                                spikes at the right position), while the GRU layer seems to be
+(svdb). They represent better balanced datasets (N: 17,000,                          more detailed. For example, for the a.1 signal, we have two
+SVEB: 17,000, VEB: 17,000, F: 546, Q: 217)1. Following the                           noticeable spikes in the conv layer activation map but four in
+first stage, the model with the best performance from T 1 was                        the GRU’s one that covers the four ill-shaped beats in the
+re-trained using the new datasets and was tested using the                           input signal (S, V, V, V). This is similar to the a.2 case.
+DST1 dataset. The test result shows that the model averagely                         However, for the a.3 case, the conv layer seems to be more
+scored F1= 92.67 for N class, F1= 60.85 for SVEB class, F1=                          sensible as it spikes both F beats whereas the GRU layer only
+89.51 for VEB class and F1= 62.65 for F class. The results are                       flags the latter one with a more focused spike. It is also
+similar to what the model achieved using the DS1 only dataset                        interesting to see both layers treat a.4 as an N record despite
+for training, with clear improvement on N and F class                                that it has a V shape noise in the middle. As for the
+detection. Also, an interesting observation of this experiment                       misclassified sample, b.1, the conv layer successfully spikes it,
+is that given the model performances for SVEB and VEB                                but the GRU layer almost completely ignores it. For b.2, both
+classification remain consistent, this reveals that the mitdb and                    layers focus at the right position but not with enough
+svdb data do share some common features.                                             confidence (the spikes are not significant enough). b.3 is an
+                                                                                     interesting case, both layers spiked it successfully but
+   1
+                                                                                     considered it as V class. The F beat does look like a V beat as
+     Unless otherwise stated, all the data in the new training datasets
+are resampled to 180Hz and re-standardised.
+                                                                                     shown in a.2. However, the network manages to classify the
+L. Guo et al.: Inter-Patient ECG Classification with Convolutional and Recurrent Neural Networks                                                            9
+
+
+
+
+Figure 8: Visualisation of Layer Activations. The first row shows the input ECG signal. The second row shows layer activations of the last
+convolution layer before the GRU layer. The third row shows layer activations of the GRU layer. Each bin in the diagram represent the sum of
+activations for all filters/units that cover a specific local area in the original signal. Putting all them together, we are able to visualise the total
+activations from a layer for all different local areas in the input signal. In other words, a local area that receives more activations (high spikes
+in the figure) is considered more important by the network for the final classification. Note: As we have applied pooling operations in the
+model (input size gets reduced from 1800 to 28), the above activation map is re-constructed (from 28 back to 1800) using un-pooling
+operations.
+a.2 correctly which contains two similar shaped F beats. This                        conducted show that this proposed model has achieved
+requires further investigation and understanding of the                              considerable performance improvement compared to the
+network behaviour. The misclassification for b.4 is easy to                          current state-of-the-art with good scalability. The experiment
+understand. The last four beats, although annotated as normal                        results also indicate that the model performance remains
+beats, have different shapes as compared to the first two                            consistent across two heterogeneous data sources.
+normal beats. Looking into the activation map, it is believed                        To further extend this work, we will increase the depth of the
+that some of the misclassifications can be improved via further                      network to test if the model can learn more generic features
+parameter tuning, e.g. filter size in particular and larger                          (features that are useful for any ECG dataset). We also plan to
+network capacity. This will be the basis for future work.                            apply a similar approach to multi-label ECG classification
+                                                                                     problem. In this work, data segments are annotated using the
+               V. CONCLUSION AND FUTURE WORK                                         maximum occurred annotations from the databases. However,
+As we are entering the cloud-enabled healthcare era, the                             in reality, it is often to see records that contain multiple classes
+development of automatic diagnosis/early warning services                            (as shown in Figure 8.a.1 and a.2). A model that is able to
+based on large volume but heterogeneous data sources has                             label all different types of classes accurately would
+become the key to success.                                                           undoubtedly help with the fast developing trend of cloud-
+In this paper, we presented our work on using a branched deep                        based healthcare services.
+learning model for inter-patient ECG classification problem.
+We discussed the model design rationale and justified out                                                          References
+choices of each component. How the important parameters of                           [1] H. Kim, S. Kim, N. Van Helleputte, A. Artes, M. Konijnenburg, J.
+                                                                                         Huisken, C. Van Hoof, and R. F. Yazicioglu, ‘A Configurable and Low-
+the model are chosen is also explained. The experiments
+L. Guo et al.: Inter-Patient ECG Classification with Convolutional and Recurrent Neural Networks                                                                  9
+
+
+
+     Power Mixed Signal SoC for Portable ECG Monitoring Applications’,                    Classification’, IEEE Trans. Biomed. Eng., vol. 59, no. 1, pp. 241–247,
+     IEEE Trans. Biomed. Circuits Syst., vol. 8, no. 2, pp. 257–267, 2014.                Jan. 2012.
+[2] D. D. Mehta, N. T. Nazir, R. G. Trohman, and A. S. Volgman, ‘Single-             [26] J. Rodriguez, A. Goni, and A. Illarramendi, ‘Real-Time Classification of
+     lead portable ECG devices: Perceptions and clinical accuracy compared                ECGs on a PDA’, IEEE Trans. Inf. Technol. Biomed., vol. 9, no. 1, pp.
+     to conventional cardiac monitoring’, J. Electrocardiol., vol. 48, no. 4,             23–34, Mar. 2005.
+     pp. 710–716, Jul. 2015.                                                         [27] W. Jiang, S. G. Kong, Wei Jiang, and G. Seong Kong, ‘Block-based
+[3] Y. Li, L. Guo, and Y. Guo, ‘Enabling Health Monitoring as a Service in                neural networks for personalized ECG signal classification’, IEEE
+     the Cloud’, in 2014 IEEE/ACM 7th International Conference on Utility                 Trans. Neural Networks, vol. 18, no. 6, pp. 1750–1761, Nov. 2007.
+     and Cloud Computing, 2014, pp. 127–136.                                         [28] M. Lagerholm, C. Peterson, G. Braccini, L. Edenbrandt, and L. Sornmo,
+[4] S. M. Mathews, C. Kambhamettu, and K. E. Barner, ‘A novel                             ‘Clustering ECG complexes using Hermite functions and self-organizing
+     application of deep learning for single-lead ECG classification’, Comput.            maps’, IEEE Trans. Biomed. Eng., vol. 47, no. 7, pp. 838–848, Jul. 2000.
+     Biol. Med., vol. 99, pp. 53–62, Aug. 2018.                                      [29] Y. Bengio, A. Courville, and P. Vincent, ‘Representation learning: A
+[5] P. De Chazal, M. O’Dwyer, and R. B. Reilly, ‘Automatic classification                 review and new perspectives’, IEEE Trans. Pattern Anal. Mach. Intell.,
+     of heartbeats using ECG morphology and heartbeat interval features’,                 vol. 35, no. 8, pp. 1798–1828, 2013.
+     IEEE Trans. Biomed. Eng., vol. 51, no. 7, pp. 1196–1206, 2004.                  [30] G. E. Hinton, S. Osindero, and Y.-W. Teh, ‘A fast learning algorithm for
+[6] Y. H. Hu, S. Palreddy, and W. J. Tompkins, ‘A patient-adaptable ECG                   deep belief nets’, Neural Comput., vol. 18, no. 7, pp. 1527–1554, 2006.
+     beat classifier using a mixture of experts approach’, IEEE Trans.               [31] P. Vincent, H. Larochelle, Y. Bengio, and P.-A. Manzagol, ‘Extracting
+     Biomed. Eng., vol. 44, no. 9, pp. 891–900, 1997.                                     and composing robust features with denoising autoencoders’, in
+[7] M. M. Al Rahhal, Y. Bazi, H. AlHichri, N. Alajlan, F. Melgani, and R.                 Proceedings of the 25th international conference on Machine learning,
+     R. Yager, ‘Deep learning approach for active classification of                       2008, pp. 1096–1103.
+     electrocardiogram signals’, Inf. Sci. (Ny)., vol. 345, pp. 340–354, Jun.        [32] Y. LeCun and Y. Bengio, ‘Convolutional networks for images, speech,
+     2016.                                                                                and time series’, Handb. brain theory neural networks, vol. 3361, no. 10,
+[8] S. Chauhan and L. Vig, ‘Anomaly detection in ECG time signals via                     p. 1995, 1995.
+     deep long short-term memory networks’, in 2015 IEEE International               [33] R. Donida Labati, E. Muñoz, V. Piuri, R. Sassi, and F. Scotti, ‘Deep-
+     Conference on Data Science and Advanced Analytics (DSAA), 2015, pp.                  ECG: Convolutional Neural Networks for ECG biometric recognition’,
+     1–7.                                                                                 Pattern Recognit. Lett., Mar. 2018.
+[9] B. H. Tracey and E. L. Miller, ‘Nonlocal means denoising of ECG                  [34] Y. Yan, X. Qin, Y. Wu, N. Zhang, J. Fan, and L. Wang, ‘A restricted
+     signals’, IEEE Trans. Biomed. Eng., vol. 59, no. 9, pp. 2383–2386, 2012.             Boltzmann machine based two-lead electrocardiography classification’,
+[10] R. Sameni, M. B. Shamsollahi, C. Jutten, and G. D. Clifford, ‘A                      in 2015 IEEE 12th International Conference on Wearable and
+     nonlinear Bayesian filtering framework for ECG denoising’, IEEE                      Implantable Body Sensor Networks (BSN), 2015, pp. 1–9.
+     Trans. Biomed. Eng., vol. 54, no. 12, pp. 2172–2185, 2007.                      [35] D. Wang and Y. Shang, ‘Modeling Physiological Data with Deep Belief
+[11] R. Hoekema, G. J. H. Uijen, and A. Van Oosterom, ‘Geometrical aspects                Networks.’, Int. J. Inf. Educ. Technol., vol. 3, no. 5, pp. 505–511, 2013.
+     of the interindividual variability of multilead ECG recordings’, IEEE           [36] M. Zubair, J. Kim, and C. Yoon, ‘An Automated ECG Beat
+     Trans. Biomed. Eng., vol. 48, no. 5, pp. 551–559, 2001.                              Classification System Using Convolutional Neural Networks’, in 2016
+[12] J. Wiens and J. V Guttag, ‘Active learning applied to patient-adaptive               6th International Conference on IT Convergence and Security (ICITCS),
+     heartbeat classification’, in Advances in neural information processing              2016, pp. 1–5.
+     systems, 2010, pp. 2442–2450.                                                   [37] U. R. Acharya, H. Fujita, S. L. Oh, U. Raghavendra, J. H. Tan, M.
+[13] S. Kiranyaz, T. Ince, and M. Gabbouj, ‘Real-Time Patient-Specific ECG                Adam, A. Gertych, and Y. Hagiwara, ‘Automated identification of
+     Classification by 1-D Convolutional Neural Networks’, IEEE Trans.                    shockable and non-shockable life-threatening ventricular arrhythmias
+     Biomed. Eng., vol. 63, no. 3, pp. 664–675, 2016.                                     using convolutional neural network’, Futur. Gener. Comput. Syst., vol.
+[14] G. Huang, Z. Liu, L. van der Maaten, and K. Q. Weinberger, ‘Densely                  79, pp. 952–959, Feb. 2018.
+     Connected Convolutional Networks’, Aug. 2016.                                   [38] K. He, X. Zhang, S. Ren, and J. Sun, ‘Deep Residual Learning for Image
+[15] J. Chung, C. Gulcehre, K. Cho, and Y. Bengio, ‘Empirical Evaluation of               Recognition’, Dec. 2015.
+     Gated Recurrent Neural Networks on Sequence Modeling’, Dec. 2014.               [39] P. Rajpurkar, A. Hannun, … M. H. preprint arXiv, and undefined 2017,
+[16] K. Gregor, I. Danihelka, A. Graves, D. J. Rezende, and D. Wierstra,                  ‘Cardiologist-level arrhythmia detection with convolutional neural
+     ‘DRAW: A Recurrent Neural Network For Image Generation’, Feb.                        networks’, arxiv.org.
+     2015.                                                                           [40] D. Albert, B. R. Satchwell, and K. N. Barnett, ‘Wireless, ultrasonic
+[17] P. De Chazal, M. O’Dwyer, R. B. R. B. Reilly, P. deChazal, M.                        personal health monitoring system’. Google Patents, 2012.
+     O’Dwyer, and R. B. R. B. Reilly, ‘Automatic classification of heartbeats        [41] T. Mikolov, M. Karafiát, L. Burget, J. Cernock\`y, and S. Khudanpur,
+     using ECG morphology and heartbeat interval features’, IEEE Trans.                   ‘Recurrent neural network based language model.’, in Interspeech, 2010,
+     Biomed. Eng., vol. 51, no. 7, pp. 1196–1206, Jul. 2004.                              vol. 2, p. 3.
+[18] P. de Chazal and R. B. Reilly, ‘A Patient-Adapting Heartbeat Classifier         [42] R. Salloum and C.-C. J. Kuo, ‘ECG-based biometrics using recurrent
+     Using ECG Morphology and Heartbeat Interval Features’, IEEE Trans.                   neural networks’, in 2017 IEEE International Conference on Acoustics,
+     Biomed. Eng., vol. 53, no. 12, pp. 2535–2543, Dec. 2006.                             Speech and Signal Processing (ICASSP), 2017, pp. 2062–2066.
+[19] P. de Chazal, ‘Detection of supraventricular and ventricular ectopic beats      [43] M. Zihlmann, D. Perekrestenko, and M. Tschannen, ‘Convolutional
+     using a single lead ECG’, in 2013 35th Annual International Conference               Recurrent Neural Networks for Electrocardiogram Classification’, Oct.
+     of the IEEE Engineering in Medicine and Biology Society (EMBC),                      2017.
+     2013, pp. 45–48.                                                                [44] S. Ioffe and C. Szegedy, ‘Batch Normalization: Accelerating Deep
+[20] M. Llamedo and J. P. Martínez, ‘Heartbeat Classification Using Feature               Network Training by Reducing Internal Covariate Shift’, Feb. 2015.
+     Selection Driven by Database Generalization Criteria’, IEEE Trans.              [45] Y. LeCun, Y. Bengio, and G. Hinton, ‘Deep learning’, Nature, vol. 521,
+     Biomed. Eng., vol. 58, no. 3, pp. 616–625, Mar. 2011.                                no. 7553, pp. 436–444, 2015.
+[21] T. Ince, S. Kiranyaz, and M. Gabbouj, ‘A Generic and Robust System              [46] A. L. Goldberger, L. A. Amaral, L. Glass, J. M. Hausdorff, P. C. Ivanov,
+     for Automated Patient-Specific Classification of ECG Signals’, IEEE                  R. G. Mark, J. E. Mietus, G. B. Moody, C. K. Peng, and H. E. Stanley,
+     Trans. Biomed. Eng., vol. 56, no. 5, pp. 1415–1426, May 2009.                        ‘PhysioBank, PhysioToolkit, and PhysioNet: components of a new
+[22] J. L. Herlocker and J. A. Konstan, ‘Content-independent task-focused                 research resource for complex physiologic signals.’, Circulation, vol.
+     recommendation’, Internet Comput. IEEE, vol. 5, no. 6, pp. 40–47, 2001.              101, no. 23, pp. E215-20, Jun. 2000.
+[23] X. Jiang, L. Zhang, Q. Zhao, and S. Albayrak, ‘ECG Arrhythmias                  [47] A. ECAR, ‘Recommended practice for testing and reporting
+     Recognition System Based on Independent Component Analysis Feature                   performance results of ventricular arrhythmia detection algorithms’,
+     Extraction’, in TENCON 2006 - 2006 IEEE Region 10 Conference, 2006,                  Assoc. Adv. Med. Instrum., 1987.
+     pp. 1–4.                                                                        [48] D. P. Kingma and J. Ba, ‘Adam: A Method for Stochastic Optimization’,
+[24] L. Senhadji, G. Carrault, J. J. Bellanger, and G. Passariello, ‘Comparing            Dec. 2014.
+     wavelet transforms for recognizing cardiac patterns’, IEEE Eng. Med.            [49] S. M. Mathews, L. F. Polania, and K. E. Barner, ‘Leveraging a
+     Biol. Mag., vol. 14, no. 2, pp. 167–173, 1995.                                       discriminative dictionary learning algorithm for single-lead ECG
+[25] G. de Lannoy, D. Francois, J. Delbeke, and M. Verleysen, ‘Weighted                   classification’, in 2015 41st Annual Northeast Biomedical Engineering
+     Conditional Random Fields for Supervised Interpatient Heartbeat                      Conference (NEBEC), 2015, pp. 1–2.
+

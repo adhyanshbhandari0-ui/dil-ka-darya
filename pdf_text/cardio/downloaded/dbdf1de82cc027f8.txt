@@ -1,0 +1,477 @@
+                                                                     Large Kernel Matters ——
+                                                   Improve Semantic Segmentation by Global Convolutional Network
+
+                                                        Chao Peng Xiangyu Zhang Gang Yu Guiming Luo Jian Sun
+                                         School of Software, Tsinghua University, {pengc14@mails.tsinghua.edu.cn, gluo@tsinghua.edu.cn}
+                                                        Megvii Inc. (Face++), {zhangxiangyu, yugang, sunjian}@megvii.com
+
+
+
+
+arXiv:1703.02719v1 [cs.CV] 8 Mar 2017
+                                                                 Abstract
+
+                                            One of recent trends [30, 31, 14] in network architec-
+                                        ture design is stacking small filters (e.g., 1x1 or 3x3) in the
+                                        entire network because the stacked small filters is more ef-
+                                        ficient than a large kernel, given the same computational
+                                        complexity. However, in the field of semantic segmenta-
+                                        tion, where we need to perform dense per-pixel prediction,
+                                        we find that the large kernel (and effective receptive field)
+                                        plays an important role when we have to perform the clas-
+                                        sification and localization tasks simultaneously. Following
+                                        our design principle, we propose a Global Convolutional
+                                        Network to address both the classification and localization
+                                        issues for the semantic segmentation. We also suggest a               Figure 1. A: Classification network; B: Conventional segmentation
+                                        residual-based boundary refinement to further refine the ob-          network, mainly designed for localization; C: Our Global Convo-
+                                                                                                              lutional Network.
+                                        ject boundaries. Our approach achieves state-of-art perfor-
+                                        mance on two public benchmarks and significantly outper-
+                                        forms previous results, 82.2% (vs 80.2%) on PASCAL VOC
+                                        2012 dataset and 76.9% (vs 71.8%) on Cityscapes dataset.              classification performance.
+                                                                                                                 In this paper, we propose an improved net architecture,
+                                                                                                              called Global Convolutional Network (GCN), to deal with
+                                                                                                              the above two challenges simultaneously. We follow two
+                                        1. Introduction                                                       design principles: 1) from the localization view, the model
+                                                                                                              structure should be fully convolutional to retain the localiza-
+                                            Semantic segmentation can be considered as a per-pixel            tion performance and no fully-connected or global pooling
+                                        classification problem. There are two challenges in this              layers should be used as these layers will discard the local-
+                                        task: 1) classification: an object associated to a specific se-       ization information; 2) from the classification view, large
+                                        mantic concept should be marked correctly; 2) localization:           kernel size should be adopted in the network architecture
+                                        the classification label for a pixel must be aligned to the ap-       to enable densely connections between feature maps and
+                                        propriate coordinates in output score map. A well-designed            per-pixel classifiers, which enhances the capability to han-
+                                        segmentation model should deal with the two issues simul-             dle different transformations. These two principles lead to
+                                        taneously.                                                            our GCN, as in Figure 2 A. The FCN [25]-like structure
+                                            However, these two tasks are naturally contradictory. For         is employed as our basic framework and our GCN is used
+                                        the classification task, the models are required to be in-            to generate semantic score maps. To make global convolu-
+                                        variant to various transformations like translation and ro-           tion practical, we adopt symmetric, separable large filters to
+                                        tation. But for the localization task, models should be               reduce the model parameters and computation cost. To fur-
+                                        transformation-sensitive, i.e., precisely locate every pixel          ther improve the localization ability near the object bound-
+                                        for each semantic category. The conventional semantic seg-            aries, we introduce boundary refinement block to model the
+                                        mentation algorithms mainly target for the localization is-           boundary alignment as a residual structure, shown in Fig-
+                                        sue, as shown in Figure 1 B. But this might decrease the              ure 2 C. Unlike the CRF-like post-process [6], our boundary
+
+
+                                                                                                          1
+refinement block is integrated into the network and trained     tion on denseCRF and put the whole pipeline completely on
+end-to-end.                                                     GPU. Furthermore, Adelaide [21] deeply incorporates CRF
+    Our contributions are summarized as follows: 1) we pro-     and CNN where hand-crafted potentials is replaced by con-
+pose Global Convolutional Network for semantic segmen-          volutions and nonlinearities. Besides, there are also some
+tation which explicitly address the “classification” and “lo-   alternatives to CRF. [4] presents a similar model to CRF,
+calization” problems simultaneously; 2) a Boundary Refine-      called Bilateral Solver, yet achieves 10x speed and com-
+ment block is introduced which can further improve the lo-      parable performance. [16] introduces the bilateral filter to
+calization performance near the object boundaries; 3) we        learn the specific pairwise potentials within CNN.
+achieve state-of-art results on two standard benchmarks,           In contrary to previous works, we argues that semantic
+with 82.2% on PASCAL VOC 2012 and 76.9% on the                  segmentation is a classification task on large feature map
+Cityscapes.                                                     and our Global Convolutional Network could simultane-
+                                                                ously fulfill the demands of classification and localization.
+2. Related Work
+                                                                3. Approach
+    In this section we quickly review the literatures on se-
+mantic segmentation. One of the most popular CNN based             In this section, we first propose a novel Global Convolu-
+work is the Fully Convolutional Network (FCN) [25]. By          tional Network (GCN) to address the contradictory aspects
+converting the fully-connected layers into convolutional        — classification and localization in semantic segmentation.
+layers and concatenating the intermediate score maps, FCN       Then using GCN we design a fully-convolutional frame-
+has outperformed a lot of traditional methods on semantic       work for semantic segmentation task.
+segmentation. Following the structure of FCN, there are
+                                                                3.1. Global Convolutional Network
+several works trying to improve the semantic segmentation
+task based on the following three aspects.                          The task of semantic segmentation, or pixel-wise classi-
+    Context Embedding in semantic segmentation is a hot         fication, requires to output a score map assigning each pixel
+topic. Among the first, Zoom-out [26] proposes a hand-          from the input image with semantic label. As mentioned in
+crafted hierarchical context features, while ParseNet [23]      Introduction section, this task implies two challenges: clas-
+adds a global pooling branch to extract context information.    sification and localization. However, we find that the re-
+Further, Dilated-Net [36] appends several layers after the      quirements of classification and localization problems are
+score map to embed the multi-scale context, and Deeplab-        naturally contradictory: (1) For classification task, models
+V2 [7] uses the Atrous Spatial Pyramid Pooling, which is a      are required invariant to transformation on the inputs — ob-
+combination of convolutions, to embed the context directly      jects may be shifted, rotated or rescaled but the classifica-
+from feature map.                                               tion results are expected to be unchanged. (2) While for lo-
+    Resolution Enlarging is another research direction in       calization task, models should be transformation-sensitive
+semantic segmentation. Initially, FCN [25] proposes the         because the localization results depend on the positions of
+deconvolution (i.e. inverse of convolution) operation to in-    inputs.
+crease the resolution of small score map. Further, Deconv-          In deep learning, the differences between classification
+Net [27] and SegNet [3] introduce the unpooling operation       and localization lead to different styles of models. For clas-
+(i.e. inverse of pooling) and a glass-like network to learn     sification, most modern frameworks such as AlexNet [20],
+the upsampling process. More recently, LRR [12] argues          VGG Net [30], GoogleNet [31, 32] or ResNet [14] em-
+that upsampling a feature map is better than score map. In-     ploy the ”Cone-shaped” networks shown in Figure 1 A:
+stead of learning the upsampling process, Deeplab [24] and      features are extracted from a relatively small hidden layer,
+Dilated-Net [36] propose a special dilated convolution to       which is coarse on spatial dimensions, and classifiers
+directly increase the spatial size of small feature maps, re-   are densely connected to entire feature map via fully-
+sulting in a larger score map.                                  connected layer [20, 30] or global pooling layer [31, 32, 14],
+    Boundary Alignment tries to refine the predictions near     which makes features robust to locally disturbances and al-
+the object boundaries. Among the many methods, Condi-           lows classifiers to handle different types of input transfor-
+tional Random Field (CRF) is often employed here because        mations. For localization, in contrast, we need relatively
+of its good mathematical formation. Deeplab [6] directly        large feature maps to encode more spatial information. That
+employs denseCRF [18], which is a CRF-variant built on          is why most semantic segmentation frameworks, such as
+fully-connected graph, as a post-processing method after        FCN [25, 29], DeepLab [6, 7], Deconv-Net [27], adopt
+CNN. Then CRFAsRNN [37] models the denseCRF into                ”Barrel-shaped” networks shown in Figure 1 B. Techniques
+a RNN-style operator and proposes an end-to-end pipeline,       such as Deconvolution [25], Unpooling [27, 3] and Dilated-
+yet it involves too much CPU computation on Permutohe-          Convolution [6, 36] are used to generate high-resolution
+dral Lattice [1]. DPN [24] makes a different approxima-         feature maps, then classifiers are connected locally to each
+Figure 2. An overview of the whole pipeline in (A). The details of Global Convolutional Network (GCN) and Boundary Refinement (BR)
+block are illustrated in (B) and (C), respectively.
+
+
+spatial location on the feature map to generate pixel-wise                  discard localization information. Second from the classi-
+semantic labels.                                                            fication view, motivated by the densely-connected structure
+    We notice that current state-of-the-art semantic segmen-                of classification models, the kernel size of the convolutional
+tation models [25, 6, 27] mainly follow the design princi-                  structure should be as large as possible. Specially, if the ker-
+ples for localization, however, which may be suboptimal                     nel size increases to the spatial size of feature map (named
+for classification. As classifiers are connected locally rather             global convolution), the network will share the same ben-
+than globally to the feature map, it is difficult for classi-               efit with pure classification models. Based on these two
+fiers to handle different variations of transformations on the              principles, we propose a novel Global Convolutional Net-
+input. For example, consider the situations in Figure 3: a                  work (GCN) in Figure 2 B. Instead of directly using larger
+classifier is aligned to the center of an input object, so it is            kernel or global convolution, our GCN module employs a
+expected to give the semantic label for the object. At first,               combination of 1 × k + k × 1 and k × 1 + 1 × k convo-
+the valid receptive filed (VRF)1 is large enough to hold the                lutions, which enables densely connections within a large
+entire object. However, if the input object is resized to a                 k×k region in the feature map. Different from the separable
+large scale, then VRF can only cover a part of the object,                  kernels used by [32], we do not use any nonlinearity after
+which may be harmful for classification. It will be even                    convolution layers. Compared with the trivial k × k convo-
+worse if larger feature maps are used, because the gap be-                  lution, our GCN structure involves only O( k2 ) computation
+tween classification and localization becomes larger.                       cost and number of parameters, which is more practical for
+    Based on above observation, we try to design a new ar-                  large kernel sizes.
+chitecture to overcome the drawbacks. First from the local-
+ization view, the structure must be fully-convolutional with-               3.2. Overall Framework
+out any fully-connected layer or global pooling layer that
+used by many classification networks, since the latter will                    Our overall segmentation model are shown in Figure 2.
+                                                                            We use pretrained ResNet [14] as the feature network and
+    1 Feature maps from modern networks such as GoolgeNet or ResNet
+                                                                            FCN4 [25, 35] as the segmentation framework. Multi-scale
+usually have very large receptive field because of the deep architecture.
+However, studies [38] show that network tends to gather information
+                                                                            feature maps are extracted from different stages in the fea-
+mainly from a much smaller region in the receptive field, which is called   ture network. Global Convolutional Network structures are
+valid receptive field (VRF) in this paper.                                  used to generate multi-scale semantic score maps for each
+Figure 3. Visualization of valid receptive field (VRF) introduced by [38]. Regions on images show the VRF for the score map located at
+the center of the bird. For traditional segmentation model, even though the receptive field is as large as the input image, however, the VRF
+just covers the bird (A) and fails to hold the entire object if the input resized to a larger scale (B). As a comparison, our Global Convolution
+Network significantly enlarges the VRF (C).
+
+
+class. Similar to [25, 35], score maps of lower resolution                 mentioned above, we use PASCAL VOC 2012 validation
+will be upsampled with a deconvolution layer, then added                   set for the evaluation. For all succeeding experiments, we
+up with higher ones to generate new score maps. The final                  pad each input image into 512 × 512 so that the top-most
+semantic score map will be generated after the last upsam-                 feature map is 16 × 16.
+pling, which is used to output the prediction results.
+   In addition, we propose a Boundary Refinement (BR)
+block shown in Figure 2 C. Here, we models the boundary
+alignment as a residual structure. More specifically, we de-
+fine S̃ as the refined score map: S̃ = S + R(S), where S is
+the coarse score map and R(·) is the residual branch. The
+details can be referred to Figure 2.
+
+4. Experiment
+   We evaluate our approach on the standard benchmark
+PASCAL VOC 2012 [11, 10] and Cityscapes [8]. PAS-                          Figure 4. (A) Global Convolutional Network. (B) 1 × 1 convolu-
+CAL VOC 2012 has 1464 images for training, 1449 images                     tion baseline. (C) k × k convolution. (D) stack of 3 × 3 convolu-
+for validation and 1456 images for testing, which belongs                  tions.
+to 20 object classes along with one background class. We
+also use the Semantic Boundaries Dataset [13] as auxiliary
+dataset, resulting in 10,582 images for training. We choose                4.1.1   Global Convolutional Network — Large Kernel
+the state-of-the-art network ResNet 152 [14] (pretrained on                        Matters
+ImageNet [28]) as our base model for fine tuning. Dur-                         In Section 3.1 we propose Global Convolutional Net-
+ing the training time, we use standard SGD [20] with batch                 work (GCN) to enable densely connections between clas-
+size 1, momentum 0.99 and weight decay 0.0005 . Data                       sifiers and features. The key idea of GCN is to use large
+augmentations like mean subtraction and horizontal flip are                kernels, whose size is controlled by the parameter k (see
+also applied in training. The performance is measured by                   Figure 2 B). To verify this intuition, we enumerate differ-
+standard mean intersection-over-union (IoU). All the exper-                ent k and test the performance respectively. The overall
+iments are running with Caffe [17] tool.                                   network architecture is shown as in Figure 2 A except that
+   In the next subsections, first we will perform a series of              Boundary Refinement block is not applied. For better com-
+ablation experiments to evaluate the effectiveness of our ap-              parison, a naive baseline is added just to replace GCN with a
+proach. Then we will report the full results on PASCAL                     simple 1 × 1 convolution (shown in Figure 4 B). The results
+VOC 2012 and Cityscapes.                                                   are presented in Table 1.
+                                                                               We try different kernel sizes ranging from 3 to 15. Note
+4.1. Ablation Experiments
+                                                                           that only odd size are used just to avoid alignment error. In
+   In this subsection, we will make apple-to-apple compar-                 the case k = 15, which roughly equals to the feature map
+isons to evaluate our approaches proposed in Section 3. As                 size (16×16), the structure becomes “really global convolu-
+   k      base    3       5      7      9       11     13     15    GCN, another trivial approach to form a large kernel is to
+ Score    69.0   70.1    71.1   72.8   73.4    73.7   74.0   74.5   use stack of small kernel convolutions(for example, stack
+                                                                    of 3 × 3 kernels in Figure 4 D), , which is very common
+Table 1. Experimental results on different k settings of Global
+                                                                    in modern CNN architectures such as VGG-net [30]. For
+Convolutional Network. The score is evaluated by standard mean
+                                                                    example, we can use two 3 × 3 convolutions to approximate
+IoU(%) on PASCAL VOC 2012 validation set.
+                                                                    a 5 × 5 kernel. In Table 3, we compare GCN with convolu-
+                                                                    tional stacks under different equivalent kernel sizes. Differ-
+tional”. From the results, we can find that the performance         ent from [30], we do not apply nonlinearity within convo-
+consistently increases with the kernel size k. Especially,          lutional stacks so as to keep consistent with GCN structure.
+the “global convolutional” version (k = 15) surpasses the           Results shows that GCN still outperforms trivial convolu-
+smallest one by a significant margin 5.5%. Results show             tion stacks for any large kernel sizes.
+that large kernel brings great benefit in our GCN structure,
+which is consistent with our analysis in Section 3.1.                         k             3       5       7       9        11
+    Further Discussion: In the experiments in Table 1,                  Score (GCN)        70.1    71.1    72.8    73.4     73.7
+since there are other differences between baseline and dif-             Score (Stack)      69.8    71.8    71.3    69.5     67.5
+ferent versions of GCN, it seems not so confirmed to at-
+                                                                    Table 3. Comparison Experiments between Global Convolutional
+tribute the improvements to large kernels or GCN. For ex-
+                                                                    Network and the equivalent stack of small kernel convolutions.
+ample, one may argue that the extra parameters brought by
+                                                                    The score is measured under standard mean IoU(%). GCN is still
+larger k lead to the performance gain. Or someone may               better with large kernels (k > 7).
+think to use another simple structure instead of GCN to
+achieve large equivalent kernel size. So we will give more             For large kernel size (e.g. k = 7) 3 × 3 convolutional
+evidences for better understanding.                                 stack will bring much more parameters than GCN, which
+    (1) Are more parameters helpful? In GCN, the number             may have side effects on the results. So we try to reduce
+of parameters increases linearity with kernel size k, so one        the number of intermediate feature maps for convolutional
+natural hypothesis is that the improvements in Table 1 are          stack and make further comparison. Results are listed in Ta-
+mainly brought by the increased number of parameters. To            ble 4. It is clear that its performance suffers from degrada-
+address this, we compare our GCN with the trivial large ker-        tion with fewer parameters. In conclusion, GCN is a better
+nel design with a trivial k×k convolution shown in Figure 4         structure compared with trivial convolutional stacks.
+C. Results are shown in Table 2. From the results we can see
+that for any given kernel size, the trivial convolution design        m (Stack)        2048        1024        210        2048 (GCN)
+contains more parameters than GCN. However, the latter is               Score          71.3        70.4        68.8          72.8
+consistently better than the former in performance respec-           # of Params      75885K      28505K      4307K          608K
+tively. It is also clear that for trivial convolution version,
+                                                                    Table 4. Experimental results on the channels of stacking of small
+          k                3        5            7       9          kernel convolutions. The score is measured under standard mean
+    Score (GCN)          70.1      71.1        72.8     73.4        IoU. GCN outperforms the convolutional stack design with less
+    Score (Conv)         69.8      70.4        69.6     68.8        parameters.
+ # of Params (GCN)       260K     434K         608K    782K
+                                                                       (3) How GCN contributes to the segmentation results? In
+ # of Params (Conv)      387K     1075K       2107K    3484K
+                                                                    Section 3.1, we claim that GCN improves the classification
+Table 2. Comparison experiments between Global Convolutional        capability of segmentation model by introducing densely
+Network and the trivial implementation. The score is measured       connections to the feature map, which is helpful to han-
+under standard mean IoU(%), and the 3rd and 4th rows show num-      dle large variations of transformations. Based on this, we
+ber of parameters of GCN and trivial Convolution after res-5.       can infer that pixels lying in the center of large objects may
+                                                                    benefit more from GCN because it is very close to “pure”
+larger kernel will result in better performance if k ≤ 5, yet       classification problem. As for the boundary pixels of ob-
+for k ≥ 7 the performance drops. One hypothesis is that             jects, however, the performance is mainly affected by the
+too many parameters make the training suffer from overfit,          localization ability.
+which weakens the benefits from larger kernels. However,               To verify our inference, we divide the segmentation
+in training we find trivial large kernels in fact make the net-     score map into two parts: a) boundary region, whose pix-
+work difficult to converge, while our GCN structure will not        els locate close to objects’ boundary (distance ≤ 7), and b)
+suffer from this drawback. Thus the actual reason still needs       internal region as other pixels. We evaluate our segmenta-
+further study.                                                      tion model (GCN with k = 15) in both regions. Results
+    (2) GCN vs. Stack of small convolutions. Instead of             are shown in Table 5. We find that our GCN model mainly
+improves the accuracy in internal region while the effect in         for comparison because the training of large ResNet152 is
+boundary region is minor, which strongly supports our argu-          very costly. From the results we can see that our GCN-
+ment. Furthermore, in Table 5 we also evaluate the bound-            based ResNet is slightly poorer than original ResNet as an
+ary refinement (BF) block referred in Section 3.2. In con-           ImageNet classification model. However, after finetuning
+trary to GCN structure, BF mainly improves the accuracy in           on segmentation dataset ResNet-GCN model outperforms
+boundary region, which also confirms its effectiveness.              original ResNet significantly by 5.5%. With the applica-
+                                                                     tion of GCN and boundary refinement, the gain of GCN-
+   Model       Boundary (acc.)    Internal (acc. )   Overall (IoU)   based pretrained model becomes minor but still prevails.
+  Baseline         71.3                93.9              69.0        We can safely conclude that GCN mainly helps to improve
+   GCN             71.5                95.0              74.5        segmentation performance, no matter in pretrained model
+ GCN + BR          73.4                95.1              74.7        or segmentation-specific structures.
+Table 5. Experimental results on Residual Boundary Alignment.
+                                                                         Pretrained Model           ResNet50      ResNet50-GCN
+The Boundary and Internal columns are measured by the per-pixel
+accuracy while the 3rd column is measured by standard mean IoU.        ImageNet cls err (%)            7.7             7.9
+                                                                       Seg. Score (Baseline)          65.7            71.2
+                                                                      Seg. Score (GCN + BR)           72.3            72.5
+4.1.2   Global Convolutional Network for Pretrained                  Table 6. Experimental results on ResNet50 and ResNet50-GCN.
+        Model                                                        Top-5 error of 224×224 center-crop on 256×256 image is used in
+   In the above subsection our segmentation models are               ImageNet classification error. The segmentation score is measured
+                                                                     under standard mean IoU.
+finetuned from ResNet-152 network. Since large kernel
+plays a critical role in segmentation tasks, it is nature to ap-
+ply the idea of GCN also on the pretrained model. Thus we            4.2. PASCAL VOC 2012
+propose a new ResNet-GCN structure, as shown in Figure 5.
+We remove the first two layers in the original bottleneck               In this section we discuss our practice on PASCAL VOC
+structure used by ResNet, and replace them with a GCN                2012 dataset. Following [6, 37, 24, 7], we employ the Mi-
+module. In order to keep consistent with the original, we            crosoft COCO dataset [22] to pre-train our model. COCO
+also apply Batch Normalization [15] and ReLU after each              has 80 classes and here we only retain the images including
+of the convolution layers.                                           the same 20 classes in PASCAL VOC 2012. The training
+                                                                     phase is split into three stages: (1) In Stage-1, we mix up all
+                                                                     the images from COCO, SBD and standard PASCAL VOC
+                                                                     2012, resulting in 109,892 images for training. (2) During
+                                                                     the Stage-2, we use the SBD and standard PASCAL VOC
+                                                                     2012 images, the same as Section 4.1. (3) For Stage-3, we
+                                                                     only use the standard PASCAL VOC 2012 dataset. The in-
+                                                                     put image is padded to 640 × 640 in Stage-1 and 512 × 512
+                                                                     for Stage-2 and Stage-3. The evaluation on validation set is
+                                                                     shown in Table 7.
+
+                                                                            Phase       Baseline         GCN      GCN + BR
+                                                                            Stage-1(%)    69.6           74.1       75.0
+                                                                            Stage-2(%)    72.4           77.6       78.6
+                                                                            Stage-3(%)    74.0           78.7       80.3
+Figure 5. A: the bottleneck module in original ResNet. B: our               Stage-3-MS(%)                           80.4
+Global Convolutional Network in ResNet-GCN.                                 Stage-3-MS-CRF(%)                       81.0
+
+   We compare our ResNet-GCN structure with the original             Table 7. Experimental results on PASCAL VOC 2012 validation
+ResNet model. For fair comparison, sizes for ResNet-GCN              set. The results are evaluated by standard mean IoU.
+are carefully selected so that both network have similar
+computation cost and number of parameters. More details                 Our GCN + BR model clearly prevails, meanwhile the
+are provided in the appendix. We first pretrain ResNet-GCN           post-processing multi-scale and denseCRF [18] also bring
+on ImageNet 2015 [28] and fine tune on PASCAL VOC                    benefits. Some visual comparisons are given in Figure 6.
+2012 segmentation dataset. Results are shown in Table 6.             We also submit our best model to the on-line evaluation
+Note that we take ResNet50 model (with or without GCN)               server, obtaining 82.2% on PASCAL VOC 2012 test set,
+Figure 6. Examples of semantic segmentation results on PASCAL VOC 2012. For every row we list input image (A), 1 × 1 convolution
+baseline (B), Global Convolutional Network (GCN) (C), Global Convolutional Network plus Boundary Refinement (GCN + BR) (D), and
+Ground truth (E).
+
+
+as shown in Table 8. Our work has outperformed all the            4.3. Cityscapes
+previous state-of-the-arts.
+                                                                      Cityscapes [8] is a dataset collected for semantic seg-
+  Method                                    mean-IoU(%)           mentation on urban street scenes. It contains 24998 images
+  FCN-8s-heavy [29]                            67.2               from 50 cities with different conditions, which belongs to
+  TTI zoomout v2 [26]                          69.6               30 classes without background class. For some reasons,
+  MSRA BoxSup [9]                              71.0               only 19 out of 30 classes are evaluated on leaderboard. The
+  DeepLab-MSc-CRF-LargeFOV [6]                 71.6               images are split into two set according to their labeling qual-
+  Oxford TVG CRF RNN COCO [37]                 74.7               ity. 5,000 of them are fine annotated while the other 19,998
+  CUHK DPN COCO [24]                           77.5               are coarse annotated. The 5,000 fine annotated images are
+  Oxford TVG HO CRF [2]                        77.9               further grouped into 2975 training images, 500 validation
+  CASIA IVA OASeg [33]                         78.3               images and 1525 testing images.
+  Adelaide VeryDeep FCN VOC [34]               79.1                   The images in Cityscapes have a fixed size of 1024 ×
+  LRR 4x ResNet COCO [12]                      79.3               2048, which is too large to our network architecture. There-
+  Deeplabv2-CRF [7]                            79.7               fore we randomly crop the images into 800 × 800 during
+  CentraleSupelec Deep G-CRF[5]                80.2               training phase. We also increase k of GCN from 15 to 25
+  Our approach                                 82.2               as the final feature map is 25 × 25. The training phase is
+                                                                  split into two stages: (1) In Stage-1, we mix up the coarse
+Table 8. Experimental results on PASCAL VOC 2012 test set.        annotated images and the training set, resulting in 22,973
+images. (2) For Stage-2, we only finetune the network on                 Method                                  mean-IoU(%)
+training set. During the evaluation phase, we split the im-              FCN 8s [29]                                65.3
+ages into four 1024 × 1024 crops and fuse their score maps.              DPN [24]                                   59.1
+The results are given in Table 9.                                        CRFasRNN [37]                              62.5
+                                                                         Scale invariant CNN + CRF [19]             66.3
+            Phase                      GCN + BR                          Dilation10 [36]                            67.1
+            Stage-1(%)                   73.0                            DeepLabv2-CRF [7]                          70.4
+            Stage-2(%)                   76.9                            Adelaide context [21]                      71.6
+            Stage-2-MS(%)                77.2                            LRR-4x [12]                                71.8
+            Stage-2-MS-CRF(%)            77.4                            Our approach                               76.9
+
+Table 9. Experimental results on Cityscapes validation set. The           Table 10. Experimental results on Cityscapes test set.
+standard mean IoU is used here.
+
+                                                                     [6] L.-C. Chen, G. Papandreou, I. Kokkinos, K. Murphy, and
+   We submit our best model to the on-line evaluation                    A. L. Yuille. Semantic image segmentation with deep con-
+server, obtaining 76.9% on Cityscapes test set as shown                  volutional nets and fully connected crfs. In ICLR, 2015. 1,
+in Table 10. Once again, we outperforms all the previous                 2, 3, 6, 7
+publications and reaches the new state-of-art.                       [7] L.-C. Chen, G. Papandreou, I. Kokkinos, K. Murphy, and
+                                                                         A. L. Yuille. Deeplab: Semantic image segmentation with
+5. Conclusion                                                            deep convolutional nets, atrous convolution, and fully con-
+                                                                         nected crfs. arXiv preprint arXiv:1606.00915, 2016. 2, 6, 7,
+    According to our analysis on classification and segmen-              8
+tation, we find that large kernels is crucial to relieve the         [8] M. Cordts, M. Omran, S. Ramos, T. Rehfeld, M. Enzweiler,
+contradiction between classification and localization. Fol-              R. Benenson, U. Franke, S. Roth, and B. Schiele. The
+lowing the principle of large-size kernels, we propose the               cityscapes dataset for semantic urban scene understanding.
+Global Convolutional Network. The ablation experiments                   arXiv preprint arXiv:1604.01685, 2016. 4, 7
+show that our proposed structures meet a good trade-off              [9] J. Dai, K. He, and J. Sun. Boxsup: Exploiting bounding
+between valid receptive field and the number of parame-                  boxes to supervise convolutional networks for semantic seg-
+ters, while achieves good performance. To further refine                 mentation. In Proceedings of the IEEE International Con-
+the object boundaries, we present a novel Boundary Re-                   ference on Computer Vision, pages 1635–1643, 2015. 7
+finement block. Qualitatively, our Global Convolutional             [10] M. Everingham, S. A. Eslami, L. Van Gool, C. K. Williams,
+Network mainly improve the internal regions while Bound-                 J. Winn, and A. Zisserman. The pascal visual object classes
+ary Refinement increase performance near boundaries. Our                 challenge: A retrospective. International Journal of Com-
+best model achieves state-of-the-art on two public bench-                puter Vision, 111(1):98–136, 2015. 4
+marks: PASCAL VOC 2012 (82.2%) and Cityscapes                       [11] M. Everingham, L. Van Gool, C. K. Williams, J. Winn, and
+(76.9%).                                                                 A. Zisserman. The pascal visual object classes (voc) chal-
+                                                                         lenge. International journal of computer vision, 88(2):303–
+References                                                               338, 2010. 4
+                                                                    [12] G. Ghiasi and C. C. Fowlkes. Laplacian pyramid reconstruc-
+ [1] A. Adams, J. Baek, and M. A. Davis. Fast high-dimensional           tion and refinement for semantic segmentation. In European
+     filtering using the permutohedral lattice. In Computer              Conference on Computer Vision, pages 519–534. Springer,
+     Graphics Forum, volume 29, pages 753–762. Wiley Online              2016. 2, 7, 8
+     Library, 2010. 2
+                                                                    [13] B. Hariharan, P. Arbeláez, L. Bourdev, S. Maji, and J. Ma-
+ [2] A. Arnab, S. Jayasumana, S. Zheng, and P. H. Torr. Higher           lik. Semantic contours from inverse detectors. In 2011 In-
+     order conditional random fields in deep neural networks. In         ternational Conference on Computer Vision, pages 991–998.
+     European Conference on Computer Vision, pages 524–540.              IEEE, 2011. 4
+     Springer, 2016. 7                                              [14] K. He, X. Zhang, S. Ren, and J. Sun. Deep residual learning
+ [3] V. Badrinarayanan, A. Handa, and R. Cipolla.            Seg-        for image recognition. In The IEEE Conference on Computer
+     net: A deep convolutional encoder-decoder architecture              Vision and Pattern Recognition (CVPR), June 2016. 1, 2, 3,
+     for robust semantic pixel-wise labelling. arXiv preprint            4
+     arXiv:1505.07293, 2015. 2                                      [15] S. Ioffe and C. Szegedy. Batch normalization: Accelerating
+ [4] J. T. Barron and B. Poole. The fast bilateral solver. ECCV,         deep network training by reducing internal covariate shift. In
+     2016. 2                                                             Proceedings of The 32nd International Conference on Ma-
+ [5] S. Chandra and I. Kokkinos. Fast, exact and multi-scale in-         chine Learning, pages 448–456, 2015. 6
+     ference for semantic image segmentation with deep gaussian     [16] V. Jampani, M. Kiefel, and P. V. Gehler. Learning sparse high
+     crfs. arXiv preprint arXiv:1603.08358, 2016. 7                      dimensional filters: Image filtering, dense crfs and bilateral
+     neural networks. In IEEE Conf. on Computer Vision and                 Conference on Computer Vision and Pattern Recognition,
+     Pattern Recognition (CVPR), June 2016. 2                              pages 1–9, 2015. 1, 2
+[17] Y. Jia, E. Shelhamer, J. Donahue, S. Karayev, J. Long, R. Gir-   [32] C. Szegedy, V. Vanhoucke, S. Ioffe, J. Shlens, and Z. Wojna.
+     shick, S. Guadarrama, and T. Darrell. Caffe: Convolu-                 Rethinking the inception architecture for computer vision.
+     tional architecture for fast feature embedding. arXiv preprint        arXiv preprint arXiv:1512.00567, 2015. 2, 3
+     arXiv:1408.5093, 2014. 4                                         [33] Y. Wang, J. Liu, Y. Li, J. Yan, and H. Lu. Objectness-aware
+[18] V. Koltun. Efficient inference in fully connected crfs with           semantic segmentation. In Proceedings of the 2016 ACM on
+     gaussian edge potentials. Adv. Neural Inf. Process. Syst,             Multimedia Conference, pages 307–311. ACM, 2016. 7
+     2011. 2, 6                                                       [34] Z. Wu, C. Shen, and A. v. d. Hengel. High-performance
+[19] I. Krešo, D. Čaušević, J. Krapac, and S. Šegvić. Con-           semantic segmentation using very deep fully convolutional
+     volutional scale invariance for semantic segmentation. In             networks. arXiv preprint arXiv:1604.04339, 2016. 7
+     German Conference on Pattern Recognition, pages 64–75.           [35] S. Xie and Z. Tu. Holistically-nested edge detection. In Pro-
+     Springer, 2016. 8                                                     ceedings of the IEEE International Conference on Computer
+[20] A. Krizhevsky, I. Sutskever, and G. E. Hinton. Imagenet               Vision, pages 1395–1403, 2015. 3, 4
+     classification with deep convolutional neural networks. In       [36] F. Yu and V. Koltun. Multi-scale context aggregation by di-
+     Advances in neural information processing systems, pages              lated convolutions. arXiv preprint arXiv:1511.07122, 2015.
+     1097–1105, 2012. 2, 4                                                 2, 8
+[21] G. Lin, C. Shen, A. van den Hengel, and I. Reid. Efficient       [37] S. Zheng, S. Jayasumana, B. Romera-Paredes, V. Vineet,
+     piecewise training of deep structured models for semantic             Z. Su, D. Du, C. Huang, and P. H. Torr. Conditional random
+     segmentation. In The IEEE Conference on Computer Vision               fields as recurrent neural networks. In Proceedings of the
+     and Pattern Recognition (CVPR), June 2016. 2, 8                       IEEE International Conference on Computer Vision, pages
+[22] T.-Y. Lin, M. Maire, S. Belongie, J. Hays, P. Perona, D. Ra-          1529–1537, 2015. 2, 6, 7, 8
+     manan, P. Dollár, and C. L. Zitnick. Microsoft coco: Com-       [38] B. Zhou, A. Khosla, A. Lapedriza, A. Oliva, and A. Torralba.
+     mon objects in context. In European Conference on Com-                Object detectors emerge in deep scene cnns. arXiv preprint
+     puter Vision, pages 740–755. Springer, 2014. 6                        arXiv:1412.6856, 2014. 3, 4
+[23] W. Liu, A. Rabinovich, and A. C. Berg. Parsenet: Looking
+     wider to see better. arXiv preprint arXiv:1506.04579, 2015.
+     2
+[24] Z. Liu, X. Li, P. Luo, C.-C. Loy, and X. Tang. Semantic im-
+     age segmentation via deep parsing network. In Proceedings
+     of the IEEE International Conference on Computer Vision,
+     pages 1377–1385, 2015. 2, 6, 7, 8
+[25] J. Long, E. Shelhamer, and T. Darrell. Fully convolutional
+     networks for semantic segmentation. In Proceedings of the
+     IEEE Conference on Computer Vision and Pattern Recogni-
+     tion, pages 3431–3440, 2015. 1, 2, 3, 4
+[26] M. Mostajabi, P. Yadollahpour, and G. Shakhnarovich. Feed-
+     forward semantic segmentation with zoom-out features. In
+     Proceedings of the IEEE Conference on Computer Vision
+     and Pattern Recognition, pages 3376–3385, 2015. 2, 7
+[27] H. Noh, S. Hong, and B. Han. Learning deconvolution net-
+     work for semantic segmentation. In Proceedings of the IEEE
+     International Conference on Computer Vision, pages 1520–
+     1528, 2015. 2, 3
+[28] O. Russakovsky, J. Deng, H. Su, J. Krause, S. Satheesh,
+     S. Ma, Z. Huang, A. Karpathy, A. Khosla, M. Bernstein,
+     A. C. Berg, and L. Fei-Fei. ImageNet Large Scale Visual
+     Recognition Challenge. International Journal of Computer
+     Vision (IJCV), 115(3):211–252, 2015. 4, 6
+[29] E. Shelhamer, J. Long, and T. Darrell. Fully convolutional
+     networks for semantic segmentation. 2016. 2, 7, 8
+[30] K. Simonyan and A. Zisserman. Very deep convolutional
+     networks for large-scale image recognition. arXiv preprint
+     arXiv:1409.1556, 2014. 1, 2, 5
+[31] C. Szegedy, W. Liu, Y. Jia, P. Sermanet, S. Reed,
+     D. Anguelov, D. Erhan, V. Vanhoucke, and A. Rabinovich.
+     Going deeper with convolutions. In Proceedings of the IEEE
+                                  Appendix.A          ResNet50 and ResNet50-GCN
+
+                      Component         Output Size        ResNet50                   ResNet50-GCN
+                        conv1           112 × 112                        7 × 7, 64, stride 2
+                                                                      3 × 3 max pool, stride 2
+                                                                                               
+                                                          1 × 1, 64                     1 × 1, 64
+                         res-2            56 × 56       3 × 3, 64  × 3              3 × 3, 64  × 3
+                                                         1 × 1, 256                    1 × 1, 256
+                                                                                            
+                                                        1 × 1, 128                   1 × 1, 128
+                         res-3            28 × 28      3 × 3, 128 × 4             3 × 3, 128 × 4
+                                                        1 × 1, 512                   1 × 1, 512
+                                                                                                  
+                                                        1 × 1, 256            (1 × 5, 85) (5 × 1, 85)
+                         res-4            14 × 14      3 × 3, 256  × 6     (5 × 1, 85) (1 × 5, 85) × 6
+                                                       1 × 1, 1024                  1 × 1, 1024
+                                                                                                   
+                                                        1 × 1, 512           (1 × 7, 128) (7 × 1, 128)
+                         res-5             7×7         3 × 3, 512  × 3    (7 × 1, 128) (1 × 7, 128) × 3
+                                                       1 × 1, 2048                   1 × 1, 2048
+                  ImageNet Classifier   1×1                    global average pool, 1000-d fc, softmax
+                          MFlops (Conv)                      3700                           3700
+
+Table 11. Architectures for ResNet50 and ResNet50-GCN, discussed in Section 4.1.2. The bottleneck and GCN blocks are shown in
+brackets (referred to Figure 5). Downsampling is performed between every components with stride 2 convolution. Output Size (2nd
+column) is measured with standard ImangeNet 224 × 224 images. The computational complexity of convolutions is shown in last row.
+                 Appendix.B         Examples of semantic segmentation results on Cityscapes.
+
+
+
+
+Figure 7. Examples of semantic segmentation results on Cityscapes. For every row we list input Image (A), Global Convolutional Network
+plus Boundary Refinement (GCN + BR) (B) and Ground Truth (C).
+

@@ -1,0 +1,707 @@
+     Beyond Outlier Detection: L OOKO UT for Pictorial
+                      Explanation
+
+     Nikhil Gupta1 , Dhivya Eswaran2 , Neil Shah3 , Leman Akoglu2 , and Christos
+                                    Faloutsos2
+      1
+          Indian Institute of Technology Delhi, India cs5140462@cse.iitd.ac.in
+                                Carnegie Mellon University, USA
+                   {deswaran, lakoglu, christos}@cs.cmu.edu
+                                 2
+                                   Snap Inc. nshah@snap.com
+
+
+       Abstract. Why is a given point in a dataset marked as an outlier by an off-the-
+       shelf detection algorithm? Which feature(s) explain it the best? What is the best
+       way to convince a human analyst that the point is indeed an outlier? We provide
+       succinct, interpretable, and simple pictorial explanations of outlying behavior in
+       multi-dimensional real-valued datasets while respecting the limited attention of
+       human analysts. Specifically, we propose to output a few pictures (focus-plots,
+       ie., pairwise feature plots) from a few, carefully chosen feature sub-spaces. The
+       proposed L OOKO UT makes four contributions: (a) problem formulation: we
+       introduce an “analyst-centered” problem formulation for explaining outliers via
+       focus-plots, (b) explanation algorithm: we propose a plot-selection objective
+       and the L OOKO UT algorithm to approximate it with optimality guarantees, (c)
+       generality: our explanation algorithm is both domain- and detector-agnostic, and
+       (d) scalability: L OOKO UT scales linearly with the size of input outliers to ex-
+       plain and the explanation budget. Our experiments show that L OOKO UT per-
+       forms near-ideally in terms of maximizing explanation objective on several real
+       datasets, while producing fast, visually interpretable and intuitive results in ex-
+       plaining groundtruth outliers.
+
+
+1   Introduction
+Given a multi-dimensional dataset of real-valued features, e.g., sensor measurements,
+and a list of outliers (identified by an off-the-shelf “black-box” detector or any other
+external mechanism), how can we explain the outliers to a human analyst in a succinct,
+effective, and interpretable fashion?
+     Outlier detection is a widely studied problem. Numerous detectors exist for point
+data [1,5,19], time series [12], as well as graphs [2,3]. However, the literature on out-
+lier explanation or description is perhaps surprisingly sparse. Given that the outcomes
+(alerts) of a detector often go through a “vetting” procedure by human analysts, it is ex-
+tremely beneficial to provide explanations for such alerts which can empower analysts
+in sensemaking and reduce their efforts in troubleshooting and recovery. Moreover, such
+explanations should justify the outliers succinctly in order to save analyst time.
+     Our work sets out to address precisely the above outlier explanation problem. Con-
+sider the following example situation: Given performance metrics from hundreds of
+machines within a large company, an analyst could face two relevant scenarios.
+!Name !             !   !Score!
+!****************** !   !********!
+!Skilling,!Jeﬀ !        !0.893!
+!Lay,!Kenneth !         !0.761!
+!Fastow,!Andrew         !0.442!
+!Mark,!Rebecca          !0.429!
+!Smith,!John !          !0.331!
+!Cooper,!Stephen        !0.308!
+!Tomson,!Mary!          !0.232!
+!... !       !      !   !...!
+      (a) traditional                                 (b) proposed
+
+Fig.  1: Compared
+TradiMonal:!           to traditional ranked list output (a: wordy, lengthy, no explanation),
+                  Proposed:!
+!!"verbal"
+L OOK             !!"visual"simpler, more interpretable explanations (b: visual, succinct, inter-
+        O UT produces
+"!"lengthy" L OOK
+pretable).        "!"succinct"
+                    O UT explains Enron founder/CEO “Ken Lay” and COO “Jeff Skilling”
+"!"no"explana1on" "!"interpretable"
+by two “focus-plots” in which they are most salient.
+  – Detected outliers: For monitoring, s/he could use any “black-box” outlier detector
+     to spot machines with suspicious values of metric(s). Here, we are oblivious to
+     the specific detector, knowing only that it flags outliers, but does not produce any
+     interpretable explanation.
+  – Dictated outliers: Alternatively, outlying machines may get reported to the analyst
+     externally (e.g., they crash or get compromised).
+In both scenarios, the analyst would be interested in understanding in what ways the
+pre-identified outlying machines (detected or dictated) differ from the rest.
+    In this work, we propose a new approach called L OOKO UT, for explaining a given
+set of outliers, and apply it to various, relational and non-relational, settings. At its
+heart, L OOKO UT provides interpretable pictorial explanations through simple, easy-to-
+grasp focus-plots (Definition 1), which “incriminate” the given outliers the most. We
+summarize our contributions as follows.
+  – Outlier Explanation Problem Formulation: We introduce a new formulation that
+     explains outliers through “focus-plots”. In a nutshell, given the list of outliers from
+     a dataset with real-valued features, we aim to find a few 2D plots on which the total
+     “blame” that the outliers receive is maximized. Our emphasis is on two key aspects:
+     (a) interpretability: our plots visually incriminate the outliers, and (b) succinctness:
+     we show only a few plots to respect the analyst’s attention; the analysts can then
+     quickly interpret the plots, spot the outliers, and verify their abnormality given the
+     discovered feature pairs.
+  – Succinct Quantifiable Explanation Algorithm L OOKO UT: We propose the L OOK -
+     O UT algorithm to solve our explanation problem. Specifically, we develop a plot
+     selection objective, which quantifies the ‘goodness’ of an explanation and lends
+     itself to monotone submodular function optimization, which we solve efficiently
+     with optimality guarantees. Figure 1 illustrates L OOKO UT’s performance on the
+     Enron communications network, where it discovers two focus-plots which maxi-
+     mally incriminate the given outlying nodes: Enron founder “Ken Lay” and CEO
+     “Jeff Skilling.” Note that the outliers stand out visually from the normal nodes.
+  – Generality: L OOKO UT is general in two respects: it is (a) domain-agnostic, mean-
+     ing it is suitable for datasets from various domains, and (2) detector-agnostic,
+      meaning it can be employed to explain outliers produced by any detector or identi-
+      fied through any other mechanism (e.g., crash reports, customer complaints, etc.)
+    – Scalability: We show that L OOKO UT requires time linear on (i) the number of
+      plots to choose explanations from, (ii) the number of outliers to explain and (iii)
+      the user-specified budget for explanations (see Lemma 5 and Fig. 5).
+     We experiment with several real-world datasets from diverse domains including e-
+mail communications and astronomy, which demonstrate the effectiveness, interpretabil-
+ity, succinctness and generality of our approach.
+     Reproducibility: Our datasets are publicly available (See Section 5.1) and L OOK -
+O UT is open-sourced at https://github.com/NikhilGupta1997/Lookout.
+
+
+2     Related Work
+
+While there is considerable prior                                    Knorr et al. [15]
+work on outlier detection [6,3,12],                                   Dang et al.[7]
+literature on outlier description                                    Angiulli et al. [4]
+is comparably sparse. Several                                       Micenkova et al. [20]
+works aim to find an optimal            Properties vs. Methods
+                                                                     Kopp et al. [16]
+feature subspace which distin-
+                                                                     Keller et al. [14]
+guishes outliers from normal
+points. [14] aims to find a sub-                                       L OOKO UT
+space which maximizes differ-           Quantifiable explanations 4 4 4 4 4
+ences in outlier score distribu-        Budget-conscious                            4 4
+tions of all points across sub-         Visually interpretable                         4
+spaces. [17] instead takes a con-       Scalable                       4        44 4
+straint programming approach
+which aims to maximize dif- Fig. 2: Comparison with other outlier description
+ferences between neighborhood approaches, in terms of four desirable properties.
+densities of known outliers and
+normal points. An associated problem focuses on finding minimal, or optimal feature
+subspaces for each outlier. [15] aims to give “intensional knowledge” for each outlier
+by finding minimal subspaces in which the outliers deviate sufficiently from normal
+points using pruning rules. [7,8] use spectral embeddings to discover subspaces which
+promote high outlier scores, while aiming to preserve distances of normal points. [20]
+instead employs sparse classification of an inlier class against a synthetically-created
+outlier class for each outlier in order to discover small feature spaces which discern
+it. [16] proposes combining decision rules produced by an ensemble of short decision
+trees to explain outliers. [4] augments the per-outlier problem to include outlier groups
+by searching for single features which differentiate many outliers.
+     All in all, none of these works meet several key desiderata for outlier description: (a)
+quantifiable explanation quality, (b) budget-consciousness towards analysts (returning
+explanations which do not grow with size of the outlier set), (c) visual interpretability,
+and (d) a scalable descriptor, which is sub-quadratic on the number of nodes and at worst
+polynomial on (low) dimensionality. Fig. 2 shows that unlike existing approaches, our
+L OOKO UT approach is designed to give quantifiable explanations which aim to max-
+imize incrimination, respect human attention-budget and visual interpretability con-
+straints, and scale linearly on the number of outliers.
+
+3     Preliminaries and Problem Statement
+3.1   Notation
+Let V be the set of input data points, where each point v ∈ V originates from Rd and
+n = |V| is the total number of points. Here, d = |F| is the dimensionality of the dataset
+and F = {f1 , f2 , . . . , fd } is the set of real-valued features (either directly given, or
+extracted, e.g., from a relational dataset). The set of outlying points given as input is
+denoted by A ⊆ V, |A| = k. Typically, k  n.
+
+3.2   Intuition & Proposed Problem
+The explanations we seek to generate should be simple and interpretable. Moreover,
+they should be easy to illustrate to humans who will ultimately leverage the explana-
+tions. To this end, we decide to use focus-plots (Definition 1) for outlier justification,
+due to their visual appeal and interpretability. A formal definition is given below.
+Definition 1 (Focus-plot). Given a dataset of points V, a pair of features fx , fy ∈ F
+(where F is the set of real-valued features) and an input set of outliers A, focus-plot
+p ∈ P is a 2-d scatter plot of all points, with fx on x-axis, fy on y-axis, ‘drawing
+attention’ to the set of “maxplained” (maximally explained) outliers Ap ⊆ A best
+explained by this feature pair.
+     Intuitively, our pictorial outlier explanation is a set of focus-plots, each of which
+“blames” or “explains away” a subset of the input outliers, whose outlierness is best
+showcased by the corresponding pair of features. That is, we consider d2 = d(d−1)
+                                                                               
+                                                                                       2
+2-d spaces by generating all pairwise feature combinations. Within each 2-d space, we
+then score the points in A by their  outlierness (Section 4.1).
+     Let us denote the set of all d2 focus-plots by P. Even for small values of d, showing
+all the focus-plots would be too overwhelming for the analyst. Moreover, some outliers
+could redundantly show up in multiple plots. Ideally, we would identify only a few
+focus-plots, which could “blame” or “explain away” the outliers to the largest possible
+extent. In other words, our goal would be to output a small subset S of P, on which
+points in A receive high outlier scores (Section 4.2).
+     Given this intuition, we formulate our problem:
+Problem 1 (Outlier Explanation).
+ – Given (a) a dataset on points V consisting of real-valued features F,
+    (b) a list of outliers A ⊆ V, either (1) detected by an off-the-shelf detector or (2)
+        dictated by external information, and
+    (c) a fixed budget of b focus-plots,
+ – find the best such focus-plots S ⊆ P, |S| = b
+ – to maximize the total maximum outlier score of outliers that we can “blame”
+   through the b plots.
+                            Table 1: Symbols and Definitions
+                   Symbol Definition
+                           V Set of data points, |V| = n
+                           A Input set of outliers, |A| = k
+                          F Set of features, |F| = d
+                           P Set of focus-plots, |P| = d(d − 1)/2 = l
+                         si,j Outlier score of ai ∈ A in plot pj ∈ P
+                           S Subset of selected focus-plots
+                       f (S) Explanation objective function
+                  ∆f (p | S) Marginal gain of plot p w.r.t S
+                            b Budget, i.e., maximum cardinality of S
+
+
+
+4     Proposed Algorithm L OOKO UT
+
+In this section, we detail our approach for scoring the input outliers by focus-plots, our
+plot selection objective and algorithm for choosing focus-plots, the overall complexity
+analysis of L OOKO UT, and conclude with discussion.
+
+4.1   Scoring by Feature Pairs
+
+Given all the points V, with marked outliers A ⊆ V, and their given (or extracted)
+features F ∈ Rd , our first step is to quantify how much “blame” we can attribute to
+each input outlier in R2 . As previously mentioned, 2-d spaces are easy to illustrate
+visually with focus-plots. Moreover, outliers in 2-d are easy to interpret: e.g., “point
+a has too many/too few y=dollars for its x=number of accounts”. Given a focus-plot,
+an analyst can easily discern the outliers visually and come up with such explanations
+without any further supervision.
+     We construct 2-d spaces (fx , fy ) by pairing the features ∀x, y = {1, . . . , d}, x 6= y
+(order does not matter). Each focus-plot pj ∈ P corresponds to such a pair of features,
+j = {1, . . . , d2 }. For scoring, we consider two different scenarios, depending on how
+                  
+
+the input outliers were obtained.
+     If the outliers are detected by some “black-box” detector available to the analyst,
+we can employ the same detector on all the nodes (this time in 2-d) and thus obtain the
+scores for the nodes in A.
+     If the outliers are dictated, i.e. reported externally, then the analyst could use any
+off-the-shelf detector, such as LOF [5], DB-outlier [15], etc. In this work, we use the
+Isolation Forest (iForest) detector [19] for two main reasons: (a) it boasts constant train-
+ing time and space complexity (i.e., independent of n) due to its sampling strategy, and
+(b) it has been shown empirically to outperform alternatives [9] and is thus state-of-the-
+art. However, note that none of these existing detectors has the ability to explain the
+outliers, especially iForest, as it is an ensemble approach.
+     By the end of the scoring process, each outlier receives |P| = l = d2 scores.
+                                                                              
+4.2   Plot Selection Objective
+
+While scoring in small, 2-d spaces is easy and can be trivially parallelized, presenting
+all such focus-plots to the analyst would not be productive given their limited attention
+budget. As such, our next step is to carefully select a short list of plots that best blame
+all the outliers collectively, where the plot budget can be specified by the user.
+     While selecting plots for justification, we aim to incorporate the following criteria:
+  – incrimination power; such that the outliers are scored as highly as possible,
+  – high expressiveness; where each plot incriminates multiple outliers, so that the
+     explanation is sublinear in the number of outliers, and
+  – low redundancy; such that the plots do not explain similar sets of outliers.
+We next introduce our objective criterion which satisfies the above requirements.
+
+
+Objective function At this step of the pro-
+cess, we can conceptually think of a com-
+plete, weighted bipartite graph between the k
+input outliers A = {a1 , . . . , ak } and l focus-
+plots P = {p1 , . . . , pl }, in which edge weight
+si,j depicts the outlier score that ai received
+from pj , as illustrated in Fig. 3.
+     We formulate our objective to maximize
+the total maximum outlier score of each out-
+lier amongst the selected plots:
+                          X
+  maximize      f (S) =           max si,j    (1)
+  S⊆P,|S|=b                       pj ∈S
+                          ai ∈A                     Fig. 3: L OOKO UT with k=4 outliers,
+                                                    l=3 focus-plots, and budget b=2. p1
+Here, our objective function, f (S), can be is picked first due to maximum total
+considered the total incrimination score given incrimination (sum of edge weights =
+by subset S. Since we are limited with a bud- 2.9). Next p3 is chosen over p2 , due to
+get of plots, we aim to select those which its higher marginal gain (0.4 vs 0.2).
+explain multiple outliers to the best extent.
+Note that each outlier receives their maxi-
+mum score from exactly one of the plots among the selected set (excluding ties), which
+effectively partitions the explanations and avoids redundancy. In the example from Fig.
+3, focus-plots p1 and p3 “explain away” outliers {a1 , a2 , a3 } and {a4 } respectively,
+where the maximum score that each outlier receives is highlighted in red font.
+    Concretely, we denote by Ap the set of maxplained (maximally explained) outliers
+by focus-plot p, i.e., outliers that receive their highest score from p, i.e. Ap = {ai |p =
+arg maxpj ∈S si,j }, where we break ties at random. Note that Ap ∩ Ap0 = ∅, ∀ p, p0 ∈
+P. In depicting a plot p to the analyst, we mark the set of maxplained outliers Ap in red
+and the rest in A\Ap in blue – see Fig. 1.
+
+
+4.3   Approximation Algorithm L OOKO UT
+Algorithm 1 L OOKO UT
+Input: dataset of points V, outliers A, set of all possible focus-plots P, budget b
+Output: pictorial outlier explanation S, which is a set of focus-plots
+ 1: for pj ∈ P do
+ 2:    Dj ← iForest constructed using V and the two features used in plot pj
+ 3:    for ai ∈ A do
+ 4:       si,j ← anomaly score given by detector Dj to point ai
+ 5:    end for
+ 6: end for
+ 7: initialize S ← ∅
+ 8: while |S| < b do
+ 9:    recompute marginal gain ∆f (p | S) ∀ p ∈ P \ S using Eq. (4) / lines 9-10 can be
+10:    p∗ ← arg maxp∈P\S ∆f (p | S)                            efficiently implemented using
+11:    S ← S ∪ {p∗ }                                        lazy greedy heuristic (e.g., [18])
+12: end while
+13: return S
+
+    Having defined our plot selection objective, we need to devise a subset selection
+algorithm to optimize Eq. (1), for a budget b. Notice that the optimal subset selection is
+a combinatorial task which we can show to be NP-hard.
+
+Lemma 1. The focus-plot selection problem in Eq. (1) is NP-hard.
+
+Proof. We sketch the proof by a reduction from the Maximum Coverage (MaxCover)
+problem, which is known to be NP-hard [10]. An instance of MaxCover involves an
+integer k and a collection of sets {S1 , . . . , Sl } each containing a list of elements, where
+the goal is to find k sets such that the total number of covered elements is maximized.
+The MaxCover problem instance maps to an instance of our problem, where each set Sj
+corresponds to a focus-plot pj , each element ei maps to an outlier ai , and the elements
+(outliers) inside each set has the same unit score (si,j = 1 for ei ∈ Sj ) while the others
+outside the set has score zero (si,j = 0 for ei ∈      / Sj ) on the corresponding focus-plot.
+Since MaxCover is equivalent to a special case of our problem, we conclude that Eq. (1)
+is at least as hard as MaxCover.                                                             
+
+    Therefore, our aim is to find an approximation algorithm to optimize Eq. (1).
+
+
+Properties of our objective Fortunately, our objective f (·) exhibits three key proper-
+ties that enable us to use a greedy algorithm with an approximation guarantee. Specif-
+ically, our objective f : 2|P| → R+ ∪ {0} is (i) non-negative, since the outlier scores
+take non-negative values, often in [0, 1], e.g., using iForest [19], (ii) non-decreasing (see
+Lemma 2) and (iii) submodular (see Lemma 3).
+
+Lemma 2 (Monotonicity). f is non-decreasing, i.e., for any S ⊆ T , f (S) ≤ f (T ).
+               P                  P
+Proof. f (S) =   maxpj ∈S si,j ≤      maxpj ∈T si,j = f (T )                       
+                 ai ∈A                   ai ∈A
+Lemma 3 (Submodularity). f is submodular, i.e., for any two sets S ⊆ T and a
+focus-plot pj ∗ ∈ P \ T , f (S ∪ {pj ∗ }) − f (S) ≥ f (T ∪ {pj ∗ }) − f (T ).
+
+                                     X                                        
+  Proof. f (S ∪ {pj ∗ }) − f (S) =               max         si,j − max si,j
+                                             pj ∈S∪{pj ∗ }         pj ∈S
+                                     ai ∈A
+                                     X                                                  
+                                 =           si,j ∗   − max si,j       · I si,j > max si,j
+                                                                               ∗
+                                                        pj ∈S                      pj ∈S
+                                     ai ∈A
+                                     X                                                   
+                                 ≥           si,j ∗ − max si,j         · I si,j ∗ > max si,j (2)
+                                                        pj ∈T                      pj ∈S
+                                     ai ∈A
+                                     X                                                   
+                                 ≥           si,j ∗ − max si,j         · I si,j ∗ > max si,j (3)
+                                                        pj ∈T                      pj ∈T
+                                     ai ∈A
+                                 = f (T ∪ {pj ∗ }) − f (T )
+
+where I [·] is the indicator function and Eq. (2) and Eq. (3) follow from the fact that
+maxpj ∈S si,j ≤ maxpj ∈T si,j whenever S ⊆ T .                                       
+
+Proposed L OOKO UT algorithm Submodular functions which are non-negative and
+non-decreasing admit approximation guarantees under a greedy approach identified by
+Nemhauser et al. [22]. The greedy algorithm starts with the empty set S0 . In iteration
+t, it adds the element (in our case, focus-plot) that maximizes the marginal gain ∆f in
+function value, defined as
+
+                      ∆f (p|St−1 ) = f (St−1 ∪ {p}) − f (St−1 )                                (4)
+
+That is,
+                      St := St−1 ∪ { arg max ∆f (p|St−1 ) } .
+                                       p∈P\St−1
+
+This leads to L OOKO UT explanation algorithm, given in Algorithm 1. Its approximation
+guarantee is given in Lemma 4.
+
+Lemma 4 (63% approximation guarantee). Given A, P and budget b, let Ŝ be the
+output of L OOKO UT (Algorithm 1). Suppose S ∗ = arg maxS⊆P,|S|=b f (S) is an opti-
+mal set of focus-plots. Then:
+                                            
+                                           1
+                              f (Ŝ) ≥ 1 −     f (S ∗ )                        (5)
+                                           e
+Proof. This follows from [22] since by design, our plot selection objective f is non-
+negative, non-decreasing and submodular.                                           
+
+4.4   Computational Complexity Analysis
+Lemma 5. L OOKO UT total time complexity is O(l log n0 (k + n0 ) + klb), for sample
+size n0 < n, and is sub-linear in total number of input points n.
+Proof. We study complexity in two parts: (1) scoring the given outliers (Section 4.1)
+and (2) selecting focus-plots to present to the user (Section 4.2).
+     (1) For each focus-plot, we train an iForest model [19] in 2-d. Following their rec-
+ommended setup, we sub-sample n0 points and train t (100 in [19]) randomized isola-
+tion trees. The depth of each tree is O(log n0 ), where each point is evaluated at each
+level for the threshold/split conditions. Therefore, training iForest with t trees takes
+O(tn0 log n0 ). Then, scoring |A| = k outliers takes O(tk log n0 ). Total complexity of
+training and scoring on all plots is O(lt log n0 (k + n0 )). Note that this can also be done
+per plot independently in parallel to reduce time.
+     (2) At each iteration of the greedy selection algorithm, we compute the marginal
+gain for each yet-unselected plot of being added to our select-set in O(kl). Marginal
+gain per plot can also be computed independently in parallel. Among the remaining
+plots, we pick the one with the largest marginal gain. Finding the maximum among all
+gains takes O(l) via a linear scan. We repeat this process b times until the budget is
+exhausted. Total selection complexity is thus O(klb).
+     The overall complexity of both parts is effectively O(l log n0 (k + n0 ) + klb), since
+t is a constant.                                                                          
+    Notice that the total number of focus-plots, l=d2 , is quadratic in number of features.
+Typically, d is small (<100). In high dimensions, we could either use parallelism (multi-
+core machines are commodity), or drop features with low kurtosis as done earlier [19]
+or other feature selection criteria [13].
+
+4.5   Discussion
+Here we answer some questions that may be in the reader’s mind.
+1. How do we define “outlier?” We defer this question to the off-the-shelf outlier de-
+tection algorithm (iForest [19], LOF [5], etc.). Our focus here is to succinctly and inter-
+pretably explain what makes the pre-selected items stand out from the rest.
+2. Why focus-plots? Using focus-plots for justification is an essential, concious choice
+we make for several reasons: (a) scatterplots are easy to look at and quickly interpret
+(b) they are universal and non-verbal, in that we need not use language to convey the
+outlierness of points – even people unfamiliar with the context of Enron will agree that
+the point “Jeff Skilling” in Fig. 1 is far away from the rest, and (c) they show where the
+outliers lie relative to the normal points – the contrastive visualization of points is more
+convincing than stand-alone rules.
+3. How do we choose the budget b? We designed our objective function to be budget-
+conscious, and let the budget be specified by the analyst (user). If not specified, we use
+b=7, since humans have a working memory of size “seven, plus or minus two” [21].
+4. Why not decision trees to separate outliers from the rest? While arguably inter-
+pretable, decisions trees are not easy to visualize the points when higher than depth
+3. Moreover, they try to find balanced splits which would try to cluster the outliers –
+which is unlikely for outliers. Also, decision trees are not budget-conscious, i.e. they
+would not necessarily produce the minimum description. Finally, they do not provide
+any quantifiable explanations, i.e. incrimination per outlier like our si,j scores – the
+splits are binary.
+      Table 2: Datasets with labeled outliers (that we explain) studied in this work.
+      Dataset         Type       # points       # features           Description
+              1
+      E NRON          graph        151              12         e-mail communications
+       D BLP2         graph       1.3M              12              co-authorship
+      H TRU3         feature      17.9K             8            pulsar identification
+      G LASS4        feature       213              9             glass composition
+
+5     Experiments
+In this section, we empirically evaluate L OOKO UT on three, diverse datasets. Our ex-
+periments were designed to answer the following questions:
+[Q1] Quality of Explanation: How well can L OOKO UT “explain” or “blame” the
+     given outliers?
+[Q2] Scalability: How does L OOKO UT scale with the input graph size and the number
+     of outliers?
+[Q3] Discoveries: Does L OOKO UT lead to interesting and intuitive explanations on
+     real world data?
+These are addressed in Sec. 5.3, 5.4 and 5.5 respectively. Before detailing our empirical
+findings, we describe the datasets used and our experimental setup.
+
+5.1   Dataset Description
+To illustrate the generality of our proposed domain-agnostic pictorial outlier explana-
+tions algorithm L OOKO UT, we select our datasets from diverse domains: - e-mail com-
+munication (E NRON), co-authorship (D BLP), pulsar identification (H TRU), and glass
+composistion (G LASS). All datasets are publicly available and the first two are uni-
+partite, directed and undirected resp., time-evolving graph datasets. The latter two are
+multi-feature datasets consisting of continuous values. A brief description is given be-
+low and a summary is provided in Table 2.
+E NRON: This dataset consists of 19K emails exchanged between 151 E NRON employ-
+ees during the period surrounding the scandal5 (May 1999-June 2002). The communi-
+cations are on daily granularity.
+D BLP: This dataset contains the co-authorship network of 1.3M authors over 25 years
+from 1990 to 2014. The networks are collected at yearly granularity.
+H TRU: This dataset describes a sample of 17.9K pulsar (rapidly rotating neutron star)
+candidates collected during the High Time Resolution Universe Survey. Radio emis-
+sions have been binary classified as either background noise or as pulsar radiation.
+Features are extracted from the radio emission pattern curves and profiles.
+G LASS: This dataset consists of a multiclass classification of 213 glass samples with
+element-wise composisions of each sample as features. There are a total of seven classes
+ 1
+   http://networkdata.ics.uci.edu/netdata/html/EnronMailUSC1.html
+ 2
+   http://konect.uni-koblenz.de/networks/dblp_coauthor
+ 3
+   https://archive.ics.uci.edu/ml/datasets/Glass+Identification
+ 4
+   https://archive.ics.uci.edu/ml/datasets/HTRU2
+ 5
+   https://en.wikipedia.org/wiki/Enron_scandal
+which are clustered into two distinct types: (Classes 1-4) window glass and (Classes 5-
+7) non-window glass.
+
+5.2   Experimental Setup
+Graph feature extraction: We extract the following intuitive and easy-to-understand
+features from our graph datasets (E NRON, D BLP) in order to generate pictorial explana-
+tions: (1) indegree and (2) outdegree for the number of unique in- and out- neigh-
+bors of every node, (3) inweight-v and (4) outweight-v for the total weight of
+in- and out- edges incident on each node, (5) inweight-r and (6) outweight-r
+for the count of in- and out- edges (including repetitions) incident on each node, (7)
+average-IAT, (8) IAT-variance, (9-11) minimum-IAT, median-IAT, and
+maximum-IAT to capture various statistics of inter-arrival time (IAT) between edges
+and finally, (12) lifetime- for the time gap between the first and the last edge
+[11,23,2].
+    Groundtruth: To obtain “ground-truth” outliers for L OOKO UT input, we use the
+iForest [19] algorithm on given or extracted features. This yields a ranked list of points
+with scores in [0, 1] (higher value suggests higher abnormality), from which we pick the
+desired top k. Analogously, we use iForest for computing the outlier score in each focus-
+plot. We note that the analyst is free to choose any outlier detector(s) for both/either of
+the above stages, making L OOKO UT detector-agnostic. However, it is recommended
+that the same methods be used for both stages to ensure ranking similarities.
+    Evaluation metric: We quantify the quality of explanation provided by a set of
+plots S using its incrimination score which is a normalized form of our objective:
+                                                   1
+                             incrimination(S) =      · f (S)                           (6)
+                                                   C
+where C is the normalization constant equal to the maximum achievable objective (see
+Eq. (1)) when all plots are selected, i.e., C = f (P).
+    Baselines: Due to the lack of comparable prior works, we use a naı̈ve version of our
+approach, called L OOKO UT-NA ÏVE which ignores the submodularity of our objective.
+Instead, L OOKO UT-NA ÏVE assigns a score to each plot by summing up scores for all
+given outliers and chooses the top b plots for a given budget b. For the sake of compar-
+ison, we compare both L OOKO UT and L OOKO UT-NA ÏVE with a R ANDOM baseline in
+which random b plots are chosen for the given budget b.
+    All experiments were performed on an OSX personal computer with 16GB memory.
+R ANDOM baseline incrimination scores and runtimes were averaged over 10 trials.
+
+5.3   Quality of Explanation
+Fig. 4 compares the incrimination scores of both L OOKO UT-NA ÏVE and L OOKO UT on
+the E NRON, H TRU and G LASS datasets for several choices of k and b. The red dotted
+line indicates the ideal value, incrimination(P) = 1, i.e., the highest achievable incrim-
+ination (by selecting all plots). Fig. 4 shows that L OOKO UT consistently outperforms
+L OOKO UT-NA ÏVE and rapidly converges to the ideal incrimination with increasing
+budget. Results on D BLP were similar, but excluded for space constraints.
+                    (a) E NRON                                (b) E NRON
+
+
+
+
+                    (c) H TRU                                  (d) G LASS
+
+Fig. 4: Comparison of explanation capability of L OOKO UT with other baselines. Re-
+sults shown on E NRON (a-b) with k = {10, 20} outliers (left to right), H TRU (c) with
+32 outliers and G LASS (d) with 28 outliers.
+
+5.4   Scalability
+
+We empirically studied how L OOKO UT runtime varies with (i) number of focus-plots l
+and (ii) the number of outliers k.
+    To study the variation of runtime with the number of focus-plots, we vary the num-
+ber of features which are taken into consideration. Fig. 5 (left) illustrates linear scaling
+with respect to number of focus-plots for the G LASS dataset.
+    We also study the variation of runtime with the number of outliers, as feature extrac-
+tion incurs a constant overhead on each dataset. Fig. 5 (right) illustrates linear scaling
+with respect to number of outliers for a D BLP subgraph with 10K edges.
+
+
+5.5   Discoveries
+
+In this section, we present our discoveries using L OOKO UT on all four real world
+datasets. Scoring in 2-d was performed using iForest with t = 100 trees and sample
+size ψ = 64 (E NRON, H TRU, G LASS) and ψ = 256 (D BLP). We use dictated outliers
+for E NRON, H TRU and G LASS, and detected outliers for D BLP dataset to demonstrate
+performance in both settings.
+Fig. 5: L OOKO UT scales linearly with (left) number of focus-plots to consider and
+right) number of outliers.
+
+
+
+
+                     (a)                                       (b)
+
+Fig. 6: Discoveries using L OOKO UT on detected outliers: L OOKO UT partitions and
+explains outlier detection results from iForest on D BLP (a-b).
+
+E NRON (CEO & CFO explained by large outdegree)
+We used two top actors in the E NRON scandal, Kenneth Lay (CEO) and Jeff Skilling
+(CFO) as dictated outliers for L OOKO UT and sought explanations for their abnormality
+based on internal e-mail communications. With b = 2, L OOKO UT produced the focus-
+plots shown in Fig. 1 (right). Explanations indicate that Jeff Skilling had an unsually
+large IAT-max for the number of employees he communicated with (outdegree).
+On the other hand, Kenneth Lay sent emails to an abnormally large number of employ-
+ees (outdegree) given the time range during which he emailed anyone (lifetime).
+D BLP (high h-index authors explained by large lifetime and high co-authorships)
+We obtained ground truth outliers by running iForest on the high-dimensional space
+spanned by the extracted graph features. With k = 5, the detected outlying authors
+were Jack Dongarra, Thomas S. Huang, Alberto L. Sangiovanni-Vincentelli, H. Vincent
+Poor, and Hao Wang. The explanations provided by L OOKO UT with b = 2 are shown
+in Fig. 6a-b. Thus, the outlying authors users are partitioned into two groups. The mem-
+bers of the first group, Jack Dongarra, Thomas S. Huang, Alberto L. Sangiovanni-
+Vincentelli, and H. Vincent Poor are outlying because they had unusually high duration
+                      H TRU                                  G LASS
+
+
+
+
+                       (a)                                   (d)
+
+
+
+
+                       (b)                                    (e)
+
+
+
+
+                       (c)                                    (f)
+
+Fig. 7: Discoveries using L OOKO UT on dictated outliers: L OOKO UT explains outlier
+characteristics on H TRU (a-c) and G LASS (d-f) for budget b = 3.
+
+during which they published papers (lifetime) and total number of co-authorships
+(inweight-r). This is consistent with their high h-indices obtained from their re-
+spective google scholar pages (see brackets in Fig. 6a). The second group consists of
+only Hao Wang, who was also outlying in the first focus-plot, but is best explained by
+very high IAT-variance for his inweight-r value, shown in Fig. 6b.
+
+H TRU (pulsars correlated with skewness and extra kurtosis of integrated profile)
+The given radio emission samples were classified as either random noise or produced
+from a pulsar. We subsampled datapoints from the pulsar class and considered them
+as our set of dictated outliers with k = 32. We ran L OOKO UT on this subsampled
+dataset with b = 3 and obtained the focus-plots shown in Fig. 7a-c. The explanations
+infer high values of skewness and excess kurtosis seem to strongly indicate
+a pulsar radio emission. We observe that only the first focus-plot, Fig. 7a, succeeds to
+provide a suitable explanation for our set of detected anomalies. This is quantitatively
+explained in Fig. 4c where budget b = 1 has a high incrimination score and on further
+increasing the budget only a small marginal gain is observed.
+G LASS (headlamp glass explained by high Aluminium and Barium content)
+The dataset contains seven classes pertaining to different types of glass. Broadly these
+seven classes are split into two categories: window based glass (class 1-4) and non-
+window based glass (class 5-7). To compare glass composition between these two cat-
+egories we stitched together a subset of the original dataset by including only classes
+1, 2, 3, 4 & 7. Here class 7 (headlamps) is considered the set of dictated outliers with
+k = 28. The explanations provided by L OOKO UT, on the newly constructed dataset,
+with b = 3 are shown in Fig. 7d-f. The first two focus-plots Fig. 7d-e reflect higher
+aluminium and barium concentrations in headlamps as compared to window glass.
+Aluminium is used as a reflective coating and the presence of barium, in the form
+of oxides (borosilicate glass), helps induce heat resistant properties – both properties
+we expect to find in headlamps. Concurrently, we observe a very low or nearly zero
+concentration of potassium in headlamp glass. Potassium is to used to toughen
+glass and is found in windows which need to be resistant to adverse weather conditions.
+    Note that on all datasets, outlying points are visually distinguishable, and often
+complementary between focus-plots. This is in line with our desired explanation task,
+and achieved as a result of our L OOKO UT subset selection objective and approach.
+
+
+6   Conclusions
+In this work, we formulated and tackled the problem of succinctly and interpretably ex-
+plaining outliers to human analysts. We made the following contributions: (a) problem
+formulation: we formulate our goal for explaining outliers using a budget of visually
+interpretable focus-plots, (b) explanation algorithm: we propose a submodular objec-
+tive to quantify explanation quality and propose the L OOKO UT method for solving it
+approximately with guarantees, (c) generality: we show that L OOKO UT can work with
+diverse domains and any detection algorithm, and (d) scalability: we show theoreti-
+cally and empirically that L OOKO UT scales linearly in the number of input outliers as
+well as the total number of focus-plots to chose from. We conduct experiments on real-
+world datasets: e-mail communication, co-authorship, pulsar identification, and glass
+composition and demonstrate that L OOKO UT produces qualitatively interpretable ex-
+planations for “ground-truth” outliers and achieves strong quantitative performance in
+maximizing our proposed objective.
+
+Acknowledgments. This material is based upon work supported by the National Sci-
+ence Foundation (NSF) under Grants No. CNS-1314632, IIS-1408924 and IIS 1408287,
+by NSF CAREER 1452425 and the PwC Risk and Regulatory Services Innovation Cen-
+ter at Carnegie Mellon University.. Any opinions, findings, and conclusions or recom-
+mendations expressed in this material are those of the author(s) and do not necessarily
+reflect the views of the National Science Foundation, or other funding parties. The U.S.
+Government is authorized to reproduce and distribute reprints for Government purposes
+notwithstanding any copyright notation here on.
+
+References
+ 1. Aggarwal, C.C.: Outlier Analysis. Springer (2013)
+ 2. Akoglu, L., McGlohon, M., Faloutsos, C.: Oddball: Spotting anomalies in weighted graphs.
+    PAKDD pp. 410–421 (2010)
+ 3. Akoglu, L., Tong, H., Koutra, D.: Graph based anomaly detection and description: a survey.
+    Data Min. Knowl. Discov. 29(3), 626–688 (2015)
+ 4. Angiulli, F., Fassetti, F., Palopoli, L.: Discovering characterizations of the behavior of
+    anomalous subpopulations. IEEE TKDE 25(6), 1280–1292 (2013)
+ 5. Breunig, M.M., Kriegel, H.P., Ng, R.T., Sander, J.: LOF: Identifying density-based local
+    outliers. SIGMOD Rec. 29(2), 93–104 (2000)
+ 6. Chandola, V., Banerjee, A., Kumar, V.: Anomaly detection: A survey. ACM Computing Sur-
+    veys (CSUR) 41(3), 15 (2009)
+ 7. Dang, X.H., Assent, I., Ng, R.T., Zimek, A., Schubert, E.: Discriminative features for iden-
+    tifying and interpreting outliers. In: ICDE. pp. 88–99 (2014)
+ 8. Dang, X.H., Micenková, B., Assent, I., Ng, R.T.: Local outlier detection with interpretation.
+    In: ECML/PKDD. pp. 304–320 (2013)
+ 9. Emmott, A.F., Das, S., Dietterich, T., Fern, A., Wong, W.K.: Systematic construction of
+    anomaly detection benchmarks from real data. In: KDD Workshop on Outlier Detection and
+    Description (2013)
+10. Garey, M.R., Johnson, D.S.: Computers and Intractability: A Guide to the Theory of NP-
+    Completeness. Freeman, New York (1979)
+11. Giatsoglou, M., Chatzakou, D., Shah, N., Beutel, A., Faloutsos, C., Vakali, A.: ND-Sync:
+    Detecting synchronized fraud activities. In: PAKDD. vol. 9078, pp. 201–214 (2015)
+12. Gupta, M., Gao, J., Aggarwal, C.C., Han, J.: Outlier detection for temporal data: A survey.
+    IEEE Trans. Knowl. Data Eng. 26(9), 2250–2267 (2014)
+13. Jr., C.T., Traina, A.J.M., Wu, L., Faloutsos, C.: Fast feature selection using fractal dimension.
+    JIDM 1(1), 3–16 (2010)
+14. Keller, F., Müller, E., Wixler, A., Böhm, K.: Flexible and adaptive subspace search for outlier
+    analysis. In: CIKM. pp. 1381–1390. ACM (2013)
+15. Knorr, E.M., Ng, R.T.: Finding intensional knowledge of distance-based outliers. In: VLDB.
+    pp. 211–222 (1999)
+16. Kopp, M., Pevný, T., Holena, M.: Interpreting and clustering outliers with sapling random
+    forests. In: ITAT (2014)
+17. Kuo, C.T., Davidson, I.: A framework for outlier description using constraint programming.
+    In: AAAI. pp. 1237–1243 (2016)
+18. Leskovec, J., Krause, A., Guestrin, C., Faloutsos, C., VanBriesen, J.M., Glance, N.S.: Cost-
+    effective outbreak detection in networks. In: KDD. pp. 420–429. ACM (2007)
+19. Liu, F.T., Ting, K.M., Zhou, Z.H.: Isolation forest. ICDM pp. 413–422 (2008)
+20. Micenková, B., Ng, R.T., Dang, X.H., Assent, I.: Explaining outliers by subspace separabil-
+    ity. In: ICDM. pp. 518–527 (2013)
+21. Miller, G.: The magic number seven plus or minus two: Some limits on our automatization
+    of cognitive skills. Psychological Review 63, 81–97 (1956)
+22. Nemhauser, G.L., Wolsey, L.A.: Best algorithms for approximating the maximum of a sub-
+    modular set function. Math. Oper. Res. 3(3) (1978)
+23. Shah, N., Beutel, A., Hooi, B., Akoglu, L., Günnemann, S., Makhija, D., Kumar, M., Falout-
+    sos, C.: Edgecentric: Anomaly detection in edge-attributed networks. In: ICDM Workshops.
+    pp. 327–334. IEEE (2016)
+

@@ -1,0 +1,472 @@
+   Evaluating Real-time Anomaly Detection
+Algorithms – the Numenta Anomaly Benchmark
+
+
+                                               Alexander Lavin
+                                       Numenta, Inc. Redwood City, CA
+                                           alavin@numenta.com
+
+
+                                               Subutai Ahmad
+                                       Numenta, Inc. Redwood City, CA
+                                          sahmad@numenta.com
+
+
+
+
+                                                October 9, 2015
+
+
+
+
+    We appreciate and encourage any comments on the contents of this paper. The GitHub URL
+    for NAB is https://github.com/numenta/NAB. The repository contains all the code, data, and
+    detailed results reported in this paper. You can submit issues or pull requests there, or contact
+    us at the above email addresses.
+
+
+    Note: This is a draft preprint of a paper to be published in ICMLA 2015, December 9-11,
+    Miami, Florida. The final paper may be slightly different from this version. Please use the
+    following citation for this paper:
+
+    A. Lavin and S. Ahmad, “Evaluating Real-time Anomaly Detection Algorithms – the
+        Numenta Anomaly Benchmark,” in 14th International Conference on Machine
+        Learning and Applications (IEEE ICMLA’15), 2015.
+   Evaluating Real-time Anomaly Detection
+Algorithms – the Numenta Anomaly Benchmark
+                      Alexander Lavin                                                           Subutai Ahmad
+             Numenta, Inc. Redwood City, CA                                             Numenta, Inc. Redwood City, CA
+                 alavin@numenta.com                                                        sahmad@numenta.com
+
+
+                                Abstract                                   automation, the detectors should continue to learn and adapt to
+                                                                           changing statistics while simultaneously making predictions.
+    Much of the world’s data is streaming, time-series data, where         The real goal is often prevention, rather than detection, so it is
+anomalies give significant information in critical situations;             desirable to detect anomalies as early as possible, giving
+examples abound in domains such as finance, IT, security, medical,
+and energy. Yet detecting anomalies in streaming data is a difficult
+                                                                           actionable information ideally well before a catastophic failure.
+task, requiring detectors to process data in real-time, not batches, and       Benchmarks designed for static datasets do not adequately
+learn while simultaneously making predictions. There are no                capture the requirements of real-time applications. For
+benchmarks to adequately test and score the efficacy of real-time          example, scoring with standard classification metrics such as
+anomaly detectors. Here we propose the Numenta Anomaly
+Benchmark (NAB), which attempts to provide a controlled and
+                                                                           precision and recall do not suffice because they fail to reflect
+repeatable environment of open-source tools to test and measure            the value of early detection. An artificial separation into
+anomaly detection algorithms on streaming data. The perfect detector       training and test sets does not properly capture a streaming
+would detect all anomalies as soon as possible, trigger no false           scenario nor does it properly evaluate a continuously learning
+alarms, work with real-world time-series data across a variety of          algorithm. The NAB methodology and scoring rules (described
+domains, and automatically adapt to changing statistics. Rewarding         below) are designed with such criteria in mind. Through
+these characteristics is formalized in NAB, using a scoring algorithm      experience with customers and researchers we also discovered
+designed for streaming data. NAB evaluates detectors on a                  it would be beneficial for the industry to include real-world
+benchmark dataset with labeled, real-world time-series data. We            labeled data from multiple domains. Such data is rare and
+present these components, and give results and analyses for several
+                                                                           valuable, and NAB attempts to incorporate such a dataset as
+open source, commercially-used algorithms. The goal for NAB is to
+provide a standard, open source framework with which the research          part of the benchmark. There exist two other time-series data
+community can compare and evaluate different algorithms for                corpuses intended for real-time anomaly detection: the UC-
+detecting anomalies in streaming data.                                     Irvine dataset [3] and a recently released dataset from Yahoo
+                                                                           Labs [4]. Neither of these include a scoring system but their
+    Keywords—anomaly detection; time-series data; benchmarks;              data could eventually be incorporated into NAB.
+streaming data
+                                                                               NAB attempts to provide a controlled and repeatable
+                       I. INTRODUCTION                                     environment of tools to test and measure different anomaly
+                                                                           detection algorithms on streaming data. We include in this
+    With the rapid rise in real-time data sources the detection of         paper an initial evaluation of four different real-time
+anomalies in streaming data is becoming increasingly                       algorithms. At Numenta we have developed an anomaly
+important. Use cases such as preventative maintenance, fraud               detection algorithm based on Hierarchical Temporal Memory
+prevention, fault detection, and monitoring can be found                   (HTM). HTM is a continuous learning system derived from
+throughout numerous industries such as finance, IT, security,              theory of the neocortex [5] and is well suited for real-time
+medical, energy, e-commerce, and social media. Anomaly                     applications. The algorithm has proven useful in applications
+detection is notoriously difficult to benchmark and compare [1,            such as monitoring server data, geospatial tracking, stock
+2]. In addition, real-time applications impose their own unique            trading metrics, and social media [6]. We also include
+constraints and challenges that must be considered. The goal               comparative results with open source anomaly detection
+of this paper is to introduce the Numenta Anomaly Benchmark                algorithms from Etsy Skyline [7], a popular open source
+(NAB), a rigorous new benchmark and source code for                        algorithm, and two from Twitter [8]. There are, of course,
+evaluating real-time anomaly detection algorithms.                         many algorithms we have not directly tested [2, 9-14]. It is our
+    Anomaly detection in real-world streaming applications is              hope that eventually a wide assortment of algorithms will be
+challenging. The detector must process data and output a                   independently evaluated and results reported in a manner that
+decision in real-time, rather than making many passes through              is objectively comparable.
+batches of files. In most scenarios the number of sensor                      In the next section we discuss the two main components of
+streams is large and there is little opportunity for human, let            NAB: the scoring system and dataset. We then discuss and
+alone expert, intervention. As such, operating in an                       analyze NAB scoring results for the above algorithms.
+unsupervised, automated fashion (e.g. without manual
+parameter tweaking) is often a necessity. As part of this
+           II. NUMENTA ANOMALY BENCHMARK                                   it is well suited to be a standard benchmark for streaming
+                                                                           applications.
+     NAB aims to represent the variety of anomalous data and
+the associated challenges detectors face in real-world streaming
+applications. We define anomalies in a data stream to be
+patterns that do not conform to past patterns of behavior for the
+stream. This definition encompasses both point anomalies (or
+spatial anomalies) as well as temporal anomalies. For
+example, a spiking point anomaly occurs when a single data
+point extends well above or below the expected range.
+Streaming data commonly also contains temporal anomalies,
+such as a change in the frequency, sudden erratic behavior of a
+metric, or other temporal deviations. Anomalies are defined
+with respect to past behavior. This means a new behavior can
+be anomalous at first but ceases to be anomalous if it persists;
+i.e. a new normal pattern is established. Fig. 1 shows a few
+representative anomalies taken from the NAB dataset.
+   In the next two sections we discuss both the NAB dataset
+and scoring system, and the qualities that make them ideal for
+evaluating real-world anomaly detection algorithms.
+A. Benchmark Dataset
+    In the current version of NAB we focus on time-series data
+where each row contains a time stamp plus a single scalar
+value. The requirements are then to (i) include all types of
+streaming data anomalies, (ii) include a variety of data metrics,
+and (iii) present common challenges such as noise and
+establishing new normal patterns.
+    Anomalous patterns differ significantly across applications.
+A one-second latency in periodic EKG data could be a
+significant fluctuation, but the same pattern in stock trading
+volume may be meaningless. It is thus important for the NAB
+dataset to include metrics across a variety of domains and
+applications. The data currently in the NAB corpus represents
+a variety of metrics ranging from IT metrics such as network
+utilization to sensors on industrial machines to social media
+chatter. We also include some artificially-generated data files
+that test anomalous behaviors not yet represented in the                   Fig. 1. Two representative examples of real data streams from the NAB
+                                                                           dataset. Anomalies are labeled with red circles. The first anomaly in the top
+corpus’s real data, as well as several data files without any              figure is subtle and challenging. The spiking behavior does not return to the
+anomalies. The current NAB dataset contains 58 data files,                 baseline as expected, and this is soon the new normal pattern. The second
+each with 1000-22,000 data instances, for a total of 365,551               anomaly is a simple spike anomaly after which the system returns to previous
+data points.                                                               patterns. The third anomaly identifies a long period inconcsitent with the
+                                                                           normal spiking pattern. The bottom figure shows temperature sensor data
+    The NAB dataset is labeled by hand, following a                        from an internal component of a large, expensive, industrial machine. The
+meticulous, documented procedure. Labelers must adhere to a                first anomaly was a planned shutdown. The third anomaly is a catastrophic
+set of rules when inspecting data files for anomalies, and a               system failure. The second anomaly, a subtle but observable change in the
+                                                                           behavior, indicated the actual onset of the problem that led to the eventual
+label-combining algorithm formalizes agreement into ground                 system failure.
+truth labels. The process is designed to mitigate human error as
+much as possible. 1 In addition a smooth scoring function                  B. Scoring Real-Time Anomaly Detectors
+(described below) ensures that small labeling errors will not
+cause large changes in reported scores.                                        In NAB an anomaly detector accepts data input and outputs
+                                                                           instances which it deems to be anomalous. The NAB scoring
+    It is often prohibitively expensive to collect an accurately           system formalizes a set of rules to determine the overall quality
+labeled set of anomalous data instances that covers all types of           of anomaly detection. We define the requirements of the ideal,
+anomalous behavior [2]. A key element of the NAB dataset is                real-world anomaly detector as follows:
+the inclusion of real-world data with anomalies for which we
+know the causes. We propose the NAB dataset as a quality                       i.     detects all anomalies present in the streaming data
+collection of time-series data with labeled anomalies, and that                ii.    detects anomalies as soon as possible, ideally before
+                                                                                      the anomaly becomes visible to a human
+                                                                               iii.   triggers no false alarms (no false positives)
+1
+ The full labeling process and rules can be found in the NAB wiki, along       iv.    works with real time data (no look ahead)
+with the label-combining source code, in the NAB repo [15].
+    v. is fully automated across all datasets (any data                        soon after the ground truth anomaly. 10% is a convenient
+specific parameter tuning must be done online without human                    number but note the exact number is not critical. We tested a
+intervention)                                                                  range of window sizes (between 5% and 20%) and found that,
+                                                                               partly due to the scaled scoring function, the end score was not
+   The NAB scoring algorithm aims to reward these                              sensitive to this percentage.
+characteristics. There are three key aspects of scoring in NAB:
+anomaly windows, the scoring function, and application                             Different applications may place different emphases as to
+profiles. These are described in more detail below.                            the relative importance of true positives vs. false negatives and
+                                                                               false positives. For example, the graph in Fig. 2 represents an
+    Traditional scoring methods, such as precision and recall,                 expensive industrial machine that one may find in a
+don’t suffice because they don’t effectively test anomaly
+                                                                               manufacturing plant. A false negative leading to machine
+detection algorithms for real-time use. For example, they do                   failure in a factory can lead to production outages and be
+not incorporate time and do not reward early detection.
+                                                                               extremely expensive. A false positive on the other hand might
+Therefore, the standard classification metrics – true positive                 require a technician to inspect the data more closely. As such
+(TP), false positive (FP), true negative (TN), and false negative
+                                                                               the cost of a false negative is far higher than the cost of a false
+(FN) are not applicable for evaluating algorithms for the above                positive. Alternatively, an application monitoring the statuses
+requirements.
+                                                                               of individual servers in a datacenter might be sensitive to the
+                                                                               number of false positives and be fine with the occasional
+                                                                               missed anomaly since most server clusters are relatively fault
+                                                                               tolerant.
+                                                                                   To gauge how algorithms operate within these different
+                                                                               application scenarios, NAB introduces the notion of
+                                                                               application profiles. For TPs, FPs, FNs, and TNs, NAB applies
+                                                                               different relative weights associated with each profile to obtain
+                                                                               a separate score per profile.
+
+
+
+
+Fig. 2. Shaded red regions represent the anomaly windows for this data file.
+The shaded purple region is the first 15% of the data file, representing the
+probationary period. During this period the detector is allowed to learn the
+data patterns without being tested.
+
+    To promote early detection NAB defines anomaly
+windows. Each window represents a range of data points that is
+centered around a ground truth anomaly label. Fig. 2 shows an
+example using the data from Fig 1. A scoring function
+(described in more detail below) uses these windows to
+identify and weight true positives, false positives, and false
+negatives. If there are multiple detections within a window, the
+earliest detection is given credit and counted as a true positive.
+Additional positive detections within the window are ignored.                  Fig. 3. Scoring example for a sample anomaly window, where the values
+The sigmoidal scoring function gives higher positive scores to                 represent the scaled sigmoid function, the second term in Eq. (1). The first
+true positive detections earlier in a window and negative scores               point is an FP preceding the anomaly window (red dashed lines) and
+                                                                               contributes -1.0 to the score. Within the window we see two detections, and
+to detections outside the window (i.e. the false positives).
+                                                                               only count the earliest TP for the score. There are two FPs after the window.
+These properties are illustrated in Fig. 3 with an example.                    The first is less detrimental because it is close to the window, and the second
+                                                                               yields -1.0 because it’s too far after the window to be associated with the true
+    How large should the windows be? The earlier a detector                    anomaly. TNs make no score contributions. The scaled sigmoid values are
+can reliably identify anomalies the better, implying these                     multiplied by the relevant application profile weight, as shown in Eq. (1), the
+windows should be as large as possible. The tradeoff with                      NAB score for this example would calculate as: −1.0𝐴!" + 0.9999𝐴 !" −
+extremely large windows is that random or unreliable                           0.8093𝐴!" − 1.0𝐴!" . With the standard application profile this would result
+detections would be regularly reinforced. Using the underlying                 in a total score of 0.6909.
+assumption that true anomalies are rare, we define anomaly
+window length to be 10% the length of a data file, divided by                      NAB includes three different application profiles: standard,
+the number of anomalies in the given file. This technique                      reward low FPs, and reward low FNs. The standard profile
+allows us to provide a generous window for early detections                    assigns TPs, FPs, and FNs with relative weights (tied to the
+and also allow the detector to get partial credit if detections are            window size) such that random detections made 10% of the
+time would get a zero final score on average. The latter two         score for a given algorithm is simply the sum of the raw scores
+profiles accredit greater penalties for FPs and FNs,                 over all the data files in the corpus:
+respectively. These two profiles are somewhat arbitrary but
+designed to be illustrative of algorithm behavior. The NAB                                        𝑆! =         𝑆!!                (3)
+codebase itself is designed such that the user can easily tweak                                          !∈!
+the relative weights and re-score all algorithms. The                   The final reported score is a normalized NAB score
+application profiles thus help evaluate the sensitivity of           computed as follows:
+detectors to specific applications criteria.
+                                                                                                                   !
+                                                                                        !
+                                                                                                           𝑆 ! − 𝑆!"##
+    The combination of anomaly windows, a smooth temporal                              𝑆!"# = 100 ∙       !
+                                                                                                         𝑆!"#$"%&    !
+                                                                                                                  − 𝑆!"##         (4)
+scoring function (details in the next section), and the
+introduction of application profiles allows researchers to
+evaluate online anomaly detector implementations against the         Here we scale the score based on the raw scores of a “perfect”
+requirements of the ideal detector. Specifically the overall         detector (one that outputs all true positives and no false
+NAB scoring system evaluates real-time performance, prefers          positives) and a “null” detector (one that outputs no anomaly
+earlier detection of anomalies, penalizes “spam” (i.e. FPs), and     detections). It follows from Eq. (4) that the maximum
+provides realistic costs for the standard classification             (normalized) score a detector can achieve on NAB is 100, and
+evaluation metrics TP, FP, TN, and FN.                               an algorithm making no detections will score 0.
+C. Computing NAB Score: Details                                      D. Other NAB Details
+     The final NAB score for a given algorithm and a given               NAB is most valuable as a community tool, benefitting
+application profile is computed as follows. Let 𝐴 be the             researchers in academia and industry. In building NAB we
+application         profile   under      consideration,      with    have been collaborating with the community, and welcome
+𝐴 !" , 𝐴!" , 𝐴!" , 𝐴 !" the corresponding weights for true           more contributions of data and additional online anomaly
+positives, false positives, etc. These weights are bounded           detection algorithms. To this end, NAB is a completely open
+0 ≤ 𝐴 !" , 𝐴 !" ≤ 1 and −1 ≤ 𝐴!" , 𝐴!" ≤ 0. Let 𝐷 be the set         source code base released under the permissive MIT License
+of data files and let 𝑌! be the set of data instances detected as    [15]. It follows a versioning protocol and public issue tracking,
+anomalies for datafile 𝑑. (As discussed earlier, we remove           allowing changes and dataset additions to be clearly discussed
+redundant detections: if an algorithm produces multiple              and communicated. We post scores from contributed
+detections within the anomaly window, we retain only the             algorithms on the NAB scoreboard [16], which reflects a
+earliest one.) The number of windows with zero detections in         specific NAB version number – NAB v1.0 at the time of paper
+this data file is the number of false negatives, represented by      submission.1 The codebase is modular and designed to make it
+𝑓! .                                                                 easy to test additional algorithms (regardless of programming
+                                                                     language), adjust application profiles, and even test custom
+    The following scaled sigmoidal scoring function defines          labeled datafiles.
+the weight of individual detections given an anomaly window
+and the relative position of each detection:                                               III. ALGORITHMS TESTED
+                                        1                                It is our hope that over time the NAB scoreboard will
+          𝜎 ! 𝑦 = 𝐴 !" − 𝐴!"                   −1              (1)   reflect results from a large number of algorithms. In this paper
+                                     1 + 𝑒 !!
+                                                                     we report initial NAB results using four open source and
+In Eq. (1), 𝑦 is the relative position of the detection within the   commercially used algorithms, plus some control detectors.
+anomaly window. The parameters of Eq. (1) are set such that          The four primary algorithms are the Numenta HTM anomaly
+the right end of the window evaluates to 𝜎 𝑦 = 0.0 = 0 (see          detector, Etsy Skyline, and two Twitter algorithms,
+Fig. 3), and it yields a max and min of 𝐴 !" and 𝐴!" ,               AnomalyDetectionTs and AnomalyDetectionVec. We also use
+respectively. Every detection outside the window is counted as       some simple control detectors as baselines. Each of these are
+a false positive and given a scaled negative score relative to the   briefly described below.
+preceding window. The function is designed such that
+detections slightly after the window contribute less negative            The HTM detector (developed by Numenta and the
+scores than detections well after the window. Missing a              authors) is based on Hierarchical Temporal Memory (HTM), a
+window completely is counted as a false negative and assigned        machine intelligence technology inspired by the structure of
+a score of 𝐴!" .                                                     the neocortex [17, 18, 19]. Given a real-time data stream
+                                                                     ⋯ , 𝑥!!! , 𝑥!!! , 𝑥! , 𝑥!!! , 𝑥!!! , ⋯ , the algorithm models the
+    The raw score for a data file is the sum of the scores from      temporal sequences in that stream. At any point 𝑡 the HTM
+individual detections plus the impact of missing any windows:        makes multiple predictions for 𝑥!!! . At time 𝑡 + 1 these
+                                                                     predictions are compared with the actual values to determine
+              𝑆!! =          𝜎 ! (𝑦) + 𝐴!" 𝑓!                        an instantaneous anomaly score between 0 and 1. If any of the
+                                                              (2)    predictions are significantly different from 𝑥!!! the anomaly
+                      !∈!!
+                                                                     score will be 1. Conversely, if one of the predictions is exactly
+Eq. (2) accumulates the weighted score for each true positive        equal to 𝑥!!! the anomaly score will be 0. The system
+and false positive, and detriments the total score with a
+weighted count of all the false negatives. The benchmark raw         1
+                                                                         Contributor details can be found in the NAB wiki.
+maintains the mean and variance of the recent distribution of         for each data instance. The score from this detector offers some
+anomaly scores. At every time step it outputs the likelihood          intuition for the chance-level performance on NAB.
+that the current anomaly score is from the respective normal
+                                                                          Each algorithm in NAB is allowed to output an anomaly
+distribution. The anomaly likelihood score is thresholded to
+detect the final anomaly.                                             score between 0 and 1. The score is then thresholded using a
+                                                                      fixed threshold in order to detect an anomaly. NAB includes an
+    The Numenta algorithm has several features that make it           automated hill-climbing search for selecting the optimal
+suitable for real world streaming data. It can deal with both         threshold for each algorithm. This search efficiently optimizes
+predictable and highly unpredictable data – the final score is        over the range of possible thresholds, where the objective
+the deviation from the typical level of predictability for that       function to be maximized is the NAB scoring function. The
+stream. The temporal model makes multiple predictions and             detection threshold is thus tuned based on the full NAB dataset,
+can thus deal with branching temporal sequences. The                  under the constraint that a single fixed number be used for all
+algorithm is a continuously learning algorithm, so changes in         data files.
+the statistics of the data are automatically handled without
+additional retraining. Finally, the system is robust to parameter                                                IV. RESULTS
+settings. Thus it is able to handle a wide range of datasets          A. Overall NAB Scores
+without manual parameter tweaking. The code has been used
+in commercial applications and is freely available under an               Table 1 summarizes the scores for all algorithms on the
+AGPL license in Python and C++ [20].                                  three application profiles using the data files in NAB 1.0. The
+                                                                      HTM detector achieves the best overall scores, followed by
+     Skyline is a real-time anomaly detection system [7]              Etsy and Twitter. Although the HTM detector performs
+originally developed by Etsy.com for monitoring its high              markedly better, the Etsy and Twitter algorithms perform
+traffic web site. The algorithm employs a mixture of experts          significantly better than chance across all three application
+approach. It incorporates a set of simple detectors plus a voting     profiles.
+scheme to output the final anomaly score. The detectors
+include deviation from moving average, deviation from a least                                         TABLE I.              NAB SCOREBOARD
+squares estimate, deviation from a histogram of past values,
+etc. Like the Numenta algorithm, Skyline is well suited for                                                            Scores for Application Profilesa
+                                                                              Detectors
+analyzing streaming data. The internal estimates are                                                        Standard          Reward low FP             Reward low FN
+continually adjusted and, due to the mixture of simple experts,
+                                                                          1. Numenta HTM                       64.7                  56.5                      69.3
+it is relatively robust across a wide range of applications. The
+code is open source and has been tested in commercial settings.           2. Twitter ADVec                     47.1                  33.6                      53.5
+                                                                          3. Etsy Skyline                      35.7                  27.1                      44.5
+    Twitter recently released two versions of a real-time
+anomaly detection algorithm. It uses a combination of                     4. Randomb                           16.8                   5.8                      25.9
+statistical techniques to robustly detect outliers. The                   5. Null                               0.0                   0.0                       0.0
+Generalized ESD test [21] is combined with robust statistical                              a.
+                                                                                                Each algorithms’ parameters were optimized to yield the best NAB scores possible.
+metrics, and piecewise approximation is used to detect long                         b.
+                                                                                         Random detections do not yield scores ≈ 0 because of the NAB score optimization step.
+term      trends.     One    version     of     the    algorithm
+AnomalyDetectionVec is intended to be more general and                B. Results Analysis
+detect anomalies in data without timestamps but requires                  A detailed analysis of the errors illustrates the primary
+manually tuning of the periodicity. A second version of the           strengths and weaknesses of each algorithm. Notice all
+algorithm, AnomalyDetectionTs, exploits timestamps to detect          algorithms dropped in score from the Standard to Reward low
+periodicity and can detect both short-term (intra-day) and long-      FP profiles, but why does the Skyline score decrease more than
+term          (inter-day)       anomalies.          Unfortunately     the others? For the NAB corpus of 365,558 data instances,
+AnomalyDetectionTs was unable to calculate the necessary              Skyline detects 1161 as anomalous, whereas HTM and ADVec
+period parameters for some of the NAB data files, and thus we         detect 387 and 612, respectively.1 An algorithm that makes
+cannot include it in the Table 1 results. It is worth noting that     many detections is more likely to result in more FPs than one
+for the data files ADTs successfully ran, it was outperformed         with fewer. Similarly, this algorithm would result in fewer
+by ADVec. Both algorithms have been used in commercial                FNs, as reflected in the Reward low FN results, where Skyline
+settings and the R code is available as open source [22].             increased the most of the tested algorithms.
+    In addition to the above core set of detectors we use three           Investigating individual results files illustrates some of the
+control detectors. A “null” detector outputs a constant anomaly       interesting situations that arise in real time applications and
+score of 0.5 for all data instances. A “perfect” detector is an       how different detectors behave. Fig. 4 demonstrates the value
+oracle that outputs detections that would maximize the NAB            of continuous learning. This file shows CPU usage on a
+score; i.e. it outputs only true positives at the beginning of each   production server over time and contains two anomalies. The
+window. As discussed earlier the raw NAB scores from these
+two detectors are used to scale the NAB score for all other
+algorithms between 0 and 100. We also include a “random”              1
+                                                                        To maximize the ADVec scores we tuned the “max_anom” and “period”
+detector that outputs a random anomaly score between 0 and 1          parameters. The former was set to flag a maximum of 0.20% of the data
+                                                                      instances in a given file as anomalous. The latter set the period length to 150
+                                                                      data instances (used during seasonal decomposition).
+first is a simple spike detected by all algorithms. The second is
+a sustained shift in the usage. Skyline and HTM both detect the
+change but then adapt to the new normal (with Skyline
+adapting quickest). Twitter ADVec however continues to
+generate anomalies for several days.
+
+
+
+
+                                                                                   Fig. 6. Detection results demonstrating early detection.       Although all
+                                                                                   detectors correctly identify the anomaly, the HTM (diamond) detects it three
+                                                                                   hours earlier than Skyline and ADVec due to a change in the metric dynamics.
+
+                                                                                       Both figures illustrate a very common situation that occurs
+                                                                                   in practice. As demonstrated by the NAB data files, temporal
+                                                                                   changes in behavior often precede a large easily detectable
+Fig. 4. Detection results for anomalies on a production server based on CPU
+                                                                                   shift. Temporal and sequence based anomaly detection
+usage. The shapes correspond to different detectors: HTM, Skyline, and
+ADVec are diamond, square, and plus respectively. For a given detector, the        techniques can thus detect anomalies in streaming data before
+scored (i.e. the first) TP detection within each window is labeled in black. All   they are easily visible. This provides hope that such algorithms
+FP detections are colored red. As in Fig. 2, the red shaded regions denote the     can be used in production to provide early warning and help
+anomaly windows.                                                                   avoid catastrophes far more reliably than traditional
+                                                                                   techniques.
+    Figs. 5 and 6 demonstrate temporal anomalies and their
+importance in early detection. Fig. 5 shows a close up of the                                   V. CONCLUSION AND FUTURE WORK
+results for the previously discussed machine temperature
+                                                                                       The aim of NAB is to provide the anomaly detection
+sensor data file. The first anomaly shown in this plot is a
+                                                                                   research community with a controlled and repeatable
+somewhat subtle temporal anomaly where the temporal
+                                                                                   environment of tools to test and measure different algorithms
+behavior is unusual but individual readings are within the
+                                                                                   for real-time streaming applications. The contributions of this
+expected range. This anomaly (which preceded the catastrophic
+                                                                                   work are threefold:
+failure on February 8) is only detected by HTM. All three
+detectors detect the second anomaly, although Skyline and                            I. Benchmark dataset: real world time-series data files
+HTM detect it earlier than ADVec. In this plot HTM and                                  from a variety of domains, labeled with anomalies.
+Skyline also each have a false positive. Fig. 6 is another                              Easily accessible real data for streaming applications is
+example demonstrating early detection. All three detectors                              rare, and its value for algorithm practitioners is
+detect the anomaly but HTM detects it three hours earlier due                           significant. In this paper we have noted some of the
+to a subtle shift in metric dynamics.                                                   insights such as the presence of subtle changes in
+                                                                                        dynamics preceding large-scale failures.
+                                                                                     II. Performance evaluation: a scoring philosophy designed
+                                                                                         for real time applications. The scoring system in NAB
+                                                                                         augments traditional metrics by incorporating time,
+                                                                                         explicitly rewarding early detection. The addition of
+                                                                                         easily tuned application profiles allows developers to
+                                                                                         explicitly test algorithms for their specific application
+                                                                                         requirements.
+                                                                                     III. Code library: fully open source repository complete
+                                                                                         with data, algorithms, and documentation.
+                                                                                       We discussed the NAB components and methods, and
+                                                                                   presented evaluation results for several open source detection
+                                                                                   algorithms. Although the HTM algorithm outperforms the
+Fig. 5. A close up of the detection results for the machine temperature data       other tested anomaly detectors, the results show there is still
+of Figs. 1 (bottom) and 2. Only the HTM (diamond) detects the first anomaly        room for improvement. Investigating the results has allowed us
+(a purely temporal anomaly). All algorithms detect the second anomaly, HTM         to pinpoint the strengths and shortcomings of all algorithms.
+and Skyline hours before ADVec. HTM and Skyline (diamond) each show an
+FP.                                                                                   We have found NAB to be a comprehensive, robust
+                                                                                   evaluation tool for real-world anomaly detection algorithms.
+NAB v1.0 is ready for researchers to evalute their algorithms            [9]  F. Serdio and E. Lughofer and K. Pichler and M.Pichler and T.
+and report their results. To move beyond NAB v1.0, future                     Buchegger and H. Efendic. (2014) “Fault Detection in
+                                                                              Multi­Sensor Networks based on Multivariate Time­Series
+work on NAB will involve adding more real-world data files to                 Models and Orthogonal Transformations”, Information Fusion,
+the corpus. We also anticipate incorporating multivariate                     vol. 20, pp. 272­291
+anomaly detection and categorical data. Over time we hope                [10] N. Laptev, S. Amizadeh, and I. Flint. (2015) Generic and
+researchers can use NAB to test and develop a large number of                 Scalable Framework for Automated Time-series Anomaly
+anomaly detection algorithms for the specific purpose of                      Detection. In Proceedings of the 21th ACM SIGKDD
+applying them to real time streaming applications.                            International Conference on Knowledge Discovery and Data
+                                                                              Mining, pp. 1939–1947.
+                       ACKNOWLEDGMENT                                    [11] U. Rebbapragada, P. Protopapas, C. E. Brodley, and C. Alcock.
+                                                                              (2009) “Finding anomalous periodic time series : An application
+    We would like to thank Jeff Hawkins, Ian Danforth,                        to catalogs of periodic variable stars,” Machine Learning, vol.
+Celeste Baranski, Jay Gokhale, and Tom Silver for their                       74, no. 3, pp. 281–313.
+contributions to this paper. We also thank the IEEE reviewers            [12] V. Chandola, V. Mithal, and V. Kumar. (2008) "Comparative
+for comments that helped improve overall readibility.                         evaluation of anomaly detection techniques for sequence data."
+                                                                              Eighth IEEE International Conference on Data Mining.
+                            REFERENCES                                   [13] D. Dasgupta, and S. Forrest. (1996) "Novelty detection in time
+                                                                              series data using ideas from immunology." Proceedings of the
+[1]   M Tavallaee, N. Stakhanova, and A. Ghorbani, “Toward                    International Conference on Intelligent Systems.
+      credible evaluation of anomaly-based intrusion-detection
+      methods,” IEEE Transactions on Systems, Man and Cybernetics        [14] J. Lin, E. Keogh, S. Lonardi, and B. Chiu. (2003) "A symbolic
+      Part C: Applications and Reviews, vol. 40, no. 5, pp. 516–524,          representation of time series, with implications for streaming
+      September 2010.                                                         algorithms." Proceedings of the 8th ACM SIGMOD workshop
+                                                                              on Research issues in data mining and knowledge discovery.
+[2]   V. Chandola, A. Banjeree, and V. Kumar, "Anomaly Detection:             ACM.
+      A Survey," ACM Computing Surveys (CSUR). USA, vol. 41,
+      issue 3, pp 1–72, September 2009.                                  [15] Numenta, Inc. (2015) NAB: Numenta Anomaly Benchmark
+                                                                              [Online code repository]. Redwood City, CA: Numenta, Inc.
+[3]   E. Keogh, J. Lin, and A. Fu, "HOT SAX: Efficiently finding the          Available: https://github.com/numenta/NAB
+      most unusual time series subsequence," in proceedings of Fifth
+      IEEE International Conference on Data Mining, pp. 226-233,         [16] A. Lavin. (2015) NAB Scoreboard [Online wiki]. Redwood
+      November 2005.                                                          City,         CA:         Numenta,         Inc.      Available:
+                                                                              https://github.com/numenta/NAB/wiki/NAB%20Scoreboard
+[4]   N. Laptev, A. Amizadeh, and Y. Billawala. (2015, March 25)
+      Yahoo Labs News: Announcing A Benchmark Dataset For Time           [17] J. Hawkins and S. Blakeslee, On Intelligence. New York: Henry
+      Series Anomaly Detection [Online blog]. Available:                      Holt and Company, 2004.
+      http://labs.yahoo.com/news/announcing-a-benchmark-dataset-         [18] J. Hawkins, S. Ahmad, and D. Dubinsky. (2014) The Science of
+      for-time-series-anomaly-detection                                       Anomaly Detection [Online technical report]. Redwood City,
+[5]   J. Hawkins, S. Ahmad, and D. Dubinsky. (2010) Hierarchical              CA: Numenta, Inc. Available: http://numenta.com/#technology
+      temporal memory including HTM cortical learning algorithms         [19] S. Purdy. (2014, October 17) Science of Anomaly Detection
+      [Online technical report]. Palo Alto, CA: Numenta, Inc.                 [Online video]. Redwood City, CA: Numenta, Inc. Available:
+      Available: http://numenta.org/cla-white-paper.html                      http://numenta.com/learn/science-of-anomaly-detection.html
+[6]   (2015) Numenta Applications [Online website]. Redwood City,        [20] Numenta, Inc. (2015) NuPIC: Numenta Platform for Intelligent
+      CA: Numenta, Inc. Available: http://numenta.com/#applications           Computing [Online code repository]. Redwood City, CA:
+[7]   A. Stanway. (2013) etsy/skyline [Online code repository].               Numenta, Inc. Available: https://github.com/numenta/nupic
+      Available: https://github.com/etsy/skyline                         [21] B. Rosner, “Percentage points for a generalized ESD many-
+[8]   A. Kejariwal. (2015, January 6) Twitter Engineering:                    outlier procedure”, Technometrics, 25(2), pp. 165-172, May
+      Introducing practical and robust anomaly detection in a time            1983.
+      series             [Online           blog].           Available:   [22] A. Kejariwal. (2015) Twitter/AnomalyDetection [Online code
+      https://blog.twitter.com/2015/introducing-practical-and-robust-         repository].                                         Available:
+      anomaly-detection-in-a-time-series                                      https://github.com/twitter/AnomalyDetection
+

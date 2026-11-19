@@ -1,0 +1,476 @@
+                                                                     The One Hundred Layers Tiramisu:
+                                                           Fully Convolutional DenseNets for Semantic Segmentation
+
+                                                   Simon Jégou1 Michal Drozdzal2,3 David Vazquez1,4 Adriana Romero1 Yoshua Bengio1
+                                                      1
+                                                        Montreal Institute for Learning Algorithms 2 École Polytechnique de Montréal
+                                                               3
+                                                                 Imagia Inc., Montréal, 4 Computer Vision Center, Barcelona
+                                                              simon.jegou@gmail.com, michal@imagia.com, dvazquez@cvc.uab.es,
+
+
+
+
+arXiv:1611.09326v3 [cs.CV] 31 Oct 2017
+                                                             adriana.romero.soriano@umontreal.ca, yoshua.umontreal@gmail.com
+
+
+
+                                                                  Abstract
+
+                                             State-of-the-art approaches for semantic image segmen-
+                                         tation are built on Convolutional Neural Networks (CNNs).
+                                         The typical segmentation architecture is composed of (a)
+                                         a downsampling path responsible for extracting coarse se-
+                                         mantic features, followed by (b) an upsampling path trained
+                                         to recover the input image resolution at the output of the
+                                         model and, optionally, (c) a post-processing module (e.g.
+                                         Conditional Random Fields) to refine the model predictions.
+                                             Recently, a new CNN architecture, Densely Connected
+                                         Convolutional Networks (DenseNets), has shown excellent
+                                         results on image classification tasks. The idea of DenseNets
+                                         is based on the observation that if each layer is directly con-
+                                         nected to every other layer in a feed-forward fashion then
+                                         the network will be more accurate and easier to train.
+                                             In this paper, we extend DenseNets to deal with the prob-
+                                         lem of semantic segmentation. We achieve state-of-the-art
+                                         results on urban scene benchmark datasets such as CamVid
+                                         and Gatech, without any further post-processing module
+                                         nor pretraining. Moreover, due to smart construction of
+                                         the model, our approach has much less parameters than
+                                         currently published best entries for these datasets. Code
+                                                                                                               Figure 1. Diagram of our architecture for semantic segmentation.
+                                         to reproduce the experiments is publicly available here :
+                                                                                                               Our architecture is built from dense blocks. The diagram is com-
+                                         https://github.com/SimJeg/FC-DenseNet
+                                                                                                               posed of a downsampling path with 2 Transitions Down (TD) and
+                                                                                                               an upsampling path with 2 Transitions Up (TU). A circle repre-
+                                                                                                               sents concatenation and arrows represent connectivity patterns in
+                                         1. Introduction                                                       the network. Gray horizontal arrows represent skip connections,
+                                                                                                               the feature maps from the downsampling path are concatenated
+                                             Convolutional Neural Networks (CNNs) are driving ma-              with the corresponding feature maps in the upsampling path. Note
+                                         jor advances in many computer vision tasks, such as im-               that the connectivity pattern in the upsampling and the downsam-
+                                         age classification [29], object detection [25, 24] and seman-         pling paths are different. In the downsampling path, the input to
+                                         tic image segmentation [20]. The last few years have wit-             a dense block is concatenated with its output, leading to a linear
+                                         nessed outstanding improvements on CNN-based models.                  growth of the number of feature maps, whereas in the upsampling
+                                         Very deep architectures [29, 11, 31] have shown impres-               path, it is not.
+                                         sive results on standard benchmarks such as ImageNet [6]
+                                         or MSCOCO [19]. State-of-the-art CNNs heavily reduce
+                                         the input resolution through successive pooling layers and,
+
+
+                                                                                                           1
+thus, are well suited for applications where a single predic-     maps with a large number of input filters (from all the lay-
+tion per input image is expected (e.g. image classification       ers below), resulting in both very large amount of compu-
+task).                                                            tation and number of parameters. In order to mitigate this
+    Fully Convolutional Networks (FCNs) [20, 27] were in-         effect, we only upsample the feature maps created by the
+troduced in the literature as a natural extension of CNNs to      preceding dense block. Doing so allows to have a number of
+tackle per pixel prediction problems such as semantic im-         dense blocks at each resolution of the upsampling path inde-
+age segmentation. FCNs add upsampling layers to standard          pendent of the number of pooling layers. Moreover, given
+CNNs to recover the spatial resolution of the input at the        the network architecture, the upsampled dense block com-
+output layer. As a consequence, FCNs can process images           bines the information contained in the other dense blocks
+of arbitrary size. In order to compensate for the resolu-         of the same resolution. The higher resolution information
+tion loss induced by pooling layers, FCNs introduce skip          is passed by means of a standard skip connection between
+connections between their downsampling and upsampling             the downsampling and the upsampling paths. The details of
+paths. Skip connections help the upsampling path recover          the proposed architecture are shown in Figure 1. We eval-
+fine-grained information from the downsampling layers.            uate our model on two challenging benchmarks for urban
+    Among CNN architectures extended as FCNs for seman-           scene understanding, Camvid [2] and Gatech [22], and con-
+tic segmentation purposes, Residual Networks (ResNets)            firm the potential of DenseNets for semantic segmentation
+[11] make an interesting case. ResNets are designed to            by improving the state-of-the-art.
+ease the training of very deep networks (of hundreds of               Thus, the contributions of the paper can be summarized
+layers) by introducing a residual block that sums two sig-        as follows:
+nals: a non-linear transformation of the input and its identity     • We carefully extend the DenseNet architecture [13] to
+mapping. The identity mapping is implemented by means                 fully convolutional networks for semantic segmenta-
+of a shortcut connection. ResNets have been extended to               tion, while mitigating the feature map explosion.
+work as FCNs [4, 8] yielding very good results in differ-
+ent segmentation benchmarks. ResNets incorporate addi-              • We highlight that the proposed upsampling path, built
+tional paths to FCN (shortcut paths) and, thus, increase the          from dense blocks, performs better than upsampling
+number of connections within a segmentation network. This             path with more standard operations, such as the ones
+additional shortcut paths have been shown not only to im-             in [27].
+prove the segmentation accuracy but also to help the net-
+work optimization process, resulting in faster convergence          • We show that such a network can outperform current
+of the training [8].                                                  state-of-the-art results on standard benchmarks for ur-
+                                                                      ban scene understanding without neither using pre-
+    Recently, a new CNN architecture, called DenseNet, was
+                                                                      trained parameters nor any further post-processing.
+introduced in [13]. DenseNets are built from dense blocks
+and pooling operations, where each dense block is an itera-
+tive concatenation of previous feature maps. This architec-
+                                                                  2. Related Work
+ture can be seen as an extension of ResNets [11], which per-         Recent advances in semantic segmentation have been de-
+forms iterative summation of previous feature maps. How-          voted to improve architectural designs by (1) improving
+ever, this small modification has some interesting implica-       the upsampling path and increasing the connectivity within
+tions: (1) parameter efficiency, DenseNets are more effi-         FCNs [27, 1, 21, 8]; (2) introducing modules to account for
+cient in the parameter usage; (2) implicit deep supervision,      broader context understanding [36, 5, 37]; and/or (3) en-
+DenseNets perform deep supervision thanks to short paths          dowing FCN architectures with the ability to provide struc-
+to all feature maps in the architecture (similar to Deeply        tured outputs [16, 5, 38].
+Supervised Networks [18]); and (3) feature reuse, all lay-           First, different alternatives have been proposed in the lit-
+ers can easily access their preceding layers making it easy       erature to address the resolution recovery in FCN’s upsam-
+to reuse the information from previously computed feature         pling path; from simple bilinear interpolation [10, 20, 1]
+maps. The characteristics of DenseNets make them a very           to more sophisticated operators such as unpooling [1, 21]
+good fit for semantic segmentation as they naturally induce       or transposed convolutions [20]. Skip connections from
+skip connections and multi-scale supervision.                     the downsampling to the upsampling path have also been
+    In this paper, we extend DenseNets to work as FCNs by         adopted to allow for a finer information recovery [27]. More
+adding an upsampling path to recover the full input reso-         recently, [8] presented a thorough analysis on the combina-
+lution. Naively building an upsampling path would result          tion of identity mapping [11] and long skip connections [27]
+in a computationally intractable number of feature maps           for semantic segmentation.
+with very high resolution prior to the softmax layer. This           Second, approaches that introduce larger context to se-
+is because one would multiply the high resolution feature         mantic segmentation networks include [10, 36, 5, 37]. In
+                                                                       3. Fully Convolutional DenseNets
+                                                                           As mentioned in Section 1, FCNs are built from a down-
+                                                                       sampling path, an upsampling path and skip connections.
+                                                                       Skip connections help the upsampling path recover spa-
+                                                                       tially detailed information from the downsampling path, by
+                                                                       reusing features maps. The goal of our model is to further
+                                                                       exploit the feature reuse by extending the more sophisti-
+                                                                       cated DenseNet architecture, while avoiding the feature ex-
+                                                                       plosion at the upsampling path of the network.
+                                                                           In this section, we detail the proposed model for seman-
+                                                                       tic segmentation. First, we review the recently proposed
+                                                                       DenseNet architecture. Second, we introduce the construc-
+                                                                       tion of the novel upsampling path and discuss its advantages
+                                                                       w.r.t. a naive DenseNet extension and more classical archi-
+                                                                       tectures. Finally, we wrap up with the details of the main
+                                                                       architecture used in Section 4.
+                                                                       3.1. Review of DenseNets
+                                                                           Let x` be the output of the `th layer. In a standard CNN,
+                                                                       x` is computed by applying a non-linear transformation H`
+Figure 2. Diagram of a dense block of 4 layers. A first layer is ap-
+                                                                       to the output of the previous layer x`−1
+plied to the input to create k feature maps, which are concatenated                           x` = H` (x`−1 ),                      (1)
+to the input. A second layer is then applied to create another k
+features maps, which are again concatenated to the previous fea-       where H is commonly defined as a convolution followed by
+ture maps. The operation is repeated 4 times. The output of the        a rectifier non-linearity (ReLU) and often dropout [30].
+block is the concatenation of the outputs of the 4 layers, and thus        In order to ease the training of very deep networks,
+contains 4 ∗ k feature maps
+                                                                       ResNets [11] introduce a residual block that sums the iden-
+                                                                       tity mapping of the input to the output of a layer. The re-
+                                                                       sulting output x` becomes
+[10], an unsupervised global image descriptor is computed                                 x` = H` (x`−1 ) + x`−1 ,                  (2)
+added to the feature maps for each pixel. In [36], Recur-
+rent Neural Networks (RNNs) are used to retrieve contex-               allowing for the reuse of features and permitting the gra-
+tual information by sweeping the image horizontally and                dient to flow directly to earlier layers. In this case, H is
+vertically in both directions. In [5], dilated convolutions            defined as the repetition (2 or 3 times) of a block composed
+are introduced as an alternative to late CNN pooling layers            of Batch Normalization (BN) [14], followed by ReLU and
+to capture larger context without reducing the image reso-             a convolution.
+lution. Following the same spirit, [37] propose to provide                Pushing this idea further, DenseNets [13] design a more
+FCNs with a context module built as a stack of dilated con-            sophisticated connectivity pattern that iteratively concate-
+volutional layers to enlarge the field of view of the network.         nates all feature outputs in a feedforward fashion. Thus, the
+                                                                       output of the `th layer is defined as
+   Third, Conditional Random Fields (CRF) have long been
+a popular choice to enforce structure consistency to seg-                             x` = H` ([x`−1 , x`−2 , ..., x0 ]),           (3)
+mentation outputs. More recently, fully connected CRFs
+[16] have been used to include structural properties of the            where [ ... ] represents the concatenation operation. In this
+output of FCNs [5]. Interestingly, in [38], RNN have been              case, H is defined as BN, followed by ReLU, a convolution
+introduced to approximate mean-field iterations of CRF op-             and dropout. Such connectivity pattern strongly encourages
+timization, allowing for an end-to-end training of both the            the reuse of features and makes all layers in the architec-
+FCN and the RNN.                                                       ture receive direct supervision signal. The output dimension
+                                                                       of each layer ` has k feature maps where k, hereafter re-
+   Finally, it is worth noting that current state-of-the-art           ferred as to growth rate parameter, is typically set to a small
+FCN architectures for semantic segmentation often rely on              value (e.g. k = 12). Thus, the number of feature maps in
+pre-trained models (e.g. VGG [29] or ResNet101 [11]) to                DenseNets grows linearly with the depth (e.g. after ` layers,
+improve their segmentation results [20, 1, 4].                         the input [x`−1 , x`−2 , ..., x0 ] will have ` × k feature maps).
+   A transition down is introduced to reduce the spatial di-         Therefore, our upsampling path approach allows us to
+mensionality of the feature maps. Such transformation is          build very deep FC-DenseNets without a feature map explo-
+composed of a 1×1 convolution (which conserves the num-           sion. An alternative way of implementing the upsampling
+ber of feature maps) followed by a 2 × 2 pooling operation.       path would be to perform consecutive transposed convolu-
+   In the remainder of the article, we will call dense block      tions and complement them with skip connections from the
+the concatenation of the new feature maps created at a given      downsampling path in a U-Net [27] or FCN-like [20] fash-
+resolution. Figure 2 shows an example of dense block con-         ion. This will be further discussed in Section 4
+struction. Starting from an input x0 (input image or output
+of a transition down) with m feature maps, the first layer of     3.3. Semantic Segmentation Architecture
+the block generates an output x1 of dimension k by applying           In this subsection, we detail the main architecture, FC-
+H1 (x0 ). These k feature maps are then stacked to the pre-       DenseNet103, used in Section 4.
+vious m feature maps by concatenation ([x1 , x0 ]) and used
+                                                                      First, in Table 1, we define the dense block layer, tran-
+as input to the second layer. The same operation is repeated
+                                                                  sition down and transition up of the architecture. Dense
+n times, leading to a new dense block with n × k feature
+                                                                  block layers are composed of BN, followed by ReLU, a
+maps.
+                                                                  3 × 3 same convolution (no resolution loss) and dropout
+3.2. From DenseNets to Fully Convolutional                        with probability p = 0.2. The growth rate of the layer is set
+     DenseNets                                                    to k = 16. Transition down is composed of BN, followed
+                                                                  by ReLU, a 1 × 1 convolution, dropout with p = 0.2 and a
+    The DenseNet architecture described in Subsection 3.1         non-overlapping max pooling of size 2 × 2. Transition up
+constitutes the downsampling path of our Fully Convolu-           is composed of a 3 × 3 transposed convolution with stride 2
+tional DenseNet (FC-DenseNet). Note that, in the down-            to compensate for the pooling operation.
+sampling path, the linear growth in the number of features            Second, in Table 2, we summarize all Dense103 layers.
+is compensated by the reduction in spatial resolution of each     This architecture is built from 103 convolutional layers : a
+feature map after the pooling operation. The last layer of the    first one on the input, 38 in the downsampling path, 15 in
+downsampling path is referred to as bottleneck.                   the bottleneck and 38 in the upsampling path. We use 5
+    In order to recover the input spatial resolution, FCNs in-    Transition Down (TD), each one containing one extra con-
+troduce an upsampling path composed of convolution, up-           volution, and 5 Transition Up (TU), each one containing a
+sampling operations (transposed convolutions or unpooling         transposed convolution. The final layer in the network is a
+operations) and skip connections. In FC-DenseNets, we             1 × 1 convolution followed by a softmax non-linearity to
+substitute the convolution operation by a dense block and         provide the per class distribution at each pixel.
+an upsampling operation referred to as transition up. Tran-           It is worth noting that, as discussed in Subsection 3.2, the
+sition up modules consist of a transposed convolution that        proposed upsampling path properly mitigates the DenseNet
+upsamples the previous feature maps. The upsampled fea-           feature map explosion, leading to reasonable pre-softmax
+ture maps are then concatenated to the ones coming from           feature map number of 256.
+the skip connection to form the input of a new dense block.           Finally, the model is trained by minimizing the pixel-
+Since the upsampling path increases the feature maps spa-         wise cross-entropy loss.
+tial resolution, the linear growth in the number of features
+would be too memory demanding, especially for the full
+                                                                  4. Experiments
+resolution features in the pre-softmax layer.
+    In order to overcome this limitation, the input of a dense       We evaluate our method on two urban scene understand-
+block is not concatenated with its output. Thus, the trans-       ing datasets: CamVid [2], and Gatech [22]. We trained our
+posed convolution is applied only to the feature maps ob-         models from scratch without using any extra-data nor post-
+tained by the last dense block and not to all feature maps        processing module. We report the results using the Inter-
+concatenated so far. The last dense block summarizes the          section over Union (IoU) metric and the global accuracy
+information contained in all the previous dense blocks at         (pixel-wise accuracy on the dataset). For a given class c,
+the same resolution. Note that some information from ear-         predictions (oi ) and targets (yi ), the IoU is defined by
+lier dense blocks is lost in the transition down due to the                            P
+pooling operation. Nevertheless, this information is avail-                                (oi == c ∧ yi == c)
+                                                                             IoU (c) = Pi                      ,              (4)
+able in the downsampling path of the network and can be                                  i (oi == c ∨ yi == c)
+passed via skip connections. Hence, the dense blocks of the
+upsampling path are computed using all the available fea-         where ∧ is a logical and operation, while ∨ is a logical or
+ture maps at a given resolution. Figure 1 illustrates this idea   operation. We compute IoU by summing over all the pixels
+in detail.                                                        i of the dataset.
+                                                  Transition Down (TD)
+                Layer
+                                                   Batch Normalization                      Transition Up (TU)
+         Batch Normalization
+                                                          ReLU
+                ReLU                                                                   3 × 3 Transposed Convolution
+                                                    1 × 1 Convolution
+          3 × 3 Convolution                                                                     stride = 2
+                                                     Dropout p = 0.2
+           Dropout p = 0.2
+                                                    2 × 2 Max Pooling
+
+Table 1. Building blocks of fully convolutional DenseNets. From left to right: layer used in the model, Transition Down (TD) and Transition
+Up (TU). See text for details.
+
+
+4.1. Architecture and training details                                  4.2. CamVid dataset
+                                                                           CamVid1 [2] is a dataset of fully segmented videos for
+   We initialize our models using HeUniform [12] and train              urban scene understanding. We used the split and image
+them with RMSprop [33], with an initial learning rate of                resolution from [1], which consists of 367 frames for train-
+1e − 3 and an exponential decay of 0.995 after each epoch.              ing, 101 frames for validation and 233 frames for test. Each
+All models are trained on data augmented with random                    frame has a size 360 × 480 and its pixels are labeled with
+crops and vertical flips. For all experiments, we finetune              11 semantic classes. Our models were trained with crops
+our models with full size images and learning rate of 1e − 4.           of 224 × 224 and batch size 3. At the end, the model is
+We use validation set to earlystop the training and the fine-           finetuned with full size images.
+tuning. We monitor mean IoU or mean accuracy and use                       In Table 3, we report our results for three networks with
+patience of 100 (50 during finetuning).                                 respectively (1) 56 layers (FC-DenseNet56), with 4 layers
+                                                                        per dense block and a growth rate of 12; (2) 67 layers (FC-
+   We regularized our models with a weight decay of 1e−4                DenseNet67) with 5 layers per dense block and a growth
+and a dropout rate of 0.2. For batch normalization, we use              rate of 16; and (3) 103 layers (FC-DenseNet103) with a
+current batch statistics at training, validation and test time.         growth rate k = 16 (see Table 2 for details). We also trained
+                                                                        an architecture using standard convolutions in the upsam-
+                                                                        pling path instead of dense blocks (Classic Upsampling). In
+                                                                        the latter architecture, we used 3 convolutions per resolution
+                                                                        level with respectively 512, 256, 128, 128 and 64 filters, as
+                        Architecture
+                                                                        in [27]. Results show clear superiority of the proposed up-
+                        Input, m = 3                                    sampling path w.r.t. the classic one, consistently improv-
+                 3 × 3 Convolution, m = 48                              ing the IoU significantly for all classes. Particularly, we
+                DB (4 layers) + TD, m = 112                             observe that unrepresented classes benefit notably from the
+                DB (5 layers) + TD, m = 192                             FC-DenseNet architecture, namely sign, pedestrian, fence,
+                DB (7 layers) + TD, m = 304                             cyclist experience a crucial boost in performance (ranging
+               DB (10 layers) + TD, m = 464                             from 15% to 25%).
+               DB (12 layers) + TD, m = 656                                As expected, when comparing FC-DenseNet56 or FC-
+                  DB (15 layers), m = 896                               DenseNet67 to FC-DenseNet103, we see that the model
+               TU + DB (12 layers), m = 1088                            benefits from having more depth as well as more parame-
+               TU + DB (10 layers), m = 816                             ters.
+                TU + DB (7 layers), m = 578                                When compared to other methods, we show that FC-
+                TU + DB (5 layers), m = 384                             DenseNet architectures achieve state-of-the-art, improving
+                TU + DB (4 layers), m = 256                             upon models with 10 times more parameters. It is worth
+                  1 × 1 Convolution, m = c                              mentioning that our small model FC-DenseNet56 already
+                          Softmax                                       outperforms popular architectures with at least 100 times
+                                                                        more parameters.
+Table 2. Architecture details of FC-DenseNet103 model used in
+our experiments. This model is built from 103 convolutional lay-           It is worth noting that images in CamVid correspond to
+ers. In the Table we use following notations: DB stands for Dense       video frames and, thus, the dataset contains temporal infor-
+Block, TD stands for Transition Down, TU stands for Transition          mation. Some state-of-the-art methods such as [17] incor-
+Up, BN stands for Batch Normalization and m corresponds to the          porate long range spatio-temporal regularization to the out-
+total number of feature maps at the end of a block. c stands for the
+number of classes.                                                         1 http://mi.eng.cam.ac.uk/research/projects/VideoRec/CamVid/
+put of a FCN to boost their performance. Our model is able         5. Discussion
+to outperform such state-of-the-art model, without requir-
+ing any temporal smoothing. However, any post-processing               Our fully convolutional DenseNet implicitly inherits
+temporal regularization is complementary to our approach           the advantages of DenseNets, namely: (1) parameter ef-
+and could bring additional improvements.                           ficiency, as our network has substantially less parame-
+                                                                   ters than other segmentation architectures published for the
+   Unlike most of the current state-of-the-art methods, FC-
+                                                                   Camvid dataset; (2) implicit deep supervision, we tried in-
+DenseNets have not been pretrained on large datasets such
+                                                                   cluding additional levels of supervision to different layers of
+as ImageNet [6] and could most likely benefit from such
+                                                                   our network without noticeable change in performance; and
+pretraining. More recently, it has been shown that deep net-
+                                                                   (3) feature reuse, as all layers can easily access their pre-
+works can also boost their performance when pretrained on
+                                                                   ceding layers not only due to the iterative concatenation of
+data other than natural images, such as video games [26, 28]
+                                                                   feature maps in a dense block but also thanks to skip con-
+or clipart [3], and this an interesting direction to explore.
+                                                                   nections that enforce connectivity between downsampling
+   Figure 3 shows some qualitative segmentation results on         and upsampling path.
+the CamVid dataset. Qualitative results are well aligned               Recent evidence suggest that ResNets behave like en-
+with the quantitative ones, showing sharp segmentations            semble of relatively shallow networks [35]: ”Residual net-
+that account for a lot of details. For example, trees, column      works avoid the vanishing gradient problem by introducing
+poles, sidewalk and pedestrians appear very well sketched.         short paths which can carry gradient throughout the extent
+Among common errors, we find that thin details found in            of very deep networks”. It would be interesting to revisit
+trees can be confused with column poles (see fifth row),           this finding in the context of fully convolutional DenseNets.
+buses and trucks can be confused with buildings (fourth            Due to iterative feature map concatenation in the dense
+row), and shop signs can be confused with road signs (sec-         block, the gradients are forced to be passed through net-
+ond row).                                                          works of different depth (with different numbers of non-
+                                                                   linearities). Thus, thanks to the smart connectivity pat-
+4.3. Gatech dataset                                                terns, FC-DenseNets might represent an ensemble of vari-
+                                                                   able depth networks. This particular ensemble behavior
+    Gatech2 [23] is a geometric scene understanding dataset,
+                                                                   would be very interesting for semantic segmentation mod-
+which consists of 63 videos for training/validation and 38
+                                                                   els, where the ensemble of different paths throughout the
+for testing. Each video has between 50 and 300 frames
+                                                                   model would capture the multi-scale appearance of objects
+(with an average of 190). A pixel-wise segmentation map is
+                                                                   in urban scene.
+provided for each frame. There are 8 classes in the dataset:
+sky, ground, buildings, porous (mainly trees), humans, cars,
+vertical mix and main mix. The dataset was originally built        6. Conclusion
+to learn 3D geometric structure of outdoor video scenes and            In this paper, we have extended DenseNets and made
+the standard metric for this dataset is mean global accuracy.      them fully convolutional to tackle the problem semantic im-
+    We used the FC-DenseNet103 model pretrained on                 age segmentation. The main idea behind DenseNets is cap-
+CamVid, removed the softmax layer, and finetuned it for            tured in dense blocks that perform iterative concatenation
+10 epochs with crops of 224 × 224 and batch size 5. Given          of feature maps. We designed an upsampling path mitigat-
+the high redundancy in Gatech frames, we used only one             ing the linear growth of feature maps that would appear in
+out of 10 frames to train the model and tested it on all full      a naive extension of DenseNets.
+resolution test set frames.                                            The resulting network is very deep (from 56 to 103 lay-
+    In Table 4, we report the obtained results. We compare         ers) and has very few parameters, about 10 fold reduction
+the results to the recently proposed method for video seg-         w.r.t. state-of-the-art models. Moreover, it improves state-
+mentation of [34], which reports results of their architecture     of-the-art performance on challenging urban scene under-
+with 2D and 3D convolutions. Frame-based 2D convolu-               standing datasets (CamVid and Gatech), without neither ad-
+tions do not have temporal information. As it can be seen          ditional post-processing, pretraining, nor including tempo-
+in Table 4, our method gives an impressive improvement of          ral information.
+23.7% in global accuracy with respect to previously pub-               Aknowledgements
+lished state-of-the-art with 2D convolutions. Moreover, our
+model (trained with only 2D convolutions) also achieves a             The authors would like to thank the developers of
+significant improvement over state-of-the-art models based         Theano [32] and Lasagne [7]. Special thanks to Frédéric
+on spatio-temporal 3D convolutions (3.4% improvement).             Bastien for his work assessing the compilation issues.
+                                                                   Thanks to Francesco Visin for his well designed data-
+  2 http://www.cc.gatech.edu/cpl/projects/videogeometriccontext/   loader [9], as well as Harm de Vries for his support
+                                         # parameters (M)                                                                                                                        Global accuracy
+                            Pretrained                       Building                                  Road    Pedestrian    Fence            Sidewalk    Cyclist    Mean IoU
+         Model                                                           Tree    Sky    Car    Sign                                   Pole
+
+       SegNet [1]          ! 29.5                           68.7        52.0    87.0   58.5   13.4    86.2    25.3          17.9     16.0    60.5        24.8       46.4        62.5
+  Bayesian SegNet [15]     ! 29.5                                                                      n/a                                                          63.1        86.9
+    DeconvNet [21]         ! 252                                                                       n/a                                                          48.9        85.9
+     Visin et al. [36]     ! 32.3                                                                      n/a                                                          58.8        88.7
+       FCN8 [20]           ! 134.5                          77.8        71.0    88.7   76.1   32.7    91.2    41.7          24.4     19.9    72.7        31.0       57.0        88.0
+   DeepLab-LFOV [5]        ! 37.3                           81.5        74.6    89.0   82.2   42.3    92.2    48.4          27.2     14.3    75.4        50.1       61.6         −
+     Dilation8 [37]        ! 140.8                          82.6        76.2    89.0   84.0   46.9    92.2    56.3          35.8     23.4    75.3        55.5       65.3        79.0
+  Dilation8 + FSO [17]     ! 140.8                          84.0        77.2    91.3   85.6   49.9    92.5    59.1          37.6     16.9    76.0        57.2       66.1        88.3
+   Classic Upsampling       7            20                 73.5        72.2    92.4   66.2   26.9    90.0    37.7          22.7     30.8    69.6        25.1       55.2        86.8
+ FC-DenseNet56 (k=12)       7            1.5                77.6        72.0    92.4   73.2   31.8    92.8    37.9          26.2     32.6    79.9        31.1       58.9        88.9
+ FC-DenseNet67 (k=16)       7            3.5                80.2        75.4    93.0   78.2   40.9    94.7    58.4          30.7     38.4    81.9        52.1       65.8        90.8
+ FC-DenseNet103 (k=16)      7            9.4                83.0        77.3    93.0   77.3   43.9    94.5    59.6          37.1     37.8    82.2        50.5       66.9        91.5
+
+                         Table 3. Results on CamVid dataset. Note that we trained our own pretrained FCN8 model
+
+
+                    Model                Acc.                                                        volutional nets and fully connected crfs. In International
+            2D models (no time)                                                                      Conference of Learning Representations (ICLR), 2015.
+            2D-V2V-from scratch [34]     55.7                                                    [6] J. Deng, W. Dong, R. Socher, L.-J. Li, K. Li, and L. Fei-Fei.
+                FC-DenseNet103           79.4                                                        ImageNet: A Large-Scale Hierarchical Image Database. In
+                                                                                                     IEEE Conference on Computer Vision and Pattern Recogni-
+            3D models (incorporate time)                                                             tion (CVPR), 2009.
+            3D-V2V-from scratch [34]     66.7                                                    [7] S. Dieleman, J. Schlter, C. Raffel, E. Olson, and et al.
+             3D-V2V-pretrained [34]      76.0                                                        Lasagne: First release., Aug. 2015.
+                 Table 4. Results on Gatech dataset                                              [8] M. Drozdzal, E. Vorontsov, G. Chartrand, S. Kadoury, and
+                                                                                                     C. Pal. The importance of skip connections in biomedical
+                                                                                                     image segmentation. CoRR, abs/1608.04117, 2016.
+in network parallelization, and Tristan Sylvain. We ac-                                          [9] A. R. F. Visin. Dataset loaders: a python library to load and
+knowledge the support of the following agencies for re-                                              preprocess datasets. https://github.com/fvisin/
+search funding and computing support: Imagia Inc., Span-                                             dataset_loaders, 2017.
+ish projects TRA2014-57088-C2-1-R & 2014-SGR-1506,                                              [10] C. Gatta, A. Romero, and J. van de Weijer. Unrolling loopy
+                                                                                                     top-down semantic feedback in convolutional deep networks.
+TECNIOspring-FP7-ACCI grant.
+                                                                                                     In IEEE Conference on Computer Vision and Pattern Recog-
+                                                                                                     nition (CVPR) workshop, 2014.
+References                                                                                      [11] K. He, X. Zhang, S. Ren, and J. Sun. Deep residual learning
+                                                                                                     for image recognition. CoRR, abs/1512.03385, 2015.
+ [1] V. Badrinarayanan, A. Kendall, and R. Cipolla. Segnet: A
+                                                                                                [12] K. He, X. Zhang, S. Ren, and J. Sun. Delving deep into
+     deep convolutional encoder-decoder architecture for image
+                                                                                                     rectifiers: Surpassing human-level performance on imagenet
+     segmentation. CoRR, abs/1511.00561, 2015.
+                                                                                                     classification. CoRR, abs/1502.01852, 2015.
+ [2] G. J. Brostow, J. Shotton, J. Fauqueur, and R. Cipolla.                                    [13] G. Huang, Z. Liu, K. Q. Weinberger, and L. van der
+     Segmentation and recognition using structure from motion                                        Maaten. Densely connected convolutional networks. CoRR,
+     point clouds. In European Conference on Computer Vision                                         abs/1608.06993, 2016.
+     (ECCV), 2008.
+                                                                                                [14] S. Ioffe and C. Szegedy. Batch normalization: Accelerating
+ [3] L. Castrejon, Y. Aytar, C. Vondrick, H. Pirsiavash, and                                         deep network training by reducing internal covariate shift.
+     A. Torralba. Learning aligned cross-modal representations                                       CoRR, abs/1502.03167, 2015.
+     from weakly aligned data. CoRR, abs/1607.07295, 2016.                                      [15] A. Kendall, V. Badrinarayanan, and R. Cipolla. Bayesian
+ [4] L. Chen, G. Papandreou, I. Kokkinos, K. Murphy, and A. L.                                       segnet: Model uncertainty in deep convolutional encoder-
+     Yuille. Deeplab: Semantic image segmentation with deep                                          decoder architectures for scene understanding. CoRR,
+     convolutional nets, atrous convolution, and fully connected                                     abs/1511.02680, 2015.
+     crfs. CoRR, abs/1606.00915, 2016.                                                          [16] P. Krähenbühl and V. Koltun. Efficient inference in fully
+ [5] L.-C. Chen, G. Papandreou, I. Kokkinos, K. Murphy, and                                          connected crfs with gaussian edge potentials. In Advances in
+     A. L. Yuille. Semantic image segmentation with deep con-                                        Neural Information Processing Systems (NIPS). 2011.
+Figure 3. Qualitative results on the CamVid test set. Pixels labeled in yellow are void class. Each row represents (from left to right):
+original image, original annotation (ground truth) and prediction of our model.
+[17] A. Kundu, V. Vineet, and V. Koltun. Feature space optimiza-     [34] D. Tran, L. D. Bourdev, R. Fergus, L. Torresani, and
+     tion for semantic video segmentation. In IEEE Conference             M. Paluri. Deep end2end voxel2voxel prediction. CoRR,
+     on Computer Vision and Pattern Recognition (CVPR), 2016.             abs/1511.06681, 2015.
+[18] C. Lee, S. Xie, P. W. Gallagher, Z. Zhang, and Z. Tu. Deeply-   [35] A. Veit, M. J. Wilber, and S. J. Belongie. Residual networks
+     supervised nets. In International Conference on Artificial           are exponential ensembles of relatively shallow networks.
+     Intelligence and Statistics (AISTATS), 2015.                         CoRR, abs/1605.06431, 2016.
+[19] T.-Y. Lin, M. Maire, S. Belongie, J. Hays, P. Perona, D. Ra-    [36] F. Visin, M. Ciccone, A. Romero, K. Kastner, K. Cho,
+     manan, P. Dollr, and C. L. Zitnick. Microsoft coco: Common           Y. Bengio, M. Matteucci, and A. Courville. Reseg: A re-
+     objects in context. In European Conference on Computer Vi-           current neural network-based model for semantic segmenta-
+     sion (ECCV), 2014.                                                   tion. In IEEE Conference on Computer Vision and Pattern
+[20] J. Long, E. Shelhamer, and T. Darrell. Fully convolutional           Recognition (CVPR) workshop, 2016.
+     networks for semantic segmentation. In IEEE Conference on       [37] F. Yu and V. Koltun. Multi-scale context aggregation by di-
+     Computer Vision and Pattern Recognition (CVPR), 2015.                lated convolutions. In International Conference of Learning
+[21] H. Noh, S. Hong, and B. Han. Learning deconvolu-                     Representations (ICLR), 2016.
+     tion network for semantic segmentation. arXiv preprint          [38] S. Zheng, S. Jayasumana, B. Romera-Paredes, V. Vineet,
+     arXiv:1505.04366, 2015.                                              Z. Su, D. Du, C. Huang, and P. Torr. Conditional random
+[22] S. H. Raza, M. Grundmann, and I. Essa. Geometric con-                fields as recurrent neural networks. In International Confer-
+     text from video. IEEE Conference on Computer Vision and              ence on Computer Vision (ICCV), 2015.
+     Pattern Recognition (CVPR), 2013.
+[23] S. H. Raza, M. Grundmann, and I. Essa. Geometric context
+     from video. In IEEE Conference on Computer Vision and
+     Pattern Recognition (CVPR), 2013.
+[24] J. Redmon, S. K. Divvala, R. B. Girshick, and A. Farhadi.
+     You only look once: Unified, real-time object detection.
+     CoRR, abs/1506.02640, 2015.
+[25] S. Ren, K. He, R. B. Girshick, and J. Sun. Faster R-CNN:
+     towards real-time object detection with region proposal net-
+     works. CoRR, abs/1506.01497, 2015.
+[26] S. R. Richter, V. Vineet, S. Roth, and V. Koltun. Playing
+     for data: Ground truth from computer games. In European
+     Conference on Computer Vision (ECCV), 2016.
+[27] O. Ronneberger, P. Fischer, and T. Brox. U-net: Convolu-
+     tional networks for biomedical image segmentation. In In-
+     ternational Conference on Medical Image Computing and
+     Computer-Assisted Intervention (MICAI), 2015.
+[28] G. Ros, L. Sellart, J. Materzynska, D. Vazquez, and A. M.
+     Lopez. The synthia dataset: A large collection of synthetic
+     images for semantic segmentation of urban scenes. In IEEE
+     Conference on Computer Vision and Pattern Recognition
+     (CVPR), 2016.
+[29] K. Simonyan and A. Zisserman. Very deep convolu-
+     tional networks for large-scale image recognition. CoRR,
+     abs/1409.1556, 2014.
+[30] N. Srivastava, G. Hinton, A. Krizhevsky, I. Sutskever, and
+     R. Salakhutdinov. Dropout: A simple way to prevent neu-
+     ral networks from overfitting. Journal of Machine Learning
+     Research, 15:1929–1958, 2014.
+[31] C. Szegedy, W. Liu, Y. Jia, P. Sermanet, S. E. Reed,
+     D. Anguelov, D. Erhan, V. Vanhoucke, and A. Rabinovich.
+     Going deeper with convolutions. CoRR, abs/1409.4842,
+     2014.
+[32] Theano Development Team. Theano: A Python framework
+     for fast computation of mathematical expressions. arXiv e-
+     prints, abs/1605.02688, May 2016.
+[33] T. Tieleman and G. Hinton. rmsprop adaptive learning. In
+     COURSERA: Neural Networks for Machine Learning, 2012.
+

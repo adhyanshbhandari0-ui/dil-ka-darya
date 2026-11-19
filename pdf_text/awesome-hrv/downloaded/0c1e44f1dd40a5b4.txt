@@ -1,0 +1,972 @@
+IEEE TRANSACTIONS ON NEURAL NETWORKS AND LEARNING SYSTEMS                                                                                             1
+
+
+
+
+           Robust Peak Detection for Holter ECGs by
+          Self-Organized Operational Neural Networks
+             Moncef Gabbouj , Fellow, IEEE, Serkan Kiranyaz , Senior Member, IEEE, Junaid Malik ,
+           Muhammad Uzair Zahid, Turker Ince , Muhammad E. H. Chowdhury , Senior Member, IEEE,
+                                  Amith Khandakar , Senior Member, IEEE, and Anas Tahir
+
+
+
+   Abstract— Although numerous R-peak detectors have been                                              I. I NTRODUCTION
+proposed in the literature, their robustness and performance
+levels may significantly deteriorate in low-quality and noisy
+signals acquired from mobile electrocardiogram (ECG) sensors,
+such as Holter monitors. Recently, this issue has been addressed
+                                                                             A     N ELECTROCARDIOGRAM (ECG) acquires the
+                                                                                   heartbeat sequence in time displaying the electrical
+                                                                             depolarization-repolarization patterns of the heart. ECG signal
+by deep 1-D convolutional neural networks (CNNs) that have                   forms itself in the QRS complexes and ventricular beats and
+achieved state-of-the-art performance levels in Holter monitors;             it bears essential information about the status of the heart.
+however, they pose a high complexity level that requires special
+parallelized hardware setup for real-time processing. On the                 Among many other tools, ECG is still the most significant
+other hand, their performance deteriorates when a compact                    noninvasive tool for cardiac monitoring and clinical diagnosis.
+network configuration is used instead. This is an expected                   R-peak detection is the primary operation that usually precedes
+outcome as recent studies have demonstrated that the learning                any kind of ECG analysis, such as ECG beat classification and
+performance of CNNs is limited due to their strictly homogenous              cardiac arrhythmia detection [1]–[21]. Conventional Holter
+configuration with the sole linear neuron model. This has been
+addressed by operational neural networks (ONNs) with their                   monitors and the recent introduction of low-cost and low-
+heterogenous network configuration encapsulating neurons with                power mobile ECG sensors present a significant motive and
+various nonlinear operators. In this study, to further boost the             challenge for robust and real-time detection of the R-peak
+peak detection performance along with an elegant computational               locations. Especially, robustness is a key issue since it was
+efficiency, we propose 1-D Self-Organized ONNs (Self-ONNs)                   reported in a recent study [22] that the R-peak detection per-
+with generative neurons. The most crucial advantage of 1-D
+Self-ONNs over the ONNs is their self-organization capability                formance can severely deteriorate when the ECG acquisition
+that voids the need to search for the best operator set per                  is poor and corrupted by a high level of noise.
+neuron since each generative neuron has the ability to create the               Particularly for clinical ECG recordings, numerous R-peak
+optimal operator during training. The experimental results over              detection algorithms have been proposed in the literature. One
+the China Physiological Signal Challenge-2020 (CPSC) dataset                 of the first and the most widely used algorithm was proposed
+with more than one million ECG beats show that the proposed
+1-D Self-ONNs can significantly surpass the state-of-the-art deep            by Pan and Tompkins [23], which has served as the benchmark
+CNN with less computational complexity. Results demonstrate                  method for more than three decades. Afterward, several other
+that the proposed solution achieves a 99.10% F1-score, 99.79%                popular methods based on signal processing have emerged,
+sensitivity, and 98.42% positive predictivity in the CPSC dataset,           such as wavelet transform [24], [25], Hilbert transforms [26],
+which is the best R-peak detection performance ever achieved.                and ensemble empirical mode decomposition [27]. Some
+  Index Terms— Convolutional neural networks (CNNs), Holter                  hybrid methods that consist of traditional signal processing
+monitors, operational neural networks (ONNs), R-peak                         and machine learning have followed, e.g., R-peak detection
+detection.                                                                   by radial basis functions (RBFs) [28] and hidden Markov
+  Manuscript received January 6, 2021; revised November 10, 2021; accepted   models (HMMs) [29]. The common approach in those classical
+March 4, 2022. The work was supported in part by the Academy of Finland      detectors was to perform R-peak enhancement first by using
+through the Project AWcHA under Grant 334566. (Corresponding author:         signal processing techniques, such as filter banks and spectral
+Moncef Gabbouj.)
+  Moncef Gabbouj, Muhammad Uzair Zahid, and Junaid Malik are with the        analysis, and then applying the peak detection. A crucial
+Department of Computing Sciences, Tampere University, 33100 Tampere,         advantage of such methods is that they are very fast. However,
+Finland (e-mail: moncef.gabbouj@tuni.fi; muhammaduzair.zahid@tuni.fi;        they are all designed for clinical ECG recordings with a
+junaid.malik@tuni.fi).
+  Serkan Kiranyaz, Muhammad E. H. Chowdhury, Amith Khandakar, and            clean, almost noise-free signal. All of them were evaluated
+Anas Tahir are with the Department of Electrical Engineering, College        on the benchmark Massachusetts Institute of Technology-Beth
+of Engineering, Qatar University, Doha 2713, Qatar (e-mail: mkiranyaz@       Israel Hospital (MIT-BIH) arrhythmia dataset [35] or other
+qu.edu.qa; mchowdhury@qu.edu.qa; amitk@qu.edu.qa; a.tahir@qu.edu.qa).
+  Turker Ince is with the Department of Electrical and Electronics           similar datasets with high-quality clinical ECG recordings.
+Engineering, İzmir University of Economics, 35330 İzmir, Turkey (e-mail:   Their performance level significantly deteriorates when the
+turker.ince@izmirekonomi.edu.tr).                                            ECG signal quality is poor [22], and thus, they are not
+  Color versions of one or more figures in this article are available at
+https://doi.org/10.1109/TNNLS.2022.3158867.                                  suitable for low-power mobile ECG sensors. In fact, a proper
+  Digital Object Identifier 10.1109/TNNLS.2022.3158867                       evaluation constitutes a major problem in general because even
+     This work is licensed under a Creative Commons Attribution 4.0 License. For more information, see https://creativecommons.org/licenses/by/4.0/
+2                                                                            IEEE TRANSACTIONS ON NEURAL NETWORKS AND LEARNING SYSTEMS
+
+
+
+
+Fig. 1. Typical Holter ECG segments from the record of patient 6 in the CPSC dataset. Red circles represent the R-peaks detected by the Pan–Tompkins
+method [23] where several FPs and FNs are visible.
+
+
+
+though there are few public datasets [30], [31] containing some            fact that the mammalian neural systems are highly het-
+noisy ECG signals with ground-truth R-peak locations, they                 erogeneous and consist of diverse (nonlinear) neuron types
+are limited in size and duration. This problem has become the              with specialized electrophysiological and biochemical prop-
+main bottleneck even for recent and modern peak detectors                  erties [42], [43]. This linear neuron model is only a crude
+based on deep learning paradigms, including long short-term                and simplified model of its biological counterpart. As a
+memory (LSTM) networks [32], and convolutional neural                      consequence, MLPs and CNNs with an entirely homogenous
+networks (CNNs) [33], [34]. Both approaches in [32] and [33]               network configuration with linear neurons are capable of
+aimed to improve the robustness but only against the artificial            learning for relatively simple and linearly separable problems;
+(additive) noise. For this purpose, they have only induced                 however, they entirely fail to do so whenever the solution space
+certain additive noise, such as baseline wander and motion                 of the problem is highly nonlinear and complex [42]–[50].
+artifacts, to ECG records in the MIT-BIH dataset and reported              To address this major deficiency, generalized operational
+a reasonable level of robustness. However, such artificial noise           perceptrons (GOPs) [42]–[49] and later on operational neural
+addition does not represent the actual degradations that occur             networks (ONNs) [50] have been proposed. Both models are
+in a Holter monitor where besides the severe and varying noise             heterogeneous with any nonlinear neuron model, and this
+levels and occasional glitches, the baseline dc level varies               gives them an elegant diversity level to learn highly complex
+drastically and frequently along with the dynamic range of                 and multimodal functions or spaces with minimal network
+QRS complexes, as shown in Fig. 1. Another issue in such                   complexity and training data. The operational neurons in GOPs
+evaluation over the MIT-BIH dataset is that this benchmark                 and ONNs mimic the biological neurons with, nodal (corre-
+dataset does not contain a sufficient number of beats and                  sponding to the synaptic connections) and pool (corresponding
+variations where a deep network can truly be tested. This                  to the integration in the soma) operators. An “operator set”
+brings the danger of a certain bias and overfitting the results.           is the combination of nodal, pool, and activation operators,
+   Recently, the study in [34] has proposed a novel method                 and the operator set library is formed in advance to store all
+based on deep 1-D CNNs that has actually been applied over                 potential operator sets. However, ONNs can only achieve a
+a real Holter ECG repository, the China Physiological Signal               limited heterogeneity level since one operator set has to be
+Challenge (2020) dataset (CPSC) with more than 1 million                   assigned to all neurons of each hidden layer. Furthermore, they
+ECG beats. This method has been tested over the entire                     are bound to the limited number of operators in the operator
+dataset and achieved the state-of-the-art performance level for            set library. The latter can be a serious bottleneck on the
+R-peak detection with a significant margin. However, it still              learning performance when the right operator set needed for
+suffers two major drawbacks: 1) 12-layer deep model poses                  the learning problem at hand is missing in the library. Finally,
+a significant computational complexity, and 2) both false-                 ONNs pose a high computational complexity especially during
+positives (FPs) and false-negatives (FNs) are still too high,              the training because the right operator sets have to be searched
+especially on the arrhythmia beats. In this study, we address              in advance with several backpropagation (BP) runs.
+both issues with a novel network model.                                       In this study, in order to address the aforementioned issues
+   According to the recent studies [42]–[50], the main draw-               and drawbacks, we propose 1-D self-organized ONNs (Self-
+back of the conventional multilayer perceptrons (MLPs) and                 ONNs) with the generative neuron model for robust R-peak
+their derivatives, CNNs, is that they both depend on the ancient           detection for the Holter ECG in real-time. The generative
+neuron model (McCulloch–Pitts) [41]. It is neuroscientific                 neuron model enables the self-organization capability for
+GABBOUJ et al.: ROBUST PEAK DETECTION FOR HOLTER ECGs BY SELF-ORGANIZED ONNs                                                            3
+
+
+
+Self-ONNs [51]–[55] where the nodal operators are iteratively                    II. 1-D S ELF -O RGANIZED O PERATIONAL
+generated during the BP training to maximize the learning                                   N EURAL N ETWORKS
+performance. Obviously, the ability to create any nonlinear                In this section, we will proceed by revisiting how ONNs
+nodal operator enables superior operational diversity and               generalize the 1-D convolution operation. Then, the mathe-
+flexibility. Therefore, Self-ONNs neither need an operator set          matical model of the proposed generative neuron-based 1-D
+library in advance, nor require any prior search process to             Self-ONN will be presented. To conclude, a simplification of
+find the optimal nodal operator. The 2-D Self-ONNs have                 the generative neuron will be discussed which can significantly
+been proposed in recent studies [50] and [54] have shown that           reduce the computational cost by enabling the use of fast
+even with a few neurons they can achieve a superior learning            vectorized operations.
+performance for various image processing and regression                    ONNs are derived from the GOPs in the same way CNNs
+tasks while the performance gap between ONNs and CNNs                   are derived from MLPs with two restrictions: limited connec-
+widens further. Hence, in this study, our primary goal is to            tivity and weight sharing. GOPs have been proposed in [42]
+achieve a superior R-peak detection performance compared                and [45] to replace the basic (linear) neuron model from the
+with the deep 1-D CNNs [34] while reducing the network                  1950s (McCulloch–Pitts) [41] aiming to address the well-
+complexity and depth significantly for a real-time application.         known limitations and drawbacks of MLPs. Recently, GOPs
+Besides [34], we shall also perform comparative evaluations             have outperformed not only MLPs but even the latest variants
+against the earlier state-of-the-art methods [23], [56]–[59]            of extreme learning machines (ELMs) [46]–[49]. Derived
+to accomplish an overall validation. As a summary, we can               directly from GOPs, ONNs [50] are heterogeneous networks
+enlist the novel and significant contributions of this article as       encapsulating neurons with linear and nonlinear operators,
+follows.                                                                hence, carrying a closer link to biological systems. In brief,
+   1) This is the first study where 1-D Self-ONNs1 have even            ONNs extend the sole usage of linear convolutions in the
+       been proposed for ECG peak detection evaluated over              convolutional neurons by the nodal and pool operators.
+       the largest ECG benchmark dataset the CPSC (2020)                   Let us consider the case of the kth neuron in the lth layer
+       dataset with more than one million ECG beats.                    of a 1-D CNN. For the sake of brevity, we assume the same
+   2) Thanks to the heterogeneous network model with gener-             convolution operation with unit stride and the required amount
+       ative neurons, 1-D Self-ONNs exhibit a superior learning         of zero padding. The output of this neuron can be formulated
+       capability that achieved the state-of-the-art peak detec-        as follows:
+       tion performance even though it has half the network
+       depth and more than four times fewer neurons.                                                           
+                                                                                                               Nl−1
+                                                                                              x kl = bkl +              l
+                                                                                                                      x ik           (1)
+   3) The most important contribution of the proposed
+                                                                                                               i=0
+       approach is the crucial reduction achieved on the
+       missed (false-negatives) for arrhythmia beats compared           where bkl is the bias associated with this neuron and x ik
+                                                                                                                                l
+                                                                                                                                    is
+       with [34] and other major peak detection methods.                defined as
+   4) Along with superior R-peak detection performance com-                                                      
+                                                                                           l
+                                                                                         x ik = Conv1D wik , yil−1 .               (2)
+       pared with the deep 1-D CNNs [34], the proposed
+       1-D Self-ONNs enable a significant reduction in the              Here, wik ∈ R K is the kernel connecting the i th neuron of
+       depth and complexity of the deep CNN model proposed                                                                        l
+                                                                        (l−1)th layer to the kth neuron of the lth layer, while x ik ∈ RM
+       in [34].                                                         is the input map, and yi ∈ R are the lth and (l−1)th layers’
+                                                                                                l−1    M
+   5) Finally, this is the first article where the raw-vectorized       kth and i th neurons’ outputs, respectively. By definition, the
+       BP formulations are presented for 1-D Self-ONNs                  convolution operation of (2) can be expressed as
+       along with the corresponding computational complexity
+                                                                                                   K −1
+                                                                                                   
+       analysis.                                                                        l
+                                                                                      x ik (m) =          wik
+                                                                                                           l
+                                                                                                              (r )yil−1 (m + r ).    (3)
+The rest of the article is organized as follows. Section II
+                                                                                                   r=0
+presents 1-D Self-ONNs with generative neurons and formu-
+lates the forward-propagation (FP) and BP training. Section III         The core idea behind an operational neuron is a generalization
+outlines the methodology followed in the paper. Section IV              of the earlier as follows:
+describes the ECG datasets and presents the experimental                                         l                         K −1
+                                                                                   l
+                                                                                 x ik (m) = Pkl ψkl wik (r ), yil−1 (m + r ) r=0    (4)
+setup used for testing and evaluation. The experimental results
+and comparative evaluations using standard performance met-             where ψlk (·) : R M×K → R K and Pkl (·) : R K → R 1 are termed
+rics against several state-of-the-art techniques are provided,          as nodal and pool functions, respectively, and assigned to the
+followed by a detailed complexity analysis, in the same                 kth neuron of lth layer. In a heterogenous ONN configuration,
+section. Finally, Section V concludes the paper and suggests            every neuron has uniquely assigned ψ and P operators. Owing
+topics for future research.                                             to this, an ONN network enjoys the flexibility of incorporating
+                                                                        any nonlinear transformation, which is suitable for the given
+  1 The optimized PyTorch implementation of the peak detector based     learning problem. However, hand-crafting a suitable library
+on 1-D Self-ONNs and the benchmark ECG CPSC dataset are publicly        of possible operators and searching for an optimal one for
+shared in https://github.com/MUzairZahid/R-Peak-Detection-1D-SelfONN.
+The optimized PyTorch implementation of Self-ONNs is freely shared in   each neuron in a network introduces a significant overhead,
+http://selfonn.net/                                                     which rises exponentially with increasing network complexity.
+4                                                                              IEEE TRANSACTIONS ON NEURAL NETWORKS AND LEARNING SYSTEMS
+
+
+
+Moreover, it is also possible that the ideal operator for the
+given learning problem cannot be expressed in terms of well-
+known functions. To resolve this key limitation, a composite
+nodal function is required that is iteratively created and tuned
+during BP. A straightforward choice for accomplishing this
+would be to use a weighted combination of all operators
+in the operator set library and learn the weights during
+training. However, such a formulation would be susceptible
+to instability issues because of the different dynamic ranges
+of individual functions. In addition, it would still rely on the
+manual selection of suitable functions to populate the operator
+set library. Therefore, to formulate a nodal transformation that
+does not require any preselection and manual assignment of
+operators, we make use of the Taylor-series-based function
+approximation.                                                               Fig. 2.     Visual comparison of different nodal transformation profiles
+   The Taylor series expansion of an infinitely differentiable               entailed by the kernel of a convolutional, operational, and the proposed
+                                                                             generative neuron of order Q. The generative neuron model enables enhanced
+function f (x) near a point x = a is given as                                nonlinearity and heterogeneity within the kernels.
+                             ∞
+                              f (n) (a)
+                   f (x) =                  (x − a)n .                (5)
+                             n=0
+                                     n!                                      as a result of (8), which would be uniquely tailored for i kth
+The Qth order truncated approximation of (5), formally known                 connection. This enables enhanced flexibility which provides
+as the Taylor polynomial, takes the form of the following finite             three key benefits. First, the need for manually defining a list of
+summation:                                                                   suitable nodal operators and searching for the optimal operator
+                                                                             for each neuron connection is naturally alleviated. Second, the
+                              
+                              Q
+                                f (n) (a)                                    heterogeneity is not limited to each neuron connection i → k
+                 f (x)(Q) =                  (x − a)n .               (6)                                            lk (wik
+                                                                                                                           l(Q)
+                                       n!                                    but down to each kernel element as ψ               (r ), yil−1 (m +r ))
+                              n=0
+                                                                             will be unique ∀r ∈ [0, 1, . . . , K −1]. As show in Fig. 2, such
+   The above-mentioned formulation enables the approxima-                    diversity is not achievable even with the flexible operational
+tion of any function f (x) sufficiently well in the close vicinity           neuron model of ONNs. Third, in generative neurons, the
+of a. If the coefficients ( f (n) (a)/n!) are tuned and the inputs           heterogeneity is driven only by the values of the weights wik      l(Q)
+are bounded, the formulation of (6) can be used to generate                  and the core operations (multiplication and summation) are the
+any transformation. This is the key idea behind the generative               same for all neurons in a layer, as shown in (8). Owing to this,
+neurons which form Self-ONNs. Specifically, in terms of the                  unlike ONNs, the generative neurons inside a Self-ONN layer
+notation used in (4), the nodal transformation of a generative               can be parallelized much more efficiently, which leads to a
+neuron would take the following general form:                                considerable reduction in computational complexity and time.
+                             Q
+                                                            q              Moreover, a special case of (8) can also be expressed in terms
+l wl(Q) (r ), y l−1 (m + r ) =
+ψ                                  l(Q)
+                                  wik   (r, q) yil−1 (m + r ) .              of the widely applicable convolutional model.
+ k   ik         i
+                                     q=1
+                                                                      (7)    A. Representation in Terms of Convolution
+   In (7), Q is a hyperparameter that controls the degree of the               If the pooling operator Pkl is fixed to summation operator,
+Taylor series approximation, and wik       l(Q)
+                                                   is a learnable kernel     ik
+                                                                             x l
+                                                                                 is then defined as
+of the network. A key difference in (7) as compared with                                           −1 
+                                                                                                       Q
+                                                                       l
+                                                                                                  K
+                                                                                                                                       q
+the convolutional (3) and operational (4) model is that ψ                k            x
+                                                                                       ik (m) =
+                                                                                       l                     l( Q)
+                                                                                                            wik    (r, q) yil−1 (m + r ) .         (9)
+is not fixed, rather a distinct operator over each individual                                     r=0 q=1
+output, yil−1 , and thus, requires Q times more parameters.                  Exploiting the commutativity of the summation operations
+Therefore, the K × 1 kernel vector wik           l
+                                                      has been replaced      in (9), we can alternatively write
+                          l(Q)           K ×Q
+by a K × Q matrix wik ∈ R                         which is formed by
+                                                                                                  K −1
+                                                                                                 Q 
+replacing each element wik  l
+                               (r ) with a Q-dimensional vector
+  l(Q)           l(Q)         l(Q)                    l(Q)                           x
+                                                                                      ik (m) =
+                                                                                      l                     l(Q)
+                                                                                                           wik   (r, q − 1)yil−1 (m + r )q .      (10)
+wik (r ) = [wik (r, 0), wik        (r, 1), . . . , wik     (Q − 1)]. The
+                                                                                                 q=1 r=0
+input map of the generative neuron, x     ik can now be expressed
+                                             l
+
+as                                                                           Using (1) and (2), the formula in (10) can be further simplified
+                    ⎛                                         ⎞ K −1         as follows:
+                      
+                      Q
+                                                                                                                           
+      x           l⎝     l(Q)
+                        wik     (r, q) yil−1 (m + r ) ⎠
+                                                            q
+                                                                     . (8)                      Q
+                                                                                                                l(Q)  l−1 q
+       ik (m) = Pk
+       l
+                                                                                         
+                                                                                         x ik =
+                                                                                           l
+                                                                                                    Conv1D wik      , yi       .        (11)
+                       q=1
+                                                            r=0                                    q=1
+                              l(Q)
+  During training, as        wik
+                            is iteratively tuned by the BP,                    Hence, the formulation can be accomplished by applying
+customized nodal transformation functions will be generated                  Q 1-D convolution operations. If Q is set to 1, (11) entails
+GABBOUJ et al.: ROBUST PEAK DETECTION FOR HOLTER ECGs BY SELF-ORGANIZED ONNs                                                                   5
+
+
+
+                                                                          We now consider the Hadamard product of these two matrices
+                                                                          Yil−1 ⊗ Wikl
+                                                                              ⎡ l−1                                                          ⎤
+                                                                                   yi (0)wik  l
+                                                                                                (0)      ...     yil−1 (K − 1)wik
+                                                                                                                                l
+                                                                                                                                  (K − 1)
+                                                                              ⎢           ..                                 ..         ⎥
+                                                                              ⎢                                                         ⎥
+                                                                              ⎢ l−1 . l                  ...                  .         ⎥
+                                                                           =⎢ ⎢ yi (m)wik (0)            . . . yi (m + K − 1)wik (K − 1)⎥
+                                                                                                                l−1           l
+                                                                                                                                        ⎥.
+                                                                              ⎢            ..                             ..            ⎥
+                                                                              ⎣             .            ...               .            ⎦
+                                                                                yil−1 (M −1)wik  l
+                                                                                                   (0)   . . . yil−1 (M + K − 1)wik
+                                                                                                                                 l
+                                                                                                                                    (K −1)
+                                                                                                                                        (14)
+                                                                          Applying the summation operation across rows, we get
+                                                                                                     K −1
+                                                                                                       
+                                                                                                
+Fig. 3.   Reshuffling operation used to convert yil−1 to Yl−1
+                                                          i .
+                                                                                    Yil−1 ⊗ Wikl (m) =      wik
+                                                                                                             l
+                                                                                                                (r )yil−1 (m + r )          (15)
+                                                                                                               r=0
+
+                                                                          which is equivalent to (3). We also note that
+the convolutional formulation of (3). Therefore, as CNN is a                              
+                                                                                              Yil−1 ⊗ Wikl = Yil−1 wik
+                                                                                                                    l
+                                                                                                                       .                    (16)
+subset of ONN corresponding to a specific operator set, it is
+also a special case of Self-ONN with Q = 1 for all neurons.               Therefore,
+                                                                                                                    
+                                                                                                  l
+                                                                                                x ik (m) = Yil−1 wik
+                                                                                                                  l
+                                                                                                                       (m)                  (17)
+B. Vectorized Notation                                                                                l
+                                                                                                    x ik = Yil−1 wik
+                                                                                                                  l
+                                                                                                                     .                      (18)
+   Expressing explicit loops in terms of matrix and vector                   Hence, the 1-D convolution operation can be represented
+manipulations is a key idea behind vectorization, which is a              in terms of a single matrix-vector product. This operation
+major driving factor behind fast implementations of modern-               lies at the heart of conventional explicit general matrix
+day neural network implementations. In this section, we first             multiplications (GEMM)-based convolution implementations
+introduce how the vectorized notation can be used to express              and enables efficient usage of parallel computational resources,
+the 1-D convolution operation inside a neuron. Afterward,                 such as GPU cores.
+the same key principles will be exploited to express the
+generative neuron formulation of (9) as a single matrix-vector            C. Forward Propagation Through a 1-D Self-ONN Neuron
+product.
+                                                                             Equation (11) shows how the Self-ONN formulation of (10)
+   First, an alternate formulation of the operation of (3) is
+                                                                          can be represented as a summation of Q individual convolu-
+now presented. We introduce a transformation δ(·, K ), which
+                                                                          tional operations. Moreover, from (12), a convolutional opera-
+concatenates yil−1 such that values inside each K -dimensional
+                                                                          tion can be represented as a matrix-vector product. We now use
+kernel as rows to form a matrix Yil−1 ∈ R M×K . The process
+                                                                          these two formulations to represent the transformation of (11)
+is visually depicted in Fig. 3 for K = 3, and mathematically
+                                                                          as a single convolution operation, and consequently, a single
+expressed in (12)
+                                                                          matrix-vector product, instead of Q-separate ones.
+                                                                                                           (Q)
+
+Yil−1                                                                        We start by introducing Yil−1 ∈ R M×K Q such that
+                                                                                     ( Q)
+                                                                                                     l−1 ◦2         l−1 ◦Q 
+ = δ yil−1 , K                                                                    Yil−1 = Yil−1       Yi        ...    Yi           (19)
+  ⎡                                                                   ⎤
+        yil−1 (0)            yil−1 (1)      ...       yil−1 (K − 1)
+                                                                          where ◦n is the Hadamard exponentiation operator. The mth
+  ⎢          ..                  ..                          ..   ⎥                   (Q)
+  ⎢           .                   .         ...               .   ⎥       row of Yil−1 can be expressed as
+  ⎢                                                               ⎥
+ =⎢
+  ⎢     y i (m)
+          l−1
+                          yil−1 (m + 1)     ...    yi (m + K − 1) ⎥
+                                                    l−1
+                                                                  ⎥.                                 ⎡                        ⎤T
+  ⎢         ..                   ..                      ..       ⎥                                           yil−1 (m)
+  ⎣          .                    .         ...           .       ⎦                                  ⎢                 ..     ⎥
+                                                                                                     ⎢                  .     ⎥
+    yil−1 (M − 1)           yil−1 (M)       ...    yil−1 (M + K − 1)                                 ⎢                        ⎥
+                                                                                                     ⎢ y l−1 (m + K − 1) ⎥
+                                                                                                     ⎢ i                      ⎥
+                                                                   (12)                              ⎢             ..         ⎥
+                                                                                                     ⎢              .         ⎥
+                                                                                                     ⎢                        ⎥
+Second, we construct a matrix Wikl ∈ R M×K whose rows are                                            ⎢                        ⎥
+                                                                                                     ⎢       yi (m)
+                                                                                                               l−1        2
+                                                                                                                              ⎥
+repeated copies of wik ∈ R K                                                                         ⎢              .         ⎥
+                                                                                     Yil−1( Q)
+                                                                                                     ⎢
+                                                                                               (m) = ⎢              ..        ⎥ . (20)
+                                                                                                                              ⎥
+             ⎡ l                                         ⎤                                           ⎢ l−1                  2 ⎥
+               wik (0) wik l
+                                (1) . . . wik
+                                            l
+                                              (K − 1)                                                ⎢ yi (m + K − 1) ⎥
+                                                                                                     ⎢               ..       ⎥
+             ⎢ ..            ..                 ..       ⎥                                           ⎢                        ⎥
+             ⎢ .              .     ...          .       ⎥                                           ⎢                .       ⎥
+             ⎢                                           ⎥                                           ⎢                        ⎥
+      Wik = ⎢ wik (0) wik (1) . . . wik (K − 1) ⎥
+        l    ⎢   l       l                  l
+                                                         ⎥. (13)                                     ⎢
+                                                                                                     ⎢      yi (m)
+                                                                                                              l−1         Q   ⎥
+                                                                                                                              ⎥
+             ⎢ .              ..                 ..      ⎥                                           ⎢                ..      ⎥
+             ⎣ .   .           .    ...           .      ⎦                                           ⎣                 .      ⎦
+               wik
+                 l
+                    (0) w  ik (1)
+                           l
+                                    . . . wik (K
+                                            l
+                                                    − 1)                                                 yil−1 (m + K − 1) Q
+6                                                                                       IEEE TRANSACTIONS ON NEURAL NETWORKS AND LEARNING SYSTEMS
+
+
+
+Moreover, we construct Wikl(Q) ∈ R M×K Q by first vectorizing                          In addition, using (24), we can write
+                                                                                                          
+  l(Q)
+wik    ∈ R K ×Q to wik
+                    l(Q)
+                         ∈ R K Q and then concatenating m                                        ( Q)
+            
+            l(Q)                                                                            Yil−1 ⊗ Wikl( Q)
+copies of wik along the row dimension, as expressed in the
+                                                                                                 ⎡          K −1                              ⎤
+following:                                                                                              Q 
+                                                                                                                         q l(Q)
+                                                                                                 ⎢                yi (r ) wik (r, q − 1)
+                                                                                                                   l−1
+                                                                                                                                              ⎥
+                                   ⎡                              ⎤T                             ⎢                                            ⎥
+                                            l( Q)                                                ⎢      q=1 r=0                               ⎥
+                                           wik    (0, 0)                                         ⎢                        .                   ⎥
+                               ⎢                 ..               ⎥                              ⎢                        ..                  ⎥
+                               ⎢                                  ⎥                              ⎢                                            ⎥
+                               ⎢                  .               ⎥                              ⎢   Q K −1                                 ⎥
+                               ⎢                                  ⎥                              ⎢                                            ⎥
+                                         l(Q)
+                                        wik   (K − 1, 0)                                     =⎢  ⎢            yi (m + r ) wik (r, q − 1) ⎥
+                                                                                                                             q l( Q)
+                                                                                                                                              ⎥.
+                                                                                                                l−1
+                               ⎢                                  ⎥                                                                                (26)
+                               ⎢            l(Q)
+                                          wik    (0, 1)           ⎥                              ⎢ q=1 r=0                                    ⎥
+                               ⎢                                  ⎥                              ⎢                                            ⎥
+                               ⎢                ..                ⎥                              ⎢                       ..                   ⎥
+                               ⎢                                  ⎥                              ⎢                        .                   ⎥
+                          
+                          l(Q) ⎢                 .                ⎥                              ⎢ Q                                          ⎥
+                         wik = ⎢                                  ⎥            (21)              ⎢  K −1                                    ⎥
+                               ⎢         l(Q)
+                                        wik   (K − 1, 1)          ⎥                              ⎣                                            ⎦
+                               ⎢                                  ⎥                                                                l( Q)
+                                                                                                           yil−1 (M − 1 + r )q wik (r, q − 1)
+                               ⎢                ..                ⎥
+                               ⎢                 .                ⎥
+                               ⎢                                  ⎥                                q=1 r=0
+                               ⎢         l(Q)
+                                        wik   (0, Q − 1)          ⎥
+                               ⎢                                  ⎥                    Finally, from (25) and (26), we can simply infer that
+                               ⎢                ..                ⎥
+                               ⎣                 .                ⎦                                                              
+                                                                                                                             
+                                l(Q)
+                              wik    (K − 1,Q − 1)                                                         x
+                                                                                                            ik = Yi
+                                                                                                            l      l−1( Q)   l(Q)
+                                                                                                                            wik     .              (27)
+                   l( Q)     Q)
+                             l(
+                  Wik (m) = wik .                                             (22)     The formulation of (27) provides a key computational benefit,
+                                                                                       as the forward propagation through the generative neuron
+                                                      (Q)
+Taking the Hadamard product of Yil−1                        and Wikl(Q) , we get       is accomplished using a single-matrix-vector multiplication.
+                                                                                       Hence, in theory, if the computational cost and memory
+                                                                                                                               (Q)
+      ( Q)
+ Yil−1 ⊗ Wikl( Q) (m)                                                                  requirement of constructing matrices Yil−1 and Wikl(Q) is con-
+                                                                                       sidered negligible, the complexity of a convolutional neuron
+           ⎡                            l(Q)                           ⎤T
+                       yil−1 (m)wik          (0, 0)                                    is approximately the same as that of the generative neuron,
+           ⎢                         .
+                                     ..                                ⎥               as both can be accomplished by a single-matrix-vector product.
+           ⎢                                                           ⎥
+           ⎢                                                           ⎥               Finally, to complete the forward propagation, using (1), we can
+           ⎢ y l−1 (m + K − 1)wl(Q) (K − 1, 0)                         ⎥
+           ⎢    i                          ik                          ⎥               express
+           ⎢                       ..                                  ⎥
+           ⎢                        .                                  ⎥
+           ⎢                                                           ⎥                                                        
+                                                                                                                                Nl−1
+           ⎢                                                           ⎥
+                                                                                                                xkl = bkl +           x
+                                         l(Q)
+           ⎢           yil−1 (m)2 wik         (0, 1)                   ⎥                                                                ik .
+                                                                                                                                        l
+                                                                                                                                                   (28)
+           ⎢                         .                                 ⎥
+       =⎢  ⎢                         .                                 ⎥ .     (23)                                             i=0
+                                     .                                 ⎥
+           ⎢                                                           ⎥
+           ⎢ yil−1 (m + K − 1)2 wik         l(Q)
+                                                 (K − 1, 1)            ⎥
+           ⎢                                                           ⎥               D. Backpropagation
+           ⎢                      ..                                   ⎥
+           ⎢                       .                                   ⎥
+           ⎢                                                           ⎥                  We now proceed to derive the BP formulation for the gen-
+           ⎢                  Q l(Q)
+                    yi (m) wik (0,Q − 1)
+                     l−1                                               ⎥
+           ⎢                                                           ⎥               erative neuron model of 1-D Self-ONN by utilizing the vec-
+           ⎢                        ..                                 ⎥
+           ⎣                         .                                 ⎦               torized notation introduced in Section II-C. To backpropagate
+                                       l(Q)
+                  yil−1 (m + K − 1) Q wik   (K − 1,Q − 1)                              the error through the generative neuron, given the derivative of
+                                                                                       the loss with respect to the neuron’s output, d L/d x
+                                                                                                                                            l
+                                                                                                                                            ik , we aim
+                                                                                                          l−1          l(Q)             l
+    Summation of the earlier yields                                                    to define d L/d yi , d L/dwik , and d L/dbk .
+                                                                                                                                                  (Q)
+                                                                                          We start by taking the derivative of (27) w.r.t. Yil−1 as
+     ( Q)
+                   
+   Yil−1 ⊗ Wikl( Q) (m)                                                                follows:
+                                                                                                                     
+        
+        K −1                                   
+                                               K −1                                                  d x
+                                                                                                        l
+                                                                                                            (m)            
+                                                                                                                          l(Q)
+                                                                                                                        wik    , m=m
+    =                         l(Q)
+               yil−1 (m + r )wik   (r , 0) +
+                                                                       l( Q)
+                                                      yil−1 (m + r )2 wik    (r , 0)
+                                                                                                        ik
+                                                                                                                   =                                (29)
+                                                                                                   dYil−1  (Q)
+                                                                                                               (m)      
+                                                                                                                        0,       otherwise.
+        r=0                                    r=0
+                   K −1
+                                           l( Q)
+                                                                                       Using (29), we can now apply the chain rule to get
+        +···+             yil−1 (m + r ) Q wik    (r, Q − 1)
+                   r=0                                                                                         dL            d L d x  l
+
+         K −1
+        Q                                                                                                               =             ik
+                                                                                                                                             .     (30)
+                                                                                                                             d x
+                                                                                                               l−1( Q)          l dY l−1( Q)
+                                    l( Q)                                                                dYi
+    =              yil−1 (m + r )q wik    (r, q − 1).                          (24)                                             ik      i
+
+        q=1 r=0                                                                                          (Q)
+                                                                                       Given (d L/dYil−1 ), we aim to find the derivative of the loss
+This is equivalent to (10). Therefore, one can now express                             w.r.t. to the previous layer’s output
+
+                                                                                                          dL            d L dYil−1
+                     Yil−1 ⊗ Wikl( Q) (m) = x
+                          ( Q)                                                                                      =                          .   (31)
+                                             ik (m).
+                                             l
+                                                                               (25)                             l−1
+                                                                                                             d yi        dYil−1 d yil−1
+GABBOUJ et al.: ROBUST PEAK DETECTION FOR HOLTER ECGs BY SELF-ORGANIZED ONNs                                                         7
+
+
+                                      (Q)
+We know from (19) that Yil−1                = [Yil−1      (Yil−1 )◦2                              TABLE I
+         l−1 ◦Q
+. . . (Yi ) ]. Taking the derivative of (19) w.r.t. Yi   l−1                PATIENT I NFORMATION ON THE ECG D ATA F ROM CPSC-DB
+
+                                                   ◦Q−1 
+             (Q)
+      dYil−1                ◦1                
+           l−1
+                 = 1 2 Yil−1         . . . Q Yil−1          . (32)
+       dYi
+Using this, we can write
+                                             ( Q)
+                    dL       d L dYil−1
+                         =       (Q)
+                                                  .            (33)
+                  dYil−1   dYil−1       dYil−1
+Finally, we can calculate the derivative of the loss w.r.t. yil−1
+as follows:
+       dL       
+                M−1
+                       dL      dYil−1 (m)
+              =
+  d yil−1 (m)   m=0
+                    dYil−1 (m) d yil−1 (m)
+                 
+                 M−1
+                         dL
+             =
+                      dYil−1 (m)
+                  
+                 m=0
+                                                                                          III. M ETHODOLOGY
+                     d yil−1 (m)       d yil−1 (m + K − 1)
+                 ×               ,...,                      . (34)        In this study, we are aiming to achieve a superior R-peak
+                     d yil−1 (m)             d yil−1 (m)
+                                                                       detection performance compared with the state-of-the-art
+From (34) and (12), we can notice that (dYil−1 (m)/d yil−1 (m))        method in [34] based on a 12-layer 1-D CNN with 448 neurons
+will be equal to 1 only when the condition m ≤ m ≤ (m +                while reducing the network complexity and depth significantly.
+K − 1) is met, and 0, otherwise. Moreover, as there are no             Therefore, as shown in Fig. 4, for a fair comparison with [34],
+repeating entries in each row of Yil−1 , only one element of           the same R-peak approach is followed. However, the architec-
+(dYil−1 (m)/d yil−1 (m)) can be nonzero and the location of this       tural complexity of the network is reduced by using a six-layer
+nonzero element is given by mod(m, K ). Based on these two             1-D Self-ONN with less than 100 neurons. In order to perform
+observations, we can infer the following:                              fair comparative evaluations against [34], the same network
+    dL                                                                 model of [34], the UNet is used for Self-ONNs. As shown in
+d yil−1 (m)                                                            Fig. 4, the peak detection problem is converted to a regression
+         ⎧                                                             task, which aims to learn the peak locations by transforming
+     M−1⎨ d L
+                  (m, mod(m, K )), m ≤ m ≤ (m + K − 1)                the original (normalized) ECG segment into a sequence of
+=           dY l−1
+         ⎩ i                                                           five-sample wide pulses. The center of each pulse corresponds
+     m=0 0,                         otherwise.
+                                                                       to the R-peak location. In order to evaluate its effect, the
+                                                      (35)             order of the Taylor polynomials, Q, is varied in {3,5,7} over
+The only other partial derivative needed for completing the            three networks. Each 20-s (8000 samples) ECG segment is
+                                                        
+                                                        l(Q)           linearly normalized in the range, [−1, 1], and then used as
+BP is the of the loss w.r.t. the weights of the neuron wik   .
+Again, by the chain rule, we can write                                 input for the 1-D Self-ONNs. The same optimizer (Adam) is
+                                                                       used to train the network with the same number of epochs
+                  dL            d L d x  l
+                         (r ) =           ik
+                                              .         (36)           and hyperparameters. The details of the experimental setup
+                    
+                    l(Q)
+                d wik           d x
+                                   l     
+                                         l(Q)
+                                   ik d wik                            and network parameters will be presented in Section IV.
+                   
+where (d x       l(Q)
+          ik /d wik ) can be calculated by taking the derivative
+          l
+                 
+                 l(Q)
+                                                                                      IV. E XPERIMENTAL R ESULTS
+of (27) w.r.t. wik     as follows:
+                                                                          In this section, we will first introduce the benchmark ECG
+                          d x l
+                                           ( Q)
+                               ik
+                                    = Yil−1 .              (37)        dataset, CPSC 2020, used in this study, and then present
+                              
+                             l(Q)
+                         d wik                                         the experimental setup used for testing and evaluation of the
+For the bias, we can use (28) to write                                 proposed R-peak detector using 1-D Self-ONNs. An exten-
+                                                                       sive set of ECG classification experiments and comparative
+                          d L d xkl     dL
+                                        M−1
+                dL                                                     evaluations against the recent methods over the benchmark
+                      =              =             (m).    (38)
+                dbkl       
+                         d x k dbk
+                             l    l             l                     CPSC-DB Holter dataset will be presented next. Finally, the
+                                        m=0 d x k
+                                                                       computational complexity analysis of 1-D Self-ONNs and 1-D
+Finally, assuming a stochastic gradient descent (SGD)-based            CNNs will be reported in detail.
+optimization, the weights and biases can be updated as follows:
+               
+              l(Q)                Q)
+                                 l(              dL
+            wik     (t + 1) = wik (t) − (t)               (39)        A. China Physiological Signal Challenge-2020
+                                                  
+                                                  l(Q)
+                                               d wik
+                                                                         The CPSC-DB dataset consists of ten single-lead ECG
+                                            dL
+                bkl (t + 1) = bkl (t) − (t) l             (40)        recordings which are collected from arrhythmia patients, each
+                                            dbk                        of the recordings lasts for about 24 h. Table I presents the
+where (t) is the learning factor at iteration t.                      patient information in detail [41].
+8                                                                   IEEE TRANSACTIONS ON NEURAL NETWORKS AND LEARNING SYSTEMS
+
+
+
+
+Fig. 4.   Proposed approach for R-peak detection.
+
+
+
+   The other properties of the CPSC-DB (Holter) ECG dataset        and F1-score, which is the harmonic mean of the model’s
+can be summarized as follows: All ECG data were acquired           Precision and Recall are computed. The true-negative (TN) is
+by a unified wearable ECG device with a sampling frequency         omitted in peak detection (TN = 0). The expressions of these
+of 400 Hz and the total number of beats is 1 026 095. The          performance metrics using the hit/miss counters, e.g., TP, TN,
+recordings include irregular heart rhythms and supraventricular    FP, and FN, are as follows:
+premature beats (SPBs or S beats) and premature ventricular
+                                                                              TP              TP            2PprSen
+contraction (PVC or V) type beats. All recordings are provided      Ppr =           , Sen =         , F1 =           . (41)
+in MATLAB format with corresponding S and V beats annota-                   TP + FP         TP + FN        Ppr + Sen
+tions. R-peak annotations for each ECG cycle were annotated
+by a team of biomedical researchers. To show the robustness
+of the R-peak detector against noise and other artifacts,          C. Peak Detection Performance Evaluation
+CPSC-DB presents a real-world Holter dataset containing              R-peak detection results over the entire CSPC dataset are
+numerous ECG containments and artifacts.                           presented in Table II. The (performance) loss (%) in FN (or
+                                                                   FP or other “miss” metrics) of a method X compared with the
+B. Experimental Setup                                              method with the minimum FN can be defined as follows:
+   For all experiments, as in [34], shallow training is employed                                       FN(min)
+where the number of BP epochs is limited to 50. We set                          FN LOSS(X)% = 100              .            (42)
+                                                                                                        FN(X)
+the learning rate, (0), as 10−3 and an Adam optimizer is
+used for minimizing the binary cross-entropy loss (BCE).           It is clear that 1-D Self-ONNs achieved a significant perfor-
+We performed three individual BP runs for training over each       mance gap when compared with the 1-D CNNs with the same
+patient’s data, and for comparative evaluations, we report the     number of learning units (neurons) and depth. Overall, Self-
+best detection performance.                                        ONNs with Q = 3 and Q = 5 reduced the FPs and FNs
+   The comparative evaluations of the proposed R-peak detec-       on peak detection by more than 43% and 64%, respectively.
+tor based on 1-D Self-ONNs are carried out against the             Even when compared with the state-of-the-art 1-D CNN
+following two detectors with 1-D CNNs: 1) the deep 1-D             configuration in [34] with twice the depth and more than four
+CNN from [34], and 2) 1-D CNN with the same network                times the number of neurons, the detection errors, FPs and
+configuration as 1-D Self-ONN. Moreover, comparative eval-         FNs, were reduced by more than 7% and 37%, respectively.
+uations are also performed against five earlier state-of-the-      Such a substantial reduction especially on FNs over both 1-D
+art classifiers from the literature [23], [56]–[59]. R-peak        CNN configurations shows that 1-D Self-ONNs can indeed
+detection experiments are performed over the CSPC dataset.         accomplish a superior learning capability to detect the actual
+Each classifier is trained over nine patients and tested over      peaks. The performance loss is significantly higher for the
+the (unseen) patient. Therefore, tenfold cross validation is       earlier methods [23], [56]–[59]. Finally, the results indicate
+performed for comparative evaluations over all ten patients        that the best performances are obtained by 1-D Self-ONNs
+with overall 1 026 095 beats. Over the cumulated TP, FP, and       with either Q = 3 or Q = 5. We have found that the former
+FN counters, and the standard performance metrics, Precision       setting is a better choice because of the higher F1 score,
+or Positive Predictivity ( Ppr), Recall or Sensitivity (Sen),      significantly lower FPs, and lower computational cost.
+GABBOUJ et al.: ROBUST PEAK DETECTION FOR HOLTER ECGs BY SELF-ORGANIZED ONNs                                                        9
+
+
+
+                                                              TABLE II
+                     OVERALL P EAK D ETECTION P ERFORMANCE OF THE C LASSIFIERS . 1-D CNN (∗ ) AND 1-D S ELF -ONN
+                             H AVE THE S AME C ONFIGURATION . T HE B EST R ESULTS A RE P RESENTED IN Bold
+
+
+
+
+                                                               TABLE III
+              P EAK D ETECTION P ERFORMANCE OF THE C LASSIFIERS OVER THE A RRHYTHMIA (S AND V) B EATS . 1-D CNN (∗ ) AND
+                        1-D S ELF -ONN H AVE THE S AME C ONFIGURATION . T HE B EST R ESULTS A RE P RESENTED IN Bold
+
+
+
+
+   In peak detection, detecting the arrhythmia, i.e., supraven-     glitches. Especially, the deep CNN model [34] missed both
+tricular premature (S) and premature ventricular contrac-           arrhythmic peak locations in Fig. 5(d) which is a substantial
+tion (V) beats is crucial since R-peak detection is the prior       error.
+operation to an automated ECG beat classification and arrhyth-
+mia detection. Obviously, this aim cannot be fulfilled if the       D. Computational Complexity
+peak detector fails to detect an abnormal beat. For this purpose,
+the focus is then drawn on the peak detection performance over         In this section, we provide the formulation for calculating
+the arrhythmia (S and V) beats. As shown in Table III, once         the total number of multiply-accumulate operations (MACs)
+again 1-D Self-ONNs have shown superiority for detecting            and the total number of parameters (PARs) of a generative
+both S and V beats over both 1-D CNN configurations. This           neuron of a 1-D Self-ONN. To calculate the number of
+time even the deep 1-D CNN causes over 52% and 58% more             trainable parameters, we recall from Section II that, for each
+misdetections, respectively, and again, the gap further widens      kernel connection, the generative neuron has Q times more
+over the 1-D CNN with the same configuration. Finally, the          learnable parameters. Cumulatively, the number of trainable
+loss of the earlier methods [23], [56]–[59] has peaked above        parameters, n lk , of the kth neuron of lth layer is given by the
+90%, which shows that those methods are not robust at all for       following formulation:
+the Holter ECG.                                                                         n lk = Nl−1 ∗ K kl ∗ Q lk .             (43)
+   As for visual comparison, over the four ECG segments,
+Fig. 5 shows R-peak detection results of 1-D Self-ONNs and          In (43), Nl−1 is the number of neurons in layer l −1, K kl is the
+the two 1-D CNN configurations. Such typical visual results         kernel size used in the neuron, and Q lk is the approximation
+clearly show that both 1-D CNN models yield numerous FPs            order selected for this neuron. Finally, to calculate the total
+and FNs especially when the R-peak is corrupted with high           number of MAC operations, one can note from (26) that to
+noise or some abrupt change occurring in the close vicinity,        produce a single element in the output x
+                                                                                                            ik , we require K k ∗ Q k
+                                                                                                            l                  l    l
+                                                                                                                l−1
+e.g., abrupt shifts on the baseline or occasional voltage           MAC operations for each output map yi           of the previous
+10                                                                              IEEE TRANSACTIONS ON NEURAL NETWORKS AND LEARNING SYSTEMS
+
+
+
+
+Fig. 5. (a)–(d) Visualization of R-peak detection results over four ECG segments. For each segment, (top to bottom) rows show the ground truth, the output
+of the 12-layer CNN ([34]), the output of the 6-layer CNN version of [34], and the output of the proposed 1-D Self-ONN. Typical FPs and FNs are visible
+over the detections of both 1-D CNN models. Ground truth peak locations are shown on the top plot where red and black dashed lines correspond to normal
+and arrhythmic peak locations, respectively.
+
+
+
+                                TABLE IV                                      with the average time complexity, using the formulations in
+     N ETWORK M ODELS AND T HEIR C OMPUTATIONAL C OMPLEXITIES .               (43) and (44), we provide the overall PARs and MACs for
+       T HE AVERAGE T IME C ORRESPONDS TO THE T IME TO D ETECT
+              R-P EAK L OCATIONS OF A 20-s ECG S EGMENT
+                                                                              both network models in Table IV. As shown in Table IV,
+                                                                              a significant gap occurs between 1-D Self-ONN and deep CNN
+                                                                              models in terms of the total number of parameters and average
+                                                                              computation time. The Self-ONN network requires the most
+                                                                              number of multiply-accumulate operations. However, a higher
+                                                                              percentage of these operations are independent, and thus,
+                                                                              parallelizable. Therefore, an efficient implementation using the
+                                                                              formulation of (27) results in an actual running time that is less
+                                                                              than the deep CNN and only marginally (3.1%) higher than the
+                                                                              equivalent 1-D CNN, which is negligible considering the cru-
+layer. Generalizing this, we can write the following:                         cial gain in the detection performance. The optimized PyTorch
+                                                                              implementation of Self-ONNs is publicly shared in [63].
+                 MAClk = Nl−1 ∗ |x
+                                  ik | ∗ K k ∗ Q k
+                                  l        l     l
+                                                                      (44)
+where | · | is the cardinality operator. For notational conve-                                           V. C ONCLUSION
+nience, the bias term and the cost of the Hadamard exponen-                      In this study, 1-D Self-ONNs are proposed for R-peak detec-
+tiation are omitted from (44).                                                tion, especially for poor quality ECG signals, e.g., acquired
+   We implemented the proposed 1-D Self-ONN using Python                      by Holter monitors or low-power mobile ECG sensors. The
+and FastONN [61] library, based on PyTorch [62]. All the                      primary goal is to achieve the state-of-the-art R-peak detection
+experiments reported in this article were run on a 2.2-GHz                    performance with an elegant computational efficiency for a
+Intel Core i7-8750H with 16 GB of RAM and an NVIDIA                           real-time application over such low-power ECG devices. As a
+GeForce GTX 1060 graphic card. Both training and evaluation                   new-generation network model, a Self-ONN is a highly hetero-
+of the classifier were processed by CUDA kernels. Along                       geneous network composed of generative neurons. This yields
+GABBOUJ et al.: ROBUST PEAK DETECTION FOR HOLTER ECGs BY SELF-ORGANIZED ONNs                                                                                   11
+
+
+
+a crucial advantage of optimizing the nodal operator function                      [13] U. R. Acharya et al., “A deep convolutional neural network model
+of each kernel element, and thus, Self-ONNs can achieve an                              to classify heartbeats,” Comput. Biol. Med., vol. 89, pp. 389–396,
+                                                                                        Oct. 2017.
+utmost heterogeneity that maximizes the network diversity and                      [14] M. Zubair, J. Kim, and C. Yoon, “An automated ECG beat classification
+the learning performance. As a result, the traditional weight                           system using convolutional neural networks,” in Proc. 6th Int. Conf. IT
+optimization of conventional CNNs is entirely turned into                               Converg. Secur. (ICITCS), Sep. 2016, pp. 1–5.
+                                                                                   [15] S. S. Xu, M.-W. Mak, and C.-C. Cheung, “Towards end-to-end ECG
+an operator generation process via optimization. Despite its                            classification with raw signal extraction and deep neural networks,” IEEE
+highly nonlinear kernel elements, each Self-ONN layer can                               J. Biomed. Health Informat., vol. 23, no. 4, pp. 1574–1584, Jul. 2019.
+still be implemented by a single 1-D convolution, and this                         [16] Y. Xia and Y. Xie, “A novel wearable electrocardiogram classification
+allows a parallelized implementation similar to the one for                             system using convolutional neural networks and active learning,” IEEE
+                                                                                        Access, vol. 7, pp. 7989–8001, 2019.
+conventional CNNs.                                                                 [17] T. Ince, S. Kiranyaz, and M. Gabbouj, “A generic and robust system for
+   We performed tenfold comparative evaluations over the                                automated patient-specific classification of ECG signals,” IEEE Trans.
+benchmark CPSC dataset with more than 1M beats. Against                                 Biomed. Eng., vol. 56, no. 5, pp. 1415–1426, May 2009.
+                                                                                   [18] S. Kiranyaz, T. Ince, and M. Gabbouj, “Real-time patient-specific
+the current state-of-the-art method proposed in [34] with a                             ECG classification by 1-D convolutional neural networks,” IEEE Trans.
+12-layer CNN, 1-D Self-ONNs significantly reduced both FPs                              Biomed. Eng., vol. 63, no. 3, pp. 664–675, Mar. 2016.
+and FNs even though it has half the depth and more than                            [19] S. Kiranyaz, T. Ince, R. Hamila, and M. Gabbouj, “Convolutional
+                                                                                        neural networks for patient-specific ECG classification,” in Proc. 37th
+four times fewer neurons. Against the 1-D CNN with the                                  Annu. Int. Conf. IEEE Eng. Med. Biol. Soc. (EMBC), Aug. 2015,
+equivalent configuration, the performance gap further widens.                           pp. 2608–2611.
+The most crucial advantage is that 1-D Self-ONNs can reduce                        [20] X. Xu and H. Liu, “ECG heartbeat classification using convolutional
+more than 52% and 58% of the overall misdetections of                                   neural networks,” IEEE Access, vol. 8, pp. 8614–8619, 2020.
+                                                                                   [21] S. Kiranyaz, T. Ince, and M. Gabbouj, “Personalized monitoring and
+the S and V arrhythmia beats, respectively, compared with                               advance warning system for cardiac arrhythmias,” Sci. Rep., vol. 7, no. 1,
+the deep CNNs. Finally, the 1-D Self-ONN model used in                                  pp. 1–8, Aug. 2017, doi: 10.1038/s41598-017-09544-z.
+this study presents a superior computational efficiency with                       [22] F. Liu et al., “Performance analysis of ten common QRS detectors on
+                                                                                        different ECG application cases,” J. Healthcare Eng., vol. 2018, pp. 1–8,
+respect to the deep 1-D CNNs, and thus, especially for low-                             May 2018, doi: 10.1155/2018/9050812.
+power, mobile devices, such as Holter monitors, the proposed                       [23] J. Pan and W. J. Tompkins, “A real-time QRS detection algorithm,” IEEE
+approach can conveniently be used as an R-peak detector in                              Trans. Biomed. Eng., vol. BME-32, no. 3, pp. 230–236, Mar. 1985, doi:
+real-time. The optimized implementation of the proposed peak                            10.1109/TBME.1985.325532.
+                                                                                   [24] M. Jia, F. Li, J. Wu, Z. Chen, and Y. Pu, “Robust QRS detection
+detector and the benchmark CPSC dataset is shared in [64].                              using high-resolution wavelet packet decomposition and time-attention
+                                                                                        convolutional neural network,” IEEE Access, vol. 8, pp. 16979–16988,
+                                                                                        2020, doi: 10.1109/ACCESS.2020.2967775.
+                               R EFERENCES                                         [25] V. Kalidas and L. Tamil, “Real-time QRS detector using station-
+                                                                                        ary wavelet transform for automated ECG analysis,” in Proc. IEEE
+ [1] World Health Organization. Cardiovascular Diseases (CVDs) Fact                     17th Int. Conf. Bioinf. Bioeng. (BIBE), 2017, pp. 457–461, doi:
+     Sheet. Accessed: May 20, 2018. [Online]. Available: http://www.who.                10.1109/BIBE.2017.00-12.
+     int/en/news-room/fact-sheets/detail/cardiovascular-diseases                   [26] M. Rakshit and S. Das, “An efficient wavelet-based automated R-peaks
+ [2] O. T. Inan, L. Giovangrandi, and G. T. A. Kovacs, “Robust neural-                  detection method using Hilbert transform,” Biocybern. Biomed. Eng.,
+     network-based classification of premature ventricular contractions using           vol. 37, no. 3, pp. 566–577, Feb. 2017, doi: 10.1016/j.bbe.2017.02.002.
+     wavelet transform and timing interval features,” IEEE Trans. Biomed.
+                                                                                   [27] B. Hossain, S. K. Bashar, A. J. Walkey, D. D. Mcmanus, and
+     Eng., vol. 53, no. 12, pp. 2507–2515, Dec. 2006.
+                                                                                        K. H. Chon, “An accurate QRS complex and p wave detection in ECG
+ [3] V. X. Afonso, W. J. Tompkins, T. Q. Nguyen, and S. Luo, “ECG beat
+                                                                                        signals using complete ensemble empirical mode decomposition with
+     detection using filter banks,” IEEE Trans. Biomed. Eng., vol. 46, no. 2,
+                                                                                        adaptive noise approach,” IEEE Access, vol. 7, pp. 128869–128880,
+     pp. 192–202, Feb. 1999.
+                                                                                        2019, doi: 10.1109/ACCESS.2019.2939943.
+ [4] J. L. Willems and E. Lesaffre, “Comparison of multigroup logistic and
+                                                                                   [28] K. Arbateni and A. Bennia, “Sigmoidal radial basis function ANN
+     linear discriminant ECG and VCG classification,” J. Electrocardiol.,
+     vol. 20, no. 2, pp. 83–92, 1987.                                                   for QRS complex detection,” Neurocomputing, vol. 145, pp. 438–450,
+                                                                                        Dec. 2014, doi: 10.1016/j.neucom.2014.05.009.
+ [5] J. L. Talmon, Pattern Recognition of the ECG. Berlin, Germany:
+     Akademisch Proefscrift, 1983.                                                 [29] A. S. A. Huque, K. I. Ahmed, M. A. Mukit, and R. Mostafa, “HMM-
+ [6] D. A. Coast, R. M. Stern, G. G. Cano, and S. A. Briller, “An approach to           based supervised machine learning framework for the detection of fECG
+     cardiac arrhythmia analysis using hidden Markov models,” IEEE Trans.               R-R peak locations,” IRBM, vol. 40, no. 3, pp. 157–166, Jun. 2019, doi:
+     Biomed. Eng., vol. 37, no. 9, pp. 826–836, Sep. 1990.                              10.1016/j.irbm.2019.04.004.
+ [7] S. Osowski, L. T. Hoai, and T. Markiewicz, “Support vector machine-           [30] G. B. Moody, W. E. Muldrow, and R. G. Mark, “A noise stress test
+     based expert system for reliable heartbeat recognition,” IEEE Trans.               for arrhythmia detectors,” in Proc. Comput. Cardiol., vol. 11, 1984,
+     Biomed. Eng., vol. 51, no. 4, pp. 582–589, Apr. 2004.                              pp. 381–384.
+ [8] Y. H. Hu, W. J. Tompkins, J. L. Urrusti, and V. X. Afonso, “Applications      [31] B. Porr and L. Howell, “R-peak detector stress test with a new
+     of artificial neural networks for ECG signal detection and classification,”        noisy ECG dataset reveals significant performance differences amongst
+     J. Electrocardiol., vol. 26, pp. 66–73, Jan. 1994.                                 popular detectors,” BioRxiv, Aug. 2019, Art. no. 722397, doi: 10.
+ [9] Y. H. Hu, S. Palreddy, and W. J. Tompkins, “A patient-adaptable                    1101/722397.
+     ECG beat classifier using a mixture of experts approach,” IEEE Trans.         [32] J. Laitala et al., “Robust ECG R-peak detection using LSTM,” in
+     Biomed. Eng., vol. 44, no. 9, pp. 891–900, Sep. 1997.                              Proc. ACM Symp. Appl. Comput., Mar. 2020, pp. 1104–1111, doi:
+[10] S. C. Lee, “Using a translation-invariant neural network to diagnose               10.1145/3341105.3373945.
+     heart arrhythmia,” in Proc. Images 21st Century. Proc. Annu. Int. Eng.        [33] O. Ronneberger, P. Fischer, and T. Brox, “U-Net: Convolutional
+     Med. Biol. Soc., Nov. 1989, pp. 240–247.                                           networks for biomedical image segmentation,” in Proc. Med. Image
+[11] P. de Chazal and R. B. Reilly, “A patient-adapting heartbeat classifier            Comput. Comput.-Assisted Intervent, 2015, pp. 234–241.
+     using ECG morphology and heartbeat interval features,” IEEE Trans.            [34] M. U. Zahid et al., “Robust R-peak detection in low-quality Holter ECGs
+     Biomed. Eng., vol. 53, no. 12, pp. 2535–2543, Dec. 2006.                           using 1D convolutional neural network,” IEEE Trans. Biomed. Eng., vol.
+[12] U. R. Acharya, H. Fujita, O. S. Lih, Y. Hagiwara, J. H. Tan, and                   69, no. 1, pp. 119–128, Jan. 2022, doi: 10.1109/TBME.2021.3088218.
+     M. Adam, “Automated detection of arrhythmias using different intervals        [35] R. Mark and G. Moody. MIT-BIH Arrhythmia Dataset Directory.
+     of tachycardia ECG segments with convolutional neural network,” Inf.               Accessed: Mar. 17, 2022. [Online]. Available: http://ecg.mit.edu/
+     Sci., vol. 405, pp. 81–90, Sep. 2017.                                              dbinfo.html
+12                                                                                  IEEE TRANSACTIONS ON NEURAL NETWORKS AND LEARNING SYSTEMS
+
+
+
+[36] W. S. McCulloch and W. Pitts, “A logical calculus of the ideas immanent      [48] J. Malik, O. C. Devecioglu, S. Kiranyaz, T. Ince, and M. Gabbouj, “Real-
+     in nervous activity,” Bull. Math. Biophys., vol. 5, no. 4, pp. 115–133,           time patient-specific ECG classification by 1D self-operational neural
+     1943.                                                                             networks,” IEEE Trans. Biomed. Eng., early access, Dec. 15, 2021, doi:
+[37] T. Klausberger and P. Somogyi, “Neuronal diversity and temporal                   10.1109/TBME.2021.3135622.
+     dynamics: The unity of hippocampal circuit operations,” Science,             [49] J. Malik, S. Kiranyaz, and M. Gabbouj, “Self-organized operational
+     vol. 321, no. 5885, pp. 53–57, Jul. 2008.                                         neural networks for severe image restoration problems,” Neural Netw.,
+[38] I. Soltesz, Diversity in the Neuronal Machine: Order and Variability in           vol. 135, pp. 201–211, Mar. 2021, doi: 10.1016/j.neunet.2020.12.014.
+     Interneuronal Microcircuits. London, U.K.: Oxford Univ. Press, 2002.         [50] O. C. Devecioglu, J. Malik, T. Ince, S. Kiranyaz, E. Atalay, and
+[39] S. Kiranyaz, T. Ince, A. Iosifidis, and M. Gabbouj, “Generalized model            M. Gabbouj, “Real-time glaucoma detection from digital fundus images
+     of biological neural networks: Progressive operational perceptrons,” in           using self-ONNs,” IEEE Access, vol. 9, pp. 140031–140041, 2021, doi:
+     Proc. Int. Joint Conf. Neural Netw. (IJCNN), May 2017, pp. 2477–2485.             10.1109/ACCESS.2021.3118102.
+[40] S. Kiranyaz, T. Ince, A. Iosifidis, and M. Gabbouj, “Progressive opera-      [51] J. Laitala et al., “Robust ECG R-peak detection using LSTM,” in
+     tional perceptrons,” Neurocomputing, vol. 224, pp. 142–154, Feb. 2017.            Proc. ACM Symp. Appl. Comput., Mar. 2020, pp. 1104–1111, doi:
+[41] D. T. Tran, S. Kiranyaz, M. Gabbouj, and A. Iosifidis, “Progres-                  10.1145/3341105.3373945.
+     sive operational perceptron with memory,” Neurocomputing, vol. 379,          [52] P. S. Hamilton and E. P. Limited. (2002). Open Source ECG Analysis
+     pp. 172–181, 2020.                                                                Software Documentation. Accessed: Dec. 10, 2020. [Online]. Available:
+[42] D. T. Tran and A. Iosifidis, “Learning to rank: A progressive neural              http://www.eplimited.com/
+     network learning approach,” in Proc. IEEE Int. Conf. Acoust., Speech         [53] M. Elgendi, M. Jonkman, and F. De Boer, “Frequency bands effects on
+     Signal Process. (ICASSP), May 2019, pp. 8355–8359.                                QRS detection,” in Proc. 3rd Int. Conf. Bio-Inpsired Syst. Signal Process.
+[43] D. T. Tran, S. Kiranyaz, M. Gabbouj, and A. Iosifidis, “Heterogeneous             (BIOSIGNALS), vol. 1, V. Mahadevan and J. Zhou, Eds. Institute for
+     multilayer generalized operational perceptron,” IEEE Trans. Neural                Systems and Technologies of Information, Control and Communication,
+     Netw. Learn. Syst., vol. 31, no. 3, pp. 710–724, Mar. 2020, doi:                  2010, pp. 428–431.
+     10.1109/TNNLS.2019.2914082.                                                  [54] V. Kalidas and L. Tamil, “Real-time QRS detector using station-
+[44] D. T. Tran, S. Kiranyaz, M. Gabbouj, and A. Iosifidis, “Knowledge                 ary wavelet transform for automated ECG analysis,” in Proc. IEEE
+     transfer for face verification using heterogeneous generalized operational        17th Int. Conf. Bioinf. Bioeng. (BIBE), Oct. 2017, pp. 457–461, doi:
+     perceptrons,” in Proc. IEEE Int. Conf. Image Process. (ICIP), Sep. 2019,          10.1109/BIBE.2017.00-12.
+     pp. 1168–1172.                                                               [55] J. Malik, S. Kiranyaz, and M. Gabbouj, “FastONN-Python based open-
+[45] S. Kiranyaz, T. Ince, A. Iosifidis, and M. Gabbouj, “Operational neural           source GPU implementation for operational neural networks,” 2020,
+     networks,” Neural Comput. Appl., vol. 32, no. 11, pp. 6645–6668,                  arXiv:2006.02267.
+     Jun. 2020, doi: 10.1007/s00521-020-04780-3.                                  [56] A. Paszke, “PyTorch: An imperative style, high-performance
+[46] S. Kiranyaz, J. Malik, H. B. Abdallah, T. Ince, A. Iosifidis, and                 deep learning library,” in Proc. Adv. Neural Inf. Process. Syst.,
+     M. Gabbouj, “Self-organized operational neural networks with gener-               H. Wallach, Eds. Red Hook, NY, USA: Curran Associates, 2019,
+     ative neurons,” Neural Netw., vol. 140, pp. 294–308, Aug. 2021, doi:              pp. 8026–8037.
+     10.1016/j.neunet.2021.02.028.                                                [57] Self-ONN Source. Accessed: Mar. 17, 2022. [Online]. Available:
+[47] T. Ince et al., “Early bearing fault diagnosis of rotating machinery by           http://selfonn.net/
+     1D self-organized operational neural networks,” IEEE Access, vol. 9,         [58] 1D Self-ONN Peak Detector. Accessed: Mar. 17, 2022. [Online]. Avail-
+     pp. 139260–139270, 2021, doi: 10.1109/ACCESS.2021.3117603.                        able: https://github.com/MUzairZahid/R-Peak-Detection-1D-SelfONN
+

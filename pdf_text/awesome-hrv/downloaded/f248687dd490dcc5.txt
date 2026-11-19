@@ -1,0 +1,778 @@
+                                         IEEE TRANSACTIONS ON CONSUMER ELECTRONICS, VOL. #, NO. #, AUGUST 2022 (PREPRINT)                                                     1
+
+
+
+
+                                         Tiny-HR: Towards an interpretable machine learning
+                                          pipeline for heart rate estimation on edge devices
+                                                                Preetam Anbukarasu1,* , Shailesh Nanisetty2 , Ganesh Tata1 , and Nilanjan Ray1
+                                                         1
+                                                             Department of Computing Science, University of Alberta, Edmonton, Alberta, Canada
+                                                         2
+                                                             Department Of Industrial and Systems Engineering, IIT Kharagpur, West Bengal, India
+                                                                    *
+                                                                      Corresponding Author: Preetam Anbukarasu, anbukara@ualberta.ca
+
+
+
+
+arXiv:2208.07981v1 [cs.LG] 16 Aug 2022
+                                            Abstract—The focus of this paper is a proof of concept,          initialization time and initialization energy of the data ac-
+                                         machine learning (ML) pipeline that extracts heart rate from        quisition systems (∼10’s of µS and 1 mA) and the Nyquist
+                                         pressure sensor data acquired on low-power edge devices. The        frequency of the features obtained from the signal, since
+                                         ML pipeline consists an upsampler neural network, a signal qual-
+                                         ity classifier, and a 1D-convolutional neural network optimized     the sampling rate has to be high enough for reliable signal
+                                         for efficient and accurate heart rate estimation. The models were   reconstruction using traditional signal processing techniques.
+                                         designed so the pipeline was less than 40 kB. Further, a hybrid     The generally accepted minimum sampling rate for heart rate
+                                         pipeline consisting of the upsampler and classifier, followed       estimation from wearable sensors is 10-20 Hz [5], with 12
+                                         by a peak detection algorithm was developed. The pipelines          Hz being at the threshold below which the accuracy of the
+                                         were deployed on ESP32 edge device and benchmarked against
+                                         signal processing to determine the energy usage, and inference      heart rate estimation drops off markedly [6]. Studies have
+                                         times. The results indicate that the proposed ML and hybrid         shown that low sampling rates can still produce reliable HR
+                                         pipeline reduces energy and time per inference by 82% and 28%       estimates if the signal-to-noise ratio is low and a suitable
+                                         compared to traditional algorithms. The main trade-off for ML       non-linear interpolation is used to reconstruct the signal [7].
+                                         pipeline was accuracy, with a mean absolute error (MAE) of 3.28,    However, it is still typical for the sampling rate to be 2 to
+                                         compared to 2.39 and 1.17 for the hybrid and signal processing
+                                         pipelines. The ML models thus show promise for deployment           8 times higher than Nyquist frequency to ensure sufficient
+                                         in energy and computationally constrained devices. Further, the     signal quality. Due to these high sampling requirements, the
+                                         lower sampling rate and computational requirements for the ML       energy saved by putting the ADC and processing unit in
+                                         pipeline could enable custom hardware solutions to reduce the       sleep mode between samples is diminished substantially. The
+                                         cost and energy needs of wearable devices.                          signal processing pipeline, on the other hand, is responsible
+                                           Index Terms—Cardiovascular Biometrics, Interpretable Ma-          for 30-50% of the mean energy and memory usage in the
+                                         chine Learning, Signal Processing and TinyML.                       processing unit, with the inference time and energy used by the
+                                                                                                             various signal conditioning and feature extraction algorithms
+                                                                  I. I NTRODUCTION                           scaling at least linearly with sampling rate [4]. As a result, the
+                                            Embedded biometric and wearable devices are some of              selection criteria for embedded hardware and microprocessor
+                                         the fastest growing consumer electronic devices because of          units are constrained by the sampling rate and the complexity
+                                         their versatility and ease of use for remote health care [1],       of the signal processing pipeline required to extract relevant
+                                         authentication [2] and tracking. With over 250 million devices      features for inference. These challenges increase the cost
+                                         deployed, they are a rich source of health data that usually do     and complexity of the hardware while reducing the inference
+                                         not get utilized to their full potential [3], due to limitations    efficiency of wearable edge devices.
+                                         imposed by processing power, bandwidth, compliance and                 In recent years, multiple studies have demonstrated that
+                                         energy constraints of edge devices. In addition, the limited        machine learning approaches, especially deep or convolutional
+                                         footprint and cost constraints make it impractical to integrate     neural networks (DNN and CNN) [8]–[11] and signal classi-
+                                         more powerful processing units and larger batteries in these        fiers [12]–[16], show great promise in augmenting the capabil-
+                                         devices. The vast majority of the memory, computation and           ities of traditional signal processing approaches for biomedical
+                                         consequently the energy consumption in these devices arise          embedded devices [17]–[19]. Several research studies have
+                                         from the processing units and data acquisition system. Prior        shown the potential of deep learning models for applications
+                                         studies have shown that the sampling rate is a major factor         like heart rate detection from photoplethysmogram [2], [20]–
+                                         in the baseload power consumption (up to 30%) in biometric          [23], heart anomaly detection [24]–[26], and motion artifact
+                                         sensors [4]. A simple solution to reduce power consumption          tolerant heart rate extraction and signal reconstruction [14],
+                                         in wearable devices is to decrease the sampling rate and to         [15], [27]–[30]. Further, these DNNs are being optimized by
+                                         put the data acquisition and processing unit in sleep mode          approaches such as, sparsification, pruning, and quantization,
+                                         between samples. However, this approach is limited by the           which have reduced the size and complexity of these models
+                                                                                                             without compromising their accuracy and usefulness [31].
+                                                                                                             TinyML tools such as TensorFlow Lite and Cube AI have
+                                         978-1-5386-5541-2/18/$31.00 © 2022 IEEE                             enabled the conversion of trained deep learning models to
+IEEE TRANSACTIONS ON CONSUMER ELECTRONICS, VOL. #, NO. #, AUGUST 2022 (PREPRINT)                                                     2
+
+
+
+enable deployment in embedded devices with limited program           of signal conditioning and filtering algorithms as well. We
+memory, RAM and processing power [32]–[35].                          demonstrate that the U-NN can reconstruct usable signals from
+   Despite these advances, TinyML is still in its infancy and        input signals obtained at sub-optimal sampling space below the
+compact DNN/CNN models have not been extensively used in             Nyquist rate.
+consumer devices and embedded systems, especially for crit-
+ical applications where a false inference or misclassification       B. Interpretable Machine Learning and Signal Classifier
+can have major ramifications and liabilities. There are two
+                                                                        Most DNNs are black boxes with limited interpretability,
+main reasons for the lack of real-world applications, 1. Most
+                                                                     especially if their architecture is complex with multiple hidden
+DNNs are black boxes with very limited interpretability, 2.
+                                                                     layers and nodes. Interpretability is of paramount importance
+These DNNs are prohibitively large and energy-hungry to be
+                                                                     for mission-critical applications as in medical devices that
+deployed on embedded devices, especially when dealing with
+                                                                     produce inferences that would be used for diagnosis. Many
+high sampling rate data.
+                                                                     previous works have proposed potential approaches to improve
+   This paper focuses on a lightweight ML pipeline that
+                                                                     the interpretability and robustness of deep learning models
+addresses the issues of interpretability and deployment on
+                                                                     [41], [42]. For our application, the interpretability of the
+edge devices, by using three distinct models: 1. An upsampler
+                                                                     pipeline arises from a decision-making classifier that is trained
+neural network (U-NN) that takes low sampling rate sensor
+                                                                     with expert labelled datasets to identify abnormal or poor-
+data as input and reconstructs it into a filtered, higher sampling
+                                                                     quality signals that are not suitable for further processing.
+rate output, 2. A classifier that is trained to detect abnormal,
+                                                                     By creating a go/no-go gate using the classifier, we avoid
+low-quality signals to process independently of the good
+                                                                     the possibility of inaccurate inferences and wasting real-time
+quality signals and 3. A heart rate regression convolutional
+                                                                     processing resources in the embedded device on poor-quality
+neural network (HR-NN) that estimates heart rate from the
+                                                                     data. From an interpretability standpoint, the classifier gate
+good quality signals obtained from the classifier. All parts
+                                                                     provides insights into the location of the pipeline at which the
+of the pipeline are optimized for deployment in low-powered
+                                                                     model might fail when deployed in an environment where data
+edge devices and the output of each ML model that forms the
+                                                                     sets that were not encountered during training. For example,
+pipeline is designed to be probable to improve interpretability.
+                                                                     the model can encounter situations where the input data itself
+We compared the ML pipeline with a fully interpretable hybrid
+                                                                     contains a lot of noise and motion artifacts, in which case the
+pipeline (U-NN + Classifier + Traditional peak detection based
+                                                                     signal may have to be conditioned before processing or even
+HR estimator) and a traditional signal processing pipeline
+                                                                     dropped altogether. Alternatively, an issue with the upsampling
+(Signal conditioning + Noise reduction + Peak Detection). We
+                                                                     step can be flagged and investigated by a human expert at the
+demonstrate that the proposed three-part ML pipeline performs
+                                                                     classifier gate. We have discussed different scenarios wherein
+favourably in terms of inference time while being slightly
+                                                                     the output characteristics of the upsampler, classifier and heart
+inferior in terms of accuracy. The results further indicate that
+                                                                     rate regressor are exposed to abnormal datasets and noisy input
+the ML pipeline deployed on ESP32, while having a larger
+                                                                     signals and the potential changes in the estimation accuracy
+model size, is more energy efficient than signal processing.
+                                                                     and reliability of the proposed models. We further discuss the
+The traditional signal processing pipeline resulted in a rela-
+                                                                     potential limitations and future directions of studies to address
+tively higher accuracy at the expense of much longer inference
+                                                                     these limitations.
+times. The hybrid pipeline showed comparable accuracy with a
+lower energy consumption than the signal processing pipeline.
+                                                                     C. Machine Learning for Heart Rate Estimation
+                      II. BACKGROUND                                    Heart rate (HR) monitoring in wearable devices is typically
+                                                                     carried out using wrist photoplethysmogram (PPG) signals.
+A. Upsampling Neural Networks for biometric signal                   PPG data quality is affected by a range of factors including
+   Upsampling is one of the simplest ways to restore or re-          motion artifacts, skin tone variations and hydration levels, etc
+construct a signal to its original version from a low-resolution     [43], [44]. In the current study, a tactile pressure sensor is
+input. Upsampling neural networks (U-NN) have been used              used to obtain the pulse wave data from which the heart rate
+extensively in image super-resolution [36], [37], medical imag-      is estimated. The tactile pressure sensor affords a more robust
+ing in applications such as FastMRI using compressed sensing         signal with a higher signal-to-noise ratio, which is not as
+[38], [39] and EEG signal reconstruction [40]. The main              badly affected by environmental factors. Typically, the heart
+advantage of the U-NN versus interpolation is the relative           rate from wearable sensors is estimated using an extensive
+fidelity and the recovery of finer features of the signal making     signal processing pipeline consisting of moving average filters,
+them more representative of the ground truth. In this study,         baseline correction algorithms, thresholding algorithms and
+we use a U-NN to reconstruct a 12 Hz output signal from              peak detection algorithms. Fig.1 is an example of a signal
+a 6 HZ input, which can reduce the true sampling rate,               processing pipeline used to extract biometrical parameters
+energy consumption and duty cycle of the data acquisition            from the raw signal. These algorithms are well studied and
+system. By putting the ADC to sleep for the time between             are currently used in embedded devices, even though they
+samples, we can reduce the ADC energy consumption by                 consume considerable inference time and energy for HR
+50% without compromising on signal quality. In addition to           estimation. In this study, we have explored an HR regression
+reconstruction, the U-NN effectively performs the function           neural network that takes conditioned and upsampled 12 Hz
+IEEE TRANSACTIONS ON CONSUMER ELECTRONICS, VOL. #, NO. #, AUGUST 2022 (PREPRINT)                                                    3
+
+
+
+data as input and provides windowed mean HR values as                normalized signals were interpolated by a factor of 10 to
+output. We have further compared inference times and energy          enable more accurate HR estimates. The interpolated curves
+of the HR-NN versus the traditional pipeline. The ML pipeline        were smoothed by a 30-order moving average filter before
+was found to be more energy efficient while being slightly           being fed into a peak detection algorithm to determine the
+more inaccurate than traditional and hybrid pipelines.               mean heart rate for each dataset. The peak detection algorithm
+                                                                     was developed based on previous studies [45], [46] on energy-
+                         III. M ETHOD                                efficient heart rate detection that uses a 3-point non-linear
+A. Data Acquisition and Processing                                   interpolator after the approximate peak location is determined
+                                                                     to reduce inference time and computational requirements.
+   The raw pulse data used for the study was obtained from a
+custom-made, thin film sensor applied over the radial artery on
+the wrist. The data were acquired at 126 Hz using an ESP32           C. Machine Learning Pipeline
+edge device equipped with an external 16-bit ADC and a pro-             The main constituents of the proposed ML pipeline and the
+grammable gain amplifier. The sensitivity and dynamic range          flow of data are shown in Fig. 2. The pipeline consists of three
+of the sensors were optimized to ensure the reliable acquisition     parts, upsampler, classifier and HR regressor. The architecture
+of the pressure pulse data. The signals were segmented into          and parameters associated with each of the constituents are
+6-second frames, then baseline corrected and normalized to           discussed below. The pipeline is assembled along with their
+ensure standardized input for the signal processing algorithms       tensors and matrices after the individual models were trained
+and the neural networks. The datasets were downsampled to            and validated in the format discussed below.
+an effective sampling rate of 6 Hz and 12 Hz to use as inputs
+and ground truth for the upsampling neural networks, while the       D. Dataset for ML pipeline
+12 Hz datasets were used as input for the signal processing
+                                                                        The dataset is split into 3 parts: Training data (70%),
+algorithms. The heart rate ground truth was determined by
+                                                                     Validation data (15%) and Test Data (15%). These three splits
+measuring the peak to peak time and by averaging the values
+                                                                     are kept the same while training the upsampler, classifier and
+over the 6-second interval for each dataset. The datasets
+                                                                     regressor. The regressor is only trained with the upsampled
+were labelled as either good quality signals or poor quality
+                                                                     normal signals since the classifier would reject abnormal
+signals, as determined by the signal quality, presence of motion
+                                                                     signals when the system is deployed and hence they would
+artifacts, relative amplitude and peak prominence. The labelled
+                                                                     not be passed as input to the regressor.
+datasets were used to train a signal quality classifier to prevent
+HR regressor inferences from unsuitable low-quality signals.
+In total, 5687 labelled signals were obtained from 5 healthy         E. Upsampler
+volunteers for the study. The datasets were acquired with the           The objective of the Upsampler is to reconstruct the signal
+volunteers in seated position at rest or after moderate exercise.    to its original version for a given low-dimensional input. We
+   The datasets were passed through a traditional signal pro-        employ a Fully Connected Neural Network (FCN) to achieve
+cessing pipeline consisting of signal filters, noise reduction and   this.
+signal conditioning algorithms, to determine the HR ground              The architecture is composed of three layers; an Input layer
+truth. Fig. 1. shows the major part of the pipeline used in this     with 35 neurons, a hidden layer and an output layer with 69
+study to generate the HR values. Specifically, a combination         neurons (Table I). ’Relu’ (Rectified Linear Unit) activation
+of 6-order median and FIR filters were used to remove high-          function was used in the neural network. The model perfor-
+frequency noise and fluctuations in the samples. Further,            mance was evaluated using Root Mean Squared Error (RMSE).
+baseline correction was performed to remove the oscillations         The model is trained using stochastic gradient descent with
+and breathing artifacts present in the signal. Normalization         a learning rate of 0.9 for 2000 epochs. Different runs are
+was carried out to standardize the datasets and to make them         performed by varying number of neurons in the hidden layer
+comparable across samples. The normalized curves were fed            from 30 to 55. The network with 55 neurons in the hidden
+to a peak detection algorithm to determine the mean heart rate       layer achieved the best test RMSE (0.094). The parameters of
+for each data frame. The ground truth values were randomly           the FCN are updated using stochastic gradient descent and the
+sampled for different datasets and independently validated           Mean Squared Error (MSE) loss function was used to compute
+by two experts (Biomedical engineers) to be within a mean            the gradient.
+absolute error (MAE) of 0.24, which is comparable to the
+best signal processing algorithms available for HR prediction.       F. Classifier
+                                                                        The classifier is trained to predict if a signal is normal or
+B. Signal Processing Pipeline                                        abnormal. A 1-D CNN architecture with two hidden layers
+    For edge deployment, we optimized the pipeline shown in          was used for the classifier. Table II shows the architecture of
+Fig. 1 for lower model size, inference times and fewer overall       the classifier. The abnormal and normal signals were labelled
+steps to enable a fair comparison with the machine learning          positive and negative respectively. The network is trained using
+and hybrid pipelines discussed in the paper. The lightweight         the binary cross entropy loss function. For gradient descent,
+signal processing pipeline consists of 6-order median and FIR        the Adam [47] optimization algorithm is used with a learning
+filters, baseline correction, followed by normalization. The         rate of 0.003. The model is trained for 1000 epochs. The model
+IEEE TRANSACTIONS ON CONSUMER ELECTRONICS, VOL. #, NO. #, AUGUST 2022 (PREPRINT)                                                             4
+
+
+
+
+       Raw signal             Median Filter (N=6)             FIR Filter (N=6)          Wavelet Transform                Baseline
+                                                                                             (N=32)                    interpolation
+
+
+
+
+       Heart rate               Peak detection               Cubic Interpolation           Normalization           Baseline correction
+       estimation
+
+
+
+
+Fig. 1: Traditional signal processing pipeline used for comparison in the paper. The pipeline consists of multiple stages of
+signal conditioning filters, smoothing functions and peak detection algorithms to estimate heart rate.
+
+     Raw signal                           Upsampled signal                                                           Heart rate estimation
+
+
+                        Upsampler
+                                                                   Go/No-Go
+                                                                                      Normal    Y    1D CNN HR
+                                                                     Signal
+                           FCN                                                        Signal         Regressor
+                                                                   Classifier
+
+
+
+                                                                                         N              Signal
+                                                                                                      Discarded
+
+
+Fig. 2: Complete Machine learning pipeline consisting of an upsampler neural network, a classifier to prevent abnormal signals
+from further processing and a heart rate regression neural network designed to directly predict heart rate from the dataframe.
+
+
+checkpoint with the smallest F1-score on the validation set             H. Details of Experiments
+was chosen to report the final results. The performance of the
+                                                                           Hyperparameter tuning was performed to determine the
+classifier is evaluated using its accuracy and F1-score on the
+                                                                        learning rate, weight decay, the number of hidden neurons
+test set. F1-score is the harmonic mean of precision and recall
+                                                                        for each layer (FCN), output channels (1-D CNN) and kernel
+metrics.
+                                                                        size for the convolution layers (1-D CNN). For all three
+                                                                        components of the ML pipeline, shallow architectures were
+                                                                        chosen such that their combined size is similar to the size of
+                                                                        the signal processing pipeline on the edge device. In Table III,
+G. HR Regressor                                                         the standard deviation for the evaluation metrics is reported by
+                                                                        running each experiment with 5 different random seeds that
+   We perform our experiments using the FCN and 1-D CNN                 result in different weight initialization for the models.
+architecture. The input layer has 69 neurons and the output
+layer has one neuron to yield the heart rate value. The output
+                                                                        I. Hybrid Pipeline
+from the best performing upsampler is provided as input to
+the HR Regressor. Both the hidden layers in the FCN have 8                 The proposed hybrid pipeline that combines the U-NN,
+neurons each with the sine activation function between these            signal quality classifier from the ML pipeline with the peak
+layers. Table II depicts the architecture of the 1-D CNN. For           detection and HR estimation algorithms from the signal pro-
+both types of networks, we use Adam as the Gradient Descent             cessing pipeline were developed and tested to take advantage
+optimization algorithm with Mean Squared Error (MSE) as the             of the strengths of both approaches. Fig. 3. shows the flow of
+loss function. A learning rate of 0.05 and weight decay of 0.05         data and the constituents of the hybrid pipeline. The hybrid
+is used, and the model is trained for 1000 epochs. The model            pipeline enables us to take advantage of the efficiency of the
+checkpoint with the smallest RMSE on the validation set was             ML pipeline while also benefiting from the high inference
+chosen to report the final results. The evaluation metrics used         accuracy of the traditional peak detection algorithm for HR
+for the regressor are RMSE and MAE.                                     estimation.
+IEEE TRANSACTIONS ON CONSUMER ELECTRONICS, VOL. #, NO. #, AUGUST 2022 (PREPRINT)                                                       5
+
+
+
+                                Number of                            Input Size     Layer     Kernel Size   Output Size   Activation
+          Input Size   Layer                Activation
+                                 neurons                                69x1       1-D Conv       5            65x5         ReLU
+              35       Linear      55          ReLU
+                                                                        65x5       1-D Conv       5            61x5         ReLU
+              55       Linear      69            -
+                                                                        305         Linear         -            1          Sigmoid
+TABLE I: 2-layer Fully Connected network architecture for
+Upsampler                                                           TABLE II: Same 3-layer 1-D CNN architecture is used for
+                                                                    the Classifier and the HR Regressor. The Regressor has the
+                                                                    Sine activation function instead of ReLU and it does not have
+J. Deployment on Edge Device                                        a sigmoid layer at the end.
+  The three different pipelines proposed in the current work
+were deployed on an ESP32 edge device. The inference time,          B. Signal Conditioning and Upsampling
+energy consumption and inference accuracy were measured on
+                                                                       Signals, when acquired at low sampling rates, require sub-
+edge. The deployment on ESP32 was facilitated by converting
+                                                                    stantial conditioning and upsampling to extract meaningful
+PyTorch models of the U-NN, Classifier and HR-NN into
+                                                                    features using traditional signal processing. This results in
+ONNX. The ONNX models were then ported over to Ten-
+                                                                    higher computational needs and longer processing times which
+sorFlow and to TFLite, to make the models compatible with
+                                                                    makes low sampling rates unattractive for most applications.
+ESP32. The porting over process was carried out to remove all
+                                                                    Further, the use of simple interpolation and curve fitting
+overheads, unnecessary libraries and dependencies that could
+                                                                    leads to signal distortions compromising the prediction ac-
+reduce the inference efficiency on edge.
+                                                                    curacy. The U-NN proposed in the current study combines
+                                                                    the functions of signal conditioning and interpolation, effec-
+              IV. R ESULTS AND D ISCUSSIONS                         tively reconstructing a realistic representation of the ground
+A. Signal Requirements for Heart Rate Estimation                    truth signal acquired at higher sampling rates. Fig. 4 shows
+                                                                    representative signals reconstructed from 4 and 6 Hz to 12
+   Heart rate estimation is a relatively simple process that        Hz by the U-NN. The RMSE between the reconstructed 12Hz
+involves peak detection and peak-to-peak distance estimation        signal and the ground truth 12 Hz signal was 0.094, which
+to determine the mean value over a sliding time window.             indicates good reconstruction quality and agreement with the
+This process leads to accurate heart rate estimations when a        ground truth. Considering the constraints of edge deployment,
+good quality input signal with well-defined peak morphology         we chose a shallow FCN architecture with a model size of
+is used. The Nyquist frequency of the peak features used to         only 22.8 kB and consists of 5844 parameters which are well
+estimate heart rate ranges from 0.3 to 3 Hz for healthy subjects,   within the flash memory and RAM requirements of ESP32.
+which provides a theoretical guarantee that the feature can         Table 1 shows the relevant metrics of the U-NN.
+be reconstructed at sampling rates above 6 Hz. In practice,
+the sampling rate as high as eight times Nyquist frequency is
+used to ensure sufficient signal quality and accuracy. However,     C. Signal Quality Classification and Quality Heuristics
+this approach leads to long inference times, higher energy             The signal quality is one of the most important determinants
+consumption and computational requirements on edge devices.         of heart rate estimation accuracy. Factors such as insufficient
+For optimal accuracy and energy usage characteristics on edge,      sensor contact, motion artifacts, and partial occlusion of the
+a sampling rate of 12 Hz can be used, with a suitable signal        blood vessels can affect the signal and make them unusable
+processing pipeline that can reliably predict heart rate under      for carrying out inferences. Many studies in the literature
+most conditions. Such a signal processing pipeline would have       have used classification models to improve signal processing
+to incorporate signal conditioning, quality classification, non-    efficiency and to avoid processing datasets that are not suitable.
+linear interpolation and feature extraction. These steps increase   Using traditional signal processing techniques, such signal
+the inference time and energy consumed by the edge device. In       quality classification can be achieved by using heuristics
+this study, we demonstrate a proof of concept machine learning      and rule-based decision-making algorithms that can identify
+(ML) pipeline that overcomes the limitations of traditional         abnormal data and eliminate them. In addition, post inference
+signal processing by reducing the inference time and energy         rules which consist of physiological range bounds, and outliers
+demand. Further, we compared the accuracy characteristics of        can be used for anomaly detection. In our study, we have
+the proposed ML model versus a lightweight signal processing        developed a 1D CNN model that classifies data with a binary
+algorithm.                                                          label based on the signal quality. The classifier acts as a go/no-
+   Fig. 3 shows the flow of data through the complete ML            go gate that prevents poor quality signals from being used for
+pipeline, consisting of the U-NN, signal quality classifier and     inferences. Fig 5 shows some common examples of datasets
+the HR-NN that infers the heart rate. These models have             classified as having poor quality. The accuracy and F1-Score
+the advantage of being more interpretable than end-to-end           of the classifier were found to be 94% and 0.72 respectively
+machine learning models. In comparison to our proposed              when exposed to the test dataset. 1D CNN being a compact
+ML pipeline, the traditional signal processing algorithm had        architecture resulted in a model size of only 1.82 kB and
+a slightly higher accuracy, but it required a much higher           466 parameters. Table III shows the relevant metrics of the
+inference time leading to higher energy usage.                      classifier.
+IEEE TRANSACTIONS ON CONSUMER ELECTRONICS, VOL. #, NO. #, AUGUST 2022 (PREPRINT)                                                                                                                                                                                                                                            6
+
+
+
+
+                                    Raw signal                                                                              Upsampled signal                                                                                                   Peak detection                                   Heart rate estimation
+
+                                                                                                                                                              Go/No-Go                                                                  Y
+                                                                      Upsampler                                                                                                                                       Normal
+                                                                                                                                                                Signal
+                                                                         FCN                                                                                                                                          Signal
+                                                                                                                                                              Classifier
+
+
+
+
+                                                                                                                                                                                                                            N                      Signal
+                                                                                                                                                                                                                                                 Discarded
+
+
+Fig. 3: Hybrid signal processing pipeline consisting of an upsampler neural network, a classifier to prevent abnormal signal from
+further processing and a traditional peak detection algorithm designed to count the total number of peaks within a dataframe.
+
+                                                                                                                                        Model Size            Number of
+                                                         Model                 Architecture                                                                                                                                       Performance Metrics
+                                                                                                                                              (kB)            Parameters
+                                                      Upsampler                FCN (Table I)                                                  22.8                 5844                                                           RMSE = 0.094±0.002
+                                                       Classifier           1-D CNN (Table II)                                                1.82                 466                                            Accuracy = 94±0.3%           F1-Score = 0.72±0.008
+                                                       Regressor            1-D CNN (Table II)                                                1.82                 466                                             RMSE = 4.8±0.07                MAE = 3.28±0.14
+
+                                                                            TABLE III: Test Set Results of different components of the ML pipeline.
+
+
+a)                                                   6 Hz Input                                                                        12 Hz Output                                                      a)                                                                          b)
+                                                                                                                                                                                                                        Insufficient Contact                                                    Partial Occlusion
+
+
+
+
+ Normalizezd Pressure (A.U)                                                          Normalizezd Pressure (A.U)                                                            Normalizezd Pressure (A.U)                                                  Normalizezd Pressure (A.U)
+                               1                                                                                   1                                                                                     1                                                                           1
+                              0.8                                                                                 0.8                                                                                   0.8                                                                         0.8
+                              0.6                                                                                 0.6                                                                                   0.6                                                                         0.6
+                              0.4                                                                                 0.4                                                                                   0.4                                                                         0.4
+                              0.2                                                                                 0.2                                                                                   0.2                                                                         0.2
+                               0                                                                                   0                                                                                     0                                                                           0
+                                    0    1       2       3        4     5      6                                        0    1    2        3          4   5    6                                              0         2                 4       6                                       0     2              4        6
+                                                      Time (S)                                                                          Time (S)                                                                             Time (S)                                                               Time (S)
+
+                                                                                                                                                                                                         c)                                                                          d)
+b)                                                   4 Hz Input                                                                       12 Hz Output                                                                          Motion Artifact                                                   Good Quality Signal
+
+
+
+
+                                                                                                                                                                          Normalizezd Pressure (A.U)                                                  Normalizezd Pressure (A.U)
+                               1                                                                                   1                                                                                     1                                                                           1
+
+
+
+
+ Normalizezd Pressure (A.U)                                                        Normalizezd Pressure (A.U)
+                              0.8                                                                                 0.8                                                                                   0.8                                                                         0.8
+
+                              0.6                                                                                 0.6                                                                                   0.6                                                                         0.6
+
+                              0.4                                                                                 0.4                                                                                   0.4                                                                         0.4
+
+                              0.2                                                                                 0.2                                                                                   0.2                                                                         0.2
+
+                               0                                                                                   0                                                                                     0                                                                           0
+                                    0    1       2       3        4     5      6                                        0   1     2        3          4   5    6                                              0         2                 4       6                                       0     2              4        6
+                                                      TIme (S)                                                                          Time (S)                                                                             Time (S)                                                               Time (S)
+
+
+
+Fig. 4: Plots showing the reconstructed pulse signals obtained                                                                                                        Fig. 5: Typical signals that are classified a good versus bad
+from upsampling-NN with a) 6 Hz and b) 4 Hz raw samples as                                                                                                            based on the signal quality and peak prominence criteria. The
+inputs and the resultant 12 Hz output signal. The U-NN was                                                                                                            good signals are passed to the regression step where the heart
+trained on 12 Hz ground truth signals that were processed                                                                                                             rates are estimated.
+using signal conditioning and smoothing algorithms. The
+image clearly show that the U-NN, in addition to upsampling,
+reliably reconstructs the features of the raw signal.                                                                                                                 of further improving the accuracy of heart rate predictions
+                                                                                                                                                                      using more sophisticated approaches. Table IV shows relevant
+                                                                                                                                                                      metrics for the signal processing pipeline.
+D. Heart Rate Estimation                                                                                                                                                 In our proposed ML pipeline, the 1D CNN heart rate
+   The final set of steps in the pipeline to extract heart rate                                                                                                       regressor uses the reconstructed 12 Hz signal as input and
+estimations involve the pulse peak detection and peak-to-                                                                                                             provides a signal HR value as output. Tables II and III
+peak distance measurement for the hybrid and the traditional                                                                                                          shows the architecture and relevant statistics of the regressor
+processing pipeline. The accuracy of heart rate estimates is                                                                                                          respectively. The model size is only 1.8 kB and has 499 pa-
+directly affected by these features. In a signal processing                                                                                                           rameters. The 1D CNN through learning, abstracts the relevant
+pipeline, the feature extraction consists of filters and algorithm                                                                                                    features necessary for peak detection and HR estimation, as
+parameters that have to be hand-tuned and optimized to ensure                                                                                                         compared to the traditional peak detection algorithms. Thus,
+accuracy. These parameters for commonly extracted features                                                                                                            the dependence on hand tuning of parameters is eliminated
+are usually set based on predetermined rules and heuristics.                                                                                                          in the ML pipeline. Table IV shows the performance and
+The lightweight signal processing pipeline that we created                                                                                                            accuracy metrics of the ML, hybrid and the signal processing
+using these rules performed well in terms of accuracy with an                                                                                                         pipeline, compared in this study. The results show that the
+MAE of 1.13 and RMSE of 3.44. The size of the entire signal                                                                                                           ML pipeline has a much lower inference time (nearly 6x)
+processing pipeline was 22 kB and leaving open the possibility                                                                                                        and consequently, lower energy consumption. However, the
+IEEE TRANSACTIONS ON CONSUMER ELECTRONICS, VOL. #, NO. #, AUGUST 2022 (PREPRINT)                                                         7
+
+
+
+                                                                Signal Processing Pipeline   Hybrid Pipeline   ML Pipeline
+                                   Model size                             22 kB                  35 kB           39 kB
+                                 Inference time                          2.51 ms                1.82 ms          0.41 ms
+                           Estimated inference energy                    7.4 mJ                 5.15 mJ          1.21 mJ
+                 Mean absolute error of entire data set (BPM)              1.17                   2.35            2.99
+                      Mean absolute error of test set (BPM)                1.17                   2.39            3.28
+
+TABLE IV: Comparison of the model size, inference time, inference energy consumption, ADC current draw and inference
+accuracy on ESP32 edge device for the traditional signal processing, hybrid and complete ML pipelines. The model size
+includes the libraries used to run the models, in addition to the models themselves. All inferences were conducted at a clock
+speed of 40 MHz.
+
+
+inference accuracy (MAE = 3.28 BPM) was found to be lower                models on a much wider distribution of data, which will be
+than both hybrid (MAE = 2.1) and signal processing (MAE =                the focus of our future studies.
+1.17) pipelines. Further, the HR estimation error was found to
+be similar for both the train and test set, which suggests that          B. Accuracy
+the CNN has not over-fitted to the training dataset. The visual             The accuracy of the proposed pipeline, while promising,
+representation of the HR predictions made by the three models            is not theoretically guaranteed as is the case with traditional
+versus the HR ground truth is shown in Fig. 6. The fig. 6.a),            signal processing. For greater generalizability, and accuracy
+b) and c) shows the plot of HR estimation Vs. HR ground                  in real-world conditions, much larger training datasets have
+truth. Further, the ML pipeline results in estimations that have         to be acquired to train and validate the ML models, which
+a wider inter-quartile range and standard deviation than both            might be impractical and expensive to achieve. This is one of
+hybrid and signal processing as shown in Fig. 6.d). However,             the reasons we developed the hybrid pipeline, which shares
+the total number of outlier HR estimates is much lower for the           most of the ML pipeline, while deviating only at the HR
+ML pipeline. This result is in agreement with prior studies [48]         inference stage, where traditional signal processing is used,
+that have shown that signal processing algorithms deployed in            instead of the HR regressor. Due to the relatively small model
+commercial edge devices tend to make large estimation errors             size of the regressor, we can deploy both the HR regressor and
+from time to time, due to misidentification of peaks or due              the signal processing HR estimator to enable potential ground
+to poor signal quality. The ML pipeline, on the other hand,              truth acquisition on the edge device, without compromising
+does not make large estimation errors as long as the real-world          much on the energy and inference characteristics. This has
+data falls within the distribution of the data used to train the         the added benefit of introducing naturally occurring variability
+models. The potential and limitations of the ML pipeline are             in the datasets, improving the inference accuracy through
+elucidated further in the discussions section.                           federated learning over time.
+
+                        V. D ISCUSSIONS                                  C. Interpretability of the pipeline
+A. Generalizability                                                         One of the biggest problems with end-to-end machine learn-
+   One of the major challenges for ML models is the lack                 ing is the lack of interpretability and the general black box na-
+of generalizability when exposed to data that is qualitatively           ture of the models. The proposed pipeline partly addresses this
+different from the training set. All the models proposed in              by introducing probing points within the pipeline that enables
+this study have been trained on datasets considered to be in             an expert to view the outputs of the models to determine how
+the normal range. Although, all the models both individually             they are performing from an application function standpoint.
+and when combined in an edge deployed pipeline, perform                  The FCN and 1D CNNs themselves are not interpretable,
+well in terms of prediction accuracy and low error, could fail           however, the results from these networks can be analyzed
+when they encounter signals with characteristics different from          and probed to determine how well they are performing in
+the training datasets. The go/no-go classifier was designed to,          real-world scenarios. The output of the upsampler can be
+at least partially address this challenge, wherein the classifier        visually and mathematically verified to determine how well
+will identify abnormalities in the sample and prevent them               it is reconstructing the suboptimally sampled signals. The
+from being used for inferences and HR predictions. However,              classifier also acts as a quality check for the reconstructed
+even with 94% accuracy, the classifier allows some abnormal              signal. If the U-NN performs a poor reconstruction for an
+signals to pass through to the inference stage. The generaliz-           abnormal or low-quality signal, the classifier is trained to
+ability of ML models is an active area of research and is a              label it as a poor-quality signal and prevent it from further
+known impediment to the deployment of ML models in real-                 processing. Therefore, we have introduced multiple steps de-
+world applications. One potential solution is to develop more            signed to prevent an HR inference which is wrong by a wide
+advanced models and train them on diverse datasets with more             margin. The ML pipeline, thus, by design is biased towards
+abnormal signals to improve F1-Score and accuracy. Currently,            not reporting an HR value when it encounters a signal which
+the only way to ensure improved generalizability is to train the         might lead to a prediction with a large error.
+IEEE TRANSACTIONS ON CONSUMER ELECTRONICS, VOL. #, NO. #, AUGUST 2022 (PREPRINT)                                                                                                                       8
+
+
+
+                      140                                                                                                 140
+                                 a)                                                                                                  b)
+
+                      130                                                                                                 130
+
+                      120                                                                                                 120
+
+
+                      110                                                                                                 110
+
+
+
+
+ HR Estimates (BPM)                                                                         HR Estimates (BPM)
+                      100                                                                                                 100
+
+
+                       90                                                                                                  90
+
+                       80                                                                                                  80
+
+
+                       70                                                                                                  70
+
+
+                       60                                                                                                  60
+
+                       50                                                                                                  50
+                            50        60   70   80    90     100    110   120   130   140                                       50        60   70    80    90     100    110    120    130       140
+                                                 HR Ground Truth (BPM)                                                                                HR Ground Truth (BPM)
+
+                      140                                                                                                  60
+                                 c)                                                                                                  d)                                        ML Pipeline
+                                                                                                                                                                               Hybrid Pipeline
+                      130                                                                                                  50
+                                                                                                                                                                               Signal Processing
+
+                      120                                                                                                  40
+
+
+
+
+                                                                                              HR Estimation Error (BPM)
+                                                                                                                           30
+                      110
+
+
+
+
+ HR Estimates (BPM)
+                                                                                                                           20
+                      100
+                                                                                                                           10
+                       90
+                                                                                                                            0
+                       80
+                                                                                                                          -10
+                       70
+                                                                                                                          -20
+
+                       60
+                                                                                                                          -30
+
+                       50                                                                                                 -40
+                            50        60   70   80    90     100    110   120   130   140                                                                      1
+                                                 HR Ground Truth (BPM)
+
+
+Fig. 6: Plots showing the statistical inference error of heart rate estimates made by the ML, Hybrid and signal processing
+pipelines, compared with ground truth HR obtained by measuring peak to peak time. The plots show only the test set data.
+a) The HR estimates made by signal processing which shows good agreement with the ground truth. b) Hybrid pipeline HR
+estimates Vs. ground truth, which shows a slight degradation in estimation accuracy. c) ML pipeline HR estimates Vs. ground
+truth, showing good fit, albeit with a larger mean error. d) Shows the box and whisker plot with outliers, indicating that the
+interquartile range for signal process is the narrowest with hybrid and ML pipelines having slightly larger deviation. However,
+the ML pipeline does not make as many outlier estimates as signal processing and hybrid HR predictors. The black diagonal
+lines represent the ground truth HR values.
+
+
+D. Limitations                                                                              to determine the most optimal ML models. While we have
+                                                                                            used the model that balances the accuracy and efficiency
+   Despite the promising results of the ML pipeline, there are
+                                                                                            requirements of the edge devices, a more optimal model might
+limitations that have to be addressed before considering their
+                                                                                            be found if a deeper architecture search is carried out. We plan
+deployment on edge devices. The current study is strictly a
+                                                                                            to address these challenges in our future studies using more
+proof of concept designed to demonstrate the inference time
+                                                                                            volunteers and carrying out a network architecture search to
+and energy savings possible by using cutting-edge lightweight
+                                                                                            further optimize the models.
+neural networks while making them more interpretable than
+black box models. Therefore, we have made some compro-
+mises in the present study, namely, only 5 volunteers were                                                                                          VI. C ONCLUSION
+used for the preliminary training and test datasets and a                                      We have demonstrated that a three-part ML pipeline con-
+comprehensive network architecture search has not been used                                 sisting of a shallow FCN and 1D CNNs can be used to
+IEEE TRANSACTIONS ON CONSUMER ELECTRONICS, VOL. #, NO. #, AUGUST 2022 (PREPRINT)                                                                            9
+
+
+
+estimate HR values from a pressure pulse signal. The pipelines                  [12] M. S. Lee, Y. K. Lee, D. S. Pae, M. T. Lim, D. W. Kim, and T. K.
+were deployed in an ESP32 edge device and the performance                            Kang, “Fast emotion recognition based on single pulse ppg signal with
+                                                                                     convolutional neural network,” Applied Sciences, vol. 9, no. 16, p. 3355,
+characteristics were determined. When compared to traditional                        2019.
+signal processing, the ML pipeline was nearly 6x more effi-                     [13] M. Soltane, M. Ismail, and Z. A. A. Rashid, “Artificial neural networks
+cient in inference times, while being only slightly inferior in                      (ann) approach to ppg signal classification,” International journal of
+                                                                                     computing & information sciences, vol. 2, no. 1, pp. 58–65, 2004.
+terms of inference accuracy. We further show that the ML                        [14] S.-H. Liu, J.-J. Wang, W. Chen, K.-L. Pan, and C.-H. Su, “Classification
+pipeline is more interpretable than an end-to-end ML model                           of photoplethysmographic signal quality with fuzzy neural network for
+by breaking out the functional aspects of the HR estimation                          improvement of stroke volume measurement,” Applied Sciences, vol. 10,
+                                                                                     no. 4, p. 1476, 2020.
+problem into upsampling, classification and HR regression,                      [15] Q. Li and G. D. Clifford, “Dynamic time warping and machine learning
+which enables us to probe the inferences made by the models.                         for signal quality assessment of pulsatile signals,” Physiological mea-
+Further, we constructed a hybrid pipeline, combining the effi-                       surement, vol. 33, no. 9, p. 1491, 2012.
+                                                                                [16] M. S. Roy, R. Gupta, and K. D. Sharma, “Photoplethysmogram signal
+ciency advantages of the ML pipeline with the interpretability                       quality evaluation by unsupervised learning approach,” in 2020 IEEE
+and higher accuracy of the HR estimation algorithms. All three                       Applied Signal Processing Conference (ASPCON). IEEE, 2020, pp.
+models discussed in this study can be deployed in resource-                          6–10.
+                                                                                [17] S. Maqsood, S. Xu, M. Springer, and R. Mohawesh, “A benchmark study
+constrained environments with each affording complementary                           of machine learning for analysis of signal feature extraction techniques
+advantages and tradeoffs. Being modular, the elements of the                         for blood pressure estimation using photoplethysmography (ppg),” IEEE
+models can be mixed and matched based on system and                                  Access, vol. 9, pp. 138 817–138 833, 2021.
+                                                                                [18] M. N. Schmidt, T. S. Alstrøm, M. Svendstorp, and J. Larsen, “Peak
+application constraints.                                                             detection and baseline correction using a convolutional neural network,”
+                                                                                     in ICASSP 2019-2019 IEEE International Conference on Acoustics,
+                                                                                     Speech and Signal Processing (ICASSP). IEEE, 2019, pp. 2757–2761.
+                             R EFERENCES                                        [19] L. V. Coutts, D. Plans, A. W. Brown, and J. Collomosse, “Deep learning
+                                                                                     with wearable based heart rate variability for prediction of mental and
+ [1] K. Bayoumy, M. Gaber, A. Elshafeey, O. Mhaimeed, E. H. Dineen,                  general health,” Journal of Biomedical Informatics, vol. 112, p. 103610,
+     F. A. Marvel, S. S. Martin, E. D. Muse, M. P. Turakhia, K. G. Tarakji           2020.
+     et al., “Smart wearable devices in cardiovascular care: where we are       [20] A. Reiss, I. Indlekofer, P. Schmidt, and K. V. Laerhoven, “Deep ppg:
+     and how to move forward,” Nature Reviews Cardiology, vol. 18, no. 8,            Large-scale heart rate estimation with convolutional neural networks,”
+     pp. 581–599, 2021.                                                              Sensors (Switzerland), vol. 19, 7 2019.
+ [2] N. Karimian, M. Tehranipoor, D. Woodard, and D. Forte, “Unlock             [21] M. Risso, A. Burrello, D. J. Pagliari, S. Benatti, E. Macii, L. Benini,
+     your heart: Next generation biometric in resource-constrained healthcare        and M. Poncino, “Robust and energy-efficient ppg-based heart-rate
+     systems and iot,” IEEE Access, vol. 7, pp. 49 135–49 149, 2019.                 monitoring,” vol. 2021-May. Institute of Electrical and Electronics
+ [3] G. J. Martinez, S. M. Mattingly, S. Mirjafari, S. K. Nepal, A. T.               Engineers Inc., 2021.
+     Campbell, A. K. Dey, and A. D. Striegel, “On the quality of real-          [22] A. Staffini, T. Svensson, U. I. Chung, and A. K. Svensson, “Heart rate
+     world wearable data in a longitudinal study of information workers,”            modeling and prediction using autoregressive models and deep learning,”
+     in 2020 IEEE International Conference on Pervasive Computing and                Sensors, vol. 22, 1 2022.
+     Communications Workshops (PerCom Workshops). IEEE, 2020, pp.               [23] X. Chang, G. Li, G. Xing, K. Zhu, and L. Tu, “Deepheart: A deep
+     1–6.                                                                            learning approach for accurate heart rate estimation from ppg signals,”
+ [4] A. Tobola, F. J. Streit, C. Espig, O. Korpok, C. Sauter, N. Lang,               ACM Transactions on Sensor Networks (TOSN), vol. 17, no. 2, pp. 1–18,
+     B. Schmitz, C. Hofmann, M. Struck, C. Weigand et al., “Sampling                 2021.
+     rate impact on energy consumption of biomedical signal processing          [24] G. Sivapalan, K. K. Nundy, S. Dev, B. Cardiff, and D. John, “Annet: A
+     systems,” in 2015 IEEE 12th International Conference on Wearable and            lightweight neural network for ecg anomaly detection in iot edge sen-
+     Implantable Body Sensor Networks (BSN). IEEE, 2015, pp. 1–6.                    sors,” IEEE Transactions on Biomedical Circuits and Systems, vol. 16,
+ [5] S. Béres, L. Holczer, and L. Hejjel, “On the minimal adequate sampling         no. 1, pp. 24–35, 2022.
+     frequency of the photoplethysmogram for pulse rate monitoring and          [25] E. Šabić, D. Keeley, B. Henderson, and S. Nannemann, “Healthcare and
+     heart rate variability analysis in mobile and wearable technology,”             anomaly detection: using machine learning to predict anomalies in heart
+     Measurement Science Review, vol. 19, no. 5, pp. 232–240, 2019.                  rate data,” AI & SOCIETY, vol. 36, no. 1, pp. 149–158, 2021.
+ [6] F. Wolling and K. Van Laerhoven, “Fewer samples for a longer life          [26] J. L. P. Lima, D. Macêdo, and C. Zanchettin, “Heartbeat anomaly
+     span: Towards long-term wearable ppg analysis,” in Proceedings of the           detection using adversarial oversampling,” in 2019 International Joint
+     5th international Workshop on Sensor-based Activity Recognition and             Conference on Neural Networks (IJCNN), 2019, pp. 1–7.
+     Interaction, 2018, pp. 1–10.                                               [27] H. Shin, “Deep convolutional neural network-based signal qual-
+ [7] S. Zaunseder, A. Vehkaoja, V. Fleischhauer, and C. H. Antink, “Signal-          ity assessment for photoplethysmogram,” Computers in Biology and
+     to-noise ratio is more important than sampling rate in beat-to-beat             Medicine, vol. 145, p. 105430, 2022.
+     interval estimation from optical sensors,” Biomedical Signal Processing    [28] M. S. Roy, R. Gupta, J. K. Chandra, K. D. Sharma, and A. Taluk-
+     and Control, vol. 74, p. 103538, 2022.                                          dar, “Improving photoplethysmographic measurements under motion
+ [8] U. R. Acharya, S. L. Oh, Y. Hagiwara, J. H. Tan, M. Adam, A. Gertych,           artifacts using artificial neural network for personal healthcare,” IEEE
+     and R. San Tan, “A deep convolutional neural network model to classify          Transactions on Instrumentation and Measurement, vol. 67, no. 12, pp.
+     heartbeats,” Computers in biology and medicine, vol. 89, pp. 389–396,           2820–2829, 2018.
+     2017.                                                                      [29] S. S. Chowdhury, M. S. Hasan, and R. Sharmin, “Robust heart rate
+ [9] S. Kiranyaz, T. Ince, O. Abdeljaber, O. Avci, and M. Gabbouj, “1-               estimation from ppg signals with intense motion artifacts using cascade
+     d convolutional neural networks for signal processing applications,”            of adaptive filter and recurrent neural network,” in TENCON 2019-2019
+     in ICASSP 2019 - 2019 IEEE International Conference on Acoustics,               IEEE Region 10 Conference (TENCON). IEEE, 2019, pp. 1952–1957.
+     Speech and Signal Processing (ICASSP), 2019, pp. 8360–8364.                [30] M. Svantesson, H. Olausson, A. Eklund, and M. Thordstein, “Virtual
+                                                                                     eeg-electrodes: Convolutional neural networks as a method for upsam-
+[10] M. Bursa and L. Lhotska, “The use of convolutional neural networks in
+                                                                                     pling or restoring channels,” Journal of Neuroscience Methods, vol. 355,
+     biomedical data processing,” in International Conference on Information
+                                                                                     p. 109126, 2021.
+     Technology in Bio-and Medical Informatics. Springer, 2017, pp. 100–
+                                                                                [31] L. Heim, A. Biri, Z. Qu, and L. Thiele, “Measuring what re-
+     119.
+                                                                                     ally matters: Optimizing neural networks for tinyml,” arXiv preprint
+[11] T. Wen and R. Keyes, “Time series anomaly detection using con-
+                                                                                     arXiv:2104.10645, 2021.
+     volutional neural networks and transfer learning,” arXiv preprint
+                                                                                [32] P. P. Ray, “A review on tinyml: State-of-the-art and prospects,” Journal
+     arXiv:1905.13628, 2019.
+                                                                                     of King Saud University-Computer and Information Sciences, 2021.
+                                                                                [33] H. Han and J. Siebert, “Tinyml: A systematic review and synthesis
+  Code link - https://github.com/tataganesh/HRV-edgedevice.git                       of existing research,” in 2022 International Conference on Artificial
+IEEE TRANSACTIONS ON CONSUMER ELECTRONICS, VOL. #, NO. #, AUGUST 2022 (PREPRINT)   10
+
+
+
+     Intelligence in Information and Communication (ICAIIC). IEEE, 2022,
+     pp. 269–274.
+[34] C. R. Banbury, V. J. Reddi, M. Lam, W. Fu, A. Fazel, J. Holleman,
+     X. Huang, R. Hurtado, D. Kanter, A. Lokhmotov et al., “Bench-
+     marking tinyml systems: Challenges and direction,” arXiv preprint
+     arXiv:2003.04821, 2020.
+[35] A. Osman, U. Abid, L. Gemma, M. Perotto, and D. Brunelli, “Tinyml
+     platforms benchmarking,” in International Conference on Applications
+     in Electronics Pervading Industry, Environment and Society. Springer,
+     2022, pp. 139–148.
+[36] C. Dong, C. C. Loy, K. He, and X. Tang, “Image super-resolution using
+     deep convolutional networks,” IEEE Transactions on Pattern Analysis
+     and Machine Intelligence, vol. 38, no. 2, pp. 295–307, 2016.
+[37] Z. Wang, J. Chen, and S. C. H. Hoi, “Deep learning for image super-
+     resolution: A survey,” IEEE Transactions on Pattern Analysis and
+     Machine Intelligence, vol. 43, no. 10, pp. 3365–3387, 2021.
+[38] Y. Chen, C.-B. Schõnlieb, P. Liò;, T. Leiner, P. L. Dragotti, G. Wang,
+     D. Rueckert, D. Firmin, and G. Yang, “Ai-based reconstruction for fast
+     mri —a systematic review and meta-analysis,” Proceedings of the IEEE,
+     vol. 110, no. 2, pp. 224–245, 2022.
+[39] C. Shaik, R. RajaA, S. S. Kalapala, C. S. Lakshmi Nrusimhi, S. N.
+     Devi Duth Kolusu, and P. K. Polasi, “A comprehensive review on
+     compressive sensing,” in 2022 International Conference on Applied
+     Artificial Intelligence and Computing (ICAAIC), 2022, pp. 1723–1727.
+[40] Z. Zhang, J. Zhao, and F. Ren, “An experimental study on transferring
+     data-driven image compressive sensing to bioelectric signals,” in ICASSP
+     2022 - 2022 IEEE International Conference on Acoustics, Speech and
+     Signal Processing (ICASSP), 2022, pp. 1191–1195.
+[41] F. Funer, “Accuracy and interpretability: Struggling with the epistemic
+     foundations of machine learning-generated medical information and
+     their practical implications for the doctor-patient relationship,” Philoso-
+     phy & Technology, vol. 35, no. 1, pp. 1–20, 2022.
+[42] Z. Salahuddin, H. C. Woodruff, A. Chatterjee, and P. Lambin, “Trans-
+     parency of deep neural networks for medical image analysis: A review
+     of interpretability methods,” Computers in biology and medicine, vol.
+     140, p. 105111, 2022.
+[43] A. Puranen, T. Halkola, O. Kirkeby, and A. Vehkaoja, “Effect of skin
+     tone and activity on the performance of wrist-worn optical beat-to-beat
+     heart rate monitoring,” in 2020 IEEE SENSORS. IEEE, 2020, pp. 1–4.
+[44] A. Dasari, S. K. A. Prakash, L. A. Jeni, and C. S. Tucker, “Evaluation of
+     biases in remote photoplethysmography methods,” NPJ digital medicine,
+     vol. 4, no. 1, pp. 1–13, 2021.
+[45] H. J. Baek, J. Shin, G. Jin, and J. Cho, “Reliability of the parabola
+     approximation method in heart rate variability analysis using low-
+     sampling-rate photoplethysmography,” Journal of medical systems,
+     vol. 41, no. 12, pp. 1–10, 2017.
+[46] S. Beres and L. Hejjel, “The minimal sampling frequency of the
+     photoplethysmogram for accurate pulse rate variability parameters in
+     healthy volunteers,” Biomedical Signal Processing and Control, vol. 68,
+     p. 102589, 2021.
+[47] D. P. Kingma and J. Ba, “Adam: A method for stochastic optimization,”
+     2015, published as a conference paper at the 3rd International
+     Conference for Learning Representations, San Diego, 2015. [Online].
+     Available: http://arxiv.org/abs/1412.6980
+[48] M. Etiwy, Z. Akhrass, L. Gillinov, A. Alashi, R. Wang, G. Blackburn,
+     S. M. Gillinov, D. Phelan, A. M. Gillinov, P. L. Houghtaling et al.,
+     “Accuracy of wearable heart rate monitors in cardiac rehabilitation,”
+     Cardiovascular diagnosis and therapy, vol. 9, no. 3, p. 262, 2019.
+

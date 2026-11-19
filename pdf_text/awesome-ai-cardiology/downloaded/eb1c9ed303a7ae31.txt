@@ -1,0 +1,560 @@
+   PGANs: Personalized Generative Adversarial Networks for ECG Synthesis to
+              Improve Patient-Specific Deep ECG Classification
+
+                              Tomer Golany                                      Kira Radinsky
+                 Technion-Israel Institute of Technology              Technion-Israel Institute of Technology
+                    Tomer.golany@cs.technion.ac.il                           Kirar@cs.technion.ac.il
+
+
+
+                            Abstract                              mechanisms has arisen. Many studies were conducted in
+                                                                  an attempt to reach high performance in ECG classification
+     The Electrocardiogram (ECG) is performed routinely
+                                                                  (Kass and Clancy 2006). Such models were used to reduce
+     by medical personnel to identify structural, functional
+     and electrical cardiac events. Many attempts were made       interpretation errors by identifying life-threatening arrhyth-
+     to automate this task using machine learning algorithms      mias or as systems to alert about potential risks to patients.
+     including classic supervised learning algorithms and            Most methods today for ECG classification focus on
+     deep neural networks, reaching state-of-the-art perfor-      applying classical supervised machine learning methods
+     mance. The ECG signal conveys the specific electri-          (Chazal and Reilly 2007; Ye, Kumar, and Coimbra 2012;
+     cal cardiac activity of each subject thus extreme varia-     Escalona-Moran et al. 2014) and manual feature engineer-
+     tions are observed between patients. These variations        ing. Lately, deep learning models (Al Rahhal et al. 2016)
+     are challenging for deep learning algorithms, and im-        were successfully applied and reached state-of-the-art re-
+     pede generalization. In this work, we propose a semi-
+     supervised approach for patient-specific ECG classifi-
+                                                                  sults reducing the need for feature engineering. However,
+     cation. We propose a generative model that learns to         in practice, neither of these methods have been able to scale
+     synthesize patient-specific ECG signals, which can then      well across different patient’s types of ECGs (Kiranyaz,
+     be used as additional training data to improve a patient-    Ince, and Gabbouj 2016). The changing nature of the ECG
+     specific classifier performance. Empirical results prove     signal dynamics and morphological characteristics are sig-
+     that the generated signals significantly improve ECG         nificantly different across patients, and strongly depend on
+     classification in a patient-specific setting.                the patient’s physical condition. Given the high variability
+                                                                  between patients and internal-variability of heartbeat classi-
+                                                                  fication for same patients, building deep ECG models that
+                     1    Introduction                            might be used in practice has been limited.
+Patient-specific modeling (PSM) is the development of com-           To scale deep learning to perform personalized ECG
+putational models of human pathophysiology that are in-           classification, subject-specific labeled examples are needed.
+dividualized to patient-specific data (Neal and Kerckhoffs        However, labeling a sufficient amount of ECG samples for
+2010). In the last years, PSM has been gaining attention          each patient is an infeasible task. In this work, we over-
+from the research community due to the potential to im-           come this sparseness of data by learning to synthetically
+prove diagnosis. Today, medical diagnosis is based on rough       generate personalized ECG signals of different arrhythmias
+averages derived from clinical trials which might not apply       that exhibit similar morphological characteristics to those of
+directly to a specific patient condition (Kent and Hayward        the subject of classification. Those are then used to train
+2007). PSM can be used to optimize an individual’s diagno-        deep learning models which are better adapted to the sub-
+sis and reach higher accuracies.                                  ject. To learn patient-specific signals, we devise a novel
+   In this work, we focus on PSM in the field of cardiol-         generative algorithm – Personalized Generative Adversar-
+ogy. Electrocardiography (ECG) is a non-invasive tool used        ial Networks (PGANs). PGANs learn to generate personal-
+for diagnosis and follow-up of cardiac anomalies, functional      ized arrhythmia-specific ECG signals without any need for
+disorders and cardiac arrhythmias. Any anomaly regarding          subject-specific ECG labeling. This is achieved by learning
+the heart rhythm or the morphological pattern of the cardiac      to generate ECGs that mimic the patient’s atrial and ven-
+heart beats as sampled by the ECG, can indicate acute func-       tricular depolarization and repolarization patterns during the
+tional emergencies such as acute Myocardial Ischemia or           specific arrhythmia, which are learned in an unsupervised
+acute rhythm disturbances, meaning an arrhythmia. With the        way from a few minutes of unlabeled ECG signals of the
+ongoing shortage of trained cardiologists and with the wide-      patient.
+spread use of home ECGs to monitor patients with cardiac
+                                                                     GANs (Goodfellow et al. 2014) are a class of machine
+risks, a need to develop fully automated ECG classification
+                                                                  learning algorithms used in an unsupervised machine learn-
+Copyright c 2019, Association for the Advancement of Artificial   ing, usually implemented by two deep networks (a gener-
+Intelligence (www.aaai.org). All rights reserved.                 ator and a discriminator). The two networks compete with
+each other in a zero-sum game framework. The generator at-
+tempts to learn a latent representation of a distribution, in a
+way such that the discriminative network, trained to discrim-
+inate between instances from the true data distribution and
+the ones produced by the generator, will have a high loss.
+As the ECG signals of the subject are not labeled, training a
+GAN on a specific type of the patient’s arrhythmia class is
+not possible.
+                                                                                                 S
+   In this work, we present PGANs composed of a generator
+and a discriminator network per an arrhythmia class trained
+on a large patient population but optimized using a special-
+ized loss function to mimic the morphology of the subject’s           Figure 1: An ECG waves with P,Q,R,S and T waves.
+cardiac signal. We leverage the fact that an ECG signal is         They leverage a denoising autoencoder (DAE) to learn fea-
+represented as a series of waves due to atrial and ventricu-       tures in an unsupervised way from the training data and then
+lar depolarization and repolarization: a P wave followed by        use a large number of hidden layers and neurons at each
+a QRS set and finally a T wave. We identify those special          layer to learn a sparse representation of the input. This
+waves in the patient’s unlabeled ECG signal and optimize           sparse representation of each signal is fed through a soft-
+the adversarial network to generate waves similar to the ar-       max layer in order to classify the signal into one of the five
+rhythmia as exhibited across all patients but with the special     possible beats. We show that superior results are reached
+morphological cardiac signal of the subject of classification      by applying a simple LSTM model on ECG gold-standard
+during his personalized arrhythmia. The generated signals          dataset. Due to its simplicity, superior performance and
+are then used as an additional training data for a deep learner.   success in other fields involving temporal sequences (Venu-
+We present empirical results on gold-standard ECG datasets.        gopalan et al. 2015), (Gers, Schraudolph, and Schmidhu-
+   Our contribution in this work is threefold: (1) We present      ber 2002),(Sak, Senior, and Beaufays 2014) we utilize this
+the problem of personalized ECG classification, and present        model as the leading deep model for ECG classification.
+an algorithm requiring no patient-specific labeled examples.       Patient-specific ECG classification have been addressed in
+Specifically, we present PGAN, a personalized adversar-            the last few years (Kiranyaz, Ince, and Gabbouj 2016;
+ial generative algorithm, to generate patient-specific ECG         Jiang and Kong 2007) as means of improving ECG classifi-
+signals by training on arrhythmia present in labeled data          cation as it was shown in the past (Kiranyaz, Ince, and Gab-
+over a general population and optimized to mimic the spe-          bouj 2016) that the variability between patients is too high
+cific patient’s morphological cardiac waves. (2) We empiri-        for most supervised model to reach satisfactory results on a
+cally show that utilizing the synthetically generated person-      per-patient basis. The common methods for patient-specific
+alized ECG instances significantly improves personalized           ECG classification require significant labeling of beats of the
+ECG classification using deep learning techniques. To the          ECG of the specific patient. However, such labeling still re-
+best of our knowledge, this is the first application, where        quires a cardiologist making it hard to scale for the growing
+the instances generated by an adversarial network have been        population of home ECG users and adapt to the changing in-
+shown to improve supervised classification tasks outside           patient morphology. In our work, we present a framework
+the domain of image synthesis. (3) We share our code               that requires no patient-specific labeling of data. We first
+online for further research and experimentation: https:            learn to synthetically generated patient-specific ECG via a
+//bitbucket.org/tomerGolany/ecg_dl                                 novel GAN-based framework. We first adapt GAN to work
+                                                                   produce native ECG signals and then show how to adapt it to
+                    2   Related Work                               a specific patient morphology. Those are then used to train
+                                                                   an LSTM model for the specific patient.
+Extracting interval features and using prior knowledge on
+the ECG morphology (De Chazal, O’Dwyer, and Reilly
+2004) is one of the leading methods for ECG beat-level clas-                        3   ECG Background
+sification. Each ECG signal is separated to heartbeats us-         Electrocardiography (ECG) is a non-invasive tool used for
+ing heartbeat detection techniques (Afonso et al. 1999). For       diagnosis and follow up of cardiac anomalies, functional dis-
+each heart beat, features related to the heart beat intervals      orders and cardiac arrhythmias. Each beat of the heart can
+and ECG morphology are calculated. The combined fea-               be observed as a series of deflections away from the base-
+tures are then fed into supervised machine-learning models         line on the ECG. These deflections reflect the time evolu-
+based on linear discriminants (LDs) (Nasrabadi 2007).              tion of electrical activity in the heart which initiates mus-
+   In recent years, the application of deep learning models        cle contraction. A full heart beat is also known as cardiac
+to ECG classification has become popular. It was applied           cycle, the period of time that begins with contraction of
+for numerous tasks, such as Cardiologist-Level Arrhyth-            the atria and ends with ventricular relaxation. A single si-
+mia Detection (Rajpurkar et al. 2017) and ECG heartbeat            nus (normal) cycle of the ECG, corresponding to one heart
+classification (Güler and Übeylı 2005; Prasad and Sahambi        beat, is traditionally labeled with the letters P,Q,R,S and T
+2003). One of the best methods today for ECG heartbeat-            on each of its turning points (see figure1. Each such point
+level classification is described by (Al Rahhal et al. 2016).      has unique patterns which define the cardiac cycle, as de-
+scribed by (De Luna, Batchvarov, and Malik 2006). In nor-           216 points represent 200 ms before the R-peak and 400
+mal resting hearts, the physiologic rhythm of the heart is nor-     ms after the R-peak, where the sampling rate is 360 sam-
+mal sinus rhythm (NSR). Normal sinus rhythm produces the            ples per second. All heart-beats are taken from the same
+prototypical pattern of P wave, QRS complex, and T wave.            type of arrhythmia. For a given heart-beat hbi , we define
+Generally, deviation from normal sinus rhythm is considered         W (hbi ) = [Pi , Qi , Ri , Si , Ti ] to be the wave values of the
+a cardiac arrhythmia. The average length of all type of heart-      cardiac cycle. We denote the underlying beats distribution of
+beats is 600 ms, 200 ms before the R peak and 400 ms after.         a given class as a conditional probability p(hb|Y ; W (hb)),
+Cardiac cycles can be partitioned to different classes which        which reflects the distribution of heart-beats given that it is
+can represent either normal heart beats or arrhythmias. The         taken from arrhythmia type Y and has feature wave W (hb).
+P,Q,R,S,T wave patterns varies between classes of arrhyth-          Given a set of heart-beats {hb1 , . . . hbK } taken from P pa-
+mias. We will focus on 3 type of heart-beats: Supraventricu-        tients, we aim to learn the two following models:
+lar ectopic beats, Ventricular ectopic beats and Fusion beats.         Discriminator As in classic GANs architecture, the dis-
+                                                                    criminator D(G(z), hb; θD ), aims to discriminate between a
+Feature extraction                                                  real heart-beat hb and a generated heart-beat G(z) from the
+There are many techniques to analyze an ECG signal, de-             generator. D(hb) outputs a single scalar representing the
+tect its cardiac cycles and extract the P, Q, R, S, T features      probability that hb came from a real patient rather then pg .
+from each cardiac cycle. We used a common method im-                   Generator G(hb|z; θG ), which tries to approximate the
+plemented in NeuroKit (Makowski 2016). This method is               underlying true ECG heart beat distribution p(hb|Y, W ) and
+based on filtering and finding local maximals in different ar-      generates ECG heart beats with waves similar to W and
+eas around each cardiac cycle. We first detect R-peaks as           most likely from class Y. We alter the classic GANs Gen-
+suggested by (Hamilton and Tompkins 1986), and identify             erator’s architecture with a specialized loss function to gen-
+the P, Q, R, S, T waves of each cardiac-cycle by finding lo-        erate waves similar to natural wave features (P, Q, R, S, and
+cal maximals and minimals around each R-peak.                       T values) exhibited in the training data.
+                                                                       Generator G and discriminator D act as two opponents:
+Preprocessing                                                       generator G would try to fit p(hb|Y, W ) perfectly and gen-
+Before extracting cardiac-cycles and its wave values from           erate relevant heart-beats similar to real heart-beats of the
+an ECG signal, preprocessing the whole signal in order to           desired class to deceive the discriminator, while discrimi-
+remove noise is necessary. Among all proposals for reduc-           nator D, on the contrary, would try to detect whether these
+ing noise in ECG signals, the simplest and most widely used         heart-beats are real heart-beats from the data or the ones gen-
+is the application of recursive digital filters of the finite im-   erated by its counterpart G. Formally, G and D are playing
+pulse response (FIR) (Luz et al. 2016).                             the following two-player minimax game with value func-
+                                                                    tion V (G, D):
+ 4   Personalized Generative Adversarial Nets
+                (PGANs) for ECG                                         minG maxD V (D, G) = Ex∼pdata(x) [logD(x)]+
+In this section, we introduce the framework of ECG GAN                                                                           (1)
+                                                                                            Ez∼pdata(z) [log(1 − D(G(z))]
+optimized for a specific patient ECG signal. We first
+present a general framework for ECG signal generation us-              Based on Eq. 1, the optimal parameters of the gen-
+ing GANs, adapted to the domain of ECG generation. One              erator and the discriminator can be learned by alternately
+of the difficulties of creating realistic ECG is sustaining a       maximizing and minimizing the value function V (G, D).
+natural medical cardiac morphology. We therefore devise             In each iteration, discriminator D is trained with positive
+a novel loss function for the task utilized by the generator.       samples from p(hb|Y ) and negative samples from gener-
+We discuss the details of implementation and optimization           ator G(hb|Y ; θG ). Each iteration generator G is updated
+of the generator and the discriminator. We call this adapted        twice with policy gradient under the guidance of D (detailed
+GAN framework – ECG GAN. We then present the Person-                later in this section) while the discriminator is updated once.
+alized ECG Generative Adversarial Network (PGAN) that               Competition between G and D drives both of them to im-
+extends the ECG GAN with morphological signals derived              prove their methods until G is indistinguishable from the
+from patient-specific unlabeled data. The generated ECG             true connectivity distribution. We discuss the implementa-
+signals are then used to train a deep network (Section 5).          tion and optimization of D and G as follows.
+We empirically show (Section 7) that the additional gener-
+ated labeled examples significantly improve the ECG classi-         ECG Discriminator Architecture Given positive ECG
+fication in a patient-specific setting.                             heart-beat samples from real patients and negative ECG
+                                                                    heart-beat samples from the generator, the objective for the
+ECG GAN Framework                                                   discriminator is to maximize the log-probability of assigning
+We formulate the generative adversarial nets for ECG heart          the correct labels to both positive and negative samples. The
+beats generation as follows. Let HB(n) = [hb1 , . . . , hbN ]       real heart-beats are taken from 30 minuets ECG records of
+be an ECG signal taken from a patient in one lead, sliced to        real patients, sampled at 360 Hz. preprocessing is applied to
+heartbeats (cardiac cycles), where hb(i) = {v1 , . . . , v216 }     the ECG signals received as input (as described in Section 3)
+represents the voltage values of a single heart-beat. The           and they are sliced to single heart-beats.
+ECG Discriminator Optimization The ECG heart-beats               beat is real. Therefore, we feed the examples from the gener-
+are then fed through four conventional layers. All weights       ator into the discriminator and label them as real (y = 1). We
+were initialized from a zero-centered Normal distribution        then perform Adam optimization to correct only the weights
+with a standard deviation of 0.02. Between each layer we         of the generator. Formally, the cross-entropy loss function
+perform batch normalization and apply a LeakyReLU acti-          of the generator is as following:
+vation function, where the slope of the leak is set 0.2. The
+final layer is a sigmoid layer which classifies whether the         LossH (G) = H((hbg , 1)) = H((G(z), 1))
+heart-beat is from the real data or from the generator (fake).
+Formally, the discriminator loss function is a sum of two           = [−1 ∗ logD(G(z)) − (1 − 1)log(1 − D(G(z)))] (3)
+cross-entropy functions H:                                          = −logD(G(z))
+
+  Loss(D) = H(hbreal , 1) + H(hbg , 0)                              Where hbg = G(z) is an ECG heartbeat generated from
+                                                                 the generator network, and z ∼ N (µ, σ) is a Gaussian dis-
+   = [−1 ∗ logD(hbreal ) − (1 − 1)log(1 − D(hbreal ))]+
+                                                                 tribution with µ = 0 and σ = 1. We set the hyperparameters
+  [−0 ∗ logD(hbg ) − (1 − 0)log(1 − D(hbg ))]                    as suggested by (Radford, Metz, and Chintala 2015).
+   = −logD(hbreal ) − log(1 − D(hbg ))                              MSE loss: In order to improve the generator’s ability to
+                                                         (2)     generate fake heart-beats which are more morphologically
+   Where hbg ∼ pdata(hb) , i.e., hbreal is an ECG heart beat     similar to real heart-beats, we constrain the generated heart-
+taken from the real training data, and hbg is an ECG heart-      beat wave values, P, Q, R, S, T to be as close as possible to
+beat generated from the generator network, hbg = G(z),           the wave values extracted from real heart-beats in the train-
+where z ∼ N (µ, σ) is a Gaussian distribution with µ = 0         ing data. The P, Q, R, S, T values are calculated by the al-
+and σ = 1.                                                       gorithm described in section 3. We add a penalty to the loss
+                                                                 function for how far the waves from the output of the gen-
+ECG Generator Architecture The ECG GAN Genera-                   erator are from the wave values extracted from the training
+tor architecture differs from that of the classic GAN by at-     data (Figure 4). We define the MSE generator loss as:
+tempting to keep natural morphological wave features (P, Q,
+R, S, and T values), Figure 3 describes the new architec-                  Lossmse (G) = M SE(Pdata , Pg )+
+ture. The generator input layer draws 100 random numbers                   M SE(Qdata , Qg ) + M SE(Rdata , Rg )            (4)
+from a Gaussian distribution z ∼ N (µ, σ) with µ = 0 and                    + M SE(Sdata , Sg ) + M SE(Tdata , Tg )
+σ = 1 , which are then fed to a dense layer. The output                                        Pn
+of the dense layer is funneled through three de-convolution      where, : M SE(Y, Ŷ ) = n1 i=1 (Yi − Ŷi )2 , and Y is the
+layers. Between each layer batch normalization (Ioffe and        vector of observed values of the variable being predicted,
+Szegedy 2015) is performed followed by a ReLU activation         and Pdata , Qdata , Rdata , Sdata , Tdata are calculated from
+function. Instead of generating one cardiac cycle, the final     the training data.
+layer of the generator is a dense layer with 216*3 neurons          The total loss function of the generator is the sum of the
+which produces an output vector of size 216*3 (step (1)).        two above loss functions:
+The output dimensions of the generator corresponds to the
+same dimensions of three cardiac cycle, i.e., the generator                Loss(G) = Lossmse (G) + LossH (G)                (5)
+generates three cardiac cycles. We consider only the middle        The optimization is performed using Adam optimizer
+cardiac-cycle as the generated ECG signal (step (2)), and use    (Kingma and Ba 2014) and a learning rate of 0.0002 as
+the two other cycles to calculate the wave features P, Q, R,     suggested for training GAN models in (Radford, Metz, and
+S, T (Section 3), which are then used in the loss function       Chintala 2015). The generator weights are trained twice
+described below.                                                 each iteration while the discriminator is trained once as sug-
+ECG Generator Optimization The Generator loss func-              gested in (Radford, Metz, and Chintala 2015).
+tion is defined by a combination of the classical cross-
+                                                                 Personalized ECG GAN
+entropy loss, which tries to generate cardiac-cycles that will
+fool the discriminator, and a Mean Square Error (MSE)             To address the variance between different patients which
+function which tries to generate fake heart-beats which are       causes lower ECG classification accuracies, we propose an
+more morphologically similar to real heart-beats. The MSE         alternative method of training the ECG GAN in a way that it
+loss function constrains the generated heart-beat wave val-       will learn to generate heart-beats which are closer to a spe-
+ues, P, Q, R, S, T to be as close as possible to the wave         cific patient ECG morphology. The two underlying princi-
+values extracted from real heart-beats in the training data.      ples of PGANs are as follows:
+   Cross-entropy loss: in contrast to the discriminator, the     1. Learning a GAN model per patient. Intuitively, we would
+generator aims to minimize the log-probability that the dis-         like to create an ECG GAN that generates waves similar
+criminator correctly assigns negative labels to the samples          to the wave features (P, Q, R, S, and T values) of the pa-
+generated by G. Specifically, we optimize the generator net-         tient. Specifically, we try to extract the wave features as
+work by feeding its output into the discriminator network            exhibited during the arrhythmia the generator attempts to
+and optimizing the generator’s weights in a way that the dis-        generate. We suggest a model which leverages unclassi-
+criminator network will predict that the generated ECG heart         fied beats of the subject of classification. Those beats are
+ Input 30 minuets unlabeled ECG signal                                                                                                                Trained LSTM from train patients                  specific-patient morphology (see Figure 4). The generator
+ (360Hz) record from patient from test set
+                                                                                                                                                                                                        loss is now:
+
+                                                                                                                                                                                                                        Loss(G) = H(D(G), 1) + M SE(Psubj , Pg )+
+                                                                           Band pass                                            Evaluate on
+                                                                             filter                                            trained model                                                                            M SE(Qsubj , Qg ) + M SE(Rsubj , Rg )+
+                                                                                                                                                                                                                        M SE(Ssubj , Sg ) + M SE(Tsubj , Tg )
+                                           Step (1)                                            Step (2)
+                                                                                                                                                         Choose beats most
+                                                                                                                                                          predictable as S                              Where H(D(G), 1) is the cross-entropy loss function
+                                                                                                                                        Step (3)               class
+                                                                                                                                                                                                        from before and the second part is mean-square error be-
+                                                                                                                                                                                                        tween the wave values generated from the generator and
+                                                                                                                                                                                                        wave values from subject’s heart-beats.
+                                    ECG wave
+                                                                                                                            P, Q, R, T waves
+                                  feature matrix                                                                               detection
+
+
+
+
+                                                                                          Step (4)                                        Beats which got highest probability to                                                                              ECG wave
+                                                                                                                                            be S class of patient from test set                                                                             feature matrix
+
+
+
+
+                                                                                                                                                                                                                                               Features extracted from ECG signal
+                                                                                                                                                                                                                                                     of patient from test set
+Figure 2: Feature extraction pipeline. Extract wave features of                                                                                                                                            Cardiac cycle generated
+                                                                                                                                                                                                              from Generator                                ECG wave feature
+                                                                                                                                                                                                                                                                 vector
+heart beats from specific patients in the test set.
+                                                                                                                                                                                                                                                   Features extracted from generator
+                                                                                                                                                                                                                                                             cardiac cycle
+
+
+                                                                                                                                                                                                                                              64
+                                                                                                                                                                             Generator output – 1
+                                                                                                                                                                                cardiac cycle                                                               128
+                                                                            128              Step (1)                                      Step (2)                                                                                     120                                256
+                                                                   256                                                                                                                                                                                                                512
+
+
+
+
+ Input 100 random samples
+                                                            512                                                                                                                                           Cardiac cycle from training                  60
+                                  Project and   1024                                                                                                                                                                 data                                                                             Sigmoid
+                                  reshape                         16        32                                       P, Q, R, T waves                                                                                                                             30
+                                                                                                                     detection                                                                                                                                               15
+                                                                                                                                                             Slice middle                                                                     1             1          1          1
+                                                        8                                                                                                    cardiac cycle
+                                            4
+                                                1           1          1         1                                                                                                 hbgenerator                                                    1d convolutional layers                                       Discriminator
+                            z ∼ "(0,1)
+                                                                                                                                                                                                                                                  with batch normalization                                         output
+                                                                                                                                                                              ECG wave feature
+                                                                                       3 cardiac cycles generation                                                                 vector
+                                                       1d de-convolutional layers
+                                                                                                216*3
+                                                       with batch normalization                                                                                                                                                                                                       Discriminator
+
+
+                                                                       Generator
+
+
+
+                                                                                                                                                                                                    Figure 4: Description of the ECG patient-specific Discriminator and the two parts of its loss
+Figure 3: Generator model pipeline. The generator creates three                                                                                                                                     function. The discriminator takes as input real heart-beat from the training data and a fake heart-beat
+                                                                                                                                                                                                    from the output of the generator. Each heart-beat is fed through 4 convolution layers. The last layer
+cardiac cycles in order to extract wave features from the middle                                                                                                                                    is a feed-forward layer with sigmoid activation which outputs the probability that the input heart-beat
+cardiac cycle                                                                                                                                                                                       was taken from the real data or from the generator output. The new loss function for the generator is
+                                                                                                                                                                                                    as follows: the first part is the original GAN loss function which is the cross-entropy loss function.
+                                                                                                                                                                                                    The second part is an MSE function which penalizes for how far the wave features of the generated
+                            extracted from the beginning of the ECG signal recorded                                                                                                                 heart beat are from the wave features extracted from those of the subject’s.
+                            from the patient. We feed the patient’s beats to a pre-
+                            trained LSTM classifier (see Section 5 for details of the
+                            model) tuned for predicting arrhythmia classes over a gen-                                                                                                                5            Patient-Specific Deep ECG Classification
+                            eral patient population. That is, the classifier is trained
+                            beforehand using training data over all patients (exclud-                                                                                                               In Section 4, we described PGAN – a framework for gen-
+                            ing the specific patient of classification). We then feed to                                                                                                            erating ECG signals that exhibit both a certain arrhythmia
+                            the trained LSTM the heart-beats from the specific patient                                                                                                              and are adapted to a specific patient. In this section, we
+                            (Figure 2). We select 50 heart-beats from the specific-                                                                                                                 discuss how those patient-specific ECGs are used to train
+                            patient which were predicted by the LSTM classifier with                                                                                                                a deep learner ECG classifier showed in Section 7 to em-
+                            the highest probability to belong to the class we would                                                                                                                 pirically reach better results in patient-specific ECG clas-
+                            like to generate with the generator (step (3)). From those                                                                                                              sification. Figure 5 presents the architecture of the LSTM
+                            50 heart-beats we extract the P, Q, R, S, T wave values                                                                                                                 model, which was found to have superior results on ECG
+                            (step (4)). The values are used in the generator MSE loss.                                                                                                              gold-standard dataset. The system is trained over a large
+                                                                                                                                                                                                    corpus of 66000 heart-beats (Section 7). We filter each sig-
+2. Constraining the generator to produce ECG signals with                                                                                                                                           nal as described in Section 3 (step (2)). The filtering is nec-
+   properties of the specific patient. In order to improve the                                                                                                                                      essary in order to detect correctly the R-peaks and P, Q, S,
+   generator’s ability to generate heart-beats which are more                                                                                                                                       T of each cardiac cycle(Described in section 3). and slice
+   close to real heart-beats, and specifically close to the pa-                                                                                                                                     the signal to cardiac-cycles around each R-peak (step (3)).
+   tient’s heart beats, we try to constrain the generated heart-                                                                                                                                    The sliced heart-beats are fed to an LSTM classifier (step(4))
+   beat wave values, P, Q, R, S, T to be close as possible                                                                                                                                          with 2 layers of 512 neurons each. The last layer is a softmax
+   to the wave values extracted from the patient, while still                                                                                                                                       layer which classifies the heart-beats to 5 different arrhyth-
+   close enough to the real training data, so the discrimina-                                                                                                                                       mia classes (step(5)). Once the model is trained, we con-
+   tor will be fooled. This time the MSE loss of the genera-                                                                                                                                        tinue its training with the additional generated ECG signals
+   tor adds penalty to the loss function for how far they are                                                                                                                                       of the patient of classification. We provide several empiri-
+   from the wave feature values extracted from the specific                                                                                                                                         cal results showing how the classifier performance improves
+   test patient rather from the training data. By that we ap-                                                                                                                                       as a function of the number of the synthesized ECG signals
+   proximate the generated cardiac-cycle morphology to the                                                                                                                                          added (Section 7).
+ Input ECG signal (360Hz) records
+                                                                                                                                                          Supraventricular
+                                                                                                                                                            ectopic beat
+                                                                                                                                                                             2. DCGAN – LSTM model trained on all patients with addi-
+   from 22 patients. Each one 30
+           minutes long
+                                                                      Batches of cardiac cycles                                                             Ventricular
+                                                                                                                                                            ectopic beat
+                                                                                                                                                                                tional synthesized ECG examples from a DCGAN (Rad-
+                             Band pass                  Slice to
+                                                                                                                                                                                ford, Metz, and Chintala 2015) model. As DCGAN have
+                               filter                                                                                         Softmax                       Fusion beat
+                                                     cardiac cycles
+                                                                                                                                                                                shown superior performance on several tasks (Radford,
+                                                                                                                              Step (5)
+
+             Step (1)                     Step (2)
+                                                                       216 216 216 216
+
+                                                                             Step (3)
+                                                                                                                                                          Unknown beat
+                                                                                                                                                                                Metz, and Chintala 2015; Yeh et al. 2017) we present re-
+                                                                                                   2 LSTM layers
+                                                                                                  512 neurons each
+                                                                                                      Step (4)
+                                                                                                                                                           Normal beat
+                                                                                                                                                                                sults on generated examples from this class of generative
+                                                                                                                     Train LSTM weights - Backpropagate
+                                                                                                                                                                                adversarial networks.
+                                                                                                                                 gradients
+
+                                                                                                                                                                             3. ECG GAN – LSTM model trained on all patients with
+Figure 5: Proposed LSTM model to classify heart-beats to 5 type                                                                                                                 additional synthesized ECG examples from our proposed
+of arrhythmias.                                                                                                                                                                 ECG GAN model (Section 4) but with no adaptation to
+                                                                                                                                                                                the specific test patient.
+                               6         Experimental Evaluation
+                                                                                                                                                                              Personalized ECG Generation
+ECG Dataset
+                                                                                                                                                                             1. Personalized LSTM – We devised a personalized LSTM
+Our framework consists of ECG recordings taken from the
+                                                                                                                                                                                 model following a transfer learning schema (Donahue et
+MIT-BIH database (Moody, Mark, and Goldberger 2001).
+                                                                                                                                                                                 al. 2013). We train the LSTM on all patients and add pre-
+MIT-BIH arrhythmia database is the most popular public
+                                                                                                                                                                                 dicted ECG samples from the specific patient (similarly
+dataset in discovering and clustering arrhythmias. It is con-
+                                                                                                                                                                                 to the methodology presented in Section 4). On average
+sidered the gold-standard evaluation data for ECG classi-
+                                                                                                                                                                                 800-1000 patient-specific beats are added.
+fication tasks (Moody, Mark, and Goldberger 2001). The
+database contains 48 half-hour ECG records, obtained from                                                                                                                    2. Personalized GAN – To understand the contribution of
+patients studied by the BIH Arrhythmia Laboratory between                                                                                                                        learning ECG features morphology during personalized
+1975 and 1979. Each record contains two 30-minutes ECG                                                                                                                           ECG synthesis, we devise the Personalized GAN ap-
+lead signals digitized at 360 samples per second. The                                                                                                                            proach. An LSTM model is trained on all patients with
+database contains annotations for both heartbeat class infor-                                                                                                                    additional synthesized ECG from a personalized GAN
+mation and timing information verified by independent ex-                                                                                                                        model. The GAN model is a vanilla GAN without learn-
+pert. A total of 109,492 labeled heartbeats. In this work, we                                                                                                                    ing ECG morphology, a done by the ECG GAN. The
+consider three classes of arrhythmia, and neglect two classes                                                                                                                    personalized GAN discriminator is trained on all train-
+– the normal heart beats and the unclassified beats. We ex-                                                                                                                      ing patients and in addition predicted ECG samples from
+cluded those classes from our work as they have low medical                                                                                                                      the specific patient are added (similarly to the methodol-
+value and small amount of training data (below 100).                                                                                                                             ogy presented in Section 4) (i.e., with additional 800-1000
+                                                                                                                                                                                 patient-specific beats).
+Experimental Methodology                                                                                                                                                     3. Personalized DCGAN – We wish to study the contribu-
+We follow the dataset partitioning as described by                                                                                                                               tion of the specific generator architecture to the classifi-
+(De Chazal, O’Dwyer, and Reilly 2004) and (Al Rahhal et                                                                                                                          cation. DCGAN is considered state of the art for image
+al. 2016). Both follow the AAMI recommendations for the                                                                                                                          generation. We therefore devise a model which is simi-
+ECG classification task. This partition makes sure that pa-                                                                                                                      lar to Personalized GAN but with a DCGAN architecture.
+tients data is not mixed between the training and the testing                                                                                                                    That is, the LSTM is trained with synthesized examples
+sets. In agreement with the AAMI recommended practice,                                                                                                                           from a personalized DCGAN.
+the four recordings containing paced beats were removed                                                                                                                      4. PGAN – LSTM model trained on all patients with ad-
+from the dataset. We train an LSTM model in a leave-one-                                                                                                                         ditional synthesized ECG examples from our proposed
+out fashion, each time extracting a different specific patient                                                                                                                   PGAN model (Section 4).
+for a test. We report the area under the curve (AUC) the
+ROC using the beats annotations ground truth reported from                                                                                                                    The number of synthetically generated beats by the gener-
+experts and the scores of each classifier for each class. For                                                                                                                 ative networks, which were added to the training set, is a
+the test, we only consider patients with more than 800 heart-                                                                                                                 parameter of the model. We experimented with the follow-
+beats from the desired class.                                                                                                                                                 ing values: 0, 500, 1000, 5000, 8000, 10000, 15000, 20000.
+
+Models Evaluated                                                                                                                                                                                      7   Results
+                                                                                                                                                                             Figures 6–8, present our results for the 3 arrhythmia classes.
+We present results for the following models classifying one
+class of arrhythmia:                                                                                                                                                         Personalized vs Non-Personalized LSTM
+No ECG Generation LSTM model (Section 5) trained on                                                                                                                          Across all classes the results for the Personalized LSTM
+all patients with no additional synthesized ECG examples.                                                                                                                    reached AUC values significantly lower of that of the Non-
+                                                                                                                                                                             Personalized LSTM. The heartbeat class which had the high-
+Non-Personalized ECG Generation                                                                                                                                              est gap of AUC between the non-personalized to the person-
+1. Vanilla GAN – LSTM model trained on all patients with                                                                                                                     alized LSTM had a gap of 0.15 and the heartbeat class which
+   additional synthesized ECG examples from a classical                                                                                                                      had the lowest gap of AUC between the Non-personalized to
+   GAN model.                                                                                                                                                                the personalized LSTM had a gap of 0.1. For all classes
+the AUC of the non-personalized LSTM was better then              We observe that PGAN outperforms all non-personalized
+the Personalized LSTM. We conclude that adding a small            models across all classes, reaching the following state-of-
+amount of predicted examples from the specific-patient ECG        the-art performance: F beats: 0.95 AUC; S beats: 0.85
+adds too much noise to the LSTM training. Achieving more          AUC; V beats: 0.99 AUC. Additionally, it reaches supe-
+samples requires longer ECG monitoring which reduces the          rior performance compared to all personalized models. We
+medical value of such a system. The ability of the genera-        note that the variance of the classification performance is
+tive models to add significant amounts of training examples       low and goes between 0.01 - 0.05 in the different heart-beat
+carries higher promise as shown in next experiments.              classes. We conclude that adding personalized ECG signals
+                                                                  improves ECG classification. However, the method of gen-
+The Effect of ECG Synthesis                                       erating the personalized ECG is of high importance.
+We study the effect of adding synthesized ECG signals
+on the classifier ability to distinguish between one heart-
+beat class versus the rest of the classes. We observe
+that the LSTM model trained with added synthetic exam-
+ples from any GAN model significantly outperforms the
+LSTM model trained without synthetic examples added for
+the S(supraventricular) and F(Fusion) heartbeats. For the
+V(ventricular ectopic) heart-beats, we see that the LSTM
+classifier performed very well without adding synthetic
+heart-beats to the training set, achieving AUC of 0.99. The
+LSTM kept the high score when adding synthetic heart-beats
+from all type of GANs. We observe there is no monotonic-          Figure 6: Average AUC comparison on LSTM which clas-
+ity in performance as a function of number of synthesized         sifies heart-beat of type F - Fusion beats
+examples added. There were some events where the syn-
+thetic heart-beats achieved lower AUC. For most models we
+see that the performance first drops and then fluctuates till
+reaches better performance than the LSTM trained with no
+synthesized examples. This is due to the randomness of
+the generator creation of heart-beats. We observe the im-
+provement is more significant in arrhythmia classes, which
+are composed of several medical conditions. We conjecture
+that those classes are harder to learn given the same amount
+of training generated by the PGAN. We conclude that the
+practice of adding synthesized examples to the training of
+the LSTM model significantly improves its performance for         Figure 7: Average AUC comparison on LSTM which clas-
+heartbeat classification when tuning the number of synthe-        sifies heart-beat of type S - supraventricular ectopic beats
+sized examples added.
+
+The Effect of Adapting to ECG Morphology
+The ECG GAN (Section 4) presents a novel loss functions
+whose goal is to adapt its output to ECG morphology with
+natural P, Q, R, S, T waves. We observe that for the F and V
+heart-beat class, the classification with ECG-GAN synthe-
+sized ECG significantly outperforms the classic GAN and
+DCGAN, but does not perform as well for S beats. In the S
+beats, the variation between the train and test patients is the
+highest compared to other beats classes. We conclude that
+learning to adapt to natural ECG morphology is important          Figure 8: Average AUC comparison on LSTM which clas-
+for better classification, but the need to adapt to a specific-   sifies heart-beat of type V - ventricular ectopic beats
+patient morphology is crucial. PGAN solves this issue by
+leverages our proposed ECG-GAN model and adapts it to                                 8   Conclusions
+the specific-patient morphology with patient-specific P, Q,       In this work, we study the problem of personalized ECG
+R, S, T waves.                                                    classification, which is of high importance due to high vari-
+                                                                  ability across patients. We present a general framework for
+The Effect of Personalization                                     generating natural ECG signals by constraining the gener-
+We wish to study the effect of adding personalized ver-           ative model to produce natural P, Q, R, S, T waves. We
+sus non personalized ECG signals. The personalized GAN            evaluate the performance on LSTM classifier for ECG clas-
+and DCGAN don’t outperform the non personalized mod-              sification and show that it reaches high results compared to
+els across all classes (we only observe a gain on F beats).       non-constrained generative models. We then present PGAN,
+a personalized adversarial generative algorithm, to gener-        Kass, R., and Clancy, C. 2006. Basis and Treatment of
+ate patient-specific ECG signals by training on arrhythmia        Cardiac Arrhythmias. Handbook of Experimental Pharma-
+present in labeled data over a general population and op-         cology. Springer Berlin Heidelberg.
+timized to mimic the specific patient’s morphological car-        Kent, D., and Hayward, R. 2007. Limitations of applying
+diac waves. We empirically show that utilizing the synthet-       summary results of clinical trials to individual patients: the
+ically generated personalized ECG instances significantly         need for risk stratification. JAMA 298:1209–1212.
+improves personalized ECG classification using deep learn-
+                                                                  Kingma, D. P., and Ba, J. 2014. Adam: A method for
+ing techniques.
+                                                                  stochastic optimization. arXiv preprint arXiv:1412.6980.
+                                                                  Kiranyaz, S.; Ince, T.; and Gabbouj, M. 2016. Real-time
+                        References                                patient-specific ecg classification by 1-d convolutional neu-
+Afonso, V. X.; Tompkins, W. J.; Nguyen, T. Q.; and Luo, S.        ral networks. IEEE Transactions on Biomedical Engineer-
+1999. Ecg beat detection using filter banks. IEEE transac-        ing 63(3):664–675.
+tions on biomedical engineering 46(2):192–202.                    Luz, E. J. d. S.; Schwartz, W. R.; Cámara-Chávez, G.; and
+Al Rahhal, M. M.; Bazi, Y.; AlHichri, H.; Alajlan, N.; Mel-       Menotti, D. 2016. Ecg-based heartbeat classification for ar-
+gani, F.; and Yager, R. R. 2016. Deep learning approach for       rhythmia detection: A survey. Computer methods and pro-
+active classification of electrocardiogram signals. Informa-      grams in biomedicine 127:144–164.
+tion Sciences 345:340–354.                                        Makowski, D. 2016. Neurokit: A python toolbox for statis-
+                                                                  tics and neurophysiological signal processing (eeg, eda, ecg,
+Chazal, P., and Reilly, R. 2007. A patient-adapting heart-
+                                                                  emg...). memory and cognition lab’ day, 01 november, paris,
+beat classifier using ecg morphology and heartbeat interval
+                                                                  france. https://github.com/neuropsychology/NeuroKit.py.
+features. 53:2535–43.
+                                                                  Moody, G. B.; Mark, R. G.; and Goldberger, A. L. 2001.
+De Chazal, P.; O’Dwyer, M.; and Reilly, R. B. 2004. Auto-         Physionet: a web-based resource for the study of physio-
+matic classification of heartbeats using ecg morphology and       logic signals. IEEE Engineering in Medicine and Biology
+heartbeat interval features. IEEE transactions on biomedical      Magazine 20(3):70–75.
+engineering 51(7):1196–1206.
+                                                                  Nasrabadi, N. M. 2007. Pattern recognition and machine
+De Luna, A. B.; Batchvarov, V. N.; and Malik, M. 2006. The        learning. Journal of electronic imaging 16(4):049901.
+morphology of the electrocardiogram. The ESC Textbook of
+Cardiovascular Medicine Blackwell Publishing 1–35.                Neal, M., and Kerckhoffs, R. 2010. Current progress
+                                                                  in patient-specific modeling. Briefings in Bioinformatics
+Donahue, J.; Jia, Y.; Vinyals, O.; Hoffman, J.; Zhang, N.;        11(1):111–126.
+Tzeng, E.; and Darrell, T. 2013. Decaf: A deep convolu-
+                                                                  Prasad, G. K., and Sahambi, J. 2003. Classification of ecg
+tional activation feature for generic visual recognition. arXiv
+                                                                  arrhythmias using multi-resolution analysis and neural net-
+preprint arXiv:1310.1531.
+                                                                  works. In TENCON 2003. Conference on Convergent Tech-
+Escalona-Moran, M.; Soriano, M.; Fischer, I.; and R Mi-           nologies for the Asia-Pacific Region, volume 1, 227–231.
+rasso, C. 2014. Electrocardiogram classification using reser-     IEEE.
+voir computing with logistic regression. 19.                      Radford, A.; Metz, L.; and Chintala, S. 2015. Unsupervised
+Gers, F. A.; Schraudolph, N. N.; and Schmidhuber, J. 2002.        representation learning with deep convolutional generative
+Learning precise timing with lstm recurrent networks. Jour-       adversarial networks. arXiv preprint arXiv:1511.06434.
+nal of machine learning research 3(Aug):115–143.                  Rajpurkar, P.; Hannun, A. Y.; Haghpanahi, M.; Bourn, C.;
+Goodfellow, I.; Pouget-Abadie, J.; Mirza, M.; Xu, B.;             and Ng, A. Y. 2017. Cardiologist-level arrhythmia detection
+Warde-Farley, D.; Ozair, S.; Courville, A.; and Bengio, Y.        with convolutional neural networks. CoRR.
+2014. Generative adversarial nets. In Advances in neural          Sak, H.; Senior, A.; and Beaufays, F. 2014. Long short-term
+information processing systems, 2672–2680.                        memory recurrent neural network architectures for large
+Güler, İ., and Übeylı, E. D. 2005. Ecg beat classifier de-     scale acoustic modeling. In Fifteenth annual conference of
+signed by combined neural network model. Pattern recog-           the international speech communication association.
+nition 38(2):199–208.                                             Venugopalan, S.; Rohrbach, M.; Donahue, J.; Mooney, R.;
+Hamilton, P. S., and Tompkins, W. J. 1986. Quantitative in-       Darrell, T.; and Saenko, K. 2015. Sequence to sequence-
+vestigation of qrs detection rules using the mit/bih arrhyth-     video to text. In Proceedings of the IEEE international con-
+mia database. IEEE transactions on biomedical engineering         ference on computer vision, 4534–4542.
+(12):1157–1165.                                                   Ye, W.; Kumar, B.; and Coimbra, M. 2012. Heartbeat clas-
+Ioffe, S., and Szegedy, C. 2015. Batch normalization: Ac-         sification using morphological and dynamic features of ecg
+celerating deep network training by reducing internal covari-     signals. 59:2930–41.
+ate shift. arXiv preprint arXiv:1502.03167.                       Yeh, R. A.; Chen, C.; Lim, T.-Y.; Schwing, A. G.;
+                                                                  Hasegawa-Johnson, M.; and Do, M. N. 2017. Semantic
+Jiang, W., and Kong, S. G. 2007. Block-based neural
+                                                                  image inpainting with deep generative models. In CVPR,
+networks for personalized ecg signal classification. IEEE
+                                                                  volume 2, 4.
+Transactions on Neural Networks 18(6):1750–1761.
+

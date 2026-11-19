@@ -1,0 +1,1308 @@
+                                                  Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+
+
+                                          Sparse learned kernels for interpretable and efficient medical time
+                                                                   series processing
+                                              Sully F. Chen∗           Zhicheng Guo†            Cheng Ding‡           Xiao Hu§        Cynthia Rudin¶
+
+
+                                          Abstract                                                     tients’ conditions, facilitating timely interventions,
+                                                                                                       and improving overall healthcare outcomes. These
+                                          Rapid, reliable, and accurate interpretation of med-         types of signals are usually manually reviewed by
+                                          ical time-series signals is crucial for high-stakes clin-    trained medical professionals, however, in today’s
+                                          ical decision-making. Deep learning methods of-              realm of endless medical data and the populariza-
+                                          fered unprecedented performance in medical sig-              tion of continuous passive monitoring, manual re-
+
+
+
+
+arXiv:2307.05385v4 [eess.SP] 6 Oct 2024
+                                          nal processing but at a cost: they were compute-             viewing efforts have become inefficient or even a
+                                          intensive and lacked interpretability. We propose            bottleneck in the patient care process. Traditional
+                                          Sparse Mixture of Learned Kernels (SMoLK), an                techniques to automate signal processing and cate-
+                                          interpretable architecture for medical time series           gorization, while improving speed, often come with
+                                          processing. SMoLK learns a set of lightweight flex-          limitations in terms of performance. The rise of
+                                          ible kernels that form a single-layer sparse neural          deep learning yielded a revolution in signal pro-
+                                          network, providing not only interpretability, but            cessing, offering models with unparalleled perfor-
+                                          also efficiency, robustness, and generalization to           mance (e.g., [1–5]). However, these models often
+                                          unseen data distributions. We introduce a pa-                come with their own set of challenges, particularly
+                                          rameter reduction techniques to reduce the size of           in terms of computational demands and a lack of
+                                          SMoLK’s networks while maintaining performance.              interpretability in their decision-making processes.
+                                          We test SMoLK on two important tasks common                  Post-hoc saliency methods often fail to correctly
+                                          to many consumer wearables: photoplethysmog-                 identify feature importance for time-series signals
+                                          raphy (PPG) artifact detection and atrial fibrilla-          from these black box models [6, 7].
+                                          tion detection from single-lead electrocardiograms              Recognizing the need for high-performing inter-
+                                          (ECGs). We find that SMoLK matches the perfor-               pretable models, we sought to design an architec-
+                                          mance of models orders of magnitude larger. It is            ture that combines the best of both worlds: the
+                                          particularly suited for real-time applications using         performance of deep learning with the computa-
+                                          low-power devices, and its interpretability benefits         tional efficiency and interpretability of traditional
+                                          high-stakes situations.                                      methods. We propose a method that has perfor-
+                                                                                                       mance similar to – and often better than – state-
+                                                                                                       of-the-art deep neural network (DNN) approaches
+                                          1      Introduction                                          but with several orders of magnitude fewer parame-
+                                                                                                       ters. Our method, Sparse Mixture of Learned Ker-
+                                          Medical signals such as electroencephalograms
+                                                                                                       nels (SMoLK) learns a set of lightweight flexible
+                                          (EEGs), electrocardiograms (ECGs), and photo-
+                                                                                                       kernels to construct a single-layer sparse neural
+                                          plethysmography signals (PPGs) have played a piv-
+                                                                                                       network, providing a new efficient, robust, and in-
+                                          otal role in the field of medicine, serving as a
+                                                                                                       terpretable medical signal processing architecture.
+                                          crucial medium for diagnosing and monitoring pa-
+                                                                                                       To train these kernel functions, we introduce two
+                                              ∗ Duke  University School of Medicine, Durham,           parameter reduction techniques: weight absorption
+                                          NC 27708,        USA. (corresponding author,       e-mail:   absorbs the kernel weighting factors into the kernels
+                                          sully.chen@duke.edu)                                         themselves and correlated kernel pruning reduces
+                                             † Department of Electrical and Computer Engineer-
+
+                                          ing, Duke University, Durham, NC 27708, USA. (e-mail:
+                                                                                                       redundancies among the learned kernels.
+                                          zhicheng.guo@duke.edu)                                          While our architecture is versatile enough for
+                                             ‡ Department of Biomedical Engineering, Georgia Insti-
+                                                                                                       a range of applications, we chose to spotlight its
+                                          tute of Technology & Emory University, Atlanta, GA 30322,
+                                          USA. (e-mail: chengding@gatech.edu)
+                                                                                                       efficacy using photoplethysmography (PPG) and
+                                             § Nell Hodgson Woodruff School of Nursing, Emory Uni-     single-lead electrocardiography (ECG), given their
+                                          versity, 1520 Clifton Rd, Atlanta, GA 30322, USA. (e-mail:   increasingly widespread integration into wearable
+                                          xiao.hu@emory.edu)                                           devices and use for long-term cardiac monitor-
+                                             ¶ Department of Computer Science and Department of
+
+                                          Electrical and Computer Engineering, Duke University,
+                                                                                                       ing. Photoplethysmography poses many challenges,
+                                          Durham, NC 27708, USA. (corresponding author, e-mail:        such as motion artifacts and signal noise, which
+                                          cynthia@cs.duke.edu)                                         are commonly encountered in various other medi-
+       Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+cal signals as well. Photoplethysmography is a non-      tation, SMoLK obtains the best of all worlds: (1)
+invasive optical technique to measure blood volume       state-of-the-art (SotA) performance and (2) inter-
+changes in tissue by measuring changes in light          pretability in a model with (3) several orders of
+absorption. It is commonly used to infer various         magnitude fewer parameters than the current SotA.
+cardiovascular parameters, such as blood oxygena-        For the single-lead ECG task, SMoLK achieves
+tion, heart rate, heart rate variability, and other      metrics matching a deep ResNet with less than
+related parameters [8–14]. It has become abundant        1% the parameter count, while significantly outper-
+in wearable consumer devices (i.e., smart watches)       forming deep networks in the low-data regime, even
+and there is a continuing effort to develop algo-        against equal-parameter deep networks controlling,
+rithms that extract meaningful data from PPG sig-        for potential overfitting. For interpretability (2),
+nals obtained from these devices.                        SMoLK yields a tiny-yet-optimized set of convolu-
+   A notable limitation of wearable PPG devices is       tion kernels that, when applied to the PPG signal,
+their sensitivity to motion-induced artifacts, which     summed, and ceiled, directly produces a measure
+leads to corruption in the collected signals. Mo-        of PPG signal quality. This measure can then be
+tion artifacts occur commonly since most users are       thresholded to segment artifacts. The process is
+not stationary. Motion artifacts often harm mea-         “nearly linear” given that the only non-linearity is
+surement quality and it requires considerable effort     a ceiling function setting negative values to zero.
+to identify and either discard or reconstruct these      We can directly and precisely measure the contribu-
+corrupted segments of the time series. Previous          tion of any individual convolution to the predicted
+methods relied on either additional sensors (e.g.,       signal quality, and kernel contributions are directly
+accelerometers) [15], statistical methods such as        proportional to the output signal. For classification
+standard deviation, skew, kurtosis, wavelet-based        tasks, we can directly invert the process to compute
+motion artifact reduction algorithms [16, 17] or         each part of the signal’s precise contribution to the
+more sophisticated handcrafted feature detectors         final classification. Our approach is reminiscent of
+[18, 19]. The aforementioned hand-crafted-feature-       feature-detection-based approaches in that we learn
+based-detectors and statistical methods provide          a set of kernels that mimic handcrafted features.
+clear indications and reasoning for why a segment        For our smallest model, we learn so few kernels (12
+is identified as an artifact, but often underperform     total) that we can inspect these features by eye and
+compared to other methods, such as deep neural           observe the waveforms learned by our approach.
+networks [20–22]. However, deep neural nets are          This contrasts with deep neural networks, where
+computationally intensive and contain millions of        there are so many parameters one cannot feasibly
+parameters, thus making them incompatible with           inspect the inner workings of the model, and even
+small, low-power wearable devices. Furthermore,          if one took the time to meticulously inspect these
+deep neural networks lack interpretability; it is dif-   features, it would still be unclear how each feature
+ficult, if not impossible, to determine a rationale      individually contributes to the output due to the
+behind the identification of an artifact in the PPG      built-in non-linearity.
+signal. For the same reason, they are difficult to
+troubleshoot.
+   Similar to PPG, ECG is also a vital diagnostic
+and monitoring tool for cardiac events, especially
+in hospital settings. By measuring the timing and           In terms of efficiency and memory (3), our model
+rhythm of each electrical impulse from the heart, it     reflects that for real-world applications, signal pro-
+provides crucial information about the heart’s con-      cessing can be limited by computational resources
+dition, helping to detect various cardiac abnormal-      or power consumption, as most wearable devices
+ities such as arrhythmias, heart attacks, and other      are small computing devices with limited battery
+heart diseases. ECG is considered to be the gold         life and low compute budget. Furthermore, mem-
+standard for diagnosing a variety of cardiac events.     ory is often a constraint as many wearable devices
+There have been several works in automating dis-         run multiple processes and monitor several metrics
+ease detection and diagnosis from ECG signals us-        at once. SMoLK is simple to implement, and eas-
+ing deep learning models [23–25]; however, these         ily lend itself to memory and compute optimiza-
+methods share similar issues to PPG-based deep           tion. Our architecture can be quantized easily to
+nerual networks mentioned above – they are com-          16-bit floating point operations without any ap-
+putationally inefficient and lack interpretability.      preciable decrease in performance. Our method is
+   Our approach achieves compelling results in both      lightweight enough to allow real-time assessment of
+the task of detecting artifacts in PPG signals,          signal quality or classification of arrhythmias with
+as well as the detection of atrial fibrillation from     a small enough impact that it could feasibly be im-
+single-lead ECGs (an increasingly common task in         plemented as a background process, using only kilo-
+modern-day wearables). For PPG artifact segmen-          bytes of memory.
+       Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+2     Related Work                                    methods [42, 43], rather than build interpretabil-
+                                                      ity inherently into the model, which yields a faith-
+2.1    Classical Statistical and Machine              ful understanding of model behavior. Indeed, even
+       Learning Techniques                            modern explanation algorithms for medical signal
+                                                      processing with transformer architectures [45] fail
+Statistical and machine learning techniques involve   to yield saliency maps that properly attribute fea-
+applying various algorithms to extract features and   tures to their classification. In the aforementioned
+build classifiers for detecting motion artifacts in   work, saliency maps for ST-elevation myocardial in-
+PPG signals. Several studies have used least-         farction correctly assign high saliency to some el-
+squares-based methods, such as X-LMS [26] or          evated ST segments, yet ignore equally prevalent
+adaptive filters [27]. Other methods have used sta-   ST segments seemingly at random. Furthermore,
+tistical parameters like kurtosis or Shannon entropy  an area of equally intense saliency is assigned to a
+as features to detect artifacts [28, 29]. Addition-   completely blank area of the ECG strip. Although
+ally, machine learning techniques, such as support    it is not always obvious a priori what features are
+vector machines, random forests, and naı̈ve Bayes     important, it is generally useful to know what fea-
+have been employed [30, 31] for this task. For ECG    tures contributed to a model’s decision.
+arrhythmia detection, several works also leveraged
+support vector machines, wavelet transforms and
+logistic regression [32–34]. These methods often 3           Model Architecture
+under-perform compared to deep learning-based
+approaches and typically focus on the classification 3.1 Overview
+of discrete time-chunks rather than segmentation of
+                                                      In this study, we framed the task of PPG quality
+artifacts.
+                                                      classification as a feature-detection task. We hy-
+                                                      pothesized that clean PPG signals could be identi-
+2.2 Deep Learning Approaches                          fied by certain common features, and PPG signals
+                                                      with artifacts could be identified by either the lack
+Methods such as 1D convolutional neural networks of these recurring features or by features caused by
+[35–38], 2D convolutional neural networks [39, 40], factors such as movement. Our PPG signals are
+and U-Net type architectures [41] have been im- one-dimensional time-series signals, and we learned
+plemented with varying degrees of success for PPG a set of kernels to identify these features.
+artifact detection and ECG arrhythmia detection.         To achieve this, we learn a set of M convolu-
+These methods are more accurate than traditional tion kernels of varying numbers to evaluate param-
+machine learning methods. Many of these architec- eter scaling laws: M = 12 (small), 72 (medium),
+tures, such as 1D and 2D convolutional neural net- 384 (large). The M kernels are divided into sets
+works are not inherently designed for segmentation of M/3 kernels of short (1.0 seconds), moderate
+tasks, as they were originally designed for classifi- (1.5 seconds), and long (3.0 seconds) sizes, with
+cation tasks. As a result, they must be adapted to the goal of learning features of different lengths to
+segmentation tasks via classification of signal win- improve classification quality. The kernels are con-
+dows, or methods like GradCAM [42] or SHAP [43], volved with the input PPG signal and the values are
+which adds another layer of complexity. Addition- ceiled via max(0, x) to obtain a non-negative signal
+ally, these methods are often unreliable (see experi- quality indicator. Additionally, a bias is added to
+ments in [41]). Transformer-based approaches have each convolution channel. We compute a weighted
+been implemented, performing similarly to convo- sum of the convolutions to produce a single channel
+lutional networks (though with higher parameter that represents a measure of signal quality, which
+counts) [44].                                         is then transformed to range [0.0, 1.0] via the sig-
+   Most deep learning methods demand significant moid function. We apply a 3rd-order Savitzky-
+computational resources, rendering them impracti- Golay filter (∼0.8-second filter window) to smooth
+cal for use in wearable devices. An exception is the output, then apply thresholding at a value of
+Tiny-PPG [36], which emphasizes model pruning 0.5 to produce a binary output segmentation. This
+and the development of compact, portable models. pipeline is shown in Figure 1. The addition of a
+Our experiments indicate that we achieve similar post-processing smoothing filter (Savitzky-Golay in
+performance to Tiny-PPG but with much sparser our case) yields smoother segmentation maps and
+models (about half the parameters). However, relies on the assumption that PPG artifacts tend
+Tiny-PPG is not designed for interpretability. Try- to occur in groups, rather than as fragmented ar-
+ing to understand black box deep learning models tifacts. However, this post-processing filter is not
+is extremely challenging. Most work turns to meth- strictly necessary to maintain good DICE metrics
+ods that seek to explain black box model behavior, and is an optional hyperparameter to be chosen for
+such as the aforementioned GradCAM and SHAP the use case (see Appendix A).
+      Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+
+
+Figure 1: The PPG Processing Pipeline. The processing pipeline for the PPG signal quality seg-
+mentation task during training and during inference. First, a PPG signal is normalized to a unit normal
+by subtracting the mean and dividing by the standard deviation. Next, a set of convolutions is applied.
+Our smallest model is lightweight enough that all of the convolved signals are displayed in this figure.
+The convolved signals are ceiled, weighted, and summed, and a sigmoid is applied. Finally, the output is
+smoothed and thresholded to segment the signal. After training, similar kernels are ablated and kernel
+weights are absorbed to reduce parameter count.
+
+
+   More formally, our model consists of M kernels, 3.2 Classification
+M scalar biases, and M scalar weights. Given an
+                                                   3.2.1 Overview
+input signal, x, our SMoLK model is defined as
+follows:                                           To demonstrate the versatility of our architecture,
+                                                   we slightly modify our model’s output to suit a
+                                                   classification task. First, we generate feature maps
+
+                   M
+                                                ! with our learned kernels:
+                   X
+ SMoLK(x) = σ         max(0, x ∗ km + bm ) · wm                fm (x) = max(0, x ∗ km + bm ).
+                  m=0
+                                                       However, instead of computing a weighted element-
+                                                       wise sum of the feature maps (as is performed in
+                                                       the PPG task), we compute the mean value of each
+where km , bm , wm are the m convolution ker- individual feature map to produce a score for each
+                                 th
+
+nel, bias, and signal weight respectively, ∗ repre- feature map:
+sents the convolution operation, · is scalar-vector
+                                                                       ϕm (x) = Mean(fm (x))
+multiplication, and σ is the element-wise sigmoid
+                −x −1
+function, (1 + e ) . In essence, SMoLK is equiv- where Mean computes the element-wise mean of
+alent to a linear combination of filtered signals gen- the feature map, f . We then use these scores in a
+                                                                           m
+erated by convolving the input with a learnable ker- simple linear model to produce a logit:
+nel, mapped to range (0, 1). For the segmentation
+task, the output can be further post-processed via                           M
+                                                                             X
+smoothing and thresholding to yield a segmentation                 zj (x) =     wmj ϕm (x) + bj
+map.                                                                        m=0
+        Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+where wmj is the weight of the mth feature for the Algorithm 1 Compute contribution map for ECG
+j th class, and bj is the bias for this class. In the trace
+case of ECG classification, we add global frequency Require:
+information to our linear model by computing the       1: ECG trace x of length L.
+power spectrum of the ECG signal and adding these      2: M       feature maps denoted as F             =
+as linear components:                                     {f1 , f2 , . . . , fM }.
+                                                       3: Class of interest j.
+                                                       4: Contribution weights wmj denoting the weight
+               M
+              X                  X                        of feature map fm towards class j.
+     zj (x) =     wmj ϕm (x) +       wfˆj fˆ(x) + bj
+                                                       5: Kernel size K.
+              m=0               fˆ∈F
+                                                       6: Define + as the element-wise addition of a
+                                                          scalar to a vector.
+Where fˆ(x) are the frequency bands of x in the        7: Initialize Ijx as a zero vector of size L.
+power spectrum F, and wfˆj is the corresponding        8: for m = 1 to M do
+weight of that frequency band for class j. Finally,    9:    for l = 1 to L − K + 1 do
+a non-linear activation function can be applied to 10:           Ijx [l : l + K] += fm [j] × wmj × K −1
+this logit to generate a probability distribution. 11: end for
+We use SoftMax inz our case, which is defined as 12: end for
+                                                                           j
+SoftMax(zj ) = Pn e z ′ , where zj is the logit for 13: return Ix
+                       j
+
+                   j ′ =1
+                            e j
+class j. An illustrated overview of this pipeline can
+be seen in Figure 2a.                                       and weights are scalars. We have:
+                                                            SM oLK(x)
+                                                            M
+                                                            X
+3.2.2    Interpretability                               =         max(0, x ∗ km + bm ) · wm
+                                                            m=0
+                                                            M
+Because our model is a linear combination of fea- X
+                                                      =      max(0, (x ∗ km + bm ) · |wm |) · sgn(wm )
+ture map mean activations, and each activation was
+                                                        m=0
+generated from a convolution over the signal, we M
+can directly compute the contribution of each part X
+                                                      =      max(0, (x ∗ km ) · |wm | + bm · |wm |) · sgn(wm )
+of the input signal to a given output class by revers- m=0
+ing the convolution. We thus compute the contribu- M
+tion map as follows, in Algorithm 1. At a high level, =
+                                                        X
+                                                             max(0, [x ∗ (km · |wm |)] + bm · |wm |) · sgn(wm ),
+a forward pass is performed as usual and the fea- m=0
+ture map values are computed. Then, the feature
+maps are multiplied element-wise with the feature where | · | is element-wise absolute value.
+weight for the class in question. Lastly, this prod-       The quantity km · |wm | becomes the new ker-
+uct is convolved backward into a contribution map nel, and the quantity bm · |wm | becomes the new
+buffer of equal dimension to the input ECG. This bias. We can thus reduce parameter count, since we
+allows us to compute exactly how much any given can now store the kernels themselves along with a
+portion of the input signal contributed to the out- corresponding binary value indicating whether they
+put classification. An illustration of this process are positive or negative kernels. Furthermore, each
+can be seen in Figure 2b.                               kernel can be neatly categorized into “contributing
+                                                        to good signal quality” (positive kernels) or “con-
+                                                        tributing to poor signal quality” (negative kernels).
+                                                        This process is performed after learning the ker-
+                                                        nels to reduce the memory footprint and number of
+3.3 Weight Absorption                                   scalar operations for deployed models.
+
+We can reduce the parameter count of our segmen-
+                                                            3.4     Correlated Kernel Pruning
+tation model by absorbing the weighting factor into
+the kernels themselves, due to the “almost linear”          Driven by the observation that some learned ker-
+property of the model. Let x be the input PPG               nels look quite similar, we hypothesized that we
+signal, which is a vector of length 1920. Let km ,          could prune similar kernels while maintaining good
+bm , wm be the mth convolution kernel, bias, and            performance. To measure the similarity between
+signal weight respectively. The kernels are vectors         kernels, we use Euclidean distance.
+of length 192, 96, or 64 depending on the length               At a high level, our kernel pruning method con-
+class (long, moderate, or short), while the biases          sists of the following steps:
+       Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+
+
+Figure 2: The ECG Processing Pipeline. a. The pipeline for processing a single lead ECG. First,
+a set of learned convolutions is applied to the ECG to produce several feature maps. Then, feature-
+wise means are computed, which are used as inputs to a linear model. Global frequency information,
+obtained from a power spectrum, is also used as inputs for the linear model to yield a logit. b. The
+reverse pipeline for interpreting the prediction in subfigure a from the learned kernel model. First, feature
+maps are generated by the learned kernel convolutions, in the same manner as a. However, instead of
+computing the mean value of this feature map, the feature maps are multiplied element-wise with their
+corresponding class weights. The power spectrum is not used in the interpretation. Lastly, a transposed
+convolution is applied to compute the importance of each part of the input signal. This method is
+almost an exact inverse of the forward procedure, allowing for a principled assignment of importance to
+the input signal that directly correlates to the output class logit. Notably, this method correctly labels
+the increased PR-interval as the most important feature in the classification of this ECG as 1st -degree
+heart block, indicating that our model has learned important features rather than spurious correlations.
+
+
+
+ 1. For each convolutional layer, compute the Eu-      4.1     Datasets and Preprocessing
+    clidean distance between all pairs of kernels.
+                                                       We train our model on the PPG-DaLiA [46] train-
+ 2. Sort the kernel pairs by their Euclidean dis-      ing split, and evaluate our approach on the same
+    tance (in order of increasing distance), and se-   datasets used by the current state-of-the-art algo-
+    lect the top pa pairs to prune, where pa is a      rithms [36, 41], namely PPG-DaLiA [46] test split,
+    hyperparameter.                                    WESAD [47], and TROIKA [48]. The PPG-DaLiA
+                                                       dataset is composed of recordings from 15 sub-
+                                                       jects performing real-world tasks. The data include
+ 3. For each selected pair to prune, determine         electrocardiogram (ECG), accelerometer, and elec-
+    which of the two kernels to remove and which       trodermal recordings for various settings/activities,
+    to keep based on their effective contribution to   such as sitting still, walking up/down stairs, playing
+    the signal.                                        sports (soccer, cycling, walking), and driving. The
+                                                       WESAD data was recorded from wrist and chest
+  A rigorous description of the pruning process is     PPGs from 15 subjects aged 21-55 (median 28)
+discussed in the Methods section.                      primarily focusing on varying the emotional state
+                                                       of the subject (neutral, stressed, amused). ECG,
+                                                       accelerometer, electrodermal, and wrist PPG sig-
+                                                       nals were recorded. Lastly, the TROIKA data was
+4    Methods                                           recorded from 12 subjects running on a treadmill
+                                                       (ages 18-35). Accelerometer, ECG, and PPG sig-
+For all machine learning tasks, PyTorch 2.1.1 [54]     nals were recorded. This dataset represents the
+and Scikit-learn 1.3.2 [55] were used. Data analysis   most challenging dataset for generalization among
+and statistics were conducted with SciPy 1.9.3 [56]    the datasets we test in this work, since the subjects
+and NumPy [57] 1.22.4.                                 were under intense physical demands with poor sig-
+       Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+nal quality, owing to the large amounts of move-         4.2     PPG Segmentation
+ment.
+                                                         The following experiments aim to compare our
+   We followed the same preprocessing procedure          methodology to several common baselines, as well
+as Guo et al. [41], namely applying a bandpass fil-      as a state-of-the-art multi-million parameter archi-
+ter with cutoffs of 0.9 Hz and 5 Hz, splitting the       tecture based on U-Net. We show that our seg-
+data into 30-second chunks, and resampling to 64         mentation algorithm matches or exceeds the state-
+Hz. However, instead of normalizing the chunks be-       of-the-art on several benchmark PPG tasks.
+tween [0, 1] as Guo et al. did, we instead opted to
+normalize each chunk to a unit normal distribution.
+                                                         4.2.1   Training
+Normalization was performed at the chunk-level
+rather than the dataset-level to ensure that sig-        To learn the kernels, we used stochastic gradient
+nal intensities remained relatively consistent across    descent with Adam optimization [58] (β1 = 0.9,
+chunks, improving generalization to distributions of     β2 = 0.999, ϵ = 10−8 , weight decay = 10−4 ),
+PPG signals that may have different global param-        and a linear learning rate decay schedule (decay-
+eters or greater inter-sample variability. We used       ing from 0.01 to 0.002 learning rate on the final
+Guo et al.’s publicly available artifact segmentation    iteration), with a binary cross-entropy error objec-
+labels, which were created via a web-annotation          tive function. Since our dataset is on the order
+tool and a group of skilled annotators [41].             of 108 bytes and our model sizes are on the or-
+   For our experiments with ECGs, we focus on            der of 103 –105 bytes, we can compute the gradient
+the task of single-lead atrial fibrillation detection,   over the entire dataset in a single pass to obtain
+an increasingly common feature of wearable de-           the true gradient (as opposed to an estimate via
+vices. We trained on the Computing in Cardi-             a mini-batch). For the largest model sizes, we use
+ology dataset [49], which consists of 5154 sinus         gradient accumulation due to memory constraints.
+rhythm recordings, 771 recordings of atrial fibril-      Thus, we train for 512 iterations computing the gra-
+lation, 2557 recordings of “other” arrhythmias (un-      dient over the entire training set. We find that this
+specified), and 46 recordings that were too noisy        yields empirically better performance than stochas-
+to classify, all recorded at 300 Hz. The recordings      tic mini-batches. We find it empirically difficult to
+vary in length, with the average lengths being 31.9,     overfit the training data given our parameter count
+31.6, 34.1, and 27.1 seconds for each of the afore-      no matter the iteration count, especially at smaller
+mentioned classes, respectively. For our analysis,       kernel numbers.
+we excluded the “noisy” class from our task, as our
+holdout set does not include a noisy class. Although     4.2.2   Pruning
+our methodology can classify ECG segments of ar-
+bitrary length (unlike many deep learning-based          To determine which kernel to prune, we compute
+approaches, which require the input lengths to be        the “effective contribution” of the kernel as:
+fixed), we chose to split the dataset into 10-second               effj = wj · µj ,       effk = wk · µk     (1)
+chunks to more easily compare our results to deep-
+learning based methods. After splitting the data         where wj and wk are the weights of the two ker-
+into 10-second chunks, we obtained 16742 sinus           nels in a pair and µj and µk are the mean absolute
+samples, 2463 atrial fibrillation samples, and 8685      values of the kernels wj and wk , respectively. We
+“other” samples. We applied a bandpass filter with       keep the kernel with the higher effective weight and
+cutoffs at 1.0 and 10.0 Hz, as well as per-sample        prune the other kernel.
+normalization to a unit normal (subtracting the             When pruning a kernel, we need to update the
+mean and dividing by the standard deviation).            weight and biases of the remaining kernel to correct
+   As a holdout set to test the generalization of our    for the removed kernel’s contribution. Without loss
+method, we used a large, publicly available dataset      of generality, assume that effj > effk . We update
+collected from Chapman University, Shaoxing Peo-         the weight and bias of the remaining kernel j as
+ple’s Hospital, and Ningbo First Hospital [50, 51].      follows:
+This is a diverse 12-lead ECG dataset, and we used                        effj + effk
+arrhythmias classified as either atrial fibrillation              wj′ =               ,    b′j = bj + bk .   (2)
+                                                                               µj
+(1780 samples), sinus rhythm (7858 samples), or
+other (11695 samples). Each sample consists of           where bj and bk are the biases for weight wj and
+a 10-second, 500 Hz 12-lead recording, of which          wk respectively. In essence, the bias of the two ker-
+we took only lead I for our single-lead task. We         nels are simply combined into one term to compen-
+processed the data identically to the Computing in       sate for pruning one kernel, and the weight of the
+Cardiology dataset.                                      remaining kernel is increased proportionally to ac-
+   We refer to the original works for detailed statis-   count for the loss in signal from the pruned kernel.
+tics regarding the datasets [49–51].                     This technique allows for the removal of 22% of the
+        Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+parameters of our largest model, with less than a         (β1 = 0.9, β2 = 0.999, ϵ = 10−8 , weight decay
+2% absolute impact on performance on all datasets         = 10−2 ), and a linear learning rate decay schedule
+(Appendix Table 7). Moreover, this technique is           (decaying from 0.1 to 0.0 learning rate on the final
+adaptable, allowing for the removal of more param-        iteration) for 512 epochs, with a multi-class cross-
+eters at a greater performance cost, or a smaller         entropy error objective function. However, due to
+number of parameters at a lesser performance cost.        memory constraints, we train with a batch size of
+Notably, the choice of Euclidean distance is arbi-        1024 rather than over the entire dataset.
+trary, and any distance metric can be chosen for
+the pruning step. Indeed, one can use a variety of        4.3.2   Evaluation
+distance metrics with similar results.
+   We provide three example pruning results at var-       We compute F1-score and AUC-ROC as our pri-
+ious model scales, with a target performance de-          mary metrics. We train our models on the Com-
+crease of no greater than 5% (Appendix Table 6).          puting in Cardiology dataset, optimizing for 10-
+We would like to note that one can experiment with        fold cross-validation F1-scores. We then test our
+this pruning process via our open-source GitHub           models on an entirely unrelated test set constructed
+repository.                                               from the Zheng et al. dataset previously mentioned
+   Furthermore, we show pruning results using vari-       [50, 51].
+ous distance metrics perform relatively consistently,
+indicating a robustness to the chosen distance met-       4.3.3   Baselines
+ric. We test three additional distance metrics on         We compare against a common deep learning ar-
+our large model: cosine similarity between power          chitecture for medical signal processing, namely a
+spectra (cosine distance in frequency space), co-         1D-ResNet, as well as several previously state-of-
+sine similarity in feature space (the cosine similarity   the-art low-parameter count convolutional neural
+of the feature vectors themselves), and Manhattan         networks. These baselines are outlined in the Base-
+distance (Appendix Table 7).                              line Methods section.
+
+4.2.3    Evaluation                                       4.3.4   Interpretability
+To evaluate the performance of the baselines and We trained another learned kernel classifier to dis-
+learned kernels for artifact detection, we used the tinguish between 1◦ atrioventricular block (1140
+DICE score, defined as                                samples) and sinus rhythm (8125 samples) to
+                               2|A ∩ B|               demonstrate the interpretability of our method. We
+              DICE(A, B) =                            chose 1◦ atrioventricular block to demonstrate the
+                               |A| + |B|
+                                                      interpretability of our method as it is defined by a
+where A and B are the binary segmentation maps single salient feature (the PR-interval), rather than
+of the predicted and ground truth, respectively, and a set of global features (e.g., irregularly irregular
+| · | denotes the cardinality of a set. We employed beats in atrial fibrillation). We gather this data
+this score on a test set of PPG signals, with each from the Zheng et al. dataset.
+30-second chunk of PPG signal normalized via the
+method described earlier. We conducted 10-fold 4.4 Baseline Methods
+cross-validation using 10 different models trained
+from different starting seeds.                        4.4.1 Convolutional Sliding Window
+                                                      Our first baseline is a 1D-convolutional network
+4.2.4 Baselines                                       trained to classify 3-second windows of PPG sig-
+                                                      nal as either “artifact” or “clean.” The network
+We compare to the same baselines tested in Guo
+                                                      consists simply of 3 blocks of convolution-ReLU-
+et al. [41]. Namely, a convolutional neural network
+                                                      BatchNorm-MaxPool. The 3 blocks consist of ker-
+sliding window approach, a template-matching ap-
+                                                      nel sizes 10, 5, and 3, and the channel numbers
+proach, and a ResNet-34-based classifier with seg-
+                                                      are 64, 64, and 128. The model was trained from
+mentation performed via GradCAM [42] or SHAP
+                                                      5000 three-second windows that were randomly se-
+[43]. Further details are given in the Baseline Meth-
+                                                      lected from the PPG-DaLiA training set. Training
+ods section.
+                                                      consisted of 200 epochs of minimizing cross-entropy
+                                                      loss with Adam. Testing was done by segmenting
+4.3 Atrial Fibrillation Detection                     the 30-second PPG signal into 3 second chunks with
+                                                      the trained convolutional neural network classifier,
+4.3.1 Training
+                                                      and a sliding window with a step size of 1 second
+We train our learned-kernel atrial fibrillation de- was used for testing. Since the trained convolu-
+tector similarly, with AdamW optimization [59] tional network has an input size of 3-second chunks,
+       Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+each second of PPG signal receives 3 classification       The model was trained using the Adam optimizer
+outputs. A 1-second chunk of PPG signal is classi- [58], using the binary cross-entropy loss. An initial
+fied as an artifact if any of the three classification learning rate of 10−5 was set, which was scheduled
+outputs are classified as an artifact.                 to reduce to 5 × 10−6 after 10 epochs, and further
+                                                       decrease to 1×10−6 after 50 epochs. The maximum
+4.4.2 Template-Matching                                number of training epochs was capped at 100.
+                                                          While the Resnet34-1D network is fundamentally
+We follow the same approach as Guo et al. [41], a classifier, the goal is instead to obtain segmenta-
+which was inspired by Lim et al. [60]. Signals tion labels. Assuming that the model would fo-
+were first divided from the PPG-DaLiA training set cus on artifacts when tasked with predicting an
+into separate pulses via peak detection. 10 clean artifact signal, Guo et al. employed two post-
+(artifact-free) pulses were then selected to serve as hoc explanatory methods to generate segmentation
+our standard templates for comparison with test masks: SHAP [43] and GradCAM [42].
+pulses. Each pulse from the test data was com-            SHAP is a unified measure of feature importance
+pared to these 10 templates, using the dynamic that assigns each feature an importance value for a
+time warping (DTW) distance metric to measure particular prediction. It is based on game theory
+similarity. The smallest DTW distance (out of the and computes Shapley values. The Shapley value
+10 comparisons with the templates) was then iden- of a feature represents the average marginal con-
+tified. The range of the DTW distance function is tribution of that feature across all possible feature
+[0, ∞), but empirically we find that the DTW dis- subsets.
+tances between our templates and the PPG signals          GradCAM utilizes the gradients of any target
+fall mostly within the range [0, 10]. We created a concept flowing into the final convolutional layer of
+binary predicted label by labeling a segment as an a CNN to produce a coarse localization map high-
+artifact if the minimum DTW distance is at least lighting the important regions in the image (or in
+1. Other samples were given “non-artifact” pre- this case, a time series) for predicting the concept.
+dicted labels. The threshold of DTW was chosen This is done by first computing the gradient of the
+by testing thresholds between 0 and 10 over the en- output category with respect to feature maps of the
+tire train set and choosing the threshold β that pro- last convolutional layer, then applying a global av-
+duced the highest DICE score (which was 1). To erage pooling over the gradients to obtain weights
+summarize, if the minimum DTW distance α ex- for the feature maps. These weights are multiplied
+ceeds our threshold β, we classify the entire pulse with the feature maps and summed over all maps
+(and all its timesteps) as an artifact.                to generate the final output. This output can be
+                                                       used as a heatmap, indicating which parts of the
+4.4.3 GradCAM & SHAP                                   input were important in making the model’s predic-
+                                                       tion. GradCAM can be applied to any CNN-based
+In this baseline experiment, we compare to the re-
+                                                       network without requiring architectural changes or
+sults achieved by Guo et al. [41]. Briefly, Guo et
+                                                       re-training.
+al. conducted their experiment by employing the
+                                                          For the SHAP values, the computed values were
+Resnet-34 architecture proposed by Dai et al (2016)
+                                                       first smoothed with a Gaussian filter. A binary seg-
+for 1D binary classification (identifying ‘clean’ or
+                                                       mentation mask was then created by choosing the
+‘artifact’). This architecture, traditionally used for
+                                                       class with the higher SHAP value at each timestep.
+image classification, was repurposed for time series
+analysis via GradCAM [42]. Considering the rela-
+tively small size of the training dataset, they em- 4.4.4 Segade
+ployed transfer learning on a pre-trained Resnet34- We compare against a high-performing and high-
+1D PPG signal quality classifier, as described by compute deep learning architecture, Segmentation-
+Zhang et al (2021) [61]. This pre-trained model was based Artifact Detection (Segade) by Guo et al.
+originally trained on a UCSF PPG dataset acquired [41]. Segade is a 1D segmentation network similar
+by Zhang et al [61] from 3764 intensive-care unit in architecture to UNet, with a few changes; no-
+patients according to Pereira et al (2019) [4]. The tably, the convolutions are replaced with residual
+last two residual blocks, global average pooling, and convolutions for better gradient propagation and
+the final dense layer were subsequently retrained by the convolutions are one-dimensional as the data
+Guo et al. To train a classification model, they cre- type is one-dimensional. We refer to [41] for a de-
+ated ground truth labels such that any signal that tailed discussion of the architecture.
+contained artifact timesteps was labeled as an ar-
+tifact, while all other signals were labeled as non-
+                                                       4.4.5 Tiny-PPG
+artifacts. After this labeling process, the training
+set consisted of 175 clean signals and 3261 artifact Finally, we compare against the current state-of-
+signals.                                               the-art, Tiny-PPG [36], a light-weight deep con-
+        Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+volutional neural network comprised of depth-wise          methods. A full description of the datasets, pre-
+separable convolutions and atrous spatial pyramid          processing, and baseline experiments is given in
+pooling trained via supervised cross-entropy loss          the Methods section. We find that our largest
+and a contrastive loss. The original Tiny-PPG              model significantly exceeds the performance (mea-
+model was trained on the same train set as our             sured in DICE score) of all baselines except the
+method (DaLiA) but was not benchmarked against             current state-of-the-art models (Segade and Tiny-
+WESAD or TROIKA. Thus, we used their publicly              PPG), for which it achieves >99% of their DICE-
+available code to retrain 10 identical models from         score on DaLiA and WESAD, with less than 2%
+different starting initializations to establish test-set   the parameter count of Segade and half the
+performance data on these datasets, while simulta-         parameters of Tiny-PPG. Our largest model
+neously verifying that we achieve nearly identical         even manages to significantly outperform all
+results on the DaLiA test set as the original pa-          other baselines on the most challenging and
+per reported. We leave the training details to the         least in-distribution dataset (TROIKA). Our
+original work [36].                                        medium model, at 0.4% of the parameter count of
+                                                           Segade, achieves at least 98% of Segade’s DICE
+4.4.6    ResNet-16                                         score on all datasets and matches Segade’s perfor-
+                                                           mance on TROIKA. Lastly, our smallest model, at
+We make slight modifications to an open-source             0.06% of the parameter count of Segade, reaches
+1D-ResNet model that was used to achieve com-              94% of the DICE score of Segade on DaLiA and
+petitive performance on 12-lead arrhythmia classi-         WESAD, though struggles on TROIKA, reaching
+fication [62] to accommodate our single-lead task.         86% of the DICE score of Segade. Detailed re-
+Specifically, we change the input channel width to         sults and parameter counts are in Table 1. Fur-
+1 channel rather than 12, and slightly adjust strides      thermore, we find that our model is robust to noisy
+and kernel sizes such that our data shapes remain          inputs, showing little degradation in DICE score
+coherent throughout the network. We train for              when varying levels Gaussian noise are added to the
+512 epochs over the dataset, with a batch size of          test signal, even without augmenting training data
+1024, with a learning rate of 0.001, linearly de-          with Gaussian noise (see Appendix Figure 9). We
+cayed to 0.0 over the course of training. We train         also find that it is empirically challenging to overfit
+with the AdamW optimizer in PyTorch (β1 = 0.9,             on our train set even at high parameter counts and
+β2 = 0.999, ϵ = 10−8 , weight decay = 10−2 ).              that there may be a potential performance ceiling
+                                                           due to data labeling inaccuracies (see Appendix B
+4.4.7    Jia-CNN                                           and C).
+We use the same three convolutional neural net-
+work architectures as Jia et al. [63] (referred to as      5.1.2   Interpretability
+Jia-CNN), though we change the number of final  A considerable benefit of our approach is the clar-
+output neurons from two to three to accommodate ity of the signal processing of the PPG, unlike in
+the difference in class number. Additionally, Jia-
+                                                traditional deep neural networks. Since our model
+CNN was designed to receive an input signal at 250
+                                                consists of a single layer of convolutions of varying
+Hz, thus we change only the resampling frequencykernel sizes, we can simply peer inside the model
+of our preprocessing pipeline, leaving all else the
+                                                and determine how much each set of convolutions
+same for an equal comparison. We follow the same(and even each individual kernel) contributes to the
+training paradigm as ResNet-16, though we notably
+                                                overall classification signal.
+raise the learning rate to 0.005 for Jia-CNN1 and  To begin our exploration, we look to quantify the
+Jia-CNN3. We set the learning rate to 0.002 for effect each kernel has on the output signal when
+Jia-CNN2, as we find that on some train splits, the
+                                                presented with a perfect match to its signal. To
+model is unable to converge with higher learningcompute the importance of the mth kernel, we cal-
+rates.                                          culate the following expression:
+
+                                                     kernel importancem = ∥km ∥22 + bm · wm
+                                                                                           
+5 Results
+                                                where ∥km ∥22 = j km,j
+                                                                  P 2
+                                                                           is the sum of each squared
+5.1 PPG Segmentation                            component of the mth kernel, bm is the mth ker-
+                                                nel’s bias, and wm is the mth kernel’s weight. This,
+5.1.1 Test Set Performance
+                                                by definition, computes the value added to the fi-
+We conduct our tests on several PPG datasets, nal signal by that kernel when the kernel perfectly
+DaLiA [46], WESAD [47], and TROIKA [48], overlaps with an exact template match. Further-
+against several deep learning (Segade [41] and more, we also note that inPthe case of a normal-
+Tiny-PPG [36]) and traditional machine learning ized kernel and bias (i.e., j k2m,j + bm = 1), the
+       Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+            Model                   PPG-DaLiA                WESAD               TROIKA          Params
+             Segade               0 .8734 ± 0 .0018      0 .9114 ± 0 .0033    0.8050 ± 0.0116     2.3M
+           Tiny-PPG               0 .8781 ± 0 .0012      0 .9141 ± 0 .0029   0 .8246 ± 0 .0053    85.9K
+        Sliding window             0.8068 ± 0.0014        0.8446 ± 0.0013     0.7247 ± 0.0050      51K
+      Template matching            0.6974 ± 0.0323        0.6954 ± 0.0309     0.6748 ± 0.0122      N/A
+    ResNet-34 + GradCAM            0.7129 ± 0.0010        0.7372 ± 0.0024     0.6989 ± 0.0034       4M
+      ResNet-34 + SHAP             0.6748 ± 0.0000        0.6634 ± 0.0000     0.6849 ± 0.0001       4M
+      SMoLK (Large)               0 .8692 ± 0 .0002      0 .9050 ± 0 .0002   0 .8322 ± 0 .0026    45.3K
+     SMoLK (Medium)                0.8610 ± 0.0005        0.8968 ± 0.0008     0.8067 ± 0.0075      8.5K
+      SMoLK (Small)                0.8191 ± 0.0014        0.8639 ± 0.0015     0.6891 ± 0.0022      1.4K
+
+Table 1: PPG Segmentation Performance. Various baselines vs. our approach at varying parameter
+counts on the PPG segmentation task, measured by DICE score. Italicized results are at least 99% of
+the performance of the best result. Our methods are in bold.
+
+
+kernel importance directly equals the weighting of        kernels producing mostly negative or mixed posi-
+that kernel. We run this kernel analysis across all       tive/negative values (as seen in the medium-sized
+10 cross-validation models for the small, medium,         model), and short kernels producing mostly nega-
+and large model sizes.                                    tive values, as shown in Figure 3. We demonstrate
+   We notice a clear pattern between kernel size and      one such 30-second example of this in Figure 4. The
+kernel importance. We find that for the medium            agreement between our mathematical exploration
+and large models, the long kernels have significantly     of kernel importance and our empirical exploration
+more positive (p < 10−13 ) mean importance than           of the values produced by various kernel groups over
+the short and moderate kernels, with significance         the test sets demonstrates that we can draw mean-
+computed via two-tailed independent samples t-            ingful conclusions of our model without relying on
+tests. For the small model, the long and moderate         post hoc explanability methods. These results are
+kernels have a mean importance significantly more         shown in Figure 3 by comparing the top and bot-
+positive than the small kernels (p < 10−6 ) (see Fig-     tom rows.
+ure 3). These results indicate that long ker-                Next, we note that because our smallest model
+nels generally learn to recognize poor-quality            consists of only 12 kernels, we can easily visually
+signal features, while medium and short ker-              inspect each kernel. They are all shown in Ap-
+nels learn to recognize clean PPG features.               pendix Figure 8. This is in stark contrast compared
+   We investigate this claim empirically by comput-       to most deep-learning models, where the parame-
+ing the activations of each kernel size group over the    ters are typically so numerous that it is intractable
+entire test dataset, grouping activation values by        to manually inspect each parameter; here, all of
+whether they were generated by artifact-containing        the kernels can be shown on one page. Further-
+PPG signals or clean signals. Essentially, we per-        more, parameters in deep neural networks are typi-
+form the convolution and weighting operation for          cally uninterpretable, whereas our model represents
+each set of kernels grouped by size (long, moderate,      a template-matching paradigm for waveforms.
+or short), along the entire test dataset, concate-
+nating the output values to one array. We further         5.1.3    Pruning Experiments
+segregate the output values depending on whether
+they were generated by PPG signals labeled as ar-         We find that applying our pruning procedure
+tifact or clean. In the framework of our model, this      on long kernels provides the greatest param-
+is equivalent to computing:                               eter reduction with the least performance
+             g
+                                                          trade-off. Pruning moderate and/or short ker-
+           M
+           X                                              nels impacts performance more heavily and ulti-
+                 max(0, x ∗ kgm + bgm ) · wm
+                                           g
+                                                          mately does not prune as many parameters as prun-
+           m=1
+                                                          ing long kernels, since each long kernel contains
+where g represents the kernel group in question,          more parameters by definition. Ultimately, the
+i.e., the long, moderate, or short kernels, M g is the    choice of prune-to-performance ratio is up to the
+number of kernels in group g, bg are the biases of        user and specific use case, though we provide exam-
+group g, and wg are weights associated with kernel        ple pruning schemes in Appendix Table 6 which at-
+group g.                                                  tempt to maintain performance around 96% of the
+   We find the claims generated by our mathemat-          mean original performance. Notably, as the start-
+ical analysis of kernel importance to be consistent       ing model size increases, we are able to remove pro-
+with our empirical findings, with long kernels pro-       gressively more parameters with less of a decrease
+ducing positive values most of the time, moderate         in performance. We hypothesize this may be due
+        Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+
+
+Figure 3: Kernel Statistics. The computed “kernel importance” of each kind of kernel in each model
+size (top row) and the empirical average activation of each kernel group observed over the clean and
+artifact parts of the dataset (bottom row). Significant differences in computed “kernel importances”
+are reflected in the empirical output values of those kernel groups over the test set. Significance was
+computed via a two-tailed independent samples t-test with Bonferroni correction. All differences are
+significant between the empirical kernel output due to the extremely large sample size. All box-and-
+whisker plots are constructed via the median value as the central line, the interquartile range (IQR) as
+the box, and the whiskers denoting the minimum and maximum value of the distribution. Outliers are
+defined as points that lie outside of ±1.5 × IQR and were excluded from the plot for clarity, though all
+points were included in statistical analysis.
+
+
+to increased capacity of larger models with greater    10-fold cross-validation set, the medium and large-
+learned redundancy.                                    sized SMoLK models outperform or match all other
+   Furthermore, because our model is a well-           baselines in terms of AUC-ROC, a critical clinical
+behaved “almost linear” system, model weights can      metric (Table 2), despite having dramatically fewer
+be naı̈vely quantized with virtually no loss in per-   parameters (less than 1% of ResNet-16’s parameter
+formance. In fact, a simple cast from float32 to       count). On the hold-out test set, all SMoLK models
+float16 yielded indistinguishable results. In con-     achieve superior AUC-ROC to the other baselines
+trast, the quantization process for a deep neural      for normal and atrial fibrillation detection (Table
+network is non-trivial, as error accumulates and       3), though they underperform in detection of un-
+propagates through the network.                        known “other” rhythms compared to the two high-
+                                                       est parameter count models we tested: a 16-layer
+                                                       ResNet (referred to as ResNet-16) and a previously
+5.2     Atrial Fibrillation Detection                  state-of-the-art convolutional neural network (re-
+5.2.1    Classification Performance                    ferred to as Jia-CNN1).
+
+We tested our 12-kernel, 72-kernel, and 384-kernel        We also find that our models train and generalize
+models against a 16-layer ResNet and a previously      significantly better in the low-data regime. Train-
+state-of-the-art convolutional neural network. We      ing on only 1% of the dataset, our method achieves
+train and validate on the computing in cardiology      higher F1 and AUC-ROC scores than all baselines
+atrial fibrillation detection dataset [49] and test    on both the train and holdout set, with ResNet-
+on a holdout set collected by Zheng et al. [50, 51]    16 yielding performance consistent with random
+(training/testing methodology and dataset descrip-     guessing. We hypothesized this could be due to
+tions are discussed in the Methods section). On the    overparameterization of our ResNet-16 model, thus
+        Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+
+
+Figure 4: The contribution of each kernel group to the overall output signal. Noticeably, the “long”
+kernels have a positive signal even when convolved over clean segments, the “moderate” kernels have a
+signal close to zero when convolved over clean segments and a positive value over the artifact, and the
+“small” kernels have negative values except when convolved over the artifact.
+
+           Model                 F1                           AUC-ROC                           Params
+                                              Normal              AFib            Other
+    SMoLK (Large)           0.725 ± 0.013   0.873 ± 0.009     0.961 ± 0.004    0.809 ± 0.015      47.6K
+   SMoLK (Medium)           0.703 ± 0.012   0.864 ± 0.010     0.959 ± 0.005    0.790 ± 0.013       9.7K
+    SMoLK (Small)           0.637 ± 0.015   0.834 ± 0.008     0.934 ± 0.008    0.728 ± 0.014       2.4K
+      ResNet-16             0.741 ± 0.011   0.852 ± 0.008     0.891 ± 0.012    0.799 ± 0.012      6.40M
+      Jia-CNN1              0.710 ± 0.029   0.856 ± 0.013     0.900 ± 0.026    0.789 ± 0.013      93.6K
+      Jia-CNN2              0.671 ± 0.012   0.838 ± 0.010     0.914 ± 0.012    0.749 ± 0.014      28.3K
+      Jia-CNN3              0.720 ± 0.011   0.867 ± 0.008     0.934 ± 0.012    0.786 ± 0.011      33.4K
+
+Table 2: Atrial Fibrillation Detection. Metrics on the train set, computed via 10-fold cross-validation.
+
+
+as a control, we train a simple four-layer convo-      importance maps reliably identify the PR-interval
+lutional neural network with nearly the same pa-       (the defining factor) as the most contributory fac-
+rameter count as our large learned kernel model.       tor to the classification of 1◦ atrioventricular block,
+We find that even when controlling for parameter       despite never explicitly being given this signal (Fig-
+count, deep neural networks struggle to learn in       ure 5). Importantly, this is not a post-hoc method-
+the low data regime, achieving near-random perfor-     ology (such as SHAP or GradCAM) that seeks to
+mance, while our method maintains a stable perfor-     explain a model’s behavior but is not guaranteed to
+mance across parameter counts (Table 4). This is       be faithful. Instead, this method numerically com-
+also evident at the varying parameter scales of the    putes the precise contribution of each part of the
+Jia-CNN models, though notably, Jia-CNN3 out-          signal to the classification.
+performs ResNet-16 in the low-data regime.
+
+
+5.2.2    Interpretability                              6     Discussion
+To demonstrate the built-in interpretability of our    We proposed a lightweight architecture for medical
+method for classification tasks, we train a large      signal processing, which maintains performance on
+learned kernel model to distinguish between 1◦ atri-   par or exceeding deep learning methods, all while
+oventricular block and sinus rhythm on the Zheng       remaining interpretable and efficient. We demon-
+et al. dataset. We then apply Algorithm 1 to create    strated the efficacy of our approach using PPG ar-
+a contribution map for each class. We find that our    tifact detection and single-lead ECG atrial fibril-
+       Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+           Model                  F1                           AUC-ROC                          Params
+                                                Normal             AFib            Other
+    SMoLK (Large)            0.555 ± 0.006    0.953 ± 0.003    0.802 ± 0.002    0.551 ± 0.011    47.6K
+   SMoLK (Medium)            0.549 ± 0.008    0.955 ± 0.002    0.798 ± 0.004    0.541 ± 0.010     9.7K
+    SMoLK (Small)            0.538 ± 0.010    0.957 ± 0.003    0.780 ± 0.008    0.557 ± 0.026     2.4K
+      ResNet-16              0.567 ± 0.008    0.926 ± 0.003    0.761 ± 0.007    0.710 ± 0.014    6.40M
+
+  Table 3: Metrics on test set, computed from each model trained on the 10-folds from the train set.
+
+           Model                  F1                           AUC-ROC                          Params
+                                                Normal             AFib            Other
+    SMoLK (Large)            0.410 ± 0.017    0.689 ± 0.031    0.589 ± 0.020    0.598 ± 0.039    47.6K
+   SMoLK (Medium)            0.416 ± 0.017    0.699 ± 0.023    0.585 ± 0.018    0.606 ± 0.037     9.7K
+    SMoLK (Small)            0.400 ± 0.018    0.674 ± 0.023    0.578 ± 0.018    0.591 ± 0.034     2.4K
+      ResNet-16              0.308 ± 0.016    0.512 ± 0.017    0.496 ± 0.014    0.512 ± 0.012    6.40M
+      Small-CNN              0.353 ± 0.029    0.628 ± 0.041    0.530 ± 0.018    0.603 ± 0.034    45.3K
+
+Table 4: Metrics on test set, computed from each model trained on the 10-folds from only 1% of the
+data in the train set.
+
+
+lation detection as case studies. For PPG arti-          on a PPG segmentation task (Appendix Table 6).
+fact detection, our approach achieved near state-of-     Owing to the simplicity and near linearity of our
+the-art performance on three benchmark datasets          model, we can naı̈vely quantize the model weights
+with several orders of magnitude fewer parame-           with no impact on performance. This is in con-
+ters than deep learning methods and showed bet-          trast to deep neural networks, where the extreme
+ter generalization to out-of-distribution data, as ev-   sensitivity of the system can amplify and propa-
+ident by the markedly improved performance in            gate error due to quantization, leading to perfor-
+the most out-of-distribution task, the TROIKA            mance degradation. Quantization is also often a
+dataset. SMoLK’s simplicity and interpretability         non-trivial process in deep neural networks as a re-
+allow for the inspection of the model’s inner work-      sult of dynamic range issues, again owing to the
+ings, providing insights into the contribution of        sensitivity of neural networks to small changes in
+each kernel to the overall prediction. Our method        parameter values. SMoLK suffers from none of the
+demonstrates extremely low compute and memory            aforementioned complexities.
+demands, setting it apart from deep-learning-based          Our largest model can fit in under 100 KB of
+approaches. This enables high-quality signal assess-     memory when cast to float16 and can run in
+ment on low-power wearable devices.                      under 75 KB after weight pruning. Our small-
+   Our results demonstrated that SMoLK effec-            est model runs using under 3 KB of mem-
+tively captures relevant features for identifying        ory cast to float16. Computing a raw (i.e.,
+good and poor-quality PPG signals, and provides a        without post-process smoothing) signal score is ex-
+directly interpretable, lightweight, and performant      tremely computationally efficient, with our largest
+classifier. Our analysis of kernel importance re-        model requiring on the order of 10 MFlops/second
+vealed that larger kernels primarily contribute to       of signal processing. This memory-efficient and
+the identification of poor-quality signal features,      compute-efficient approach means that designers
+while smaller and medium-sized kernels capture           of low-power, wearable devices can now achieve
+normal PPG features. We demonstrate that our             state-of-the-art PPG signal quality assessment on
+single-lead ECG classifier is directly interpretable,    extremely stringent compute budgets. SMoLK
+correctly identifying defining features of arrhyth-      is so compute-efficient that it could feasibly be
+mias. Importantly, our work demonstrates that for        implemented on microcontrollers, such as con-
+some complex tasks, simple and interpretable mod-        sumer pulse oximeters.Additionally, implementa-
+els can perform just as well as deep neural networks     tion of our architecture is simple and straight-
+and are even preferable, in agreement with studies       forward to adapt to lower-level programming lan-
+in other domains [52].                                   guages, whereas deep learning-based methods re-
+   We developed a parameter reduction techniques         quire the time-intensive re-implementation of com-
+to improve the compute-to-performance ratio,             plex operations into lower-level devices. Further-
+keeping in mind the low-power limitations of wear-       more, for segmentation tasks, SMoLK’s output only
+able devices. We demonstrated that we can remove         has local dependencies on the input signal; one does
+over 22% of the parameters in large models and           not need to wait for chunks of signal to be ac-
+maintain above 98% of the original performance           quired before running the segmentation algorithm,
+       Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+
+
+Figure 5: Selected ECG Interpretations. Various examples of 1◦ atrioventricular block from the
+Zheng et al. dataset, along with the corresponding contribution maps as computed by Algorithm 1.
+Redder colors indicate greater contribution to the 1◦ atrioventricular block, while bluer colors indicate
+lesser contribution.
+
+nor does one need to stitch together multiple pre-        In conclusion, our method provides a robust, in-
+diction windows. Instead, the output of the seg- terpretable, and efficient approach for medical sig-
+mentation algorithm can be computed in real-time nal processing, making it competitive with deep
+as the signal is acquired.                             learning approaches in performance and yet suit-
+                                                       able for deployment on low-power devices.
+   We also highlighted potential limitations in the       While our findings are promising, further re-
+datasets used for evaluation, as some labeling inac- search is needed to validate our approach in other
+curacies and discrepancies were observed in the test medical signal-processing applications. The appli-
+set samples with the poorest performance. This cation of our method to other physiological signals
+suggests that the practical maximum achievable and tasks could be explored, as well as the integra-
+performance for PPG artifact detection on these tion of our approach with other wearable devices
+test sets may be limited by the quality of the avail- like consumer pulse-oximeters, smart-rings, smart
+able ground truth labels. Additionally, while we watches, and other low-profile devices for real-time
+employed several hold-out sets for the PPG task signal quality assessment. This could significantly
+to demonstrate the generalizability of our method, advance the field of wearable health technology, en-
+the datasets suffer from a small number of test sub- abling continuous, real-time monitoring of biomark-
+jects, limiting the statistical power of our result; ers with high accuracy and minimal computational
+further research is imperative to verify that the suc- resources.
+cess of this methodology holds with a more diverse
+population. We evaluated our model on real-world
+noise, employing datasets whose distributions likely 7       Data Availability
+model the most common sources of noise (e.g., mo-
+tion artifacts in the TROIKA dataset), though ad- The data has been made publicly available at
+mittedly it was not possible to assess the robustness https://doi.org/10.5281/zenodo.13117608        [64].
+of our methodology to all possible noise sources. We refer to the original works [46–51] for the
+With all of this in mind, our methodology, and the unprocessed data, as well as maintain a copy of the
+field as a whole, would benefit from validation on pre-processed data in our GitHub repository [64]
+large datasets composed of a large number of sub- (https://github.com/SullyChen/SMoLK.               The
+jects under conditions that would generate a di- Computing in Cardiology dataset and Zheng
+versity of noise distributions. We have previously et al. dataset are available on PhysioNet.org
+advocated for a broader effort [53] to tackle this (https://physionet.org/content/challenge-
+daunting task in future work.                          2017/1.0.0/ and https://doi.org/10.13026/wgex-
+       Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+er52, respsectively).
+
+
+8    Code Availability
+The code has been made publicly available
+at      https://doi.org/10.5281/zenodo.13117608,
+our         GitHub         repository       [64]:
+https://github.com/SullyChen/SMoLK.
+
+
+9    Acknowledgements
+The authors would like to thank Anish Karpurapu
+for helpful discussions surrounding the interpreta-
+tion of electrocardiograms. This work was sup-
+ported by the National Heart, Lung, and Blood
+Institute (NHLBI) of the National Institutes of
+Health under grant number R01HL166233 (XH).
+We gratefully acknowledge this support.
+
+
+10     Competing Interests State-
+       ment
+The authors declare no competing interests.
+
+
+11     Author               Contributions
+       Statement
+Each author’s contributions were significant enough
+to warrant inclusion in the authorship list for this
+manuscript. Sully F. Chen was the primary au-
+thor, designed the study, and conceived the model
+architecture. Zhicheng Guo assisted heavily in the
+writing and editing of the manuscript and, along
+with Cheng Ding, ran the other baselines included
+in the paper and prepared the data for training and
+testing. Xiao Hu and Cynthia Rudin were the prin-
+cipal investigators and provided invaluable mentor-
+ship and assisted in the editing and writing of the
+manuscript.
+       Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+A     Post-Processing Filters                      approach. The absence of overfitting at high pa-
+                                                   rameter counts attests to the stability of our archi-
+We apply a 3rd order Savitzky-Golay filter to tecture.
+our model output to produce a result consistent      We note that it is possible that a theoretical per-
+with the structure of PPG artifacts. However, we formance limit exists due to mislabeling in the test
+note that, excluding ultra-low kernel numbers, our set; this is discussed further in the following section.
+model performs similarly on the test sets with and
+without this post-processing filter. It is thus an
+optional hyperparameter to be chosen by the user C        Data Limitations
+(Table 5).
+                                                         The extrapolated performance ceiling for our ap-
+                                                         proach prompted an inspection of the test set. We
+B     Scaling Laws                                       computed the accuracy of our approach on each 30-
+We explore the scaling behavior of our approach          second sample in the test set, then sorted the test
+by gradually increasing the number of kernels and        set by accuracy. Upon inspection of the test set
+evaluating the performance on the test set. Our          samples on which our approach performed the poor-
+main objective is to understand the relationship         est, we find that the source of this disagreement
+between the parameter count and test-set perfor-         corresponds to suboptimal labeling rather than in-
+mance, which helps us identify the potential limits      accurate classification by our approach. In other
+and robustness of our approach.                          words, our method was correct and the labels were
+  To investigate the scaling behavior, we first con-     wrong.
+duct a series of experiments with different numbers         Several such inaccuracies are shown in Figure 7.
+of kernels and measure the corresponding test-set        Many of these inaccuracies in labeling seem to stem
+performance using the DICE score. As anticipated,        from PPG signals that have abnormally low am-
+we observe an asymptotic relationship between the        plitude compared to other signals in the dataset.
+parameter count and the test-set performance, as         Although this is unusual, we do not consider it an
+shown in Figure 6.                                       artifact, since the PPG signal retains its structure
+  Our analysis reveals that the test-set perfor-         and signal-to-noise ratio. Furthermore, a PPG sig-
+mance plateaus and remains roughly monotonically         nal could have diminished amplitude due to fac-
+increasing as the parameter count increases, with-       tors like light travel distance, the brightness of the
+out exhibiting signs of overfitting. This finding sug-   source light, lessened perfusion of the appendage
+gests that our approach is robust even at ex-            (e.g., if the appendage is cold), etc.
+tremely high parameter counts.
+
+                                                         D     Robustness to Noise
+                                                         To test our model’s robustness to noise, we slowly
+                                                         add increasing amounts of Gaussian noise to our
+                                                         PPG segmentation test sets and evaluate the differ-
+                                                         ence between the performance on the noisy signal
+                                                         and the original signal (Figure 9). We find that our
+                                                         learned kernel models are robust to large amounts
+                                                         of Gaussian noise, showing little degradation with
+                                                         a noticeably noisy signal.
+
+
+                                                         E     Pruning Results
+                                                   We provide three example pruning results at var-
+                                                   ious model scales, with a target performance de-
+Figure 6: Exploration of scaling laws reveals an crease of no greater than 5%. We would like to note
+asymptotic relationship between inverse parameter that one can experiment with this pruning process
+count and DICE score.                              via our open-source GitHub repository.
+                                                     Furthermore, we show pruning results using vari-
+  In summary, our exploration of scaling laws ous distance metrics perform relatively consistently,
+demonstrates an asymptotic relationship between indicating a robustness to the chosen distance met-
+parameter count and test-set performance, provid- ric. We test three additional distance metrics on
+ing insights into the limits and robustness of our our Large model: cosine similarity between power
+       Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+
+Table 5: Comparison of performance scores with and without Savgol filtering across different datasets
+and kernel sizes.
+                                  DaLiA           TROIKA             WESAD
+                  Kernel Size
+                              Savgol None Savgol None Savgol None
+                  12-kernel   0.8185 0.7733 0.6889 0.6779 0.8632 0.8185
+                  72-kernel   0.8607 0.8483 0.8114 0.7810 0.8966 0.8833
+                  384-kernel  0.8690 0.8634 0.8331 0.8135 0.9047 0.8976
+
+
+
+
+Figure 7: Ground truth labels for several 30-second PPG signal chunks are shown in comparison to their
+corresponding labels generated by SMoLK. Notably, low-amplitude PPG signals that still retain their
+waveform are marked as artifacts in the ground truth. These segments are not marked as artifacts by
+SMoLK, presumably because the signal retains a normal PPG waveform structure despite diminished
+amplitude, and because each 30-second PPG signal is normalized to its mean and standard deviation,
+thus eliminating amplitude changes locally.
+
+
+spectra (cosine distance in frequency space), co-
+sine similarity in feature space (the cosine similarity
+of the feature vectors themselves), and Manhattan
+distance.
+       Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+
+
+Figure 8: All 12 kernels of the small model. Blue kernels contribute primarily to the detection of “clean”
+signals and red kernels contribute primarily to the detection of artifacts.
+
+      Model        Removed              All            DaLiA          TROIKA           WESAD
+       Small     16.4% ± 5.42%     96.4% ± 4.6%     94.8% ± 3.6%     99.7% ± 0.8%    94.5% ± 5.7%
+      Medium      21.7% ± 2.5%     94.9% ± 2.7%     96.1% ± 1.5%     92.7% ± 2.9%    96.0% ± 2.1%
+       Large      22.0% ± 1.8%     98.1% ± 1.8%     97.9% ± 1.5%     98.8% ± 2.0%    97.5% ± 1.7%
+
+Table 6: Pruning experiments conducted on various model sizes across all 10 folds, listing the percentage
+of parameters removed, the percentage of the original mean performance across all datasets, and the
+percentage of original performance on DaLiA, TROIKA, and WESAD.
+
+
+
+
+Figure 9: The performance of the learned kernel model as compared to baseline performance on the clean
+test signal (above panels). Examples of a PPG signals with various amounts of Gaussian noise added
+(bottom panels).
+
+    Method           Removed              All            DaLiA           TROIKA            WESAD
+  Power spectra     19.1% ± 1.2%     96.4% ± 1.9%     96.6% ± 1.4%      97.2% ± 1.9%     95.5% ± 1.9%
+  Cosine distance   20.8% ± 1.4%     95.7% ± 4.2%     95.8% ± 3.9%     96.0% ± %2.7%     95.3% ± 5.4%
+   Manhattan        21.9% ± 1.9%     98.3% ± 1.1%     98.3% ± 0.9%      98.6% ± 1.2%     98.0% ± 1.3%
+
+     Table 7: Various additional distance metrics and their performance as compared to baseline.
+      Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+References                                                 Feasibility study of pulse width at half ampli-
+                                                           tude of camera ppg for contactless blood pres-
+[1] Jan Egger, Christina Gsaxner, Antonio                  sure estimation. In 2021 43rd Annual Inter-
+    Pepe, Kelsey L. Pomykala, Frederic Jonske,             national Conference of the IEEE Engineering
+    Manuel Kurz, Jianning Li, and Jens Kleesiek.           in Medicine & Biology Society (EMBC), pages
+    Medical deep learning—a systematic meta-               365–368, 2021.
+    review. Computer Methods and Programs in
+    Biomedicine, 221:106874, 2022.                   [11] David K. Spierer, Zohn Rosen, Leib L. Lit-
+                                                          man, and Kenji Fujii. Validation of photo-
+[2] Alberto Nogales, Álvaro J. Garcı́a-Tejedor, Di-      plethysmography as a method to detect heart
+    ana Monge, Juan Serrano Vara, and Cristina            rate during rest and exercise. Journal of Med-
+    Antón. A survey of deep learning models in           ical Engineering & Technology, 39(5):264–271,
+    medical therapeutic areas. Artificial Intelli-        2015. PMID: 26112379.
+    gence in Medicine, 112:102020, 2021.
+                                                     [12] P M Nabeel, J Jayaraj, and S Mohanasankar.
+[3] Hangsik Shin.     Deep convolutional neural           Single-source ppg-based local pulse wave ve-
+    network-based signal quality assessment for           locity measurement: a potential cuffless blood
+    photoplethysmogram. Computers in Biology              pressure estimation technique. Physiological
+    and Medicine, 145:105430, 2022.                       Measurement, 38(12):2122, 2017.
+[4] Tania Pereira, Cheng Ding, Kais Gadhoumi, [13] Lena M. Nilsson. Respiration signals from pho-
+    Nate Tran, Rene A Colorado, Karl Meisel,                toplethysmography. Anesthesia & Analgesia,
+    and Xiao Hu. Deep learning approaches for               117(4):859–865, 2013.
+    plethysmography signal quality assessment in
+    the presence of atrial fibrillation. Physiological [14] Denisse Castaneda, Aibhlin Esparza, Moham-
+    Measurement, 40(12):125002, 2019.                       mad Ghamari, Cinna Soltanpur, and Homer
+                                                            Nazeran. A review on wearable photoplethys-
+[5] Shing-Hong Liu, Ren-Xuan Li, Jia-Jung                   mography sensors and their potential future
+    Wang, Wenxi Chen, and Chun-Hung Su.                     applications in health care. International Jour-
+    Classification of photoplethysmographic signal          nal of Biosensors & Bioelectronics, 4(4), 2018.
+    quality with deep convolution neural networks
+    for accurate measurement of cardiac stroke [15] Maik Pflugradt and Reinhold Orglmeister. Im-
+    volume. Applied Sciences, 10(13), 2020.                 proved signal quality indication for photo-
+                                                            plethysmographic signals incorporating mo-
+[6] Aya Abdelsalam Ismail, Mohamed Gunady,                  tion artifact detection. In 2014 36th Annual
+    Héctor Corrada Bravo, and Soheil Feizi.                International Conference of the IEEE Engi-
+    Benchmarking deep learning interpretability in          neering in Medicine and Biology Society, pages
+    time series predictions. In Advances in neu-            1872–1875, 2014.
+    ral information processing systems, volume 33,
+    pages 6441–6452, 2020.                             [16] Alexandra-Maria Tăuţan, Alex Young, Eva
+                                                            Wentink, and Fokko Wieringa. Characteri-
+[7] Hugues Turbé, Mina Bjelogrlic, Christian Lo-           zation and reduction of motion artifacts in
+    vis, and Gianmarco Mengaldo. Evaluation                 photoplethysmographic signals from a wrist-
+    of post-hoc interpretability methods in time-           worn device. In 2015 37th Annual Interna-
+    series classification. Nature Machine Intelli-          tional Conference of the IEEE Engineering in
+    gence, 5(3):250–260, 2023.                              Medicine and Biology Society (EMBC), pages
+                                                            6146–6149, 2015.
+[8] Daniel Ray, Tim Collins, Sandra I. Woolley,
+    and Prasad V. S. Ponnapalli. A review of [17] Mohamed Elgendi. Optimal signal quality in-
+    wearable multi-wavelength photoplethysmog-              dex for photoplethysmogram signals. Bioengi-
+    raphy. IEEE Reviews in Biomedical Engineer-             neering, 3(4), 2016.
+    ing, 16:136–151, 2023.
+                                                       [18] Safa Cherif, Dominique Pastor, Quang-Thang
+[9] Christoph Hoog Antink, Yen Mai, Mikko Pel-              Nguyen, and Erwan L’Her. Detection of ar-
+    tokangas, Steffen Leonhardt, Niku Oksala, and           tifacts on photoplethysmography signals us-
+    Antti Vehkaoja. Accuracy of heart rate vari-            ing random distortion testing. In 2016 38th
+    ability estimated with reflective wrist-PPG in          Annual International Conference of the IEEE
+    elderly vascular patients. Scientific Reports,          Engineering in Medicine and Biology Society
+    11, 2021.                                               (EMBC), pages 6214–6217, 2016.
+[10] Xiaorong Ding, Wenjin Wang, Yifan Chen,          [19] J. X. Sun, A. T. Reisner, and R. G. Mark.
+     Yumin Yang, Yan Zhao, and Deyuan Kong.                A signal abnormality index for arterial blood
+       Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+    pressure waveforms. In 2006 Computers in               of motion/noise artifacts in photoplethysmo-
+    Cardiology, pages 13–16, 2006.                         gram. In 2011 Annual International Confer-
+                                                           ence of the IEEE Engineering in Medicine and
+[20] Filipa    Esgalhado,     Beatriz   Fernandes,         Biology Society, pages 4972–4975, 2011.
+     Valentina Vassilenko,       Arnaldo Batista,
+     and Sara Russo. The application of deep [29] Shao Hanyu and Chen Xiaohui. Motion ar-
+     learning algorithms for ppg signal processing      tifact detection and reduction in ppg sig-
+     and classification. Computers, 10(12), 2021.       nals based on statistics analysis. In 2017
+                                                        29th Chinese Control And Decision Confer-
+[21] Pankaj, Ashish Kumar, Rama Komaragiri,             ence (CCDC), pages 3114–3119, 2017.
+     and Manjeet Kumar. A review on compu-
+     tation methods used in photoplethysmogra- [30] Wei-Jheng Lin and Hsi-Pin Ma. A physiolog-
+     phy signal analysis for heart rate estimation.     ical information extraction method based on
+     Archives of Computational Methods in Engi-         wearable ppg sensors with motion artifact re-
+     neering, 29(2):921–940, 2022.                      moval. In 2016 IEEE International Conference
+                                                        on Communications (ICC), pages 1–6, 2016.
+[22] Shahid Ismail, Usman Akram, and Imran Sid-
+     diqi. Heart rate tracking in photoplethysmog- [31] Tasbiraha Athaya and Sunwoong Choi. An ef-
+     raphy signals affected by motion artifacts: a      ficient fingertip photoplethysmographic signal
+     review. EURASIP Journal on Advances in             artifact detection method: A machine learning
+     Signal Processing, 2021(5), 2021.                  approach. Journal of Sensors, 2021, 2021.
+
+[23] Antônio H Ribeiro, Manoel Horta Ribeiro, [32] Hongqiang Li, Xiuli Feng, Lu Cao, Enbang Li,
+     Gabriela M M Paixão, Derick M Oliveira,         Huan Liang, and Xuelong Chen. A new ecg sig-
+     Paulo R Gomes, Jéssica A Canazart, Milton       nal classification based on wpd and apen fea-
+     P S Ferreira, Carl R Andersson, Peter W Mac-     ture extraction. Circuits, Systems, and Signal
+     farlane, Wagner Meira, Jr, Thomas B Schön,      Processing, 35:339–352, 2016.
+     and Antonio Luiz P Ribeiro. Automatic diag- [33] Abdelhamid Daamouche, Latifa Hamami, Naif
+     nosis of the 12-lead ECG using a deep neural     Alajlan, and Farid Melgani. A wavelet op-
+     network. Nature Communications, 11(1):1760,      timization approach for ecg signal classifica-
+     April 2020.                                      tion. Biomedical Signal Processing and Con-
+[24] Saira Aziz, Sajid Ahmed, and Mohamed-Slim        trol, 7(4):342–349, 2012.
+    Alouini. ECG-based machine-learning algo-         [34] Yakoub Bazi, Naif Alajlan, Haikel AlHichri,
+    rithms for heartbeat classification. Scientific        and Salim Malek. Domain adaptation meth-
+    Reports, 11(1):18738, September 2021.                  ods for ecg classification. In 2013 international
+                                                           conference on computer medical applications
+[25] G. Petmezas, L. Stefanopoulos, V. Kilintzis,
+                                                           (ICCMA), pages 1–4. IEEE, 2013.
+     A. Tzavelis, J. A. Rogers, A. K. Katsagge-
+     los, and N. Maglaveras.         State-of-the-Art [35] Choon-Hian Goh, Li Kuo Tan, Nigel H. Lovell,
+     Deep Learning Methods on Electrocardiogram            Siew-Cheok Ng, Maw Pin Tan, and Einly
+     Data: Systematic Review. JMIR Med Inform,             Lim. Robust ppg motion artifact detection us-
+     10(8):e38454, Aug 2022.                               ing a 1-d convolution neural network. Com-
+                                                           puter Methods and Programs in Biomedicine,
+[26] Khawaja Taimoor Tanweer, Syed Rafay
+                                                           196:105596, 2020.
+     Hasan, and Awais Mehmood Kamboh. Mo-
+     tion artifact reduction from ppg signals dur- [36] Yali Zheng, Chen Wu, Peizheng Cai, Zhiqiang
+     ing intense exercise using filtered X-LMS. In         Zhong, Hongda Huang, and Yuqi Jiang. Tiny-
+     2017 IEEE International Symposium on Cir-             ppg: A lightweight deep neural network for
+     cuits and Systems (ISCAS), pages 1–4, 2017.           real-time detection of motion artifacts in pho-
+                                                           toplethysmogram signals on edge devices. In-
+[27] Chih-Chin Wu, I-Wei Chen, and Wai-Chi
+                                                           ternet of Things, 25:101007, 2024.
+     Fang. An implementation of motion artifacts
+     elimination for ppg signal processing based on [37] Özal Yıldırım, Pawel Plawiak, Ru-San Tan,
+     recursive least squares adaptive filter. In 2017      and U Rajendra Acharya. Arrhythmia detec-
+     IEEE Biomedical Circuits and Systems Con-             tion using deep convolutional neural network
+     ference (BioCAS), pages 1–4, 2017.                    with long duration ecg signals. Computers in
+                                                           biology and medicine, 102:411–420, 2018.
+[28] Nandakumar Selvaraj, Yitzhak Mendelson,
+     Kirk H. Shelley, David G. Silverman, and Ki H. [38] Bahareh Pourbabaee,           Mehrsan Javan
+     Chon. Statistical approach for the detection          Roshtkhari, and Khashayar Khorasani.
+      Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+     Deep convolutional neural networks and [47] Philip Schmidt, Attila Reiss, Robert
+     learning ecg features for screening paroxysmal       Duerichen, Claus Marberger, and Kristof
+     atrial fibrillation patients. IEEE Transactions      Van Laerhoven. Introducing wesad, a multi-
+     on Systems, Man, and Cybernetics: Systems,           modal dataset for wearable stress and affect
+     48(12):2095–2104, 2017.                              detection. In Proceedings of the 20th ACM
+                                                          International Conference on Multimodal In-
+[39] Xin Liu, Qihan Hu, Han Yuan, and Cuiwei              teraction, ICMI ’18, page 400–408, New York,
+     Yang. Motion artifact detection in ppg signals       NY, USA, 2018. Association for Computing
+     based on gramian angular field and 2-D-CNN.          Machinery.
+     In 2020 13th International Congress on Im-
+     age and Signal Processing, BioMedical Engi- [48] Zhilin Zhang, Zhouyue Pi, and Benyuan Liu.
+     neering and Informatics (CISP-BMEI), pages           Troika: A general framework for heart rate
+     743–747, 2020.                                       monitoring using wrist-type photoplethysmo-
+                                                          graphic signals during intensive physical exer-
+[40] Elif Izci, Mehmet Akif Ozdemir, Murside De-          cise. IEEE Transactions on Biomedical Engi-
+     girmenci, and Aydin Akan. Cardiac arrhyth-           neering, 62(2):522–531, 2015.
+     mia detection from 2d ecg images by using
+     deep learning technique. In 2019 Medical Tech- [49] Gari D. Clifford, Chengyu Liu, Benjamin
+     nologies Congress (TIPTEKNO), pages 1–4.             Moody, Li wei H. Lehman, Ikaro Silva, Qiao
+     IEEE, 2019.                                          Li, A. E. Johnson, and Roger G. Mark. Af clas-
+                                                          sification from a short single lead ecg record-
+[41] Zhicheng Guo, Cheng Ding, Xiao Hu, and               ing: The physionet/computing in cardiology
+     Cynthia Rudin. A supervised machine learn-           challenge 2017. In Computing in Cardiology
+     ing semantic segmentation approach for de-           (CinC), pages 1–4. IEEE, 2017.
+     tecting artifacts in plethysmography signals
+     from wearables. Physiological Measurement, [50] Jianwei Zheng, Huimin Chu, Daniele Struppa,
+     42(12):125003, Dec 2021.                             Jianming Zhang, Sir Magdi Yacoub, Hes-
+                                                          ham El-Askary, Anthony Chang, Louis Ehw-
+[42] Ramprasaath R. Selvaraju, Michael Cogswell,          erhemuepha, Islam Abudayyeh, Alexander
+     Abhishek Das, Ramakrishna Vedantam, Devi             Barrett, Guohua Fu, Hai Yao, Dongbo Li,
+     Parikh, and Dhruv Batra. Grad-cam: Vi-               Hangyuan Guo, and Cyril Rakovski. Opti-
+     sual explanations from deep networks via             mal multi-stage arrhythmia classification ap-
+     gradient-based localization. In 2017 IEEE In-        proach. Scientific Reports, 10(1):2898, 2020.
+     ternational Conference on Computer Vision
+                                                     [51] Jianwei Zheng, Hangyuan Guo, and Huimin
+     (ICCV), pages 618–626, 2017.
+                                                          Chu. A large scale 12-lead electrocardiogram
+[43] Hugh Chen, Scott M. Lundberg, and Su-In              database for arrhythmia study (version 1.0.0).
+     Lee. Explaining a series of models by prop-          PhysioNet, 2022.
+     agating shapley values. Nature Communica- [52] Cynthia Rudin. Stop explaining black box ma-
+     tions, 13(1):4512, 2022.                            chine learning models for high stakes decisions
+                                                         and use interpretable models instead. Nature
+[44] Chao Che, Peiliang Zhang, Min Zhu, Yue Qu,
+                                                         Machine Intelligence, 1:206–215, May 2019.
+     and Bo Jin. Constrained transformer network
+     for ecg signal processing and arrhythmia clas- [53] Cynthia Rudin, Zhicheng Guo, Cheng Ding,
+     sification. BMC Medical Informatics and De-         and Xiao Hu. How good are ai health tech-
+     cision Making, 21(1):184, 2021.                     nologies? we have no idea. Op-ed in STAT,
+                                                         oct 2023.
+[45] Akhil Vaid, Joy Jiang, Ashwin Sawant, Sta-
+     matios Lerakis, Edgar Argulian, Yuri Ahuja, [54] Adam Paszke, Sam Gross, Soumith Chintala,
+     Joshua Lampert, Alexander Charney, Hayit            Gregory Chanan, Edward Yang, Zachary De-
+     Greenspan, Jagat Narula, Benjamin Glicks-           Vito, Zeming Lin, Alban Desmaison, Luca
+     berg, and Girish N. Nadkarni. A founda-             Antiga, and Adam Lerer. Automatic differ-
+     tional vision transformer improves diagnostic       entiation in pytorch. 2017.
+     performance for electrocardiograms. npj Digi-
+     tal Medicine, 6(1):108, 2023.                  [55] F. Pedregosa, G. Varoquaux, A. Gramfort,
+                                                         V. Michel, B. Thirion, O. Grisel, M. Blon-
+[46] Attila Reiss, Ina Indlekofer, Philip Schmidt,       del, P. Prettenhofer, R. Weiss, V. Dubourg,
+     and Kristof Van Laerhoven. Deep ppg: Large-         J. Vanderplas, A. Passos, D. Cournapeau,
+     scale heart rate estimation with convolutional      M. Brucher, M. Perrot, and E. Duches-
+     neural networks. Sensors, 19(14), 2019.             nay.     Scikit-learn: Machine learning in
+      Published as an article in Nature Machine Intelligence: DOI: 10.1038/s42256-024-00898-4
+
+
+    Python. Journal of Machine Learning Re-              Paulo R. Gomes, Jéssica A. Canazart, Milton
+    search, 12:2825–2830, 2011.                          P. S. Ferreira, Carl R. Andersson, Peter W.
+                                                         Macfarlane, Wagner Meira Jr., Thomas B.
+[56] Pauli Virtanen, Ralf Gommers, Travis E.             Schön, and Antonio Luiz P. Ribeiro. Auto-
+     Oliphant, Matt Haberland, Tyler Reddy,              matic diagnosis of the 12-lead ECG using a
+     David Cournapeau, Evgeni Burovski, Pearu            deep neural network. Nature Communications,
+     Peterson, Warren Weckesser, Jonathan Bright,        11(1):1760, 2020.
+     Stéfan J. van der Walt, Matthew Brett, Joshua
+     Wilson, K. Jarrod Millman, Nikolay Mayorov, [63] Zhenge Jia, Yiyu Shi, Samir Saba, and Jing-
+     Andrew R. J. Nelson, Eric Jones, Robert Kern,     tong Hu. On-device prior knowledge incorpo-
+     Eric Larson, C J Carey, İlhan Polat, Yu Feng,    rated learning for personalized atrial fibrilla-
+     Eric W. Moore, Jake VanderPlas, Denis Lax-        tion detection. ACM Trans. Embed. Comput.
+     alde, Josef Perktold, Robert Cimrman, Ian         Syst., 20(5s), sep 2021.
+     Henriksen, E. A. Quintero, Charles R. Har-
+     ris, Anne M. Archibald, Antônio H. Ribeiro, [64] Sully Chen. SMoLK: Initial Release (v1.0.0).
+     Fabian Pedregosa, Paul van Mulbregt, and          Zenodo, 2024. https://doi.org/10.5281/
+     SciPy 1.0 Contributors. SciPy 1.0: Funda-         zenodo.13117608.
+     mental Algorithms for Scientific Computing in
+     Python. Nature Methods, 17:261–272, 2020.
+[57] Charles R. Harris, K. Jarrod Millman,
+     Stéfan J. van der Walt, Ralf Gommers, Pauli
+     Virtanen, David Cournapeau, Eric Wieser,
+     Julian Taylor, Sebastian Berg, Nathaniel J.
+     Smith, Robert Kern, Matti Picus, Stephan
+     Hoyer, Marten H. van Kerkwijk, Matthew
+     Brett, Allan Haldane, Jaime Fernández del
+     Rı́o, Mark Wiebe, Pearu Peterson, Pierre
+     Gérard-Marchant, Kevin Sheppard, Tyler
+     Reddy, Warren Weckesser, Hameer Abbasi,
+     Christoph Gohlke, and Travis E. Oliphant.
+     Array programming with NumPy. Nature,
+     585(7825):357–362, September 2020.
+[58] Diederik P. Kingma and Jimmy Ba. Adam: A
+     method for stochastic optimization. In Pro-
+     ceedings of the 3rd International Conference
+     on Learning Representations, 2015.
+[59] Ilya Loshchilov and Frank Hutter. Decou-
+     pled weight decay regularization. In Inter-
+     national Conference on Learning Representa-
+     tions, 2019.
+[60] Pooi Khoon Lim, Siew-Cheok Ng, Nigel H
+     Lovell, Yong Poh Yu, Maw Pin Tan, Devin Mc-
+     Combie, Einly Lim, and Stephen J Redmond.
+     Adaptive template matching of photoplethys-
+     mogram pulses to detect motion artefact.
+     Physiological Measurement, 39(10):105005, oct
+     2018.
+[61] Oliver Zhang, Cheng Ding, Tania Pereira, Ran
+     Xiao, Kais Gadhoumi, Karl Meisel, Randall J.
+     Lee, Yiran Chen, and Xiao Hu. Explain-
+     ability metrics of deep convolutional networks
+     for photoplethysmography quality assessment.
+     IEEE Access, 9:29736–29745, 2021.
+[62] Antônio H. Ribeiro, Manoel Horta Ribeiro,
+     Gabriela M. M. Paixão, Derick M. Oliveira,
+

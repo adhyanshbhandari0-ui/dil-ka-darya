@@ -1,0 +1,554 @@
+                Outlier Detection in Urban Traffic Flow
+                             Distributions
+                                       Youcef Djenouri, Arthur Zimek, Marco Chiarandini
+                                       University of Southern Denmark, Odense, Denmark
+                                            {djenouri,zimek,marco}@imada.sdu.dk
+
+
+   Abstract—Urban traffic data consists of observations like                The detection of anomalies (outliers) in the traffic flow
+number and speed of cars or other vehicles at certain locations as       by the application of adapted outlier detection techniques is
+measured by deployed sensors. These numbers can be interpreted           one of the main applications in the analysis of urban traffic
+as traffic flow which in turn relates to the capacity of streets and
+the demand of the traffic system. City planners are interested           data. An outlier can be defined as “an observation (or a set
+in studying the impact of various conditions on the traffic flow,        of observations) which appears to be inconsistent with the
+leading to unusual patterns, i.e., outliers. Existing approaches         remainder of that set of data” [2]. Outlier detection has been
+to outlier detection in urban traffic data take into account only        studied intensely in the two last decades in an abstract setting
+individual flow values (i.e., an individual observation). This can       [5], [13], [17], [23] as well as in application scenarios such
+be interesting for real time detection of sudden changes. Here,
+we face a different scenario: The city planners want to learn            as spatial data [9], [19]. Also many algorithms have been
+from historical data, how special circumstances (e.g., events or         developed to identify outliers in traffic flow [4], [12], [14],
+festivals) relate to unusual patterns in the traffic flow, in order to   [20], [22]. However, these algorithms detect only single flow
+support improved planing of both, events and the layout of the           outliers and ignore the correlation between the flow values.
+traffic system. Therefore, we propose to consider the sequence              In this paper, we propose a different approach, as the interest
+of traffic flow values observed within some time interval. Such
+flow sequences can be modeled as probability distributions of            in collaboration with the city of Odense, Denmark, is foremost
+flows. We adapt an established outlier detection method, the local       not on real-time detection of outliers (unusual flow values in
+outlier factor (LOF), to handling flow distributions rather than         short time frames) but on the impact of certain events on the
+individual observations. We apply the outlier detection online           traffic flow over a longer time frame (e.g., a few hours, a day).
+to extend the database with new flow distributions that are              We therefore resort to capturing the flow distribution over a
+considered inliers. For the validation we consider a special case
+of our framework for comparison with state-of-the-art outlier            longer time frame. The distribution of flows is defined by the
+detection on flows. In addition, a real case study on urban traffic      set of flows (e.g., cars per minute per location) captured during
+flow data showcases that our method finds meaningful outliers            a specific time period (e.g., rush hour on Mondays), which
+in the traffic flow data.                                                immediately relates to a probability distribution of flows (or
+                                                                         flow probability distribution, FPD).
+                        I. I NTRODUCTION                                    In this paper, we propose a framework for outlier detection
+   In the analysis of urban traffic we aim to learn from the             in flow distributions. To the best of our knowledge, we are the
+behavior of independent participants (cyclists, cars, trucks,            first to deal with flow distributions. The main contributions
+and public transportation) under different conditions (weather,          of the paper are summarized as follows: (1) We show that
+events, maintenance of streets) to support decisions of city             sets of flows can be interpreted as probability distributions of
+planners and managers on the layout of streets, regulation               flows. (2) We propose a framework that updates the historical
+systems (e.g., traffic lights), and routes for public transport, or      data for dealing with flow probability distribution outliers
+temporarily invasive decisions in planning construction sites.           from the distribution of flows. (3) We propose a strategy
+An important basis for the description of the complex traffic            of constructing the database of historical flow probability
+system is the estimation of the traffic flow, based on counting          distributions, by taking into account the temporal information
+the number of objects (e.g., pedestrians, bicycles, cars, trucks,        of the flow distributions. (4) We propose an adaptation FPD-
+buses) that cross a given location during some time interval             LOF of the local outlier factor (LOF) algorithm [5] by adapting
+by means of various types of sensors in streets, in traffic light        the Bhattacharyya similarity measure [3] for detecting flow
+systems, or as mobile sensors. The flow, i.e., the number of             probability distribution outliers. (5) We apply FPD-LOF to a
+objects passing a specific location within a specified timeframe         special case to allow for comparison with existing approaches.
+(or a “window” over the time axis) varies over the day and               Experimental analysis shows that FPD-LOF outperforms the
+between different days of the week. For the city planners it             state-of-the-art flow outlier detection algorithms. In addition,
+is important to understand the impact of events, particular              a case study on real urban traffic flow data demonstrates the
+weather conditions, or planning decisions on the traffic flow in         practical usefulness of the proposed framework. The results
+the city. In this study, we therefore consider outlier detection         reveal that FPD-LOF using Bhattacharyya metric identifies
+on traffic flow data and the relation of outliers to special             meaningful outliers relating to unusual weather conditions or
+circumstances.                                                           special events in the city.
+   In the remainder, we survey existing outlier techniques for              Let I be the set of time instants at regular time intervals
+traffic data (Section II), we present the overall framework and          at which we collect flow measurements at a specific location
+the adaptation FPD-LOF for outlier detection in flow proba-              and let X = [x1 , ..., x|I| ] be the list of corresponding flow
+bility distributions (Section III), we perform an experimental           values. Let λ be the duration of the time interval between
+analysis of the framework and method on synthetic data as                two consecutive measurement instants and δ the duration
+well as a case study on real data (Section IV), and conclude the         considered by each flow measurement x ∈ X. We will assume
+paper with a perspective on potential future work (Section V).           λ = δ.
+                                                                            From I we can extract a collection T = {T1 , . . . , Tτ } of
+                       II. R ELATED W ORK                                non-intersecting subsets of µ consecutive time instants. For a
+   Several surveys on outlier detection algorithms for traffic           subset Tj , j = 1, . . . , τ , we identify the time instant where
+flow data have been published [10], [11], [15]. We refer to              the subset begins by ι(Tj ), that is, Tj = {ι(Tj ), ι(Tj ) +
+our recent overview [8] and sketch here only the methods that            1, . . . , ι(Tj )+µ}. To each Tj , j = 1, . . . , τ , there is associated
+we use in the experiments as competitors.                                a set of flow measurements XTj . Thus, for example, we can
+   Ngan et al. [16] used a DPMM (Dirichlet Process Mixture               create the collection of sets XTj , j = 1 . . . 7 each containing
+Model) for deriving outliers in urban traffic flow data. First,          the flow measurements between 7:00 and 10:00 on the seven
+the set of all flow values F = {f1 , f2 , . . . , f|F | } is projected   different days of a week.
+into an n-dimensional space, where the ith object is defined                The flow measurements in each set XTj , j = 1, . . . , τ , can
+by the flow values {fi , . . . , fi+n−1 }. The obtained dimensions       be represented as discrete random variables Yj ∈ N0 to capture
+are then reduced by PCA (Principal Component Analysis)                   the uncertainty related to those measurements. Consequently,
+to a two-dimensional space. Then, the Chinese restaurant                 each Yj can be described by its probability mass function fYj :
+process [1] is performed to cluster the flow values with an              N0 → [0, 1] defined as fYj (y) = Pr(Yj = y), y ∈ N0 .
+infinite number of clusters. Each flow value is assigned to a            To estimate fYj = fj , we use the empirical probability
+new cluster with a probability proportional to a concentration           distribution fˆj of the flow given by the relative frequency of
+parameter α, otherwise, it is assigned to the previously created         the measurements contained in XTj , that is:
+cluster. Afterwards, all flow values belonging to the cluster
+                                                                                       |{x = y | x ∈ XTj }|
+having a maximum number of elements are considered inliers,                  fˆj (y) =                      ,       y ∈ N0 , j = 1, . . . , τ.
+the remaining flow values are deemed outliers.                                                |XTj |
+   Ye et al. [22] present an anomaly-tolerant traffic matrix esti-       We name such an estimated probability distribution of flow
+mation approach called SETMADA (Simultaneously Estimate                  values a flow probability distribution (FPD). Outliers in a set
+Traffic Matrix and Detect Anomaly). It estimates the traffic             of FPDs could be defined by some outlier scoring function
+matrix and uses it for anomaly detection. Based on the prior             and some threshold as follows:
+low-rank property and temporal characteristic of the traffic                Definition 1 (FPD Outliers): Given a family of empirical
+flow, the outlier detection is formulated as a prior information-        FPDs F = {fˆ1 , fˆ2 , . . . , fˆτ } derived from a collection of flow
+guided matrix completion problem.                                        measurements {XT1 , . . . , XTτ }, a scoring function s : F → R
+   Dang et al. [7] proposed a combination between kNN [17]               that assigns outlier scores to some FPD, and some threshold
+and PCA for outlier flow detection. A dimensionality reduction           θ; FPD outliers are the members of the set O ⊆ F , such that:
+is performed by PCA. In the derived subspaces the kNN outlier
+detection [17] is applied.                                                                   O = {fˆj ∈ F | s(fˆj ) ≥ θ}.
+   Tan et al. [21] proposed a density-based bounded application
+of LOF for large scale traffic flow data in Hong Kong. A                 B. Outlier detection in a growing database of traffic flow data
+three dimensional space is derived by PCA, then the LOF                     In the application scenario with our partners in the muni-
+algorithm [5] is applied on this reduced space to find local             cipality, observations of the traffic flow are collected continu-
+outliers in the flow data.                                               ously over time.
+                                                                            There are specific questions of interest that can be answered
+     III. O UTLIER F LOW P ROBABILITY D ISTRIBUTION
+                                                                         based on the aggregation of flows over pre-specified time-
+                       D ETECTION
+                                                                         intervals (e.g., rush hour during weekdays, afternoon and
+A. Problem statement                                                     evening during weekends and holidays) to study the impact of
+   In this paper, we focus on detecting anomalous flow prob-             interferences with the normal traffic behavior (e.g., closing of
+ability distributions. A traffic flow is defined as the number           routes for construction during the rush hour, impact of special
+of vehicles passing through a location (a point in the road              events such as sport events or festivals during weekends and
+network) during a given time interval. A flow probability                holidays). Detected outliers can be verified and excluded from
+distribution (FPD) links flow values to their likelihood of              the database of normal traffic behavior.
+occurrence during a given period of time. We estimate traffic               Our infrastructure for the detection of outliers consists of:
+flow probability distributions on the basis of their empirical             1) Construction and update of a database of historical
+counterparts based on real-life measurements.                                 FPDs:
+        a) extraction of information from raw traffic flow data              In LOF, the kNN-dist is the most fundamental ingredient
+             received from sensors,                                       for density estimates. Outliers are objects with a relatively low
+        b) synthesizing data for pre-specified time intervals             local density as compared to their k nearest neighbors. These
+             via empirical FPD.                                           density estimates typically relate to Euclidean space. However,
+   2) (Online) detection of outlier FPDs: The historical FPDs             the general LOF pattern has been extended to many other,
+      are used as a reference set for each new FPD in order               non-Euclidean applications as well [19]. In our adaptation we
+      to detect outliers.                                                 have the equivalent in Bhattacharyya space. The components
+        • If the new flow distribution is not an outlier, it is
+                                                                          to derive the local outlier factor (LOF) are [5] the local
+           added to the historical data.                                  reachability density (lrd) and the local outlier factor (LOF)
+        • If it is suspected to be an outlier, it is not added to
+                                                                          based on the lrds:
+           the historical reference database.                                The local reachability density (lrd) is defined as follows:
+                                                                                                                              ˆ ˆ
+                                                                                                   ,P
+   The first component follows the definitions in Section III-A.                                         fˆi ∈kNN(fˆ) reachk (f , fi )
+To carry out the second task we adapt LOF [5], as we discuss                           ˆ
+                                                                                   lrd(f ) := 1                                          (3)
+in the following.                                                                                               |kNN(fˆ)|
+                                                                          where reachk is the so called reachability distance, given by:
+C. Adaptation of LOF for FPD outlier detection
+    We base the outlier procedure applied in our framework                      reachk (p, o)      :=     max{kNN-dist(o), dist(p, o)}.               (4)
+on the classic method LOF (Local Outlier Factor) [5]. Other
+                                                                          The function dist designates the basic distance measure used
+methods could be adapted in a similar way. We chose LOF as
+                                                                          in the data space. In standard applications, often the Euclidean
+it is well-known and it has been shown to be still state-of-the-
+                                                                          distance is used. Here we use the Bhattacharyya distance
+art [6] and suitable for generalizations to different data types
+                                                                          (Eq. 2) for measuring the distance between two FPDs.
+and scenarios [19].
+                                                                             Local reachability densities (lrds) are local density models
+    1) Similarity measure for FPDs: For the representation of
+                                                                          for each FPD. The local outlier factor (LOF) [5] is the average
+an empirical FPD fˆ : XT → [0, 1] we use a vector A of
+                                                                          ratio between the lrds of the FPDs in kNN(fˆ) and lrd(fˆ):
+length d = max{XT } to represent fˆ. A contains the estimated
+probability density values of all possible flow values up to d:                                                 1           X         lrd(fˆi )
+                                                                                     LOF (fˆ)      :=                                                 (5)
+                  A[m] = fˆ(m) ∀m ∈ [0, d}].                       (1)                                    |kNN(fˆ)| ˆ                 lrd(fˆ)
+                                                                                                                        fi ∈kNN(fˆ)
+
+   To compare two FPDs with vector representation of differ-              The intuition is that those FPDs are deemed unusual that
+ent size, we project the lower size vector to the greater size            have on average a larger Bhattacharyya distance to the k
+one as follows.                                                           most similar other FPDs than those k most similar FPDs in
+   Definition 2 (Vector projection): Let Ai and Aj be vector              turn have to their k most similar FPDs. Thus, LOF (fˆ) > 1
+representations of two FPDs fˆi and fˆj . Without loss of gen-            signals outlierness of fˆ. We use therefore 1 as a conservative
+erality, let di ≥ dj . Aj is projected to a di -size representation       cut-off threshold, i.e., if LOF (fˆnew ) ≤ 1, then fˆnew will
+by setting all the missing values of Aj to 0, i.e.,                       be considered an inlier and can be added to the database of
+                       
+                         Aj (m) if m ∈ [0, dj ]                           historical records.
+           Aj (m) =
+                         0         if m ∈ [dj + 1, di ]                                   IV. E XPERIMENTAL E VALUATION
+   Many distance measures for computing the similarity be-                   A number of experiments have been carried out to demon-
+tween two probability distributions exist in the literature such          strate the performance of the proposed framework using both
+as the Euclidean distance, the Jaccard similarity, the Kullback-          synthetic data and real urban traffic flow data.1 The evaluation
+Leibler-divergence, and the Bhattacharyya distance [3]. Here              is performed using F-measure and the area under the curve
+we choose the Bhattacharyya distance.                                     of the receiver operating characteristic (ROC AUC), common
+   The Bhattacharyya distance B(Ai , Aj ) expressing the simi-            measures for the evaluation of outlier detection methods [6].
+larity between two FPDs represented by Ai and Aj is defined
+as follows:                                                               A. Time Series Datasets
+                       di Xdj q                                             In a first experiment, we compare FPD-LOF to the recent
+                      X
+  B(Ai , Aj ) = − ln             (|m − k|) + (Ai (m)Aj (k))               use of LOF for detecting outliers in time series (BLOF [21]).
+                       m=1 k=1                                            We use three real-world time series datasets.2 The datasets are
+                                                                   (2)
+                                                                          described in [18] and collected from various domains.
+   2) Local outlier factor for FPDs: Let F = {fˆ1 , fˆ2 , . . . , fˆτ }
+be a family of FPDs, fˆ a new FPD not in F , and k < τ a                    1) EnronInc This dataset comprises four years
+parameter for the size of the set kNN(fˆ) ⊆ F consisting of                     (1999–2002) of Enron email communications. The
+the k FPDs from F that are most similar to fˆ. We denote by                     Enron email network contains a total of 80.884
+kNN-dist(fˆi ) the distance between some FPD fˆi and the k th               1 Source code and data are available at: http://dss.sdu.dk/projects/its.html.
+
+most similar FPD.                                                           2 http://odds.cs.stonybrook.edu/
+       points. The ground truth identifies the major events
+       in the company’s history, such as revenue losses and
+       restatements of earnings.                                                       0.8   ●
+                                                                                             ●
+                                                                                                     FPD−LOF
+                                                                                                     BLOF
+
+   2) RealityMining This dataset contains the communication
+                                                                                                                                                                ●
+
+       flow data at MIT university recorded continuously via                           0.7
+                                                                                                                                             ●
+                                                                                                                                                  ●
+                                                                                                                                                          ●
+
+
+                                                                                                                                      ●
+
+       preinstalled software on their mobile devices over 50
+                                                                             ROC AUC
+                                                                                                                              ●
+                                                                                                                        ●
+
+                                                                                       0.6                     ●
+
+       weeks. The sequences of weekly temporal flows are built                                            ●
+
+
+       for three types of relations, voice calls, short messages,                                ●
+
+
+                                                                                       0.5
+       and bluetooth scans. The ground truth captures semester
+       breaks, exam weeks, and holidays.                                               0.4
+
+   3) TwitterWorldCup This collection contains data related                                  10          20    30      40     50     60      70   80      90   100
+
+       to the World Cup 2014, June 12 to July 13. The                                                                       # neighborhood
+
+       tweets are filtered by popular or official World Cup                                                            (a) EnronInc
+       hashtags, such as #worldcup, #fifa, #brazil, etc. The
+                                                                                       0.8
+       ground truth contains the goals, penalties, and injuries                              ●
+                                                                                             ●
+                                                                                                     FPD−LOF
+                                                                                                     BLOF
+
+
+       in all the matches that involve at least one of the
+                                                                                       0.7
+       following renowned teams (Brazil, Germany, Argentina,
+                                                                             ROC AUC
+                                                                                                                                                                ●
+
+       Netherlands, Spain, and France).                                                0.6                                                        ●
+                                                                                                                                                          ●
+
+
+
+
+   While BLOF works on the time series as such, FPD-LOF                                                                 ●
+                                                                                                                              ●
+                                                                                                                                      ●
+                                                                                                                                             ●
+
+
+
+
+works on the distributional representation of the time series.                         0.5       ●
+                                                                                                          ●
+                                                                                                               ●
+
+
+
+
+Figures 1(a), 1(b), and 1(c) present the ROC AUC value on the
+three time series datasets (EnronInc, RealityMining, and Twit-                         0.4
+
+                                                                                             10          20    30      40     50     60      70   80      90   100
+terWorldCup) of FPD-LOF and BLOF. By varying the size                                                                       # neighborhood
+of the neighborhood from 10 to 100, FPD-LOF outperforms
+BLOF in all settings. In addition, the difference between both                                                       (b) RealityMining
+algorithms increases for RealityMining and TwitterWorldCup                             0.8   ●       FPD−LOF
+                                                                                                     BLOF
+datasets. This can be explained by the fact that the FPD-LOF                                 ●
+
+
+
+
+algorithm uses sequence flow values by taking into account                             0.7
+
+the correlation between the flows as opposed to BLOF where
+                                                                             ROC AUC
+                                                                                                                                                                ●
+
+
+individual flow values are used to determine outliers. This                            0.6
+                                                                                                                        ●
+                                                                                                                              ●
+                                                                                                                                      ●      ●
+                                                                                                                                                  ●       ●
+
+
+
+
+result confirms that using a distributional representation can                                   ●
+                                                                                                          ●
+                                                                                                               ●
+
+
+
+
+be superior to the classic time series approach.                                       0.5
+
+
+
+
+B. Real Data                                                                           0.4
+
+
+   From our collaboration with the city of Odense we have                                    10          20    30      40     50     60      70   80      90   100
+
+                                                                                                                            # neighborhood
+data from several test locations throughout the city area. Each
+data entry contains information related to the vehicle detected                                                    (c) TwitterWorldCup
+at specific locations such as: gap, length, date, time, speed,           Fig. 1. ROC AUC of FPD-LOF and BLOF for time series data sets.
+and class (i.e., type of vehicle). For ten locations, sensor
+infrastructure has been installed in a pilot experiment. The ten
+locations have different characteristics (traffic density, counters
+for cars or for bikes) as described in Table I. The traffic data
+were obtained between January 1st , 2017 and September 30th ,
+2017.                                                                                                                   TABLE I
+                                                                                                                    DATA D ESCRIPTION
+C. Quantitative Analysis
+                                                                          Address                     ID                                  Type        #(Cars or Bikes)
+   A common problem in the evaluation of outlier detection                Falen                       L1                                  Cars                  16.932
+techniques using new data is that outliers are not labeled. To            Anderupvej                  L2                                  Cars                  25.310
+facilitate a quantitative evaluation on the real data, we inject in       Åløkke Alle                 L3                                  Cars                238.775
+F = {fˆ1 , fˆ2 , . . . , fˆτ } with d∗ = max{dj | j = 1..τ } synthetic    Thomas B Thriges Gade A Syd L4                                  Bikes                 46.978
+                                                                          Niels Bohrs Alle            L5                                  Bikes               445.883
+outliers fi in different variants:                                        Rødegårdsvej Østgående      L6                                  Bikes               575.089
+   1) Null FPD: In the null FPD, the flow distribution is equal           Rugårdsvej                  L7                                  Cars              2.318.852
+       to 0 for any positive flow. In other words, the street is          Nyborgvej                   L8                                  Cars              2.352.930
+                                                                          Grønlandsgade               L9                                  Cars              2.955.464
+       always empty during the observation (see Figure 2(a)).             Odins Bro                   L10                                 Cars              3.921.746
+       Formally, a null FPD is defined as:
+                       fi (m) = 0,     m = 1 . . . d∗             (6)
+              1.0                                                                                      1.0
+                                                                                                                                                                                               1.0           FPD−LOF
+                                                                                                                                                                                                     ●       Dang et al.
+              0.9                                                                                      0.9
+
+              0.8                                                                                      0.8
+                                                                                                                                                                                               0.9
+              0.7                                                                                      0.7
+
+              0.6                                                                                      0.6
+
+
+probability                                                                              probability
+              0.5                                                                                      0.5
+                                                                                                                                                                                               0.8
+
+
+
+
+                                                                                                                                                                                   F−measure
+              0.4                                                                                      0.4
+
+              0.3                                                                                      0.3
+
+              0.2                                                                                      0.2                                                                                     0.7                                                                                  ●
+                                                                                                                                                                                                                                                                     ●      ●
+              0.1                                                                                      0.1                                                                                                                                                    ●
+                                                                                                                                                                                                                                                     ●
+              0.0                                                                                      0.0                                                                                                                                  ●
+
+                    0   10   20   30   40      50       60   70   80   90   100                              0   10   20   30   40      50       60   70   80   90   100
+                                                                                                                                                                                               0.6                                 ●
+                                                                                                                                                                                                                            ●
+                                            (#flow/t)                                                                                (#flow/t)
+                                                                                                                                                                                                                      ●
+                                                                                                                                                                                                         ●
+                                                                                                                                                                                               0.5
+                              (a) Null FPD                                                                            (b) Stable FPD
+                                                                                                                                                                                               0.4
+
+              0.4                                                                                      0.7                                                                                            10             20     30    40       50       60       70     80     90     100
+                                                                                                       0.6                                                                                                                               # neighborhood
+              0.3
+                                                                                                       0.5
+
+
+
+
+probability                                                                              probaility
+                                                                                                       0.4
+              0.2
+                                                                                                       0.3
+                                                                                                                                                                           Fig. 3. F-measure of FPD-LOF and baseline1 on 10000 observations and
+                                                                                                       0.2
+              0.1
+                                                                                                                                                                           over increasing neighborhood
+                                                                                                       0.1
+
+
+              0.0                                                                                      0.0
+
+                    0   10   20   30   40      50       60   70   80   90   100                              0   10   20   30   40      50       60   70   80   90   100
+
+                                            (#flow/t)                                                                                (#flow/t)
+                                                                                                                                                                                               1.0           Ngan et al.
+                                                                                                                                                                                                     ●       SETMADA
+                                                                                                                                                                                                             Dang et al.
+                             (c) Regular FPD                                                                     (d) Unexpected FPD                                                                          FPD−LOF
+                                                                                                                                                                                               0.9
+
+
+                              Fig. 2. Simulated unusual FPDs (schematic examples).
+
+                                                                                                                                                                                   ROC AUC
+                                                                                                                                                                                               0.8
+
+
+                                                                                                                                                                                                                                                                                    ●
+                                                                                                                                                                                               0.7                                                                          ●
+                                                                                                                                                                                                                                                                     ●
+                                                                                                                                                                                                                                                              ●
+
+                2) Stable FPD: In the stable FPD, the flow distribution is                                                                                                                                                         ●
+                                                                                                                                                                                                                                            ●
+                                                                                                                                                                                                                                                     ●
+
+
+
+                                                                                                                                                                                               0.6                          ●
+
+                   equal to 1 for flow equal to x, 0 otherwise. In other                                                                                                                                              ●
+
+                                                                                                                                                                                                         ●
+
+                   words, the flow is always the same, x (see Figure 2(b)).                                                                                                                    0.5
+
+
+                   Formally:                                                                                                                                                                         1000          2000    3000   4000    5000     6000      7000   8000   9000   10000
+
+                                                                                                                                                                                                                                         # historical data
+                                  
+                                      1 if m = x
+                         fi (m) =                   , m = 1 . . . di (7)
+                                      0 otherwise                                                                                                                          Fig. 4. ROC AUC of FPD-LOF and state-of-the-art outlier flow detection
+                                                                                                                                                                           algorithms
+                3) Regular FPD: The flow here is equally distributed, i.e.,
+                   all flow values are equally likely to occur (Figure 2(c)):
+                                                                                  1                                                                                           In a first comparison, we evaluate the impact of the neigh-
+                                                             fi (m) =                ,                 m = 1 . . . d∗                                                (8)   borhood size head-to-head with the work of Dang et al. [7] that
+                                                                                  di
+                                                                                                                                                                           uses the kNN approach with Euclidean distance for detecting
+                4) Unexpected FPD: These FPDs mock the behavior ob-                                                                                                        outliers.
+                   served when an unusual event occurs with a strong                                                                                                          Figure 3 presents the F-measure of our FPD-LOF and Dang
+                   impact on the traffic flow (e.g., festivals or accidents                                                                                                et al. [7] procedure with different size of the neighborhood on
+                   that cause some road closings). We have three stages                                                                                                    10 000 observations sampled from location L1 and 10% in-
+                   (Figure 2(d)): a stable flow from 1 to x, a cumulated                                                                                                   jected outliers randomly selected from the five types. For both
+                   flow from x to y, and a null flow from y to di :                                                                                                        algorithms, the quality increases with a larger neighborhood
+                               
+                                         if 1 ≤ m ≤ x                                                                                                                    on this dataset. In all cases, FPD-LOF outperforms Dang et
+                      fi (m) =    Ψ(m) if x < m ≤ y , m = 1 . . . d∗                                                                                                       al. [7].
+                               
+                                  0        if y < m ≤ d∗                                                                                                                      When we fix the neighborhood size to 100, we can compare
+                                                                        (9)                                                                                                all three competitors on the basis of the given data. Figure 4
+                   Here Ψ(m) is some function [x...y] → [...(1−x)] with                                                                                                  presents the ROC AUC value achieved by the methods over
+                   the following properties:                                                                                                                               varying database size (amount of historical data used). More
+                                                                                                                                                                           data is helpful for all methods, but FPD-LOF benefits more.
+                              ∀(m1 , m2 ), m1 ≤ m2 ⇐⇒ Ψ(m1 ) ≤ Ψ(m2 )                                                                                           (10)       Anyway, in all cases FPD-LOF is superior to the competing
+                              X
+                                 mΨ(m) = (1 − x)                                                                                                               (11)       approaches that do not take a distributional representation into
+                                                                                                                                                                           account.
+                5) Noise FPD: Noise FPDs are generated by adding Gaus-
+                   sian noise of variance σi with a certain probability                                                                                                    D. Qualitative Analysis (Case Study)
+                   p ∼ U(0, 1) and a threshold γi :                                                                                                                           Tables II shows the top three outliers for each location
+                                                                                                                                                                           along with an interpretation by connecting the dates to weather
+                                fi + n ∼ N (0, σi2 ) if p ≥ γi
+                             
+                        fi =                                      (12)                                                                                                     information or the event calendar of the city. Some outliers can
+                                fi                   otherwise
+                                                                                                                                                                           be related to the weather information, others can be related to
+  We compare our FDP-LOF against three competitors: the                                                                                                                    the city events.
+work of Dang et al. [7], SETMADA [22], and the work of                                                                                                                        We can remark from this table, that some flow distribution
+Ngan et al. [16] (see Section II).                                                                                                                                         outliers can be justified by the weather information (very
+                          TABLE II                                 compared to standard approaches. In an additional case study,
+        T HE TOP FPD-LOF OUTLIERS AT THE TEN LOCATIONS             looking into possible explanations of top outliers found on ten
+            Location   Date             Interpretation             locations, we related these outliers to unusual weather and to
+                       04-04-2017   children sport event           city events.
+            L1         26-03-2017        very windy
+                       28-02-2017        very windy                                               R EFERENCES
+                       04-04-2017   children sport event            [1] Amr Ahmed and Eric Xing. Dynamic non-parametric mixture models
+            L2         01-01-2017     new year holiday                  and the recurrent chinese restaurant process: with applications to evolu-
+                       15-03-2017         very rainy                    tionary clustering. In Proc. SDM, pages 219–230, 2008.
+                       10-09-2017         very rainy                [2] V. Barnett and T. Lewis. Outliers in Statistical Data. John Wiley&Sons,
+            L3         09-09-2017        very windy                     3rd edition, 1994.
+                       03-09-2017        very windy                 [3] A. Bhattacharyya. On a measure of divergence between two statistical
+                       09-02-2017      farmer’s market                  populations defined by their probability distributions. Bull. Calcutta
+            L4         08-02-2017      farmer’s market                  Math. Soc., 35:99–109, 1943.
+                       23-06-2017        very windy                 [4] Monowar H. Bhuyan, D. K. Bhattacharyya, and Jugal K. Kalita. A
+                                                                        multi-step outlier-based anomaly detection approach to network-wide
+                       10-03-2017        very windy
+                                                                        traffic. Inf. Sci., 348:243–271, 2016.
+            L5         08-02-2017      farmer’s market
+                                                                    [5] Markus M. Breunig, Hans-Peter Kriegel, Raymond T. Ng, and Jörg
+                       09-02-2017      farmer’s market
+                                                                        Sander. LOF: identifying density-based local outliers. In Proc. SIGMOD,
+                       08-03-2017       women’s day                     pages 93–104, 2000.
+            L6         23-02-2017   national sport event            [6] Guilherme O Campos, Arthur Zimek, Jörg Sander, Ricardo JGB
+                       14-02-2017   saint valentine’s day               Campello, Barbora Micenková, Erich Schubert, Ira Assent, and
+                       03-05-2017        very windy                     Michael E Houle. On the evaluation of unsupervised outlier detection:
+            L7         26-06-2017        very windy                     measures, datasets, and an empirical study. Data Min. Knowl. Discov.,
+                       14-02-2017   saint valentine’s day               30(4):891–927, 2016.
+                       23-02-2017   national sport event            [7] Taurus T. Dang, Henry Y. T. Ngan, and Wei Liu. Distance-based k-
+            L8         01-01-2017     new year holiday                  nearest neighbors outlier detection method in large-scale traffic data. In
+                       08-03-2017       women’s day                     Proc. DSP, pages 507–510, 2015.
+                                                                    [8] Youcef Djenouri and Arthur Zimek. Outlier detection in urban traffic
+                       23-01-2017         very cold                     data. In Proc. WIMS, pages 3:1–3:12, 2018.
+            L9         08-03-2017       women’s day                 [9] Marie Ernst and Gentiane Haesbroeck. Comparison of local outlier
+                       19-05-2017        very windy                     detection techniques in spatial multivariate data. Data Min. Knowl.
+                       23-02-2017   national sport event                Discov., 31(2):371–399, 2017.
+            L10        01-01-2017     new year holiday             [10] Zhenni Feng and Yanmin Zhu. A survey on trajectory data mining:
+                       12-07-2017        very windy                     Techniques and applications. IEEE Access, 4:2056–2067, 2016.
+                                                                   [11] Manish Gupta, Jing Gao, Charu C. Aggarwal, and Jiawei Han. Outlier
+                                                                        detection for temporal data: A survey. IEEE Trans. Knowl. Data Eng.,
+                                                                        26(9):2250–2267, 2014.
+windy, very rainy, and very cold) of that day. For instance,       [12] Tingshan Huang, Harish Sethu, and Nagarajan Kandasamy. A new
+the FPD of the day 28-02-2017 is an outlier because the                 approach to dimensionality reduction for anomaly detection in data
+weather was so windy that a substantial increase was observed           traffic. IEEE Transactions on Network and Service Management,
+                                                                        13(3):651–665, 2016.
+in people that took cars and buses instead of bikes. Other         [13] E. M. Knorr and R. T. Ng. Algorithms for mining distance-based outliers
+flow outliers can be related to major events. For instance,             in large datasets. In Proc. VLDB, pages 392–403, 1998.
+the first day of the year (01-01-2017) has strong impact in        [14] Anukool Lakhina, Mark Crovella, and Christophe Diot. Diagnosing
+                                                                        network-wide traffic anomalies. In Proc. SIGCOMM, pages 219–230,
+three locations, also the celebration of the women’s day (08-           2004.
+03-2017) shows up as an outlier in three locations. We can         [15] Xiaolei Li, Zhenhui Li, Jiawei Han, and Jae-Gil Lee. Temporal outlier
+justify the first case by the fact that people tend to stay at          detection in vehicle traffic data. In Proc. ICDE, pages 1319–1322, 2009.
+                                                                   [16] Henry YT Ngan, Nelson HC Yung, and Anthony GO Yeh. Outlier
+home and take some reset after a celebration at the last night          detection in traffic data based on the dirichlet process mixture model.
+of 2016. However, we can justify the second case by the fact            IET intelligent transport systems, 9(7):773–781, 2015.
+that women celebrate their day in public places (restaurant,       [17] Sridhar Ramaswamy, Rajeev Rastogi, and Kyuseok Shim. Efficient
+                                                                        algorithms for mining outliers from large data sets. In Proc. SIGMOD,
+cinemas, theaters, and so on).                                          pages 427–438, 2000.
+   These findings show that a traffic flow probability distribu-   [18] Shebuti Rayana and Leman Akoglu. Less is more: Building selective
+                                                                        anomaly ensembles. TKDD, 10(4):42:1–42:33, 2016.
+tion can be unusual in different ways, be it higher or lower       [19] Erich Schubert, Arthur Zimek, and Hans-Peter Kriegel. Local outlier
+flow values than usual being dominant. Using a distributional           detection reconsidered: a generalized view on locality with applications
+representation of the flow values supports detecting such               to spatial, video, and network outlier detection. Data Min. Knowl.
+                                                                        Discov., 28(1):190–237, 2014.
+different manifestations of outlierness apparently in a better     [20] Dihua Sun, Hongzhuan Zhao, Hang Yue, Min Zhao, Senlin Cheng, and
+way than the traditional approaches.                                    Weijian Han. St td outlier detection. IET Intelligent Transport Systems,
+                                                                        11(4):203–211, 2017.
+                       V. C ONCLUSION                              [21] Jialing Tang and Henry YT Ngan. Traffic outlier detection by density-
+                                                                        based bounded local outlier factors. Inf. Techn. Industr., 4(1):6–18, 2016.
+  We studied the representation of urban traffic flow data         [22] Wencai Ye, Lei Chen, Geng Yang, Hua Dai, and Fu Xiao. Anomaly-
+                                                                        tolerant traffic matrix estimation via prior information guided matrix
+as flow probability distributions (FPDs) and proposed an                completion. IEEE Access, 5:3172–3182, 2017.
+adaptation of LOF for outlier detection in a database of           [23] A. Zimek and P. Filzmoser. There and back again: Outlier detection
+FPDs, using the Bhattacharyya distance. Several experiments             between statistical reasoning and data mining algorithms. WIREs
+                                                                        DMKD, page e1280, 2018.
+show the benefits of this novel treatment of traffic flow data
+

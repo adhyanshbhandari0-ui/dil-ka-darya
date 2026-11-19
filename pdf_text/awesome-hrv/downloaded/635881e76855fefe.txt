@@ -1,0 +1,801 @@
+                                                                                                                                                                                             1
+
+
+
+
+                                              Detecting and interpreting myocardial infarction
+                                                 using fully convolutional neural networks
+                                                                                                  Nils Strodthoff & Claas Strodthoff
+
+
+
+                                           Abstract—Objective: We aim to provide an algorithm for the                          Clinically, cases of myocardial infarction fall into one of two
+                                        detection of myocardial infarction that operates directly on ECG                    categories, ST-elevation myocardial infarction (STEMI) and
+                                        data without any preprocessing and to investigate its decision                      non-ST-elevation myocardial infarction (NSTEMI), depending
+                                        criteria.
+                                        Approach: We train an ensemble of fully convolutional neural                        on whether or not the ECG exhibits a specific ECG-sign called
+                                        networks on the PTB ECG dataset and apply state-of-the-art                          ST elevation. The former can and should be treated as soon
+
+
+
+
+arXiv:1806.07385v2 [cs.CY] 5 Feb 2019
+                                        attribution methods.                                                                as possible with PCI, whereas the NSTEMI diagnosis has to
+                                        Main results: Our classifier reaches 93.3% sensitivity and 89.7%                    be confirmed with time-costly laboratory tests before specific
+                                        specificity evaluated using 10-fold cross-validation with sampling                  treatment can be initiated [1]. Since waiting for these results
+                                        based on patients. The presented method outperforms state-of-
+                                        the-art approaches and reaches the performance level of human                       can delay effective treatment by hours, a more detailed analysis
+                                        cardiologists for detection of myocardial infarction. We are able                   of the ECG could speed up this process significantly.
+                                        to discriminate channel-specific regions that contribute most                          Failure to identify high-risk ECG findings in the emergency
+                                        significantly to the neural network’s decision. Interestingly, the                  department is common and is of grave consequences [2]. To
+                                        network’s decision is influenced by signs also recognized by                        increase accuracy, speed and economic efficiency, different al-
+                                        human cardiologists as indicative of myocardial infarction.
+                                        Significance: Our results demonstrate the high prospects of algo-                   gorithms have been proposed to automatically detect myocar-
+                                        rithmic ECG analysis for future clinical applications considering                   dial infarction in recorded ECGs. Algorithms with adequate
+                                        both its quantitative performance as well as the possibility of                     performance would offer significant advantages: Firstly, they
+                                        assessing decision criteria on a per-example basis, which enhances                  could be applied by untrained personnel in situations where no
+                                        the comprehensibility of the approach.                                              cardiologist is available. Secondly, once set up they would be
+                                           Index Terms—convolutional neural networks, electrocardiog-                       highly reliable and inexpensive. Thirdly, they could be tuned
+                                        raphy, interpretability, myocardial infarction, time series classi-                 to specific decision boundaries, for example to high sensitivity
+                                        fication.                                                                           (low specificity) for screening purposes.
+                                                                                                                               Common ECG classification algorithms usually mimic the
+                                                                   I. I NTRODUCTION                                         approach a human physician would take: First preprocessing
+                                                                                                                            steps include the correction of baseline deviations, noise reduc-
+                                           Ischaemic heart diseases are the leading cause of death in                       tion and the segmentation of single heartbeats. In the next step,
+                                        Europe. The most prominent entity of this group is acute                            hand-engineered features such as predefined or automatically
+                                        myocardial infarction (MI), where the blood supply to parts of                      detected time intervals and voltage values are extracted from
+                                        the heart muscle is permanently interrupted due to an occluded                      the preprocessed signal. Finally, the classification is carried
+                                        coronary artery. Early detection is crucial for the effective                       out with a variety of common classifiers such as simple
+                                        treatment of acute myocardial infarction with percutaneous                          cutoff values, support vector machines or neural networks.
+                                        coronary intervention (PCI) or coronary artery bypass surgery.                      Preprocessing and feature extraction are non-trivial steps with
+                                        Myocardial infarction is usually diagnosed with the help of                         technical and methodical problems, especially with unusual
+                                        clinical findings, laboratory results, and electrocardiography.                     heart rhythms or corrupted data, resulting in a high risk of
+                                        ECGs are produced by recording electrical potentials of de-                         information loss. This urges for a more unified and less biased
+                                        fined positions of the body surface over time, representing the                     algorithmic approach to this problem.
+                                        electric activity of the heart. Deviations from the usual shape                        Deep neural networks [3], [4] and in particular convolu-
+                                        of the ECG curves can be indicative of myocardial infarction                        tional neural networks have been the driving force behind the
+                                        as well as many other cardiac and non-cardiac conditions.                           tremendous advances in computer vision [5], [6], [7], [8], [9],
+                                        ECGs are a popular diagnostic tool as they are non-invasive                         [10] in recent years. Consequently, related methods have also
+                                        and inexpensive to produce but provide a high diagnostic                            been applied to the problem of time series classification in
+                                        value.                                                                              general and ECG classification tasks specifically. Even though
+                                           This is the version of the article before peer review or editing, as submitted   we focus exclusively on ECG classification in this work, we
+                                        by an author to Physiological Measurement. IOP Publishing Ltd is not                stress that the methodology put forward here can be applied
+                                        responsible for any errors or omissions in this version of the manuscript or        to generic time series classification problems in particular to
+                                        any version derived from it. The Version of Record is available online at
+                                        10.1088/1361-6579/aaf34d.                                                           those that satisfy the following conditions: Data (a) with mul-
+                                           Nils Strodthoff is with Fraunhofer Heinrich Hertz Institute, 10587 Berlin,       tiple aligned channels (b) that arises as a continuous sequence,
+                                        Germany, e-mail: nils.strodthoff@hhi.fraunhofer.de.                                 i.e. with no start/end points in the sequence), and that exibits
+                                           Claas Strodthoff is with Department of Anesthesiology and Intensive Care
+                                        Medicine, University Medical Center Schleswig-Holstein, Campus Kiel, Kiel,          a degree of periodicity, and (c) that is fed to the algorithm in
+                                        Germany, e-mail: claas.strodthoff@uksh.de.                                          unprocessed/unsegmented form. These three criteria define a
+                                                                                                                                    2
+
+
+
+subclass within general time series classification problems that     preprocessing and feature extraction [33], [34], [35], [36],
+is important for many real-world problems. In particular, these      [37], [38], [39]. Particular mentioning deserve [40], [13] who
+criteria include raw sensor data from medical monitoring such        operate on Wavelet-transformed signals. Whereas the above
+as ECG or EEG.                                                       works used neural networks at most as a classifier on top of
+   The main contributions presented in this paper are the            previously extracted features [41], [36], [42], [37], there are
+following:                                                           works that apply neural networks directly as feature extractors
+   1) We put forward a fully convolutional neural network            to beat-level separated ECG signals [43], [44]. These have to
+       for myocardial infarction detection on the PTB dataset        be distinguished from approaches as the one considered in
+       [11], [12] focusing on the clinically most relevant case      this work where deep neural networks are applied to the raw
+       of 12 leads. It outperforms state-of-the-art literature ap-   ECG with at most minor preprocessing steps. In this direction
+       proaches [13], [14] and reaches the performance level of      Zheng et al [45], present an approach based on convolutional
+       human cardiologists reported in an earlier comparative        neural networks for multichannel time series classification
+       study [15].                                                   similar to ours but applied it to ECGs in the context of
+   2) We study in detail the classification performance on           congestive heart failure classification. Also [28], [46], [29]
+       subdiagnoses and investigate channel selection and its        use a related approach for arrhythmia/coronary artery disease
+       clinical implications.                                        detection in a single-channel setting. The most recent work on
+   3) We apply state-of-the-art attribution methods to inves-        the myocardial infarction detection using deep neural networks
+       tigate the patterns underlying the network’s decision         [14] also uses convolutional architectures applied to three
+       and draw parallels to cardiologists’ rules for identifying    channel input data. A quantitative comparison to their results
+       myocardial infarction.                                        is presented in Sec. V. Similar performance was reported in
+                                                                     [47] who used LSTMs on augmented channel data obtained
+                       II. R ELATED WORKS                            from a generative model.
+   Concerning time series classification in general, we focus
+on time series classification using deep neural networks and                 III. DATASET AND MEDICAL BACKGROUND
+do not discuss traditional methods in detail, see e.g. [16]
+for a recent review. Hüsken and Stagge [17] use recurrent              The best-known collection of standard datasets for time
+neural networks for time series classification. Wang et al [18]      series classification is provided by the UCR Time Series
+use different mainly convolutional networks for time series          Classification Archive [19]. Although many benchmarks are
+classification and achieve state-of-the-art results in compari-      available for the contained datasets [16], we intentionally
+son to traditional methods applied to the UCR Time Series            decided in favor of a different dataset, as the UCR datasets
+Classification Archive datasets [19]. Cui et al [20] use a           contain only comparably short and not necessarily periodic
+sliding window approach similar to the one applied in this           sequences and are almost exclusively single-channel data. The
+work and feed differently downsampled series into a multi-           same applies to various benchmarks datasets [19], [48], [49]
+scale convolutional neural network also reaching state-of-the-       considered for example in [24], which do not match the criteria
+art results on UCR datasets. Also, recurrent neural networks         put forward in the introduction. In particular the requirement
+have been successfully applied to time series classification         of continuous data with no predefined start and end points
+problems in the clinical context [21]. More recent works             that show a certain degree of periodicity is rarely found in
+include attention [22] and more elaborate combinations of            existing datasets, especially not in combination with the other
+convolutional and recurrent architectures [23], [24]. For a more     two requirements from above.
+detailed account on deep learning methods for time series               We advocate in-depth studies of more complex datasets that
+classification, we refer the reader to the recent review [25].       are more representative for real-world situations and therefore
+   Concerning time series classification on ECG signals, the         concentrate our study on ECG data provided by the PTB
+two main areas of work are the detection of either arrhythmia        Diagnostic ECG Database [11], [12]. It is one of the few
+or infarction. It is beyond the scope of this work to review the     freely available datasets that meet the conditions from above.
+rich body of literature on classification of ECG signals using       The dataset comprises 549 records from 290 subjects. For this
+algorithmic approaches, in particular those involving neural         study we only aim to discriminate between healthy control and
+networks, see e.g [26] for a classic review. While the literature    myocardial infarction. Therefore, we only take into account
+on myocardial infarction is covered in detail below, we want         records classified as either of these two diagnosis classes. We
+to briefly mention some more recent works [27], [28], [29],          excluded 22 ECGs from 21 patients with unknown localization
+[30] in the broad field of arrhythmia detection. For further         and infarction status from our analysis.
+references we refer the reader to the recent reviews [31], [32].        For some patients classified as myocardial infarction the
+At this point we also want to highlight [27], where the authors      dataset includes multiple records of highly variable age and
+trained a convolutional neural network on an exceptionally           in some cases even ECGs recorded after the medical inter-
+large custom dataset reaching human-level performance in             vention. The most conservative choice would be to exclude
+arrhythmia detection.                                                all myocardial infarction ECGs after the intervention and
+   More specifically, turning to myocardial infarction detection     within a preferably short threshold after the infarction. Such a
+in ECG recordings, many proposed algorithms rely on classi-          dataset would be most representative for the detection of acute
+cal machine learning methods for classification after initial        myocardial infarction in a clinical context, would, however,
+                                                                                                                                             3
+
+
+
+seriously reduce the already small dataset. As a compromise,                 coronary artery supplying those in the iMI group [50]. If not
+we decided to keep all healthy records but just the first ECG                noted otherwise we only use the subdiagnoses information
+from patients with myocardial infarction. Note that a selection              for stratified sampling of records into cross-validation folds
+based on ECG age is not applicable here as the full metadata                 and just discriminate between healthy control and myocardial
+is not provided for all records. For the ECGs where the                      infarction. In Sec. V-B we specifically investigate the impact
+full metadata is provided this selection leads to a median                   of the above subdiagnoses on the classification performance.
+(interquartile range) of the infarction age of 2.0 (4.5) days                The fact that the inferior and anterior myocardial infarction can
+with 14% of them taken after intervention. On the contrary                   be distinguished rather well represents a further a posteriori
+including all infarction ECGs would result in a median of                    justification for our assignment.
+8.0(13.8) days, 37% of which were taken after intervention.                     The PTB Database provides 15 simultaneously measured
+These figures render the second, most commonly employed,                     channels for each record: six limb leads (Einthoven: I, II,
+selection questionable for an acute infarction detection prob-               III, and Goldberger: aVR, aVL, aVF), six precordial leads
+lem. In summary, our selection leaves us with a dataset of                   (Wilson: V1, V2, V3, V4, V5, V6), and the three Frank leads
+127 records classified as myocardial infarction and 80 records               (vx, vy, vz). As the six limb leads are linear combinations
+(from 52 patients) classified as healthy control. Demographical              of just two measured voltages (e.g. I and II) we discard
+and statistical information on the dataset using the selection               all but two limb leads. Frank leads are rarely used in the
+criteria from above is compiled in Tab. I.                                   clinical context. Consequently, in our analysis we only take
+                                                                             into account eight leads that are conventionally available in
+ quantity                     MI               HC             all
+                                                                             clinical applications and non-redundant (I, II, V1, V2, V3,
+ # patients                   127              52             179
+ sex: male/female             92/35            39/13          131/48         V4, V5, V6). This is done in spite of the fact that using the
+ age: median(iqr)/nans        61.0(16.0)/0     38.4(24.0)/6   57.0(19.0)/6   full although clinically less relevant set of channels can lead
+ MI: untreated/treated/nans   81/18/28         -              -              to an even higher classification performance, see the analysis
+ MI age: median(iqr)/nans     2.0(4.5)/4       -              -
+                                                                             in Sec. V-B3 where the lead selection is discussed in detail.
+TABLE I: Demographical/statistical information on the se-
+lected records from the PTB dataset. Abbreviations: MI: my-                   IV. C LASSIFYING ECG USING DEEP NEURAL NETWORKS
+ocardial infarction HC: healthy control iqr:interquartile range
+nans: records with no information provided                                   A. Algorithmic procedure
+                                                                                As discussed in the previous section, time series classifi-
+                                                                             cation in a realistic setting has to be able to cope with time
+      subdiagnosis/localization   # patients     # samples (selected)        series that are so large that they cannot be used as input to a
+      anterior                    17             47 (17)                     single neural network or that cannot be downsampled to reach
+      antero-septal               27             77 (27)
+      antero-septo-lateral        1              2 (1)                       this state without losing large amounts of information. At this
+      antero-lateral              16             43 (16)                     point two different procedures are conceivable: Either one uses
+      lateral                     1              3 (1)                       attentional models that allow to focus on regions of interest,
+      Σ aMI                       62             172 (62)
+      inferior                    30             89 (30)
+                                                                             see e.g. [23], [24], or one extracts random subsequences from
+      infero-posterior            1              1 (1)                       the original time series. For reasons of simplicity and with
+      infero-postero-lateral      8              19 (19)                     real-time on-site analysis in mind we explore only the latter
+      infero-lateral              23             56 (23)
+      posterior                   1              4 (1)
+                                                                             possibility, which is only applicable for signals that exhibit
+      postero-lateral             2              5 (2)                       a certain degree of periodicity. The assumption underlying
+      Σ iMI                       65             174 (65)                    this approach is that the characteristics leading to a certain
+      Healthy control             52             80 (80)                     classification are present in every random subsequence. We
+      Σ MI                        127            346 (127)                   stress at this point that this procedure does not rely on the
+      Σ all                       179            426 (207)
+                                                                             identification of beginning and endpoints of certain patterns in
+TABLE II: Infarction localization in the PTB ECG Database.                   the window [51]. This approach can be justified a posteriori
+                                                                             with the reasonable accuracies and specificities it achieves.
+   For the case of myocardial infarction the dataset distin-                 Furthermore, from a medical point of view it is reasonable
+guishes different subdiagnoses corresponding to the localiza-                to assume that ECG characteristics do not change drastically
+tion of the infarction, see Tab. II, with smooth transitions                 within the time frame of any single recording.
+between certain subclasses. It is therefore not reasonable to                   The procedure leaves two hyperparameters: the choice of
+expect to be able to train a classifier that is able to distinguish          the window size and an optional downsampling rate to reduce
+records into all these subclasses based on the rather small                  the temporal input dimension for the neural network. As
+number of records in certain cases. We therefore decided to                  the dataset is not large enough for extensive hyperparameter
+distinguish just two classes that we colloquially designate                  optimizations we decided to work with a fixed window size of
+as anterior myocardial infarction (aMI) and inferior myocar-                 4 seconds downsampled to an input size of 192 pixels for each
+dial infarction (iMI), see Tab. II for a detailed breakdown.                 sequence. The window size is sufficiently large to capture at
+This grouping models the most common anatomical variant                      least three heartbeats at normal heart rates.
+of myocardial vascular supply with the left coronary artery                     As discussed in Sec. III, if we consider a binary classifica-
+supplying the regions noted in the aMI group and the right                   tion problem we are dealing with an imbalanced dataset with
+                                                                                                                                       4
+
+
+
+80 healthy records in comparison to 127 records diagnosed           transform to the original time-domain data. We stress again
+with myocardial infarction. Several approaches have been dis-       that our approach operates directly on the (downsampled) input
+cussed in the literature to best deal with imbalance [52], [53].    data without any preprocessing steps.
+Here we follow the general recommendations and oversample              For comparison we also consider recurrent neural networks,
+the minority class of healthy patients by 2:1.                      namely LSTM [61] cells. We investigate two variants: In the
+   We refrain from using accuracy as target metric as it            first approach we feed the last LSTM output into a fully
+depends on the ratio of healthy and infarction ECGs under con-      connected layer. In the second case we additionally apply a
+sideration. As sensitivity and specificity are the most common      time-distributed dense layer i.e. a layer with shared weights
+metrics in the medical context, we choose Youden’s J-statistic      across all time steps to train the network in addition on a
+as target metric for model selection which is determined by         time-series classification task where we adjusted both loss
+the sum of both quantities i.e.                                     functions to reach similar values. Similar to [17] we investigate
+                                                                    in this way if the time series predication task improves the
+             J = sensitivity + specificity − 1                      classification accuracy.
+                     TP        TN
+               =           +         − 1,                    (1)                               V. R ESULTS
+                   TP + FN   TN + FP
+where T P/F N/F P denote true positive/false negative/false         A. Network architectures
+positive classification results. Other frequently considered ob-       In Tab. III we compare the architectures described in the
+servables in this context include F1 or F2 scores that are          previous section based on 12-lead data. The comparison is
+defined as combinations of positive predictive value (precision)    based on cross-validated J−statistics without implying statis-
+and sensitivity (recall).                                           tical significance of our findings. In the light of very small
+   Finally, to obtain the best possible estimate of the test set    number of 20 or even fewer patients in the respective test
+sensitivity and specificity using the given data, we perform        sets, we do not report confidence intervals or similar variance
+10-fold cross-validation on the dataset. Its size is comparably     measures as these would be mainly driven by the fluctuations
+small and there are still considerable fluctuations of the final    due to the small size of the test set, see also [54], [55], [62]
+result statistics, even considering the data augmentation via       and the related discussion in Sec. IV-A.
+random window selection. These result statistics do not neces-         The fully convolutional architecture and the resnet achieve
+sarily reflect the variance of the estimator under consideration    similar performance applied to time-domain data. In contradis-
+when applied to unseen data [54] and it is not possible to          tinction to an earlier investigation [18] that favored the fully
+infer variance information from cross-validation scores by          convolutional architecture, a ranking of the two convolutional
+simple means [55]. The given dataset is not large enough to         architectures is not possible on the given data. Interestingly,
+allow a train-validation-test split with reasonable respective      the convolutional architectures perform better applied to raw
+sample sizes. Following [56], we circumvent this problem            time-domain data than applied to frequency-domain data. In
+by reporting ensemble scores corresponding to models with           this context it might be instructive to investigate also other
+different random initializations without performing any form        transformations of the input data such as Wavelet transforma-
+of hyperparameter tuning or model selection using test set data.    tions as considered in [40], [13].
+Compared to single initializations the ensemble score gives a          Both convolutional architectures show a better score than
+more reliable estimate of the model’s generalization perfor-        recurrent architectures. This can probably be attributed to the
+mance on unseen data. For calculating the ensemble score we         fact that we report just results with standard LSTMs and do not
+combine five identical models and report the ensemble score         investigate more advanced mechanisms such as most notably
+formed by averaging the predicted scores after the softmax          an attention mechanism, see e.g. [22], [23], [24] for recent
+layer [57].                                                         developments in this direction. Training the recurrent neural
+                                                                    network jointly on a classification task as well as on a time
+                                                                    series prediction task, see also the description in App. B, did
+B. Investigated architectures
+                                                                    not lead to an improved score, whereas a significant increase
+   We investigate both convolutional neural networks as well        was reported by [17], which might be related to the small size
+as recurrent neural network architectures. While recurrent          of the dataset.
+neural networks seem to be the most obvious choice for time
+                                                                        Model                         J-Stat   sens.   spec.   prec.
+series data, see e.g. [17], convolutional architectures have
+                                                                        Fully Convolutional           0.827    0.933   0.897   0.936
+been applied for similar tasks in early days, see e.g. [58] for         Resnet                        0.828    0.925   0.903   0.940
+applications in phoneme recognition.                                    Fully Convolutional(freq)     0.763    0.902   0.860   0.913
+   We study different variants of convolutional neural networks         Resnet(freq)                  0.656    0.870   0.786   0.869
+                                                                        LSTM mode (final output)      0.743    0.910   0.833   0.899
+inspired by several successful architectures applied in the             LSTM (final output + pred.)   0.742    0.914   0.828   0.897
+image domain such as fully convolutional networks [10] and
+resnets [7], [59], [60], see App. A for details. In addition to     TABLE III: Classification results for different network ar-
+architectures that are applied directly to the (downsampled)        chitectures on 12-lead data. Abbreviations: sens.: sensitiv-
+time series data, we also investigate the effect of incorporating   ity=recall; spec.: specificity; prec.: precision=positive predic-
+frequency-domain input data obtained by applying a Fourier          tive value
+                                                                                                                                                     5
+
+
+
+   In the following sections we analyze particular aspects                                               Confusion Matrix: train aMI+iMI
+of the classification results in more detail. All subsequent                                               0.88         0.01          0.11     0.8
+investigations are carried out using the fully convolutional                                   healthy   (16253)       (186)         (2116)
+                                                                                                                                               0.7
+architecture, which achieved the same performance as the                                                                                       0.6
+best performing resnet architecture with a comparably much                                                 0.03         0.88          0.09
+                                                                                  True label
+                                                                                                                                               0.5
+                                                                                                  aMI     (740)       (19563)        (1914)
+simpler architecture. If not noted otherwise we use the default                                                                                0.4
+setup of 12-lead data.                                                                                                                         0.3
+                                                                                                           0.14         0.10           0.76    0.2
+                                                                                                   iMI    (3238)       (2317)        (17673)
+                                                                                                                                               0.1
+B. MI localization, benchmarks, and channel selection
+                                                                                                           hy         aMI            iMI
+                                                                                                          alt
+   1) MI localization and training procedure: As described                                               he
+                                                                                                                   Predicted label
+in Sec. III we distinguish the aggregated subdiagnosis classes
+aMI and iMI. Here we examine the classification performance         Fig. 1: Confusion matrix for model trained on subdiagnoses
+of a model that distinguishes these subclasses rather than          aMI and iMI.
+training just on a common superclass myocardial infarction.
+We can investigate a number of different combination of either
+training/evaluating with or without subdiagnoses as shown in        the fact that the model is able to discriminate between the
+Tab. IV                                                             aggregated subdiagnoses whose assignments were motivated
+                                                                    by medical arguments, see Sec. III, and represents an a
+      Data                     J-Stat   sens.   spec.   prec.
+                                                                    posteriori justification for this choice.
+      cardiologists aMI [15]   0.857    0.874   0.983     -
+      cardiologists iMI [15]   0.738    0.749   0.989     -            The reported score for models evaluated on subdiagnoses
+      train MI eval MI         0.827    0.933   0.897   0.936       allows a comparison to human performance on this task. We
+      train MI eval aMI        0.877    0.980   0.897   0.884       base this comparison on a study [15] that assessed the human
+      train MI eval iMI        0.789    0.894   0.896   0.879
+      train aMI eval aMI       0.880    0.919   0.961   0.950       classification performance for different diagnosis classes based
+      train iMI eval iMI       0.689    0.810   0.879   0.849       on a panel of eight cardiologists. Here we only report the
+      train aMI+iMI eval MI    0.788    0.912   0.876   0.947       combined result and refer to the original study for individual
+      train aMI+iMI eval aMI   0.846    0.966   0.881   0.906       results. The most appropriate comparison is the model trained
+      train aMI+iMI eval iMI   0.741    0.861   0.879   0.897
+                                                                    on general MI and evaluated on subdiagnoses aMI and iMI.
+TABLE IV: Classification performance on subdiagnoses (with          However, it turns out that irrespective of the training procedure
+fully convolutional architecture) on 12-lead data. Abbrevia-        the algorithm achieves a slightly higher score on aMI classi-
+tions as in Tab. III. train MI (train aMI+iMI) refers to training   fication and a considerably higher score on iMI classification
+disregarding (incorporating) subdiagnoses and train aMI/iMI         and we see it therefore justified to claim at least human-level
+to training using just a particular subdiagnosis; analogously       performance on the given classification task. We restrain from
+for eval.                                                           drawing further conclusions from this comparison as it de-
+                                                                    pends on the precise performance metric under consideration,
+   Both for models trained on unspecific infarction and for         the fact that not the same datasets were used in both studies
+models trained using subdiagnosis labels, the performance on        and differences in subdiagnosis assignments. The claim of
+the inferior myocardial infarction classification task turns out    superhuman performance on this task would certainly require
+to be worse than the score achieved for anterior myocardial         more thorough investigations in the future.
+infarction. The most probable reason for this is that anterior         2) Comparison to literature approaches: Our data and
+myocardial infarctions show typical signs in most of the            channel selection strategy, see Sec. III, was carefully chosen
+Wilson leads because of the proximity of the anterior myocard       to reflect the requirements of a clinical application as closely
+to the anterior chest wall. For the more difficult task of          as possible. In addition, considering the comparably small size
+iMI classification, the model seems to profit from general          of the dataset, a careful cross-validation strategy is of utmost
+myocardial infarction data during training, as a model trained      importance, see Sec. IV-A. Unfortunately, most literature re-
+on generic MI achieves a higher score on aMI classification         sults do not report cross-validated scores or introduce data
+than a model trained specifically on aMI classification only.       leakage in their cross-validation procedures. This can happen
+The converse is true for the simpler task of aMI classification.    for example by sampling from beat-level segmented signals
+   Interestingly, the model trained without subdiagnoses            or most commonly by sampling based on ECGs rather than
+reaches a slightly higher score both for unspecific myocardial      patients, see [13] for a detailed discussion. Both cases lead to
+infarction classification as well as for classification on subdi-   unrealistically good performance estimates as the classification
+agnoses aMI/iMI only, which might just be an effect of an           algorithm can in some form adapt to structures in the same
+insufficient amount of training data. In any case, we restricted    ECG or structures in a different ECG from the same patient
+the rest of our investigations on the model trained disregarding    during the training phase.
+subdiagnoses.                                                          We refrain from presenting results for the latter setups
+   In Fig. 1 we show the confusion matrix for the model that        as they do not allow to disentangle a model’s classification
+is trained and evaluated on the subdiagnoses aMI and iMI in         performance from its ability to reproduce already known
+addition to healthy control. The confusion matrix underlines        patterns. Therefore, we only include a comparison to the most
+                                                                                                                                            6
+
+
+
+recent works [13], [14] that are to our knowledge the only                  leads towards the standard 12-lead setup. The overall best
+works where a cross-validated score with sampling on patient                result is achieved using all channels, which does, however,
+level, in the literature also termed subject-oriented approach              not correspond to the clinically relevant situation, where
+[13], is reported. To ensure comparability with [13], [14] we               conventionally only 12 leads are available.
+replicate their setup as closely as possible and modify our
+data selection to include limb leads and in addition to healthy             C. Interpretability
+records only all genuine inferior myocardial infarction ECGs.                  A general challenge remains the topic of interpretability of
+In this case our approach shows not only superior performance               machine learning algorithms and in particular deep learning
+compared to literature results, see Tab. V, but does unlike their           approaches that is especially important for applications in
+algorithms operate directly on the input data and does not                  medicine [63]. In the area of deep learning, there has been
+require preprocessing with appropriate input filters.                       a lot of progress in this direction [64], [65], [66]. So far most
+                                                                            applications covered computer vision whereas time series data
+   Benchmark                           J-Stat     sens.    spec.    prec.
+   Wavelet transform + SVM [13]        0.583      0.790    0.793    0.803
+                                                                            in particular did only receive scarce attention. Interpretability
+   CNN [14]                            0.694      0.853    0.841      -     methods have been applied to time series data in [18] and
+   limb leads + inferior MI∗           0.773      0.874    0.900    0.932   ECG data in particular in [67]. A different approach towards
+TABLE V: Comparison to literature results (with fully con-                  interpretability in time series was put forward in [68].
+volutional architecture). Abbreviations as in Tab. III. Results                As an exploratory study for the application of interpretabil-
+from this work marked by asterisk.                                          ity methods to time series data we investigate the application
+                                                                            of attribution methods to the trained classification model. This
+   We replicated the above setup to demonstrate the competi-                allows investigating on a qualitative level if the machine learn-
+tiveness of our approach, but for a number of reasons we are                ing algorithm uses similar features as human cardiologists.
+convinced that the scores presented in Tabs. III and IV are the             Our implementation makes use of the DeepExplain framework
+more suitable benchmark results: Firstly, from a clinical point             put forward in [69]. For neural networks with only ReLU
+of view 12-lead ECGs are the default choice and the algorithm               activation functions it can be shown [69] that attention maps
+should be fed with the full set of 8 non-redundant channels.                from ‘gradient×input’ [70] coincide with attributions obtained
+Secondly, the restriction to include only the first infarction              via the -rule in LRP [71]. Even though we are using ELU
+ECG per patient is arguably more suited for the application                 activation functions the attribution maps show only minor
+of the clinically most relevant problem of classifying acute                quantitative differences. The same applies to the comparison
+myocardial infarctions, see the discussion in Sec. III. Finally,            to integrated gradients [65]. For definiteness, we focus our
+from a machine learning perspective it is beneficial to include             discussion on ‘gradient × input’. Different from computer
+all subdiagnoses for training allowing to adapt to general                  vision, where conventionally attributions of all three color
+patterns in infarction ECGs and to only evaluate the trained                channels are summed up, we keep different attributions for
+classifier on a particular subdiagnosis of interest. For the case           every channel to be able to focus on channel-specific effects.
+of aMI this procedure leads to an improved score, see the                   We use a common normalization of all channels to be able to
+discussion of Tab. IV.                                                      compare attributions across channels.
+   3) Channel selection: By including different combinations                   We stress that attributions are inherent properties of the
+of leads one can estimate the relative amount of information                underlying models and can therefore differ already for models
+that these channels contribute to the classification decision, see          with different random initializations in an otherwise identical
+Tab. VI.                                                                    setup. If we aim to use it to identify typical indicators for
+                                                                            a classification decision as a guide for clinicians a more
+         channels             J-Stat      sens.    spec.    prec.           elaborate study is required. For simplicity, in this exploratory
+         all leads            0.878       0.941    0.937    0.961           study we focus on a single model rather than the model
+         12 leads (default)   0.827       0.933    0.897    0.936
+         Frank leads only     0.803       0.930    0.873    0.923           ensemble. By visual inspection we identified the most typical
+         limb leads only      0.811       0.912    0.899    0.937           attribution pattern for myocardial infarction among examples
+         I only               0.703       0.875    0.828    0.893           in the batch that occurred shortly after the infarction. Proto-
+         II only              0.695       0.907    0.787    0.874
+         III only             0.590       0.855    0.735    0.841
+                                                                            typical outcomes of this analysis are presented below.
+                                                                               Fig. 2 shows examples of the interpretability analysis of
+TABLE VI: Channel dependence of the classification perfor-                  selected channels of two myocardial infarction ECGs that
+mance (with fully convolutional architecture). Abbreviations                were correctly classified. As in the clinical context ECGs are
+as in Tab. III.                                                             always considered in the context of the full set of twelve
+                                                                            channels (if available), the complete set of channels is shown
+   Starting with single-lead classification results, out of leads           in Fig. 4 in the appendix. Take note that the attributions show
+I, II and III, lead III offers the least amount of information,             a high consistency over beats of one ECG, even if a significant
+possibly because its direction coincides worst with the usual               baseline shift is present. There is also a reasonable consistency
+electrical axis of the heart. The classification result using               with regard to similar ECG features exhibited by other patients
+Frank leads achieves a score that is slightly worse than the                which are not shown here.
+result using limb-leads only. A further performance increase is                ECG A is taken from a 74-year-old male patient one
+observed when complementing the limb leads with the Wilson                  day after the infarction took place. A coronary angiography
+                                                                                                                                                        7
+
+
+
+                                                                                       surrounding rather than to the elevated ST-segment.
+         1.5 A                 a                1.5 B                     e
+                                                                                          Comparing the overall visual impression of the attributions
+         1.0                                    1.0
+                                                                                       across all channels (see Fig. 4), the model seems to attribute
+         0.5                                    0.5
+                                                                                       more importance to the Wilson leads in ECG A (anterior
+         0.0                                    0.0
+                                                                                       infarction) and more importance to the limb leads in ECG
+         0.5                                    0.5
+         1.0                                    1.0
+                                                                                       B (inferior infarction). This is also where clinicians would
+         1.5 V2         b                       1.5 II          f                      expect to find signs of infarction in these cases.
+         2.0                                    2.0                                       Attributions are inherently model-dependent and as a matter
+            0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5        0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5
+U [mV]
+                                                                                       of fact the corresponding attributions show quantitative and
+                                                                                       in some cases even qualitative differences. However, across
+         1.5 A                 c                  1.5 B                     g
+                                                                                       different folds and different random initializations the attri-
+         1.0                                      1.0
+                                                                                       bution corresponding to the STE was always correctly and
+         0.5                                      0.5
+         0.0                                      0.0
+                                                                                       prominently identified. This is a very encouraging sign for
+         0.5                                      0.5                                  future classification studies on ECG data based on convolu-
+         1.0                                      1.0                                  tional methods, in particular in combination with attribution
+         1.5 V5        d                          1.5 V6                               methods. A future study could put the qualitative finding
+         2.0                                      2.0                                  presented in this section on a quantitative basis. This would
+            0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5          0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5
+                                              t [s]                                    require a segmentation of the data, possibly using another
+                                                                                       model trained on an annotated dataset as no annotations
+Fig. 2: Examplary interpretability analysis for two ECGs                               are available for the PTB dataset, and statistically evaluating
+with myocardial infarction. The attribution score is color-                            attribution scores in conjunction with this information. In this
+coded in the background. Red (blue) areas influenced the                               context it would be interesting to see if different classification
+neural network towards (against) a correct classification as                           patterns arise across different models or if they can at least be
+myocardial infarction. See the accompanying text for details.                          enforced as in [74].
+
+                                                                                                     VI. S UMMARY AND C ONCLUSIONS
+performed later confirmed an anterior myocardial infarction.                              In this work, we put forward a fully convolutional neural
+ECG B is taken from a 68-year-old male patient one day                                 network for myocardial infarction detection evaluated on the
+after the infarction which was later confirmed to be in inferior                       PTB dataset. The proposed architecture outperforms the cur-
+localization. ECGs A and B are listed as s0021are and s0225lre                         rent state-of-the-art approaches on this dataset and reaches a
+in the PTB dataset.                                                                    similar level of performance as human cardiologists for this
+   Signs for ischemia and infarction are numerous and of                               task. We investigate the classification performance on subdiag-
+variable specificity [72]. Highlighted areas coincide with                             noses and identify two clinically well-motivated subdiagnosis
+established ECG signs of myocardial infarction. These are                              classes that can be separated very well by our algorithm. We
+typically found between and including the QRS complex and                              focus on the clinically most relevant case of 12-lead data and
+the T wave, as this is when the contraction and consecutive re-                        stress the importance of a careful data selection and cross-
+polarization of the ventricles take place. ST-segment-elevation                        validation procedure.
+(STE) is the most important finding in myocardial infarction                              Moreover, we present a first exploratory study of the ap-
+ECGs and diagnostic criterion for ST-elevation myocardial                              plication of interpretability methods in this domain, which
+infarction (STEMI) [73]. This sign (though not formally                                is a key requirement for applications in the medical field.
+significant in every case) and corresponding high attributions                         These methods can not only help to gain an understanding and
+can be found in both example ECGs at the positions marked                              thereby build trust in the network’s decision process but could
+a, e, and g. At the same time in another channel (position c)                          also lead to a data-driven identification of important markers
+there is no STE and the attribution is consequently inverted.                          for certain classification decisions in ECG data that might even
+The attribution at position a also coincides with pathological                         prove useful to human experts. Here we identified common
+Q waves, which also occur in some infarction ECGs. T wave                              cardiologists’ decision rules in the network’s attribution maps
+inversion, another common sign for infarction, can be found                            and outlined prospects for future studies in this direction.
+at position d. Some other attributions of the model are less                              Both such an analysis of attribution maps and further
+conclusive. Although attributions at positions b and f fall in                         improvements of the classification performance would have
+the T and/or U waves, that is regions that are relevant for                            to rely on considerably larger databases such as [75] for
+detection of infarction, it is unclear why they influenced the                         quantitative precision. This would also allow an extension to
+decision against infarction.                                                           further subdiagnoses and other cardiac conditions such as other
+   Note that the highlighted areas do not necessarily align                            confounding and non-exclusive diagnoses or irregular heart
+perfectly with what clinicians would identify as important.                            rhythms.
+For example for a convolutional neural network to detect
+an ST-elevation, it must use and compare information from                                                      A PPENDIX
+before and after the QRS complex, which most likely results in                           All models were implemented in TensorFlow [76]. As only
+high attributions to the QRS complex itself and its immediate                          preprocessing step we apply input normalization by applying
+                                                                                                                                                    8
+
+
+
+batch normalization [77] to all input channels. In all cases we      Fully convolutional                   Resnet
+
+minimize crossentropy loss using the Adam optimizer [78]                    input           192x8               input        192x8
+with learning rate 0.001.
+                                                                        3 conv,128         192x128           3 conv,16       192x16
+   A uniformly sampled ECG signal can be represented as a
+                                                                        2 max pool,
+two-dimensional tensor (# sampling points × input channels),              stride 2
+                                                                                           96x128            3 conv,64
+                                                                                                                               1 conv,64
+as opposed to image data that is conventionally represented as                                               3 conv,64
+                                                                        3 conv,128         96x128
+a three-dimensional tensor (height × width × input channels),           2 max pool,
+                                                                                                                  +
+                                                                                           48x128
+to which for example conventional CNN building blocks like                stride 2
+                                                                                                             3 conv,64
+                                                                                                                                  repeat 5 times
+one-dimensional convolutional or pooling layer (operating on            3 conv,128         48x128                                output: 192 x 64
+                                                                                                             3 conv,64
+a single axis rather than two axes in the image case) can               2 max pool,
+                                                                                           24x128                 +
+                                                                          stride 2
+be applied straightforwardly. This approach is predominantly
+used in the literature, see e.g. [45], [46], [27].                      3 conv,128         24x128            3 conv,128
+                                                                                                               stride 2        1 conv,128
+                                                                        2 max pool,                                              stride 2
+                                                                                           12x128            3 conv,128
+                                                                          stride 2
+A. Convolutional architectures                                                                                    +
+                                                                        3 conv,128         12x128
+   We generally use ELU [79] as activation function both for            2 max pool,                          3 conv,128
+                                                                                            6x128                                 repeat 5 times
+                                                                          stride 2
+convolutional as well as fully connected layers without using                                                                    output: 96 x 128
+                                                                                                             3 conv,128
+batch normalization [77], which was reported to lead to a              3 conv,2 linear      6x2
+                                                                                                                  +
+slight performance increase compared to the standard ReLU              global av. pool        2              3 conv,256
+activation with batch normalization [80]. In the architectures                                                 stride 2        1 conv,256
+                                                                          softmax             2                                  stride 2
+with fully connected layers we apply dropout [81] at a rate of                                               3 conv,256
+0.5 to improve the generalization capability of the model. We                                                     +
+
+initialize weights according to [82]. Note that in contrast to
+                                                                                                             3 conv,256
+the case of two-dimensional data a max pooling operation only                                                                     repeat 5 times
+                                                                                                                                 output: 48 x 256
+reduces the number of couplings by a factor of 2 rather than 4,                                              3 conv,256
+
+which is then fully compensated by the conventional increase                                                      +
+
+of filter dimensions by 2 in the next convolutional layer. To                                              global av. pool            256
+achieve a gradual reduction of couplings we therefore keep                                                  fc, 2, softmax            2
+the number of filters constant across convolutional layers. We
+study the following convolutional architectures that are also       Fig. 3: Convolutional architectures: fully convolutional (left)
+depicted in Fig. 3:                                                 and resnet (right).
+   1) A fully convolutional architecture [10] with a final
+       global average pooling layer
+                                                                         time series predication task improves the classification
+   2) A resnet-inspired [7], [59], [60] architecture with skip-
+                                                                         accuracy.
+       connections
+                                                                    During RNN training we apply gradient clipping.
+We investigate the impact of including frequency information
+obtained via a Fast Fourier Transformation with NFFT =
+2dlog2 (d)e , where d = 192 denotes the sequence length after                                     ACKNOWLEDGMENT
+rescaling. The NFFT /2 + 1 independent components are used             The authors thank M. Grünewald and K.-R. Müller for
+as frequency-domain input data with otherwise unchanged             discussions and E. Dolman for comments on the manuscript.
+network architectures.
+                                                                                                     R EFERENCES
+B. Recurrent architectures                                          [1] M. Roffi, C. Patrono, J. P. Collet, C. Mueller, M. Valgimigli, F. An-
+                                                                        dreotti, J. J. Bax, M. A. Borger, C. Brotons, D. P. Chew, B. Gencer,
+  As alternative architecture we investigate recurrent neural           G. Hasenfuss, K. Kjeldsen, P. Lancellotti, U. Landmesser, J. Mehilli,
+networks, namely LSTM [61] cells. We investigated stacked               D. Mukherjee, R. F. Storey, and S. Windecker, “[2015 ESC guidelines
+LSTM architectures but found no significant gain in perfor-             for the management of acute coronary syndromes in patients presenting
+                                                                        without persistent ST-segment elevation],” Kardiol Pol, vol. 73, no. 12,
+mance. However, even for a single RNN cell, in our case with            pp. 1207–1294, 2015.
+256 hidden units, different training methods are feasible:          [2] F. A. Masoudi, D. J. Magid, D. R. Vinson, A. J. Tricomi, E. E. Lyons,
+  1) In the first variant we feed the last LSTM output into a           L. Crounse, P. M. Ho, P. N. Peterson, and J. S. Rumsfeld, “Implications
+                                                                        of the failure to identify high-risk electrocardiogram findings for the
+     fully connected softmax layer.                                     quality of care of patients with acute myocardial infarction: results of
+  2) In the second variant we additionally apply a time-                the Emergency Department Quality in Myocardial Infarction (EDQMI)
+     distributed fully connected layer, i.e. a fully connected          study,” Circulation, vol. 114, no. 15, pp. 1565–1571, Oct 2006.
+                                                                    [3] Y. LeCun, Y. Bengio, and G. Hinton, “Deep learning,” Nature, vol. 521,
+     layer with shared weights for every timestep, and train            no. 7553, pp. 436–444, 2015.
+     the network to predict the next element in a time              [4] I. Goodfellow, Y. Bengio, and A. Courville, Deep Learning. MIT Press,
+     series prediction task jointly with the classification task.       2016, http://www.deeplearningbook.org.
+                                                                    [5] A. Krizhevsky, I. Sutskever, and G. E. Hinton, “Imagenet classifica-
+     Here we adjusted both loss functions to reach similar              tion with deep convolutional neural networks,” in Advances in neural
+     values. Similar to [17] we investigate in this way if the          information processing systems, 2012, pp. 1097–1105.
+                                                                                                                                                             9
+
+
+
+ [6] C. Szegedy, W. Liu, Y. Jia, P. Sermanet, S. Reed, D. Anguelov, D. Erhan,    [27] P. Rajpurkar, A. Y. Hannun, M. Haghpanahi, C. Bourn, and A. Y.
+     V. Vanhoucke, and A. Rabinovich, “Going deeper with convolutions,”               Ng, “Cardiologist-level arrhythmia detection with convolutional neural
+     in Proceedings of the IEEE conference on computer vision and pattern             networks,” CoRR, vol. abs/1707.01836, 2017. [Online]. Available:
+     recognition, 2015, pp. 1–9.                                                      http://arxiv.org/abs/1707.01836
+ [7] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image      [28] U. R. Acharya, H. Fujita, O. S. Lih, Y. Hagiwara, J. H. Tan, and
+     recognition,” in Proceedings of the IEEE conference on computer vision           M. Adam, “Automated detection of arrhythmias using different intervals
+     and pattern recognition, 2016, pp. 770–778.                                      of tachycardia ecg segments with convolutional neural network,”
+ [8] D. Erhan, C. Szegedy, A. Toshev, and D. Anguelov, “Scalable object               Information Sciences, vol. 405, pp. 81 – 90, 2017. [Online]. Available:
+     detection using deep neural networks,” in Proceedings of the IEEE                http://www.sciencedirect.com/science/article/pii/S0020025517306539
+     Conference on Computer Vision and Pattern Recognition, 2014, pp.            [29] U. R. Acharya, H. Fujita, S. L. Oh, U. Raghavendra, J. H. Tan,
+     2147–2154.                                                                       M. Adam, A. Gertych, and Y. Hagiwara, “Automated identification of
+ [9] S. Ren, K. He, R. Girshick, and J. Sun, “Faster R-CNN: Towards real-             shockable and non-shockable life-threatening ventricular arrhythmias
+     time object detection with region proposal networks,” in Advances in             using convolutional neural network,” Future Generation Computer
+     neural information processing systems, 2015, pp. 91–99.                          Systems, vol. 79, pp. 952 – 959, 2018. [Online]. Available:
+[10] J. Long, E. Shelhamer, and T. Darrell, “Fully convolu-                           http://www.sciencedirect.com/science/article/pii/S0167739X17315248
+     tional networks for semantic segmentation,” in Proceedings                  [30] Y. Xia, N. Wulan, K. Wang, and H. Zhang, “Detecting atrial fibrillation
+     of     the     IEEE     Conference      on    Computer     Vision    and         by deep convolutional neural networks,” Computers in biology and
+     Pattern Recognition, 2015, pp. 3431–3440. [Online]. Avail-                       medicine, vol. 93, pp. 84–92, 2018.
+     able:       http://www.cv-foundation.org/openaccess/content cvpr 2015/      [31] E. J. da S. Luz, W. R. Schwartz, G. C. Chávez, and D. Menotti,
+     html/Long Fully Convolutional Networks 2015 CVPR paper.html                      “Ecg-based heartbeat classification for arrhythmia detection: A survey,”
+[11] R. Bousseljot, D. Kreiseler, and A. Schnabel, “Nutzung der                       Computer methods and programs in biomedicine, vol. 127, pp. 144–64,
+     EKG-Signaldatenbank CARDIODAT der PTB über das Internet,”                       2016.
+     Biomedizinische Technik, vol. 40, no. Ergänzungsband 1, p. 314, 1995.      [32] Y. Hagiwara, H. Fujita, S. L. Oh, J. H. Tan, R. S. Tan,
+[12] A. L. Goldberger, L. A. N. Amaral, L. Glass, J. M. Hausdorff,                    E. J. Ciaccio, and U. R. Acharya, “Computer-aided diagnosis of
+     P. C. Ivanov, R. G. Mark, J. E. Mietus, G. B. Moody, C.-K.                       atrial fibrillation based on ecg signals: A review,” Information
+     Peng, and H. E. Stanley, “Physiobank, physiotoolkit, and physionet,”             Sciences, vol. 467, pp. 99 – 114, 2018. [Online]. Available:
+     Circulation, vol. 101, no. 23, pp. e215–e220, 2000. [Online]. Available:         http://www.sciencedirect.com/science/article/pii/S0020025518305917
+     http://circ.ahajournals.org/content/101/23/e215                             [33] L. Sun, Y. Lu, K. Yang, and S. Li, “ECG analysis using multiple
+[13] L. D. Sharma and R. K. Sunkaria, “Inferior myocardial infarction detec-          instance learning for myocardial infarction detection,” IEEE transactions
+     tion using stationary wavelet transform and machine learning approach,”          on biomedical engineering, vol. 59, no. 12, pp. 3348–3356, 2012.
+     Signal, Image and Video Processing, vol. 12, no. 2, pp. 199–206, 2018.      [34] M. Arif, I. A. Malagore, and F. A. Afsar, “Detection and localization
+[14] T. Reasat and C. Shahnaz, “Detection of inferior myocardial infarction           of myocardial infarction using k-nearest neighbor classifier,” Journal of
+     using shallow convolutional neural networks,” in 2017 IEEE Region 10             medical systems, vol. 36, no. 1, pp. 279–289, 2012.
+     Humanitarian Technology Conference (R10-HTC). IEEE, dec 2017.               [35] D. H. Lee, J. W. Park, J. Choi, A. Rabbi, and R. Fazel-Rezai, “Automatic
+     [Online]. Available: https://doi.org/10.1109/r10-htc.2017.8289058                detection of electrocardiogram st segment: Application in ischemic dis-
+[15] J. L. Willems, C. Abreu-Lima, P. Arnaud, J. H. van Bemmel, C. Brohet,            ease diagnosis,” (IJACSA) International Journal of Advanced Computer
+     R. Degani, B. Denis, J. Gehring, I. Graham, G. van Herpen et al., “The           Science and Applications, vol. 4, no. 2, 2013.
+     diagnostic performance of computer programs for the interpretation of       [36] N. Safdarian, N. J. Dabanloo, and G. Attarodi, “A new pattern recogni-
+     electrocardiograms,” New England Journal of Medicine, vol. 325, no. 25,          tion method for detection and localization of myocardial infarction using
+     pp. 1767–1773, 1991.                                                             t-wave integral and total integral as extracted features from one cycle
+[16] A. Bagnall, J. Lines, A. Bostrom, J. Large, and E. Keogh, “The great             of ecg signal,” Journal of Biomedical Science and Engineering, vol. 7,
+     time series classification bake off: a review and experimental evaluation        no. 10, p. 818, 2014.
+     of recent algorithmic advances,” Data Mining and Knowledge Discovery,       [37] J. Kojuri, R. Boostani, P. Dehghani, F. Nowroozipour, and N. Saki,
+     pp. 1–55, 2016.                                                                  “Prediction of acute myocardial infarction with artificial neural net-
+[17] M. Hüsken and P. Stagge, “Recurrent neural networks for time series             works in patients with nondiagnostic electrocardiogram,” Journal of
+     classification,” Neurocomputing, vol. 50, pp. 223–235, 2003.                     Cardiovascular Disease Research, vol. 6, no. 2, pp. 51–59, 2015.
+[18] Z. Wang, W. Yan, and T. Oates, “Time series classification from scratch     [38] B. Liu, J. Liu, G. Wang, K. Huang, F. Li, Y. Zheng, Y. Luo, and
+     with deep neural networks: A strong baseline,” in Neural Networks                F. Zhou, “A novel electrocardiogram parameterization algorithm and its
+     (IJCNN), 2017 International Joint Conference on. IEEE, 2017, pp.                 application in myocardial infarction detection,” Computers in biology
+     1578–1585. [Online]. Available: http://arxiv.org/abs/1611.06455                  and medicine, vol. 61, pp. 178–184, 2015.
+[19] Y. Chen, E. Keogh, B. Hu, N. Begum, A. Bagnall, A. Mueen, and               [39] V. S. Negandhi, S. D. Parab, A. Aishwarya, and P. Bhogle, “Heart track:
+     G. Batista, “The UCR Time Series Classification Archive,” July 2015,             Automated ecg analysis for detecting myocardial infarction,” Heart, vol.
+     www.cs.ucr.edu/∼eamonn/time series data/.                                        138, no. 9, 2016.
+[20] Z. Cui, W. Chen, and Y. Chen, “Multi-scale convolutional neural             [40] L. Sharma, R. Tripathy, and S. Dandapat, “Multiscale energy and
+     networks for time series classification,” CoRR, vol. abs/1603.06995,             eigenspace approach to detection and localization of myocardial infarc-
+     2016. [Online]. Available: http://arxiv.org/abs/1603.06995                       tion,” IEEE transactions on biomedical engineering, vol. 62, no. 7, pp.
+[21] E. Choi, M. T. Bahadori, A. Schuetz, W. F. Stewart, and J. Sun, “Doctor          1827–1837, 2015.
+     AI: Predicting Clinical Events via Recurrent Neural Networks,” JMLR         [41] M. Arif, I. A. Malagore, and F. A. Afsar, “Automatic detection and
+     workshop and conference proceedings, vol. 56, pp. 301–318, 2016.                 localization of myocardial infarction using back propagation neural
+     [Online]. Available: http://arxiv.org/abs/1511.05942                             networks,” in Bioinformatics and Biomedical Engineering (iCBBE),
+[22] H. Song, D. Rajan, J. J. Thiagarajan, and A. Spanias, “Attend and                2010 4th International Conference on. IEEE, 2010, pp. 1–4.
+     Diagnose: Clinical Time Series Analysis using Attention Models,”            [42] P. Kora and S. R. Kalva, “Improved bat algorithm for the detection of
+     CoRR, vol. abs/1711.03905, Nov. 2017.                                            myocardial infarction,” SpringerPlus, vol. 4, no. 1, p. 666, 2015.
+[23] F. Karim, S. Majumdar, H. Darabi, and S. Chen, “LSTM Fully                  [43] U. R. Acharya, H. Fujita, S. L. Oh, Y. Hagiwara, J. H. Tan, and
+     Convolutional Networks for Time Series Classification,” IEEE Access,             M. Adam, “Application of deep convolutional neural network for
+     vol. 6, pp. 1662–1669, 2018. [Online]. Available: http://arxiv.org/abs/          automated detection of myocardial infarction using ECG signals,”
+     1709.05206                                                                       Information Sciences, vol. 415, pp. 190–198, 2017.
+[24] F. Karim, S. Majumdar, H. Darabi, and S. Harford, “Multivariate LSTM-       [44] M. Kachuee, S. Fazeli, and M. Sarrafzadeh, “ECG Heartbeat Classifica-
+     FCNs for Time Series Classification,” CoRR, vol. abs/1801.04503,                 tion: A Deep Transferable Representation,” CoRR, vol. abs/1805.00794,
+     2018. [Online]. Available: http://arxiv.org/abs/1801.04503                       Apr. 2018.
+[25] H. Ismail Fawaz, G. Forestier, J. Weber, L. Idoumghar, and P.-A. Muller,    [45] Y. Zheng, Q. Liu, E. Chen, Y. Ge, and J. L. Zhao, “Time series
+     “Deep learning for time series classification: a review,” CoRR, vol.             classification using multi-channels deep convolutional neural networks,”
+     abs/1809.04356, Sep. 2018.                                                       in International Conference on Web-Age Information Management.
+[26] N. Maglaveras, T. Stamkopoulos, K. I. Diamantaras, C. Pappas, and                Springer, 2014, pp. 298–310.
+     M. G. Strintzis, “Ecg pattern recognition and classification using non-     [46] U. R. Acharya, H. Fujita, O. S. Lih, M. Adam, J. H. Tan,
+     linear transformations and neural networks: A review,” International             and C. K. Chua, “Automated detection of coronary artery disease
+     journal of medical informatics, vol. 52 1-3, pp. 191–208, 1998.                  using different durations of ecg segments with convolutional neural
+                                                                                                                                                            10
+
+
+
+     network,” Knowledge-Based Systems, vol. 132, pp. 62 – 71,                    [69] M. Ancona, E. Ceolini, A. C. Öztireli, and M. H. Gross, “Towards better
+     2017. [Online]. Available: http://www.sciencedirect.com/science/article/          understanding of gradient-based attribution methods for Deep Neural
+     pii/S0950705117302769                                                             Networks,” ICLR, vol. abs/1711.06104, 2018. [Online]. Available:
+[47] D. Rajan and J. J. Thiagarajan, “A Generative Modeling Approach to                http://arxiv.org/abs/1711.06104
+     Limited Channel ECG Classification,” CoRR, vol. abs/1802.06458, Feb.         [70] A. Shrikumar, P. Greenside, A. Shcherbina, and A. Kundaje, “Not
+     2018.                                                                             Just a Black Box: Learning Important Features Through Propagating
+[48] W. Pei, H. Dibeklioglu, D. M. J. Tax, and L. van der Maaten, “Time                Activation Differences,” CoRR, vol. abs/1605.01713, 2016. [Online].
+     series classification using the hidden-unit logistic model,” CoRR, vol.           Available: http://arxiv.org/abs/1605.01713
+     abs/1506.05085, 2015. [Online]. Available: http://arxiv.org/abs/1506.        [71] S. Bach, A. Binder, G. Montavon, F. Klauschen, K.-R. Müller,
+     05085                                                                             and W. Samek, “On Pixel-Wise Explanations for Non-Linear
+[49] P. Schäfer and U. Leser, “Multivariate time series classification                Classifier Decisions by Layer-Wise Relevance Propagation,” PLoS
+     with WEASEL+MUSE,” CoRR, vol. abs/1711.11343, 2017. [Online].                     ONE, vol. 10, no. 7, p. e0130140, 07 2015. [Online]. Available:
+     Available: http://arxiv.org/abs/1711.11343                                        http://dx.doi.org/10.1371%2Fjournal.pone.0130140
+[50] A. M. R. A. Keith L. Moore, Arthur F. Dalley, Clinically Oriented            [72] S. Z. Tewelde, A. Mattu, and W. J. Brady, “Pitfalls in Electrocardio-
+     Anatomy. Wolters Kluwer — Lippincott Williams & Wilkins, 2010.                    graphic Diagnosis of Acute Coronary Syndrome in Low-Risk Chest
+                                                                                       Pain,” West J Emerg Med, vol. 18, no. 4, pp. 601–606, Jun 2017.
+[51] B. Hu, Y. Chen, and E. Keogh, “Time series classification under more
+                                                                                  [73] K. Thygesen, J. S. Alpert, A. S. Jaffe, M. L. Simoons, B. R. Chaitman,
+     realistic assumptions,” in Proceedings of the 2013 SIAM International
+                                                                                       and H. D. White, “Third universal definition of myocardial infarction,”
+     Conference on Data Mining. SIAM, 2013, pp. 578–586.
+                                                                                       Glob Heart, vol. 7, no. 4, pp. 275–295, Dec 2012.
+[52] P. Branco, L. Torgo, and R. P. Ribeiro, “A survey of predictive
+                                                                                  [74] A. S. Ross, M. C. Hughes, and F. Doshi-Velez, “Right for
+     modelling under imbalanced distributions,” CoRR, vol. abs/1505.01658,
+                                                                                       the right reasons: Training differentiable models by constraining
+     2015. [Online]. Available: http://arxiv.org/abs/1505.01658
+                                                                                       their explanations,” in IJCAI, 2017. [Online]. Available: http:
+[53] M. Buda, A. Maki, and M. A. Mazurowski, “A systematic                             //arxiv.org/abs/1703.03717
+     study of the class imbalance problem in convolutional neural                 [75] J.-P. Couderc, “A unique digital electrocardiographic repository for
+     networks,” CoRR, vol. abs/1710.05381, 2017. [Online]. Available:                  the development of quantitative electrocardiography and cardiac
+     http://arxiv.org/abs/1710.05381                                                   safety: the telemetric and holter ecg warehouse (thew),” Journal of
+[54] A. Isaksson, M. Wallman, H. Göransson, and M. G. Gustafsson, “Cross-             electrocardiology, vol. 43, no. 6, pp. 595–600, 2010.
+     validation and bootstrapping are unreliable in small sample classifica-      [76] M. Abadi, A. Agarwal, P. Barham, E. Brevdo, Z. Chen, C. Citro,
+     tion,” Pattern Recognition Letters, vol. 29, no. 14, pp. 1960–1965, 2008.         G. S. Corrado, A. Davis, J. Dean, M. Devin, S. Ghemawat, I. J.
+[55] Y. Bengio and Y. Grandvalet, “No unbiased estimator of the variance               Goodfellow, A. Harp, G. Irving, M. Isard, Y. Jia, R. Józefowicz,
+     of k-fold cross-validation,” Journal of machine learning research, vol. 5,        L. Kaiser, M. Kudlur, J. Levenberg, D. Mané, R. Monga, S. Moore,
+     no. Sep, pp. 1089–1105, 2004.                                                     D. G. Murray, C. Olah, M. Schuster, J. Shlens, B. Steiner, I. Sutskever,
+[56] T. Shaikhina and N. A. Khovanova, “Handling limited datasets with neu-            K. Talwar, P. A. Tucker, V. Vanhoucke, V. Vasudevan, F. B. Viégas,
+     ral networks in medical applications: A small-data approach,” Artificial          O. Vinyals, P. Warden, M. Wattenberg, M. Wicke, Y. Yu, and
+     Intelligence in Medicine, vol. 75, pp. 51 – 63, 2017. [Online]. Available:        X. Zheng, “Tensorflow: Large-scale machine learning on heterogeneous
+     http://www.sciencedirect.com/science/article/pii/S0933365716301749                distributed systems,” CoRR, vol. abs/1603.04467, 2016. [Online].
+[57] C. Ju, A. Bibaut, and M. J. van der Laan, “The relative performance of            Available: http://arxiv.org/abs/1603.04467
+     ensemble methods with deep convolutional neural networks for image           [77] S. Ioffe and C. Szegedy, “Batch normalization: Accelerating deep
+     classification,” CoRR, vol. abs/1704.01664, 2017. [Online]. Available:            network training by reducing internal covariate shift,” in International
+     http://arxiv.org/abs/1704.01664                                                   Conference on Machine Learning, 2015, pp. 448–456.
+[58] A. Waibel, T. Hanazawa, G. Hinton, K. Shikano, and K. J.                     [78] D. P. Kingma and J. Ba, “Adam: A method for stochastic
+     Lang, “Phoneme recognition using time-delay neural networks,” IEEE                optimization,” CoRR, vol. abs/1412.6980, 2014. [Online]. Available:
+     transactions on acoustics, speech, and signal processing, vol. 37, no. 3,         http://arxiv.org/abs/1412.6980
+     pp. 328–339, 1989.                                                           [79] D. Clevert, T. Unterthiner, and S. Hochreiter, “Fast and Accurate Deep
+[59] K. He, X. Zhang, S. Ren, and J. Sun, “Identity mappings in deep residual          Network Learning by Exponential Linear Units (ELUs),” CoRR, vol.
+     networks,” in European Conference on Computer Vision. Springer,                   abs/1511.07289, 2015. [Online]. Available: http://arxiv.org/abs/1511.
+     2016, pp. 630–645.                                                                07289
+[60] S. Zagoruyko and N. Komodakis, “Wide residual networks,” CoRR,               [80] D. Mishkin, N. Sergievskiy, and J. Matas, “Systematic evaluation
+     vol. abs/1605.07146, 2016. [Online]. Available: http://arxiv.org/abs/             of convolution neural network advances on the Imagenet,” Computer
+     1605.07146                                                                        Vision and Image Understanding, vol. 161, pp. 11–19, 2017. [Online].
+[61] S. Hochreiter and J. Schmidhuber, “Long short-term memory,” Neural                Available: http://arxiv.org/abs/1606.02228
+     computation, vol. 9, no. 8, pp. 1735–1780, 1997. [Online]. Available:        [81] N. Srivastava, G. Hinton, A. Krizhevsky, I. Sutskever, and
+     http://www.mitpressjournals.org/doi/abs/10.1162/neco.1997.9.8.1735                R. Salakhutdinov, “Dropout: A Simple Way to Prevent Neural
+                                                                                       Networks from Overfitting,” Journal of Machine Learning
+[62] G. Vanwinckelen and H. Blockeel, “On estimating model accuracy with
+                                                                                       Research, vol. 15, pp. 1929–1958, 2014. [Online]. Available:
+     repeated cross-validation,” in BeneLearn 2012: Proceedings of the 21st
+                                                                                       http://www.jmlr.org/papers/v15/srivastava14a.html
+     Belgian-Dutch Conference on Machine Learning, 2012, pp. 39–44.
+                                                                                  [82] K. He, X. Zhang, S. Ren, and J. Sun, “Delving deep into rectifiers:
+[63] F. Cabitza, R. Rasoini, and G. Gensini, “Unintended consequences of
+                                                                                       Surpassing human-level performance on imagenet classification,” in
+     machine learning in medicine,” JAMA, vol. 318, no. 6, pp. 517–518,
+                                                                                       Proceedings of the IEEE international conference on computer vision,
+     2017. [Online]. Available: http://dx.doi.org/10.1001/jama.2017.7797
+                                                                                       2015, pp. 1026–1034.
+[64] K. Simonyan, A. Vedaldi, and A. Zisserman, “Deep inside convolutional
+     networks: Visualising image classification models and saliency
+     maps,” CoRR, vol. abs/1312.6034, 2013. [Online]. Available: http:
+     //arxiv.org/abs/1312.6034
+[65] M. Sundararajan, A. Taly, and Q. Yan, “Axiomatic attribution
+     for deep networks,” in ICML, 2017. [Online]. Available: http:
+     //arxiv.org/abs/1703.01365
+[66] G. Montavon, W. Samek, and K.-R. Müller, “Methods for interpreting
+     and understanding deep neural networks,” Digital Signal Processing,
+     vol. 73, pp. 1 – 15, 2018. [Online]. Available: http://www.sciencedirect.
+     com/science/article/pii/S1051200417302385
+[67] T. Teijeiro, C. A. Garcı́a, D. Castro, and P. Félix, “Abductive reasoning
+     as the basis to reproduce expert criteria in ECG Atrial Fibrillation
+     identification,” CoRR, vol. abs/1802.05998, Feb. 2018.
+[68] S. A. Siddiqui, D. Mercier, M. Munir, A. Dengel, and S. Ahmed,
+     “TSViz: Demystification of Deep Learning Models for Time-Series
+     Analysis,” CoRR, vol. abs/1802.02952, Feb. 2018.
+ 1.5 A                                1.5 A                                1.5 A                                1.5 B                                1.5 B                                1.5 B
+ 1.0                                  1.0                                  1.0                                  1.0                                  1.0                                  1.0
+ 0.5                                  0.5                                  0.5                                  0.5                                  0.5                                  0.5
+ 0.0                                  0.0                                  0.0                                  0.0                                  0.0                                  0.0
+ 0.5                                  0.5                                  0.5                                  0.5                                  0.5                                  0.5
+ 1.0                                  1.0                                  1.0                                  1.0                                  1.0                                  1.0
+ 1.5 I                                1.5 II                               1.5 III                              1.5 I                                1.5 II                               1.5 III
+ 2.0                                  2.0                                  2.0                                  2.0                                  2.0                                  2.0
+    0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5
+
+ 1.5 A                                1.5 A                                1.5 A                                1.5 B                                1.5 B                                1.5 B
+ 1.0                                  1.0                                  1.0                                  1.0                                  1.0                                  1.0
+ 0.5                                  0.5                                  0.5                                  0.5                                  0.5                                  0.5
+ 0.0                                  0.0                                  0.0                                  0.0                                  0.0                                  0.0
+ 0.5                                  0.5                                  0.5                                  0.5                                  0.5                                  0.5
+ 1.0                                  1.0                                  1.0                                  1.0                                  1.0                                  1.0
+ 1.5 aVR                              1.5 aVL                              1.5 aVF                              1.5 aVR                              1.5 aVL                              1.5 aVF
+ 2.0                                  2.0                                  2.0                                  2.0                                  2.0                                  2.0
+    0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5
+
+ 1.5 A                                1.5 A                                1.5 A                                1.5 B                                1.5 B                                1.5 B
+ 1.0                                  1.0                                  1.0                                  1.0                                  1.0                                  1.0
+ 0.5                                  0.5                                  0.5                                  0.5                                  0.5                                  0.5
+ 0.0                                  0.0                                  0.0                                  0.0                                  0.0                                  0.0
+ 0.5                                  0.5                                  0.5                                  0.5                                  0.5                                  0.5
+ 1.0                                  1.0                                  1.0                                  1.0                                  1.0                                  1.0
+ 1.5 V1                               1.5 V2                               1.5 V3                               1.5 V1                               1.5 V2                               1.5 V3
+ 2.0                                  2.0                                  2.0                                  2.0                                  2.0                                  2.0
+    0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5
+
+ 1.5 A                                1.5 A                                1.5 A                                1.5 B                                1.5 B                                1.5 B
+ 1.0                                  1.0                                  1.0                                  1.0                                  1.0                                  1.0
+ 0.5                                  0.5                                  0.5                                  0.5                                  0.5                                  0.5
+ 0.0                                  0.0                                  0.0                                  0.0                                  0.0                                  0.0
+ 0.5                                  0.5                                  0.5                                  0.5                                  0.5                                  0.5
+ 1.0                                  1.0                                  1.0                                  1.0                                  1.0                                  1.0
+ 1.5 V4                               1.5 V5                               1.5 V6                               1.5 V4                               1.5 V5                               1.5 V6
+ 2.0                                  2.0                                  2.0                                  2.0                                  2.0                                  2.0
+    0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5      0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5
+
+Fig. 4: Examplary interpretability analysis repeated here with the full set of channels. Red (blue) areas influenced the neural network towards (against) a correct classification
+as myocardial infarction. Note that the neural network did only use a non-redundant set of 8 instead of the full set of 12 channels. Nevertheless, unused channels are
+shown as well without color-coding in the background. See Sec. V-C for details.
+
+
+                                                                                                                                                                                                                               11
+

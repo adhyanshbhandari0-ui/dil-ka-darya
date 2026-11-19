@@ -1,0 +1,810 @@
+                                         A Computer Vision Pipeline for Automated Determination of Cardiac Structure
+                                         and Function and Detection of Disease by Two-Dimensional Echocardiography
+
+                                                  Jeffrey Zhang12      Sravani Gajjala1      Pulkit Agrawal2       Geoffrey H. Tison3
+                                                                2                              4
+                                               Laura A. Hallock        Lauren Beussink-Nelson         Mats H. Lassen3      Eugene Fan3
+                                            Mandar A. Aras13       ChaRandle Jordan3       Kirsten E. Fleischmann3      Michelle Melisko3
+                                                        3                2                   4                   2
+                                            Atif Qasim       Alexei Efros      Sanjiv J. Shah       Ruzena Bajcsy      Rahul C. Deo13567∗
+
+
+
+
+arXiv:1706.07342v7 [cs.CV] 12 Jan 2018
+                                                                1
+                                                                   Cardiovascular Research Institute, University of California, San Francisco, USA.
+                                                  2
+                                                      Department of Electrical Engineering and Computer Science, University of California at Berkeley, USA.
+                                                                       3
+                                                                         Department of Medicine, University of California, San Francisco, USA.
+                                                        4
+                                                          Division of Cardiology, Department of Medicine, and Feinberg Cardiovascular Research Institute
+                                                                          Northwestern University Feinberg School of Medicine, Chicago, IL.
+                                                                    5
+                                                                      Institute for Human Genetics, University of California, San Francisco, USA.
+                                                                        6
+                                                                          California Institute for Quantitative Biosciences, San Francisco, USA.
+                                                           7
+                                                             Institute for Computational Health Sciences, University of California, San Francisco, USA.
+                                                                    ∗
+                                                                      To whom correspondence should be addressed; E-mail: rahul.deo@ucsf.edu
+
+
+
+                                                                    Abstract                                (n=197) and 1.6% (n=110)], and demonstrated applica-
+                                                                                                            bility to serial monitoring of breast cancer patients for
+                                                                                                            trastuzumab cardiotoxicity. Overall, we found that, com-
+                                             Automated cardiac image interpretation has the poten-          pared to manual measurements, automated measurements
+                                         tial to transform clinical practice in multiple ways includ-       had superior performance across seven internal consistency
+                                         ing enabling low-cost serial assessment of cardiac function        metrics (e.g. the correlation of left ventricular diastolic
+                                         by non-experts in the primary care and rural setting. We           volumes with left atrial volumes) with an average increase
+                                         hypothesized that advances in computer vision could en-            in the absolute Spearman correlation coefficient of 0.05
+                                         able building a fully automated, scalable analysis pipeline        (p=0.02). Finally, we used CNNs to develop disease detec-
+                                         for echocardiogram (echo) interpretation. Our approach             tion algorithms for hypertrophic cardiomyopathy and car-
+                                         entailed: 1) preprocessing of complete echo studies; 2)            diac amyloidosis, with C-statistics of 0.93 and 0.84, respec-
+                                         convolutional neural networks (CNN) for view identifica-           tively. Our pipeline lays the groundwork for using auto-
+                                         tion, image segmentation, and phasing of the cardiac cy-           mated interpretation to support point-of-care handheld car-
+                                         cle; 3) quantification of chamber volumes and left ven-            diac ultrasound and large-scale analysis of the millions of
+                                         tricular mass; 4) particle tracking to compute longitudinal        echos archived within healthcare systems.
+                                         strain; and 5) targeted disease detection. CNNs accurately
+                                         identified views (e.g. 99% for apical 4-chamber) and seg-
+                                         mented individual cardiac chambers. The resulting cardiac          1. Introduction
+                                         structure measurements agreed with study report values
+                                         [e.g. median absolute deviations (MAD) of 11.8 g/kg/m2                Cardiac muscle disease often progresses for years prior
+                                         for left ventricular mass index and 7.7 mL/kg/m2 for left          to the onset of symptoms. This process, known as car-
+                                         ventricular diastolic volume index, derived from 1319 and          diac remodeling, can accompany conditions such as valvu-
+                                         2918 studies, respectively]. In terms of cardiac function,         lar disease, hypertension and diabetes mellitus, and result
+                                         we computed automated ejection fraction and longitudi-             in pathologic changes to the heart that are difficult to re-
+                                         nal strain measurements (within 2 cohorts), which agreed           verse once established [11]. Although early evidence of re-
+                                         with commercial software-derived values [for ejection frac-        modeling is often detectable by imaging [13] and could in
+                                         tion, MAD=5.3%, N=3101 studies; for strain, MAD=1.5%               principle be tracked longitudinally in a personalized man-
+
+
+                                                                                                        1
+ner, the cost of imaging all individuals with cardiac risk         2. Results
+factors would be prohibitive. Automated image interpreta-
+tion could enable such monitoring at far lower costs, espe-        2.1. Overview: A Computer Vision Pipeline for Au-
+cially when coupled with inexpensive data acquisition. For               tomated 2D-Echocardiogram Interpretation
+echocardiography one such strategy could involve handheld              Our primary goal was to develop an analytic pipeline
+ultrasound devices used by non-experts [19] at point of care       for automated analysis of echocardiograms that required no
+locations (e.g. primary care clinics) and a cloud-based au-        user intervention and thus could be deployed on a high-
+tomated interpretation system that assesses cardiac struc-         performance computing cluster or web application. We
+ture and function and compares results to one or more prior        divided our approach into 6 steps (Figure 1). Preprocess-
+studies. Automated image interpretation could also enable          ing entailed automated downloading of echo studies in DI-
+surveillance of echo data collected at a given center and          COM format, separating videos from still images, extract-
+could be coupled with statistical models to highlight early        ing metadata (such as frame rate, heart rate), converting
+evidence of dysfunction or detect rare myocardial diseases.        them into numerical arrays for matrix computations, and
+Such an approach could, for example, enable systematic             de-identifying images by overwriting patient health infor-
+comparison across the tens of millions of echocardiograms          mation. We next used convolutional neural networks (de-
+completed each year in the Medicare population alone [2].          scribed below) for automatically determining echo views.
+                                                                   Based on the identified views, videos were routed to spe-
+                                                                   cific segmentation models (parasternal long axis, paraster-
+   Automated image interpretation falls under the disci-           nal short axis, apical-2 and apical 4-chamber) and the out-
+pline of computer vision, which, in turn, is a branch of           put was used to derive chamber measurements, includ-
+machine learning where computers learn to mimic human              ing lengths, areas, volumes and estimates of mass. Next,
+vision [25]. Although the application of computer vision           we generated two commonly used automated measures of
+to medical imaging has been longstanding [3], recent ad-           left ventricular function: ejection fraction and longitudinal
+vances in computer vision algorithms, processing power,            strain. Finally, we phased parasternal long-axis videos to
+and a massive increase in digital labeled data has resulted        identify images at the end of cardiac systole and diastole,
+in a striking improvement in classification performance for        and used the resulting image pairs to detect two diseases:
+several test cases, including retinal [10] and skin disease        hypertrophic cardiomyopathy and cardiac amyloidosis. Be-
+[7]. Echocardiography, nonetheless, presents challenges be-        low we elaborate on these steps, both providing technical
+yond these examples. Rather than comprising a single still         details of performance as well as clinical applications.
+image, a typical echo study consists of up to 70 videos col-
+lected from different viewpoints, and viewpoints are not la-       2.2. Convolutional Neural Networks (“Deep Learn-
+beled in each study. Furthermore, measurements can vary                  ing”) for View Identification
+from video to video because of intrinsic beat-to-beat vari-           Typical echo studies consist of up to 70 separate videos
+ability in cardiac performance as well as variability from         representing multiple different viewpoints. For example,
+the process of approximating a three-dimensional object us-        several different views are taken with the transducer placed
+ing two-dimensional cross-sectional images. Given the ex-          beside the sternum (e.g. parasternal long axis and short
+tent of this variability and the sheer amount of multidimen-       axis views), at the cardiac apex (apical views), or below
+sional information in each study that often goes unused, it        the xiphoid process (subcostal views). Furthermore, with
+appears that echocardiography would benefit from an auto-          rotation and adjustment of the zoom level of the ultrasound
+mated learning approach to assist human interpretation.            probe, sonographers actively focus on substructures within
+                                                                   an image, thus creating many variations of these views. Un-
+                                                                   fortunately, none of these views are labeled explicitly. Thus,
+   In this manuscript, we present a fully automated com-           the first learning step involves teaching the machine to rec-
+puter vision pipeline for interpretation of cardiac struc-         ognize individual echo views.
+ture, function, and disease detection using a combination             For an initial model, we manually labeled six differ-
+of computer vision approaches. We demonstrate the scal-            ent views: apical 2-, 3-, and 4-chamber (A2c, A3c, and
+ability of our approach by analyzing >4000 echo studies            A4c), parasternal long axis (PLAX), parasternal short axis
+and validate our accuracy against commercial vendor pack-          at the level of the papillary muscles (PSAX), the inferior
+ages. We describe some of the challenges we encoun-                vena cava (IVC) and labeled all as “others”. We next used
+tered in the process as well as potential promising appli-         a multi-layer convolutional neural network, an algorithm
+cations. We have deployed our pipeline on Amazon EC2               commonly used for “deep learning”, to distinguish between
+at http:///www.echocv.org and make source code and model           the different views.
+weights available.                                                    Deep learning is a form of machine learning devised to
+
+                                                               2
+                                                                          cluding these videos when quantifying left atrial volumes.
+                                                                          For subsequent steps, we focused on PLAX, PSAX, A2c,
+                                                                          and A4c views as these would be used to derive measures
+                                                                          of cardiac structure and function and to develop detection
+                                                                          models for specific diseases.
+
+                                                                          2.3. CNNs for Image Segmentation
+                                                                              Image segmentation involves identifying the location of
+                                                                          objects of interest within an image. For example, one could
+                                                                          identify the faces of people in a surveillance camera video
+                                                                          or the location of other automobiles on the road in front
+Figure 1. Overview of Automated Cardiac Interpretation Pipeline.          of a self-driving car. Given that image segmentation repre-
+We divided the pipeline into 6 steps. Preprocessing involves au-          sents a critical component of computer vision and robotics,
+tomated downloading of echo studies in DICOM format, sepa-                computer scientists have developed multiple different algo-
+rating video loops from still images, extracting metadata, con-           rithms to carry out this task.
+verting them into numerical arrays for matrix computation and                 We initially used active appearance models for this task
+de-identifying images by overwriting patient health information.          [6]. However, we found that deriving a two-step approach
+Convolutional neural networks (CNNs) are used for automatically           consisting of first deriving a bounding box around the cham-
+determining echo views - e.g. apical 4-chamber. View-classified
+                                                                          ber of interest was error-prone. We thus used an approach
+are then routed to one of 4 CNN models for image segmenta-
+tion. We use the corresponding segmented images to compute
+                                                                          relying exclusively on CNN-based methods [22] and trained
+standard measurements of cardiac structure, averaging across mul-         separate models for PLAX, PSAX, A2c, and A4c views,
+tiple cardiac cycles within a video and multiple videos for a given       which each localized 3-6 structures (Table 1). For example,
+view. We also use segmentation to derive two indices of cardiac           for A4c, we segmented the blood pools for both the right
+function: left ventricular ejection fraction and global longitudi-        and left atria and ventricles, the outer myocardial bound-
+nal strain (GLS). Finally, we use phased pairs of PLAX and A4c            ary of the left ventricle and the epicardial boundary of the
+images (corresponding to end-systole and end-diastole) to detect          whole heart. We found very good performance for our mod-
+two diseases characterized by abnormal cardiac thickening: hy-            els, with IoU values ranging from 73 to 92 for all structures
+pertrophic cardiomyopathy (HCM) and cardiac amyloidosis.                  of interest (the outer boundary of the entire heart was an
+                                                                          outlier).
+
+mimic the way the visual system works [16]. The “deep”                    2.4. Chamber Structure and Function Quantifica-
+adjective refers to multiple layers of “neurons”, processing                    tion
+nodes tuned to recognize features within an image (or other                   As an independent “real-world” confirmation of seg-
+complex input). The lower layers typically recognize sim-                 mentation, we derived commonly used measures of car-
+ple features such as edges. The neurons in subsequent lay-                diac structure and compared our results to thousands of
+ers recognize combinations of simple features and thus each               measurements derived from the University of California,
+layer provides increasing levels of abstraction. The features             San Francisco (UCSF) echocardiography laboratory, which
+in the top layer are typically used in a multiclass logistic re-          uses a variety of vendor-derived software packages. We
+gression model, which provides a final probabilistic output               downloaded >4000 studies and performed view classifica-
+for classification.                                                       tion and segmentation, deriving measurements according to
+    We trained a 13-layer network and found an extremely                  standard guidelines [15]. For most studies, we used 6 to 8
+high level of accuracy for view classification as judged by               videos for each measurement and derived a robust aggre-
+cross-validation (Figure 2, e.g. 99% for parasternal long                 gate measure across all the studies, averaging across multi-
+axis). Clustering of the top layer features by t-Distributed              ple cardiac cycles.
+Stochastic Neighbor Embedding (tSNE) [26], a useful algo-                     We compared our results with values derived from
+rithm for visualizing high-dimensional data, revealed clear               the routine clinical workflow (not all measurements were
+separation of the different classes, with intuitive closer                recorded for every study) and found excellent agreement
+groupings of some pairs (e.g. A2c and A3c). We next                       for body-surface area indexed left atrial volume (LAVOLI)
+trained a broader (22-class) network to enable detection of               and three left ventricular measures: (indexed) left ven-
+whether certain chambers are only partially visualized, as                tricular mass (LVMI), left ventricular end diastolic vol-
+this would be essential for accurate quantification of cardiac            umes(LVEDVI) and left ventricular end systolic volume
+structure and function. For example, identifying A2c views                (LVESVI), (Table. 2, Fig. 4A).
+where the left atrium is partially missing would enable ex-                   As an independent measure of performance, we assessed
+
+
+                                                                      3
+Figure 2. Convolutional neural networks successfully discriminate echo views. (Left) tSNE visualization of view classification. tSNE is
+an algorithm used to visualize high-dimensional data in lower dimensions. It depicts the successful grouping of test images corresponding
+to 6 different echocardiographic views. (Right) Confusion matrix demonstrating successful and unsuccessful view classifications within
+test data set. Numbers along the diagonal represent successful classifications while off-diagonal entries are misclassifications. Views are
+numbered as follows: 0) PLAX; 1) PSAX; 2) A2c; 3) A3c; 4) A4c; 5) IVC.
+
+                          View             Number of Images Tested              Segmented Area          IOU Accuracy
+                    Apical 2-Chamber                200                      Left atrium blood pool           90.6
+                         (A2C)                                              Left ventricle blood pool         88.1
+                                                                              Left ventricle muscle           72.7
+                                                                             Outer cardiac boundary           55.3
+                     Apical 4-Chamber                    177                 Left atrium blood pool           91.7
+                           (A4c)                                            Left ventricle blood pool         89.2
+                                                                              Left ventricle muscle           74.0
+                                                                             Right atrium blood pool          81.2
+                                                                            Right ventricle blood pool        88.0
+                                                                             Outer cardiac boundary           74.0
+                   Parasternal long axis                 104                 Left atrium blood pool           83.1
+                          (PLAX)                                            Right ventricle blood pool         85
+                                                                                   Aortic root                84.7
+                                                                             Outer cardiac boundary           86.8
+                                                                                Anterior septum               76.3
+                                                                                  Posterior wall              72.7
+                   Parasternal short axis                76                 Left ventricle blood pool         91.9
+                          (PSAX)                                              Left ventricle muscle           79.0
+                                                                            Right ventricle blood pool        78.6
+Table 1. The U-Net algorithm trains CNN models to segment echocardiographic images. Final column displays accuracy, as determined
+by cross-validation, of segmentation of specific structures within images from 4 different echocardiographic views. Segmented regions are
+depicted in Figure 3.
+
+
+how well each method (i.e. automated vs. manual) could                  We found a stronger association by automated compared to
+identify associations between different metrics. For exam-              manual estimation for LAVOLI vs. LVEDVI [ρ = 0.50 (au-
+ple, it is known that the left atrium enlarges in patients with         tomated vs. automated) vs. 0.42 (manual vs. manual), N
+increased ventricular volume and mass - presumably reflect-             = 1366] and LAVOLI vs. LVESVI [ρ = 0.47 (automated
+ing increased ventricular pressures transmitted to the atria.           vs. automated) vs. 0.38 (manual vs. manual), N = 1366],
+
+
+                                                                    4
+Figure 3. Convolutional neural networks successfully segment car-
+diac chambers. We used the U-net algorithm to derive segmenta-
+tion models for 4 views: A4c (top left), A2c (top right), PLAX
+(bottom left) and PSAX at the level of the papillary muscle (bot-
+tom right). For each view, the trio of images, from left to right,
+corresponds to the original image, the manually traced image used        Figure 4. Automated segmentation results in accurate cardiac
+in training (Ground Truth) and the automated segmented image             structure measurements in “real-world” conditions. (A) Bland-
+(determined as part of the cross-validation process).                    Altman plot comparing automated and manual (derived during
+                                                                         standard clinical workflow) measurements for indexed left ven-
+                                                                         tricular end diastolic volume (LVEDVI) from 2915 echo studies.
+                                                                         Orange, red, and blue dashed lines delineate the central 50%, 75%
+though a slightly weaker association for LAVOLI vs. LVMI
+                                                                         and 95% of patients, as judged by difference between automated
+[ρ = 0.47 (automated vs. automated) vs. 0.50 (manual                     and manual measurements. The solid gray line indicates the me-
+vs. manual), N = 825]. We also found a slightly stronger                 dian. (B) Scatter plot relating the absolute deviation between
+inverse relationship between automated LAVOLI and left                   automated-manual measurements for LVEDVI and the number of
+ventricular ejection fraction [ρ = -0.18 (automated vs. au-              videos used in the estimation. A separate loess fit is made for each
+tomated) vs. -0.15 (manual vs. manual), N = 1367], which                 of 3 tertiles of “study quality score” as judged by the average of
+is a measure of function. We describe a non-parametric sta-              the probability of view assignment across the study made by the
+tistical test in a later section to assess the likelihood that           CNN in Figure 2. All measurements made with greater than 15
+these differences in measures of internal consistency arise              studies were binned together. (C) Automated measurements re-
+by chance.                                                               veal a difference in left atrial volumes between HCM patients and
+                                                                         matched controls and (D) a difference in left ventricular mass be-
+    Our approach relies on aggregation across multiple car-              tween cardiac amyloidosis patients and matched controls.
+diac cycles within a video and across multiple videos of the
+same cardiac chamber. We explored to what extent each
+additional study contributes to the agreement between au-                dosis, a condition described below, we found markedly
+tomated and measured values by fitting a linear regression               increased left ventricular mass (125 vs 103 mg/kg/m2 ,
+model to the absolute deviation. We also generated a predic-             p=0.0006, Figure 4D).
+tor for “study quality” based on the confidence with which
+views could be classified by the CNN described above.                    2.5. Assessing Cardiac Function by Ejection Frac-
+Specifically, we took a median of the probability of the as-                   tion and Global Longitudinal Strain
+signed class for all videos in the study, generating a value                In addition to assessing the structure of the heart, 2D
+between 0 and 1 and termed it a “view probability qual-                  echocardiography provides estimates of cardiac function.
+ity score” or VPQS. We found that for LVEDVI, each 0.1                   The most commonly used metric, ejection fraction, can be
+increase in VPQS reduced the absolute deviation by 2.0                   readily computed from segmentation of the left ventricle
+mL/kg/m2 (p=8x10−10 ) and that each additional study used                during end diastole and end systole. In keeping with our
+(up to 15) modestly reduced the absolute deviation by 0.02               performance on individual left ventricular volume metrics,
+mL/kg/m2 (p=0.02) (Figure 4B).                                           we found a strong if not stronger performance for ejection
+    Changes in cardiac structure can also be useful in risk              fraction (EF), with a MAD of 5.3% (median EF 64%, N =
+models for various diseases. For example, left atrial en-                3101, Figure 5A). Along with EF, longitudinal strain is an
+largement is a predictor for sudden cardiac death [20] in                increasingly popular method to assess the longitudinal func-
+hypertrophic cardiomyopathy (HCM), a disease of cardiac                  tion of the heart [27]. It is a sensitive measure of cardiac
+thickening, and one could envisage an automated stan-                    dysfunction and is tolerant of errors in mapping of the endo-
+dardized system to compute such measures for HCM pa-                     cardial border, whereas ejection fraction estimates depend
+tients. As expected, we found clear differences in left                  on perfect delineation of this boundary. Although com-
+atrial volumes between HCM cases and matched controls                    mercial packages to measure strain have been available for
+using our automated measurements (40 vs. 25 mL/kg/m2 ,                   many years, they invariably require some user intervention
+p<2.2x10−16 , Figure 4C). Similarly, for cardiac amyloi-                 and thus cannot be implemented in a scalable, fully auto-
+
+
+                                                                     5
+                                                                                                               Absolute Deviation:
+                                                   Number of Echo Studies Used                               Automated vs. Manual
+      Metric (units described in table legend)                                        Median Value (IQR)
+                                                        for Comparison                                            Measurement
+                                                                                                             50% 75%         95%
+               Left atrial volume index                         1452                    27.7 (22.0–36.7)      4.7    8.7     16.9
+       Left ventricular diastolic volume index                  2915                    51.8 (41.8–63.8)      7.7   14.0     26.1
+        Left ventricular systolic volume index                  2910                    18.8 (14.3–24.9)      4.7    8.5     16.9
+             Left ventricular mass index                        1319                   81.0 (68.2–100.2)     11.5 19.8       43.0
+           Left ventricular ejection fraction                   3101                    64.0 (57.9–68.6)      5.3    9.9     19.1
+              Global longitudinal strain                         197                    18.0 (17.0–20.0)      1.5    2.6      5.0
+              Global longitudinal strain
+                                                                 110                    18.0 (16.0–20.0)        1.6   2.8      5.4
+             (John Hopkins PKD cohort)
+Table 2. Comparison between fully automated and manual measurements derived from 2-dimensional echocardiography. Absolute
+deviations are reported as percentiles. For each metric, 50%, 75%, and 95% of studies have an absolute deviation between automated and
+manual measurements that is less than the indicated value. Units are mL/kg/m2 for left atrial and left ventricular volumes and g/kg/m2 for
+left ventricular mass. Ejection fraction and global longitudinal strain are dimensionless. IQR = interquartile range.
+
+
+                                                                           tween automated and manual values (MAD = 1.6%, Table
+                                                                           2 and Figure 6).
+
+
+
+
+Figure 5. An automated computer vision pipeline accurately as-
+sesses cardiac function. Bland-Altman plot comparing automated
+and manual ejection fraction estimates for 3101 individual echo
+studies (A) and global longitudinal strain (GLS) for 197 echo stud-
+ies (B). Delimiting lines are as in Figure 4A. Scatter plots depict-
+                                                                           Figure 6. Bland-Altman plot as in Figure 5B for 110 studies from
+ing agreement between ejection fraction and GLS for manual and
+                                                                           a polycystic kidney disease cohort (PKD). Automated measure-
+automated measurements (N = 175). Spearman correlation coeffi-
+                                                                           ments were made blinded to manual measurements.
+cient is shown. A loess fit with standard error is depicted.
+
+
+mated pipeline. Furthermore, the black-box nature of these                    As an additional evaluation of our accuracy we looked at
+packages has made it difficult to interpret how the measure-               concordance between two measures of LV function across
+ment is made and what limitations there may be.                            174 studies: EF and GLS (Figure 5C, 5D). We found that
+   We wrote our own algorithm for strain estimation,                       the agreement between automated EF and automated GLS
+adapted from a previously published approach [21]. We                      (ρ = 0.48) was nominally better than that of manual EF vs.
+tracked echogenic particles from frame to frame to estimate                manual GLS values (ρ = 0.47). We also analyzed the GLS-
+velocities of particles across the length of the ventricle. Fit-           LVEDVI association, and found stronger agreement for val-
+ting this variation in particle velocity with position permit-             ues generated by automation [ρ = -0.19 (automated vs. au-
+ted estimates of myocardial velocity, strain rate, and strain.             tomated) vs. -0.14 (manual vs. manual), N = 174] and even
+We compared our results to measurements based on com-                      stronger agreement in GLS-LVESVI values for automation
+mercial vendor packages (Figure 4), and found excellent                    [ρ = -0.40 (automated vs. automated) vs. -0.31 (manual vs.
+agreement at the patient level (MAD = 1.5%, N = 197, Ta-                   manual), N = 174]. Overall, across our seven metrics of in-
+ble 2 and Figure 5B). Given the modest number of studies                   ternal consistency we found that our automated values were
+used to evaluate strain estimation compared with other met-                superior to those found from manual measurements (abso-
+rics, we analyzed a second cohort of 110 patients from a                   lute average increase in Spearman coefficient = 0.05, IQR
+second institution, and saw nearly identical agreement be-                 0.03-0.06, p = 0.0198, bootstrap with 10,000 iterations).
+
+
+                                                                       6
+2.6.    Mapping Patient Trajectories During
+       Trastuzumab/Pertuzumab Treatment
+    As described in the introduction, the primary motivation
+of this work is to facilitate early, low-cost detection of car-
+diac dysfunction in asymptomatic individuals to motivate
+initiation or intensification of therapy. Given our ability
+to estimate longitudinal strain accurately, we hypothesized            Figure 7. Automated strain measurements enable quantitative pa-
+that we should be able to use our analytic pipeline to gener-          tient trajectories of breast cancer patients treated with cardiotoxic
+ate quantitative patient trajectories for breast cancer patients       chemotherapies. Automated strain values were computed for 9421
+treated with cardiotoxic agents. We identified 152 patients            (apical) videos of 152 breast cancer patients undergoing serial
+treated with trastuzumab or pertuzumab, antibody inhibitors            echo monitoring during chemotherapy. Individual plots were gen-
+of the Her2 protein, which are known to cause cardiotox-               erated for each patient: plot (A) depicts a 58 year old woman
+                                                                       (right) receiving trastuzumab therapy only. Each colored dot rep-
+icity in a subset of patients. We downloaded 1047 echo
+                                                                       resents an individual echo study. A smoothing spline was fit
+studies from these patients and processed these through our            to the data. Ejection fractions in the published echo report are
+pipeline. We generated automated plots of strain trajec-               shown. Vertical blue dashed lines represent initiation and cessation
+tories, overlaid chemotherapy usage and reported ejection              of trastuzumab therapy. A horizontal dashed line at longitudinal
+fractions onto our visualization.                                      strain of 16% indicates a commonly used threshold for abnormal
+    We observed a breadth of patient trajectories. Figure 7A           strain. (B) Automated strain measurements confirm the more se-
+reveals an illustrative example, depicting a patient 58-year-          vere toxicity that occurs when combining trastuzumab/pertuzumab
+old breast cancer patient with Type 2 diabetes mellitus and            with anthracyclines. Violin plot showing median longitudinal
+hyperlipidemia who experienced cardiac dysfunction that                strain values for patients pretreated (red) or not pretreated (blue)
+improved after cessation of trastuzumab, although the fi-              with neo-adjuvant doxorubicin/cyclophosphamide prior to therapy
+nal strain values remains at the lower limit of normal. Such           with trastuzumab (and/or pertuzumab).
+plots (with accompanying statistics) could be generated by
+a cloud-based interpretation system that stores prior esti-
+mates, thus allowing depiction of longitudinal trends.                 (with varying patterns of left ventricular thickening) and
+    To further validate our approach, we also compared aver-           technically matched controls, we trained a multi-layer CNN
+age longitudinal strain values in patients who did or did not          model to detect HCM using PLAX- and A4c-view videos.
+receive doxorubicin-cyclophosphamide neo-adjuvant ther-                Because the heart changes appearance at different stages of
+apy prior to receiving trastuzumab/pertuzumab. Consis-                 the cardiac cycle, we first phased images using the results of
+tent with prior results [17], pretreatment with anthracyclines         cardiac segmentation, and selected a pair of images, one at
+worsened cardiac function, as represented by lower median              end-diastole and one at end-systole, when the left ventricle
+(19.7 vs 21.1%, p = 0.01) and nadir (16.2 vs. 17.8%, p =               is at its peak and minimum area, respectively. The result-
+0.02) absolute strain values (Figure 7B).                              ing model could detect HCM with a C-statistic (Area Under
+                                                                       the Receiving Operating Characteristic Curve or AUROC)
+2.7. Models for Disease Detection                                      of 0.93. To explore possible features being recognized by
+   In addition to quantifying cardiac structure and func-              the model, we plotted the (logit-transformed) probabilities
+tion, we sought to automate detection of rare diseases which           of disease in cases against left atrial volume and left ventric-
+may benefit from early recognition and specialized treat-              ular mass, two features associated with the disease process
+ment programs. We focused on two diseases of abnormal                  (Figure 4C,4D). Cases with higher predicted probability of
+cardiac thickening: hypertrophic cardiomyopathy (HCM)                  disease had larger left atria (ρ = 0.41, Spearman correlation
+and cardiac amyloidosis.                                               coefficient) and larger left ventricular mass (ρ = 0.38).
+   HCM, which affects 0.2% of the population, is char-                    We next developed a model to recognize cardiac amyloi-
+acterized by cardiomyocyte hypertrophy and disarray and                dosis, a morphologically similar yet etiologically different
+myocardial fibrosis [23]. It can be associated with syn-               disease [8]. Cardiac amyloidosis arises from the deposition
+cope, atrial and ventricular arrhythmias, heart failure, and           of misfolded proteins within the myocardium, and can re-
+sudden cardiac death. Once physicians recognize HCM,                   sult in heart failure, bradyarrhythmias, and sudden cardiac
+they can implement preventive measures, including avoid-               death. Early recognition of cardiac amyloidosis can result in
+ance of high intensity exercise and implantation of a car-             implementation of therapies including treatment of underly-
+diac defibrillator. Moreover, given that the first presenta-           ing plasma cell dyscrasias such as multiple myeloma (when
+tion of the disease can be sudden cardiac death, includ-               the deposited proteins are immunoglobulins) or to target
+ing in young athletes, early diagnosis can motivate physi-             production of the transthyretin protein, which accumulates
+cians to screen relatives. Using a cohort of HCM patients              in other forms of the disease. Cardiac amyloidosis can
+
+
+                                                                   7
+                                                                            pipeline is fully scalable, as evidenced by our analysis of
+                                                                            over 4000 echo studies for this manuscript on a 10-node
+                                                                            compute cluster all in a period of less than two weeks. Its
+                                                                            modular nature provides multiple points for quality assess-
+                                                                            ment and enables parallel improvement on multiple fronts.
+                                                                            Although this represents the first example of a fully auto-
+                                                                            mated pipeline, it is important to acknowledge that many
+                                                                            groups have made advances at several of these steps sepa-
+                                                                            rately and insights from these efforts were invaluable for our
+                                                                            work [21][4][12][18][9]. The primary novelties of this work
+                                                                            are the application of CNNs to segment echo images, the
+                                                                            development of an empirically validated automated quality
+                                                                            score for studies, the automation of common 2D measure-
+Figure 8. CNNs enable detection of abnormal myocardial dis-                 ments, the validation of automated values against measure-
+eases. Receiver operating characteristic curves for hypertrophic            ments from thousands of studies, and the creation of a com-
+cardiomyopathy (A) and cardiac amyloid (B) detection. In each               plete pipeline that can be deployed on the web.
+case, separate CNN models were trained using hundreds of pairs of               Even though we have developed a working product, there
+PLAX and A4c-view images for affected and unaffected individu-              is room for improvement at nearly all steps. In some cases,
+als. A pair consisted of one image at end-systole and one at end-
+                                                                            we anticipate that more training data will be sufficient for
+diastole, where phasing was performed using estimates of the left
+ventricular area. Performance was assessed by cross-validation.
+                                                                            improved performance, although it is remarkable to note
+4-independent cross validation runs were performed and the test             how few images (<200) were used to train each of our
+results averaged for each image-pair, and then a median taken               segmentation models. We are also looking at opportuni-
+across the entire study. Finally, the A4c and PLAX probabilities            ties for end-to-end training to minimize cumulative errors
+were averaged. (C, D) Within cases, CNN probabilities of disease            in the pipeline, although the current modular nature of our
+were correlated with known features of the disease process (Figure          approach enables a breadth of applications.
+4C,D). (C) Relationship between probability (logit-transformed)                 Nearly all steps in our approach relies on averaging
+of HCM and left atrial volume with Spearman correlation coeffi-             across multiple measurements and we demonstrate the util-
+cient indicated. (D) Relationship of probability of amyloid with
+                                                                            ity of multiple studies in improving concordance between
+left ventricular mass. Blue line indicates linear regression fit with
+95% confidence interval indicated by grey shaded area
+                                                                            manual and automated measurements. Our results also sug-
+                                                                            gest that health care providers that intend to use an au-
+                                                                            tomated computer vision pipeline for study interpretation
+be diagnosed with confidence using cardiac biopsy or spe-                   would benefit from building more redundancy into their ac-
+cialized imaging protocols using nuclear imaging or mag-                    quisition of echo images. In particular, there is typically
+netic resonance imaging, but such specialized techniques                    only 1 PSAX video available to compute left ventricular
+are costly, not widely available, and thus unlikely to be de-               mass.
+ployed in many clinical settings. Using amyloid cases and                       Encouragingly, our assessment of internal consistency
+matched controls, we trained a model to cardiac amyloido-                   - i.e. correlating different metrics such as left atrial and
+sis and again found excellent performance, with a C-statistic               ventricular volumes indicated that our measurements were
+of 0.84. Similar to HCM, we found that cases with higher                    modestly better than the typical clinical laboratory values.
+predicted probability of amyloid had larger left ventricular                This likely arises from the ability to average across multiple
+mass (ρ = 0.46) but did not have increased left atrial vol-                 measurements, a feat that would be challenging for humans
+umes (ρ = −0.10).                                                           forced to trace dozens of images by hand. Beyond these
+    We have deployed our pipeline on Amazon EC2                             metrics of internal consistency, it will be important to fur-
+at http://echocv.org, which features sample study out-                      ther demonstrate utility in predicting cardiac outcomes.
+puts as well as an option to upload studies by                                  We see this work as taking a step towards augmenting
+approved users and make source code available at                            clinical practice rather than replacing current approaches.
+https://bitbucket.org/rahuldeo/echocv.                                      Specifically, we would like to see more measurements taken
+                                                                            when patients are asymptomatic but at risk of cardiac dys-
+3. Discussion                                                               function, with quantitative comparisons made to prior stud-
+                                                                            ies to obtain personalized longitudinal trajectories. Such an
+   We achieved our primary objective, namely to construct                   approach would shift evaluation to the primary care setting,
+an end-to-end automated pipeline for assessment of left                     with data collected by non-experts and the resulting initia-
+ventricular structure, function, and disease detection. This                tion and tailoring of care would hopefully reduce the alarm-
+
+
+                                                                        8
+ing increase in heart failure incidence that has taken place          rays. In doing so, we also “blacked out” the identifying
+in recent decades [5]. A similar approach could be taken              patient information on the videos by setting the correspond-
+with point-of-care ultrasound at oncology infusion centers            ing pixel intensities to minimal intensity. Numerical arrays
+both reducing the cost and increasing the timeliness of diag-         were compressed for subsequent use. A subset of these
+noses of cardiotoxicity. In anticipation of such an eventual-         were converted into Audio Video Interleaved (avi) format
+ity, we deliberately avoided using any ECG information in             for manual segmentation.
+our pipeline to accommodate analysis of data from low-cost                To extract metadata corresponding to each file, we used
+portable handheld ultrasound devices.                                 the gdcmdump utility from the GDCM library. We were
+    Moreover, we have found that the combination of au-               particularly interested in the time interval between adjacent
+tomated preprocessing and the ability to identify individ-            frames, heart rate, number of columns and rows, and the
+ual echo views using deep learning allows rapid accrual of            dimensions in physical units (i.e. centimeters) correspond-
+training data for specific tasks, such as training models for         ing to each pixel, as these would be needed for quantitative
+the detection of mitral valve prolapse or pulmonary arterial          measurements of structure and function. We removed iden-
+hypertension. We are optimistic that our approach will have           tifying information (name, birth date) and created a com-
+a broad clinical impact by 1) introducing relatively low-             pressed metadata file corresponding to each study.
+cost quantitative metrics into clinical practice; 2) extracting
+knowledge from the millions of archived echos available in            4.4. Convolutional Neural Network Based View
+echo laboratories; and 3) enabling causal insights that re-                Identification
+quire systematic longitudinal tracking of patients.
+                                                                          We based our approach on the VGG architecture by Si-
+                                                                      monyan & Zisserman [24]. The network takes in a fixed-
+4. Materials and Methods                                              sized input of grayscale images with dimensions 224x224
+4.1. Human Subjects Research                                          pixels. Each image is passed through thirteen convolution
+                                                                      layers, five max-pool layers, and three fully connected lay-
+   The institutional review board at the University of Cal-           ers. All convolutional layers consist of 3x3 filters with
+ifornia San Francisco granted permission to download                  stride 1 and all max-pooling is applied over a 2x2 window
+echocardiographic data as well as review relevant clinical            with stride 2. The stack of convolutions is followed by two
+data for this study.                                                  fully connected layers, each with 500 hidden units, and a
+4.2. Auto-downloading of DICOM format echo                            final fully connected layer with size output units. The out-
+     studies from the Syngo client                                    put is fed into a six-way softmax layer to represent six dif-
+                                                                      ferent echo views: parasternal long-axis (PLAX), paraster-
+   We realized at the onset of this project that studies stored       nal short-axis at the papillary muscle (PSAX), apical 2-, 3-,
+within our echo database (Syngo, Siemens Healthcare) were             and 4-chamber (A2c, A3c, and A4c), and inferior vena cava
+in a proprietary format that could not be used for image              (IVC). The view with the highest probability was selected
+analysis. To avoid manual download of the thousands of                as the predicted view. (The final model, which focused on
+studies used for this project, we wrote scripts using Au-             distinguishing occlusions as well as a broader set of views,
+toIt software (https://www.autoitscript.com/site/autoit/) to          had 22 classes).
+mimic human interaction with the web-based client. This                   Additionally, each echo contains periphery information
+enabled downloading individual studies in Digital Imaging             unique to different output settings on ultrasound machines
+and Communications in Medicine (DICOM) format speci-                  used to collect the data. This periphery information details
+fied by date or medical record number at a rate of approxi-           additional details collected (i.e. electrocardiogram, blood
+mately 1 study per 2 minutes.                                         pressure, etc.). To improve generalizability across institu-
+                                                                      tions, we wanted the classification of views to use ultra-
+4.3. Preprocessing                                                    sound data and not metadata presented in the periphery.
+    Typical echo studies consist of a combination of 80-120           Because periphery information is predominantly static be-
+still images and videos. The still images are usually used            tween frames, we tracked pixels that do not change inten-
+for manual measurements and thus our primary interest was             sity over frames and created a mask to remove such pixels.
+in the videos. We first used the pydicom Python library               However, to account for small movement that does occur
+to count the number of frames within each file thus en-               in the periphery information (i.e. ECG activity), we sam-
+abling separation of still images from videos. We next used           pled multiple frames and removed pixels that were static
+the gdmconv utility from the Grassroots DICOM Library                 for most frames.
+(GDCM) to convert compressed DICOM format videos into                     Training data comprised of 10 random frames from each
+a raw DICOM format. This allowed use of the pydicom li-               manually labeled echo video. We trained our network on
+brary for conversion of DICOM videos into numerical ar-               approximately 40,000 pre-processed images. For stochas-
+
+
+                                                                  9
+tic optimization, we used the ADAM optimizer [14] with                50 pixels. We ran our tests for 150 epochs, which took ap-
+an initial learning rate of 1x10−5 and mini-batch size of 64.         proximately 2 hours for 200 training images on an Nvidia
+For regularization, we applied a weight decay of 1x10−4               GTX 1080. In deploying the model, segmentation of each
+and dropout with probability 0.5 on the fully connected lay-          frame required 110 ms, on average.
+ers. We ran our tests for 10-20 epochs or 10-20,000 itera-
+tions, which takes 1-2 hours on a Nvidia GTX 1080. Run-               4.6. Automated Measurements of Cardiac Struc-
+time per video was 600 ms on average.                                      ture and Function
+                                                                         We used the output of the CNN-based segmentation
+4.5. Convolutional Neural Networks for Image Seg-
+                                                                      to compute chamber dimensions and ejection fraction. A
+      mentation
+                                                                      typical echo reader typically filters through many videos to
+    Our CNN was based on the U-net architecture described             choose specific frames for measurement. They also rely on
+by Ronneberger et al [22]. The U-net network we used ac-              the electrocardiogram (ECG) tracing to phase the study and
+cepts a 512x512 pixel fixed-sized image as input, and is              thus choose end-systole and end-diastole. Since our goal
+composed of a contracting path and an expanding path with             is to enable use of handheld echo devices without ECG
+a total of 23 convolutional layers. The contracting path is           capabilities, we needed to rely on segmentation to indicate
+composed of ten convolutional layers with 3x3 filters fol-            the portion of the cycle. Since there are likely to be chance
+lowed by a rectified linear unit and four max pool layers             errors in any CNN model, we emphasized averaging as
+each using a 2x2 window with stride 2 for down-sampling.              many cardiac cycles as possible, both within one video and
+The expanding path is composed of eight convolutional lay-            across videos.
+ers with 3x3 filters followed by a rectified linear unit, and
+four 2x2 up-convolution layers. At every step in the expan-           LVEDVI, LVESVI, LVEF
+sion path (consisting of two convolutional layers), a con-            We first used the time interval between frames and the pa-
+catenation with a cropped feature map from the correspond-            tient heart rate to estimate the duration of the cardiac cycle.
+ing step of the contracting path is performed to account for          We then moved a sliding window across the video with a
+the loss of pixels at the border of every convolution of the          window length of 90% of a cardiac cycle (thus avoiding
+contracting path. The final layer uses a 1x1 convolution to           seeing end-systole or end-diastole more than once). Within
+map each feature vector to the output classes.                        a window, we selected the 90% and 10% percentile of the
+    Separate U-net CNN networks were trained to accept                left ventricular volumes to serve as LV end-diastolic area
+as input and perform segmentation on images from PLAX,                and end-systolic areas, respectively. We derived LVEDV
+PSAX (at the level of the papillary muscle), A4c and A2c              and LVESV using the area-length formula. We also used
+views. Training data was derived for each class of echo               these to compute an EF for that cycle. To enable making
+view via manual segmentation. We performed data aug-                  multiple measurements per study, we moved a sliding
+mentation techniques on training data including cropping              window across the video with a step size of half of a
+and blacking out random areas of the echo image. Training             cardiac cycle. We selected two additional percentile values
+data underwent varying degrees of cropping (or no crop-               for each metric: one percentile applied to measurements
+ping) at random x and y pixel coordinates. Similarly, circu-          from multiple cycles within one video, and a second across
+lar areas of random size set at random locations in the echo          all videos in a study. We selected the first percentile based
+image were set to 0-pixel intensity to achieve “blackout”.            on intuition regarding how the typical echo reader scans
+This U-net architecture and data augmentation techniques              through images to select one for manual segmentation. We
+enabled highly efficient training, achieving highly accurate          also avoided minimum and maximum values to exclude
+segmentation from a relatively low number of training ex-             outliers from poor quality segmentation. We selected the
+amples. Specifically, the PSAX segmentation U-net was                 second percentile to minimize bias between measured
+trained using 72 manually segmented images, PLAX using                and automated values, although in most cases there was
+128 images, A4c using 168 images and A2c using 198 im-                relatively little difference with choice of threshold and we
+ages.                                                                 used the median as default. For the first cutoff (i.e. multiple
+    For stochastic optimization, we used the ADAM opti-               measurements from one video), we used 90% percentile for
+mizer [14]. Hyperparameters were optimized for each view-             LVEDVI and 50% percentile values (i.e. the median) for
+specific U-net, with initial learning rate set to 1x10−4 or           LVESI and LVEF. For the second cutoff (across multiple
+1x10−5 , weight decay set to 1x10−6 , dropout set to 0.8 on           videos in a study), we selected median values for LVEDVI,
+the middle layers, and mini-batch size set to 5. The largest          LVESI, LVEF.
+crop size and the largest blackout circle size were also tuned
+to each specific view with maximum crop size ranging from             LAVOLI
+40-75 pixels and maximum blackout size ranging from 30-               For LAVOLI, we took a similar approach, again taking the
+
+                                                                 10
+90% percentile of the LA area for each window. If there              across 25-30 positions along the length of the left or right
+were multiple LAVOLI measurements from one video we                  ventricle, taken separately, and then computing a median
+took the median value, and if there were multiple videos per         across all positions.
+study, we took the median of these values. We found that                We noted that images with very few successfully tracked
+erroneous LAVOLI values would arise from videos with an              speckles gave unstable estimates of longitudinal strain and
+occluded LA. Although our view classification CNN was                thus we adaptively lowered the threshold level of agree-
+trained to discriminate these, some videos slipped through.          ment to include sufficient particles for function estimation
+We thus imposed an additional heuristic of excluding                 for each frame. The median number of particles that passed
+measurements from videos where LAVOLI/LVEDVI was                     the original filter was stored as a measure of quality for each
+less than 30%, as we found empirically that fewer than 5%            videos strain estimate.
+of non-occluded studies had a ratio this extreme.
+                                                                        Estimation of strain typically required 1-4 minutes per
+                                                                     video, depending on the image size and the number of
+LVMI
+                                                                     frames.
+For LVMI we again took a sliding window approach, using
+the 90% percentile value for the LV outer (myocardial) area
+and computed LVMI using the Area-Length formula [15].                4.8. Comparison with Commercial Vendor Derived
+If there were multiple LVMI measurements from one video                    Measurements
+we took the median value, and if there were multiple videos
+per study, we took the median of these values.                          The UCSF echo database includes measurements for
+                                                                     studies dating back over 15 years, although not every study
+4.7. Automated Longitudinal Strain Measurements                      includes every measurement. For downloaded studies, we
+      Using Speckle Tracking                                         extracted measurements corresponding to left ventricular
+                                                                     and atrial volumes, ejection fraction, mass, and global lon-
+    We opted to write our own algorithm for strain compu-            gitudinal strain. For strain, we also used echo studies col-
+tation, adapting an approach previously described by Rap-            lected from a second cohort of patients with Polycystic Kid-
+paport and colleagues [21]. Using the results of our im-             ney Disease seen at Johns Hopkins Medical Center. We
+age segmentation, we split the left ventricle along its long         used the identical algorithm to the one used for the UCSF
+axis, and output images focused on the endocardial bor-              data and results were generated blinded to the manual val-
+der of the hemi-ventricle. For a given frame, we used the            ues, which were computed independently by AQ and ML
+trackpy Python package [1], a particle tracking software             using the TOMTEC (Munich, Germany) cardiac measure-
+package, to locate speckles. The trackpy locate function             ment software package.
+allows the user to modify parameters involved in particle
+localization including particle diameter and minimum inter-
+particle separation. To track a given speckle from frame to          4.9. Analysis of serial echocardiograms from
+frame, we selected a multipixel patch surrounding it and                  Trastuzumab-and Pertuzumab-treated pa-
+then located the best match for that patch in the next frame              tients
+using the matchTemplate function in the OpenCV package
+(with the TM CCOEFF NORMED statistic). Importantly,                      Patients who received trastuzumab or pertuzumab for ad-
+we limited the search space to that region that could be at-         juvant or metastatic disease or received a screening echocar-
+tained based on the maximum predicted velocity of the cor-           diogram between 2011 and 2015 were identified using the
+responding myocardial segment [29] and excluded matches              UCSF pharmacy and echocardiogram databases. Patients
+that fell below a threshold level of agreement (0.85). We            with a transthoracic echocardiogram at baseline, early in
+then computed the displacement (in pixels) of the patch and          therapy (< 5 months, mean 3.0 months), and at 12 months
+projected the displacement onto the long axis of the ven-            were included in the cohort (n = 152, mean age 54.3 years,
+tricular segment. We fit a cubic polynomial function to esti-        all female). Ejection fraction values were extracted from
+mate the variation in frame-to-frame longitudinal displace-          the echocardiogram reports. Patient demographics, co-
+ment with position along the long axis and computed its              morbidities, current medications, and oncological history
+first derivative to obtain the strain rate. We next performed        were obtained from chart review.
+median smoothing and integrated the strain rate to obtain               We downloaded all available echos from each of these
+longitudinal strain. We selected the frame with the lowest           individuals and processed these through our entire pipeline.
+(most negative) strain value across all segments to compute          Plots of variation of longitudinal strain with time were gen-
+the global longitudinal strain, integrating both the medial          erated using the ggplot2 package [28] in R. In addition
+and lateral portions of the ventricle. We also computed av-          to plotting strain values, we generated a smoothing spline
+erage longitudinal strain, deriving the minimum strain value         curve using the smooth.spline function in R.
+
+
+                                                                11
+4.10. Downloading of echocardiograms from hyper-                       over the area values and took the frame with the 90th per-
+       trophic cardiomyopathy and cardiac amyloi-                      centile area as the end diastole frame and the 10th percentile
+       dosis patients                                                  frame as the end systole frame.
+                                                                           We trained separate networks for HCM and amyloid. For
+   We identified 225 patients who were seen at the UCSF
+                                                                       stochastic optimization, we used the ADAM optimizer [14]
+Familial Cardiomyopathy Clinic for suspicion of hyper-
+                                                                       with an initial learning rate of 1x10−5 and mini-batch size
+trophic cardiomyopathy. These patients typically had an af-
+                                                                       of 64. For regularization, we applied a weight decay of
+fected family history or left ventricular hypertrophy with no
+                                                                       1x10−5 and dropout with probability 0.5 on the fully con-
+clear alternative explanation. Patients had a variety of pat-
+                                                                       nected layers. We ran our tests for 50 epochs, which took
+terns of thickening including upper septal hypertrophy, con-
+                                                                       one hour to run on an Nvidia GTX 1080. Run-time perfor-
+centric hypertrophy, and predominantly apical hypertrophy.
+                                                                       mance was approximately 600ms per video.
+We downloaded all echos within the UCSF database corre-
+                                                                           Accuracy was assessed using internal 5-fold cross-
+sponding to these patients and confirmed evidence of hy-
+                                                                       validation. Given that a given patient typically had multiple
+pertrophy. We excluded bicycle, treadmill, and dobutamine
+                                                                       studies, training and test sets were defined by patient (i.e.
+stress echo studies, as these tend to include slightly modi-
+                                                                       medical record number) rather than by study. We performed
+fied views or image annotations that could have confound-
+                                                                       four rounds of cross-validation for each view (PLAX and
+ing effects on models trained for disease detection.
+                                                                       A4c). The score for each study i was obtained by: 1) tak-
+   Patients with cardiac amyloidosis were identified from
+                                                                       ing a median probability pij across the 4-rounds of cross-
+probands seen at the UCSF Familial Cardiomyopathy Clinic
+                                                                       validation for each video j; 2) taking a median of these pij
+and through a query of the UCSF echo database for reports
+                                                                       values for all videos in a study corresponding to a given
+including the term “amyloid”. We identified 70 patients that
+                                                                       view, resulting in pP LAXi and pA4ci ; 3) averaging the A4c
+had both 1) echocardiographic evidence of left ventricular
+                                                                       and PLAX values to obtain pi .
+hypertrophy and/or echocardiographic suspicion of cardiac
+amyloidosis and 2) confirmation of amyloid disease by tis-                 As an independent measure of interpretability of our dis-
+sue biopsy, nuclear medicine scan, cardiac MRI, or genetic             ease detection models, we derived the Spearman correlation
+testing (transthyretin variant). We downloaded all echos               coefficient of pi values with left ventricular mass index and
+within the UCSF database corresponding to these patients.              left atrial volume index values for the corresponding study,
+   Controls patients were also selected from the UCSF echo             analyzing cases and controls separately.
+database. For each HCM and amyloid case, up to 5 matched               4.12. Statistical Analysis
+controls were selected, with matching by age, sex, year of
+study, ultrasound device manufacturer and model.                          All analysis was performed using R 3.3.2. The linear
+                                                                       regression of absolute deviation between manual and auto-
+4.11. CNNs to detect HCM and cardiac amyloidosis                       mated values of LVEDVI was computed using the standard
+   In addition to extracting measurements from segmenta-               lm function in R. We applied a square root transform to the
+tions, we also set out to develop a classifier to automate dis-        absolute deviation, which made the residuals approximately
+ease identification. The two diseases we targeted here are             normal in distribution (untransformed and log-transformed
+HCM and cardiac amyloidosis. Again, we based our ap-                   values were right- and left-skewed, respectively). To as-
+proach on the VGG architecture by Simonyan & Zisserman                 sess the chance difference between values of Spearman cor-
+[24] with a similar network architecture as the one used in            relation coefficients for 7 metrics of internal consistency
+view classification, but with 16 layers instead of 13. The             (LAVOLI vs. LVEF, LAVOLI vs. LVMI, LAVOLI vs.
+stack of convolutions is followed by two fully connected               LVEDVI, LAVOLI vs. LVESVI, GLS vs LVEF, GLS vs
+layers, each with 4096 hidden units, and a final fully con-            LVEDVI, GLS vs LVESVI), we resampled with replace-
+nected layer with 2 output units. This final layer is fed into         ment (i.e. bootstrap) the input data for each comparison
+a 2-class softmax layer to represent probabilities for HCM             10,000 times, recomputed the correlation coefficient for au-
+vs. control or amyloid vs. control.                                    tomated and manual values, and took the mean of the dif-
+   To maintain consistency between inputs fed into the neu-            ference across all 7 metrics. The p-value was taken as the
+ral network, we extracted pairs of images from each video              relative frequency of observing a difference of 0 or less (i.e.
+that corresponded to end-diastole and end-systole and fed              manual measurements are superior) in the 10,000 iterations.
+these into our neural network. Images were resized to
+224x224 and consequently, our input pair had dimensions                5. Acknowledgements
+224x224x2. To locate the end-diastole and end-systole
+                                                                       5.1. Funding
+frames in a video, we used the segmentation networks for
+PLAX and A4c views to extract left ventricular area values                Work in the Deo laboratory was funded by NIH/NHLBI
+from each frame in the video. We applied a rolling median              grant DP2 HL123228. Additional funding for a portion of
+
+                                                                  12
+echocardiographic data used for validation was provided                    [6] T. F. Cootes, G. J. Edwards, and C. J. Taylor. Active appear-
+by NIH/NHLBI grant R01 HL127028 and NIH/NIDDK                                  ance models. IEEE Transactions on Pattern Analysis and
+P30DK090868.                                                                   Machine Intelligence 23, pages 681–685, 2001.
+                                                                           [7] A. Esteva, B. Kuprel, R. A. Novoa, J. Ko, S. M. Swetter,
+5.2. Competing Interests                                                       H. M. Blau, and S. Thrun. Dermatologist-level classification
+                                                                               of skin cancer with deep neural networks. Nature 542, pages
+   UCSF intends to submit a provisional patent based on
+                                                                               115–118, 2017.
+this work.                                                                 [8] R. H. Falk.               Cardiac amyloidosis a treat-
+5.3. Author Contributions                                                      able disease,        often overlooked.              Circulation
+                                                                               doi:10.1161/CIRCULATIONAHA.110.010447/-/DC1,
+JZ: designed the approach to view classification, wrote                        2011.
+code, drafted the manuscript                                               [9] X. Gao, W. Li, M. Loomes, and W. Lianyi. A fused deep
+LAH: advised on computer vision approaches                                     learning architecture for viewpoint classification of echocar-
+SG: segmented images, extracted clinical data                                  diography. Information Fusion 36, pages 103–113, 2017.
+LBN: performed manual strain measurements                                 [10] V. Gulshan, L. Peng, M. Coram, M. C. Stumpe, D. Wu,
+MHL: performed manual strain measurements                                      A. Narayanaswamy, S. Venugopalan, K. Widner, T. Madams,
+                                                                               J. Cuadros, R. Kim, R. Raman, P. C. Nelson, J. L. Mega, and
+GT: performed segmentation, contributed to writing the
+                                                                               D. R. Webster. Development and validation of a deep learn-
+methods section
+                                                                               ing algorithm for detection of diabetic retinopathy in retinal
+EF: extracted clinical data                                                    fundus photographs. Jama 316, pages 2402–2410, 2016.
+MAA: extracted clinical data                                              [11] J. Hill and E. Olson. Cardiac plasticity. The New England
+CJ: extracted clinical data                                                    journal of medicine 358, pages 1370–1380, 2008.
+KEF: designed clinical study, edited the manuscript                       [12] J. R. Hussan, P. J. Hunter, P. A. Gladding, N. Greenberg,
+MM: designed clinical study, extracted clinical data, edited                   R. Christie, A. Wu, H. Sorby, and J. D. Thomas. Icma: an
+the manuscript                                                                 integrated cardiac modeling and analysis platform. Bioinfor-
+AQ: designed clinical study, supervised MHL, edited the                        matics 31, pages 1331–1333, 2015.
+manuscript                                                                [13] T. Ishizu, Y. Seo, Y. Kameda, R. Kawamura, T. Kimura,
+SJS: advised on strain implementation, edited the                              N. Shimojo, D. Xu, N. Murakoshi, and K. Aonuma. Left
+manuscript, advised on study design, provided financial                        ventricular strain and transmural distribution of structural re-
+                                                                               modeling in hypertensive heart disease. Hypertension 63,
+support for LBN
+                                                                               pages 500–506, 2014.
+RB: advised on computer vision approaches, edited the
+                                                                          [14] D. P. Kingma and J. Ba. Adam: A method for stochastic
+manuscript, provided financial support for LAH and JZ                          optimization. arXiv 1412.6980 [cs.LG], 2014.
+AE: advised on computer vision approaches, edited the                     [15] R. M. Lang, L. P. Badano, V. Mor-Avi, J. Afilalo, A. Arm-
+manuscript, provided financial support for PA                                  strong, L. Ernande, F. A. Flachskampf, E. Foster, S. A. Gold-
+PA: advised on computer vision approaches, edited the                          stein, T. Kuznetsova, P. Lancellotti, D. Muraru, M. H. Picard,
+manuscript                                                                     E. R. Rietzschel, L. Rudski, K. T. Spencer, W. Tsang, and
+RCD: designed the study, segmented images, labeled views,                      J.-U. Voigt. Recommendations for cardiac chamber quan-
+wrote and implemented code, performed statistical analysis,                    tification by echocardiography in adults: an update from the
+drafted the manuscript                                                         american society of echocardiography and the european as-
+                                                                               sociation of cardiovascular imaging. J Am Soc Echocardiogr
+References                                                                     28, page 139.e14, 2015.
+                                                                          [16] Y. LeCun, Y. Bengio, and G. Hinton. Deep learning. Nature
+ [1] D. B. Allan, T. A. Caswell, and N. C. Keim. Allan: Trackpy                521, pages 436–444, 2015.
+     v0. 2. Google Scholar doi: 10.5281/zenodo. 9971, 2014.               [17] H. K. Narayan, B. Finkelman, B. French, T. Plappert, D. Hy-
+ [2] B. W. Andrus and H. G. Welch. Medicare services provided                  man, A. M. Smith, K. B. Margulies, and B. Ky. Detailed
+     by cardiologists in the united states: 1999-2008. Circ Car-               echocardiographic phenotyping in breast cancer. Circulation
+     diovasc Qual Outcomes 5, pages 31–36, 2012.                               135, pages 1397–1412, 2017.
+ [3] R. Bajcsy and S. Kovaĉiĉ. Multiresolution elastic matching.        [18] S. Narula, K. Shameer, A. M. S. Omar, J. T. Dudley, and
+     Computer Vision, Graphics, and Image Processing 46, pages                 P. P. Sengupta. Machine-learning algorithms to automate
+     1–21, 1989.                                                               morphological and functional assessments in 2d echocardio-
+ [4] J. G. Bosch, S. C. Mitchell, B. P. F. Lelieveldt, F. Nijland,             graphy. Journal of the American College of Cardiology 68,
+     O. Kamp, M. Sonka, and J. H. C. Reiber. Automatic seg-                    pages 2287–2295, 2016.
+     mentation of echocardiographic sequences by active appear-           [19] A. N. Neskovic, T. Edvardsen, M. Galderisi, M. Garbi,
+     ance motion models. IEEE Trans. Med. Imaging 21, pages                    G. Gullace, R. Jurcut, H. Dalen, A. Hagendorff, P. Lancel-
+     1374–1383, 2002.                                                          lotti, for the European Association of Cardiovascular Imag-
+ [5] E. Braunwald. The war against heart failure: the lancet lec-              ing Document Reviewers:, B. Popescu, R. Sicari, and A. Ste-
+     ture. Lancet 385, pages 812–824, 2015.                                    fanidis. Focus cardiac ultrasound: the european association
+
+
+                                                                     13
+     of cardiovascular imaging viewpoint. Eur Heart J Cardio-
+     vasc Imaging 15, pages 956–960, 2014.
+[20] C. O’Mahony, F. Jichi, M. Pavlou, L. Monserrat, A. Anas-
+     tasakis, C. Rapezzi, E. Biagini, J. R. Gimeno, G. Limongelli,
+     W. J. McKenna, R. Z. Omar, and P. M. Elliott. A novel clin-
+     ical risk prediction model for sudden cardiac death in hyper-
+     trophic cardiomyopathy (HCM risk-SCD). European Heart
+     Journal, 35(30):2010–2020, Aug. 2014.
+[21] D. Rappaport, D. Adam, P. Lysyansky, and S. Riesner. As-
+     sessment of myocardial regional strain and strain rate by
+     tissue tracking in b-mode echocardiograms. Ultrasound in
+     Medicine & Biology 32, pages 1181–1192, 2006.
+[22] O. Ronneberger, P. Fischer, and T. Brox. U-net: Convolu-
+     tional networks for biomedical image segmentation. arXiv
+     1706.07342[cs.CV], 2015.
+[23] J. G. Seidman and C. Seidman. The genetic basis for car-
+     diomyopathy: from mutation identification to mechanistic
+     paradigms. Cell 104, pages 557–567, 2001.
+[24] K. Simonyan and A. Zisserman. Very deep convolutional
+     networks for large-scale image recognition. arXiv 1409.1556
+     [cs.CV], 2014.
+[25] R. Szeliski. Computer Vision: Algorithms and Applications.
+     2010.
+[26] L. van der Maaten and G. Hinton. Visualizing high-
+     dimensional data using t-sne. Journal of Machine Learning
+     Research 9, pages 2579–2605, 2008.
+[27] J. U. Voigt, G. Pedrizzetti, P. Lysyansky, T. H. Marwick,
+     H. Houle, R. Baumann, S. Pedri, Y. Ito, Y. Abe, S. Metz, J. H.
+     Song, J. Hamilton, P. P. Sengupta, T. J. Kolias, J. D’hooge,
+     G. P. Aurigemma, J. D. Thomas, and L. P. Badano. Defini-
+     tions for a common standard for 2d speckle tracking echocar-
+     diography: consensus document of the eacvi/ase/industry
+     task force to standardize deformation imaging. Eur Heart
+     J Cardiovasc Imaging 16, pages 1–11, 2015.
+[28] H. Wickham. ggplot2. Springer Science & Business Media,
+     New York, NY, 2009.
+[29] U. M. Wilkenshoff, A. Sovany, L. Wigstrm, B. Olstad,
+     L. Lindstrm, J. Engvall, B. Janerot-Sjberg, B. Wranne,
+     L. Hatle, and G. R. Sutherland. Regional mean systolic
+     myocardial velocity estimation by real-time color doppler
+     myocardial imaging: a new technique for quantifying re-
+     gional systolic function. Journal of the American Society
+     of Echocardiography 11, pages 683–692, 1998.
+
+
+
+
+                                                                      14
+

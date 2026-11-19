@@ -1,0 +1,555 @@
+                   Proceedings of the Twenty-Sixth International Joint Conference on Artificial Intelligence (IJCAI-17)
+
+
+
+
+                    Learning Homophily Couplings from Non-IID Data for
+                 Joint Feature Selection and Noise-Resilient Outlier Detection
+                      Guansong Pang† , Longbing Cao† , Ling Chen† , Huan Liu‡
+                         †
+                     School of Software, University of Technology Sydney, Australia
+                  ‡
+                    Computer Science and Engineering, Arizona State University, USA
+      guansong.pang@student.uts.edu.au, {longbing.cao;ling.chen}@uts.edu.au, Huan.Liu@asu.edu
+
+                          Abstract                                       tures - features in which outliers may contain normal behav-
+                                                                         iors while normal objects may contain abnormal behaviors.
+     This paper introduces a novel wrapper-based                            Subspace and feature selection are two major approaches
+     outlier detection framework (WrapperOD) and its                     to handle outlier detection in noisy data. Subspace outlier
+     instance (HOUR) for identifying outliers in noisy                   detection methods (e.g., FPOF [He et al., 2005] and COMP
+     data (i.e., data with noisy features) with strong                   [Akoglu et al., 2012]) first identify a set of relevant fea-
+     couplings between outlying behaviors. Existing                      ture subspaces/patterns and then apply outlier scoring func-
+     subspace or feature selection-based methods are                     tions to combine the outlierness (i.e., outlying degree) of
+     significantly challenged by such data, as their                     objects in these subspaces. These methods separate sub-
+     search of feature subset(s) is independent of                       space/pattern search from outlier scoring to facilitate mod-
+     outlier scoring and thus can be misled by noisy                     ular design and the application of existing subspace/pattern
+     features. In contrast, HOUR takes a wrapper                         discovery techniques into outlier detection. However, such
+     approach to iteratively optimize the feature subset                 search can be misled by noisy features and produce faulty
+     selection and outlier scoring using a top-k out-                    subspaces/patterns, resulting in high false positives.
+     lier ranking evaluation measure as its objective                       Outlying feature selection is to select relevant features for
+     function. HOUR learns homophily couplings                           subsequent outlier detection. Limited work has been done
+     between outlying behaviors (i.e., abnormal be-                      in this area. Moreover, the existing work (i.e., [Pang et al.,
+     haviors are not independent - they bond together)                   2016a; 2016b]) on filter-based approaches [Li et al., 2016] se-
+     in constructing a noise-resilient outlier scoring                   lects a feature subset independently from subsequent learning
+     function to produce a reliable outlier ranking in                   methods. Consequently, the relevant features they retain can
+     each iteration. We show that HOUR (i) retains                       be noisy w.r.t. subsequent outlier detection methods. In con-
+     a 2-approximation outlier ranking to the optimal                    trast to filter-based approaches, wrapper-based approaches
+     one; and (ii) significantly outperforms five state-                 choose an optimal feature subset w.r.t. the learning methods
+     of-the-art competitors on 15 real-world data sets                   [Kohavi and John, 1997]. However, although wrapper-based
+     with different noise levels in terms of AUC and/or                  feature selection is popular for classification and clustering
+     P @n. The source code of HOUR is available at                       [Li et al., 2016], as far as we know, no such work has been
+     https://sites.google.com/site/gspangsite/sourcecode.                reported on outlier detection.
+
+1   Introduction
+Outliers are rare or inconsistent objects, compared to the ma-
+jority of objects. In recent applications such as insider trad-
+ing, network intrusion detection and fraud detection, a key
+task is to detect unexpected objects in a sophisticated envi-
+ronment with noise and complex feature relations.
+   Unsupervised outlier detection methods assign each object
+an outlier score and report the top-ranked objects as outliers                   Figure 1: The Proposed WrapperOD Framework
+without using class labels. They have been receiving great
+attention due to the high cost of obtaining class labels in                 This paper proposes a novel Wrapper-based Outlier Detec-
+real-world applications. However, they face big challenges               tion framework (WrapperOD) to detect outliers in noisy data.
+in handling data with a mixture of relevant and noisy fea-               As shown in Figure 1, WrapperOD first defines an outlier
+tures (such data is referred to as noisy data hereafter). In such        scoring function to rank objects based on their outlierness in a
+data, outliers can be detected in relevant features while they           given feature subset, and then designs an outlier ranking eval-
+are masked as normal objects with the inclusion of noisy fea-            uation function to measure the relevance of the feature subset
+
+
+
+
+                                                                  2585
+                    Proceedings of the Twenty-Sixth International Joint Conference on Artificial Intelligence (IJCAI-17)
+
+by the outlier ranking quality. These two steps are iteratively           scores in subspaces. Most of these methods use heuristic
+performed until the best feature subset (alternatively the best           search to identify outlying subspaces/patterns. This kind of
+outlier ranking) is obtained. Essentially, WrapperOD unifies              search ignores subsequent outlier scoring functions. Conse-
+the outlier ranking quality with the feature subset relevance             quently, noisy features may mislead the search, resulting in
+into one objective function and makes a joint optimization.               many faulty subspaces/patterns. The other methods work on
+   We further instantiate WrapperOD to a Homophily                        a set of randomly generated subspaces and thus do not in-
+cOupling-based oUtlieR detection method, called HOUR,                     volve subspace search, but they include many noisy features
+for categorical data which has been insufficiently explored.              into subspaces during the random generation of subspaces.
+Many real-world data often demonstrates strong homophily                     Feature selection has shown effective in removing
+coupling between outlying behaviors (i.e., feature values)                noisy/irrelevant features for classification and clustering [Li
+[Chau et al., 2011; Pang et al., 2016a]. That is, outlying be-            et al., 2016], but limited work has been done on out-
+haviors are not independent and they tend to be concurrent.               lier detection. Some work has been conducted on semi-
+As a result, the outlierness of a behavior is dependent on its            supervised/supervised outlying feature selection [Azmandian
+coupled behaviors, i.e., a behavior has large outlierness if it           et al., 2012; Jeong et al., 2012; Lorena et al., 2015]. In con-
+has strong linkage to many outlying behaviors and vice versa.             trast, very limited unsupervised methods are available in the
+HOUR treats such data as data with non-independent and                    literature due to the challenges brought by extreme class im-
+identically distributed (non-IID) behaviors [Cao, 2014] and               balance and the unavailability of class labels. The earliest
+specifies a homophily coupling-based outlier scoring func-                related work is the PALM method for unsupervised minority
+tion to capture such non-IID behaviors. It further specifies              class analysis [He and Carbonell, 2010], which assumes the
+the outlier ranking evaluation function to guide the joint op-            minority class objects are strongly self-similar. However, this
+timization by maximizing the margin between the top-ranked                assumption is opposite to that of outlier detection, in which
+k objects and the other objects. A heuristic search is used to            many outliers are isolated objects and far away from each
+generate reliable feature subsets.                                        other. CBRW FS (denoted as CBFS) [Pang et al., 2016a]
+   This work makes the following two major contributions.                 computes the weights of features for weighted outlier scoring,
+                                                                          which can also determine outlying feature selection. As far as
+    • We propose a novel WrapperOD framework to identify
+                                                                          we know, DSFS [Pang et al., 2016b] is the first work specif-
+      outliers in noisy data. In contrast to existing solutions
+                                                                          ically designed for unsupervised outlying feature selection.
+      that search feature subset(s) independently from outlier
+                                                                          These two methods are filter-based approaches that evaluate
+      scoring, WrapperOD simultaneously optimizes its out-
+                                                                          feature subsets independently from subsequent outlier scor-
+      lier scoring and feature selection, which enables its out-
+                                                                          ing functions and may retain many noisy features.
+      lier scoring function to produce a much more reliable
+      outlier ranking in noisy data.                                         CBRW [Pang et al., 2016a] also models similar homophily
+                                                                          couplings to estimate value outlierness for handling noisy fea-
+    • The performance of WrapperOD is verified by an in-                  tures, but HOUR is fundamentally different from CBRW in
+      stance HOUR. HOUR models homophily couplings be-                    two aspects below: (i) HOUR is a joint optimization of out-
+      tween outlying behaviors to construct a fast and noise-             lier scoring and feature selection while CBRW involves no
+      resilient outlier scoring function that empowers the joint          optimization and works on full feature space; and (ii) CBRW
+      optimization in WrapperOD. HOUR is guaranteed to ob-                requires iteration algorithms to compute value and object out-
+      tain a 2-approximation outlier ranking w.r.t. a given out-          lierness, whereas the outlier scoring function in HOUR has a
+      lier ranking evaluation measure.                                    closed-form solution and runs substantially faster.
+   Extensive experiments show that HOUR (i) significantly                    Great effort has been made on non-IID learning in recent
+outperforms three state-of-the-art outlier detectors and their            years [Cao et al., 2012; Cao, 2014; 2015; Cinbis et al., 2016],
+combination with two of the latest outlying feature selection             while limited work [Pang et al., 2016a; Chen et al., 2016] has
+methods in terms of AUC and/or P @n on 15 real-world data                 been reported on non-IID outlier detection. This work ex-
+sets with a diverse range of noise levels; (ii) performs stably           ploits the non-IID outlying behaviors to enable noise-resilient
+w.r.t. k in most cases; and (iii) obtains good scalability: it is         outlier detection.
+linear to data size and quadratic to the number of features.
+                                                                          3   HOUR for Joint Outlier Detection and
+2     Related Work                                                            Outlying Feature Selection
+Subspace outlier detection is a popular direction recently                Given a set of data objects X = {x1 , x2 , · · · , xN } with size
+proposed to handle data with many noisy/irrelevant features               N , described by D features F = {f1 , f2 , · · · , fD }, Wrap-
+[Zimek et al., 2012]. Traditional methods (e.g., distance-                perOD first defines an outlier scoring function φS to compute
+and density-based methods [Chandola et al., 2009]) iden-                  object outlierness in a given feature subset S ⊆ F and then
+tify outliers in original feature space and fail to work well             sorts the objects based on their outlierness to obtain an outlier
+in those data due to the meaningless distance with the pres-              ranking RφS . WrapperOD further defines an outlier ranking
+ence of noisy/irrelevant features [Zimek et al., 2012]. In con-           evaluation function J to compute the quality of RφS and uses
+trast, subspace-based methods [He et al., 2005; Lazarevic                 this ranking quality as the relevance indicator of the subset
+and Kumar, 2005; Angiulli et al., 2009; Keller et al., 2012;              S. This means that the task of finding the best feature subset
+Akoglu et al., 2012; Pang et al., 2016c] compute outlier                  is equivalent to finding the best outlier ranking. WrapperOD
+
+
+
+
+                                                                   2586
+                   Proceedings of the Twenty-Sixth International Joint Conference on Artificial Intelligence (IJCAI-17)
+
+iteratively performs function φS and function J to obtain the               We further define the outlierness of an object below.
+best feature subset S ∗ and outlier ranking Rφ∗ S ∗ .                    Definition 3 (Object Outlierness). The outlierness of an ob-
+   WrapperOD is fundamentally different from existing out-               ject x is defined as a weighted product of value outlierness.
+lier detection and outlying feature selection frameworks in                                          Y
+that: WrapperOD unifies the two correlated tasks, outlier de-                          φS (x) = 1 −      [1 − ψ(xf )]ω(f ) ,        (4)
+tection and outlying feature selection, to simultaneously ob-                                         f ∈S
+tain the optimal outlier ranking and feature subset, while ex-
+isting solutions treat these two tasks independently and are                Qxf is the value contained by x in feature f and ω(f ) =
+                                                                         where
+very sensitive to noisy features.                                        1 − v∈dom(f ) [1 − ψ(v)] computes the weight of f .
+   We further instantiate WrapperOD for categorical data by                Section 4.1 will discuss how this outlier scoring models the
+proposing HOUR. HOUR specifies its three components by                   homophily couplings and why it is fast and noise-resilient.
+a homophily coupling-based outlier scoring function φS , a
+score margin-based outlier ranking evaluation function J, and            3.2    Specifying J with Average Score Margin
+a heuristic feature subset search method:                                The function J requires an internal evaluation measure for a
+                                                                         given outlier ranking, i.e., evaluating outlier rankings without
+                       max J(RφS , k).                         (1)       class labels. Internal evaluation measure has been extensively
+                         S
+                                                                         studied for clustering tasks, while very little work has been on
+3.1   Specifying φS with Homophily Couplings                             outlier detection [Marques et al., 2015]. One related work is
+The scoring function φS has to meet at least the two require-            [Marques et al., 2015], which uses pseudo binary classifica-
+ments: (i) being sufficiently resilient to noisy features, and it        tion to evaluate the ranking quality. However, this method
+may opt for noisy features other than relevant features oth-             has O(N 3 ) time complexity, which is computationally pro-
+erwise; and (ii) being very efficient as it will be repeatedly           hibitive to be used here. Below we introduce a linear-time
+performed to evaluate a large number of feature subsets. Un-             outlier ranking evaluation measure based on the distribution
+fortunately, most outlier detectors are sensitive to noisy fea-          of object outlierness:
+tures and/or are computationally costly [Pang et al., 2016a].
+   HOUR exploits the homophily couplings between fea-                                         ∆S     1 X
+ture values to construct a fast and robust function φS . Let                   J(RφS , k) =       =      [φS (x) − φS (x0 )],        (5)
+dom(f ) = {v1 , v2 , · · · } be the domain of a feature f ∈ S,                                |S|   k|S|
+                                                                                                          x∈O
+which consists of a finite set of unordered feature values, and
+V be the whole set of feature values in S: V = ∪f ∈S dom(f ),            where O is a set of top-ranked k objects and φS (x0 ) is
+where dom(f ) ∩ dom(f 0 ) = ∅, ∀f 6= f 0 .                               thePmedian outlierness in the remaining objects. ∆S =
+                                                                          1                        0
+Definition 1 (Value Influence). The outlierness influence of             k    x∈O [φS (x) − φS (x )] is the average score margin be-
+                                                                         tween the top-k objects and the center of the other objects,
+a feature value v ∈ V is defined as follows.                             which also indicates the relevance of feature subset S. So
+                             P
+                                     δ(v)δ(u)                            maximizing J finds an outlier ranking that jointly maximizes
+              τ (v) = P u∈N     Pv                ,          (2)         the object outlierness margin and the feature subset relevance.
+                            v∈V    u∈Nv δ(v)δ(u)
+where Nv denotes a set of values that co-occur with v and                3.3    Recursive Search of Feature Subset S
+δ(·) : V 7→ (0, 1) is an initial outlierness influence estimation
+                                                                         Feature subset search methods includes complete search, se-
+of a value based on intra-feature frequency distribution.
+                                                                       quential search, and random search [Li et al., 2016]. Al-
+   We use δ(v) = 21 freq(m)−freq(v)
+                                 freq(m)     +       1
+                                                 freq(m) , ∀v ∈
+                                                                         though complete search outputs an optimal subset, it has ex-
+                                                                         ponential time complexity. Sequential search and random
+dom(f ), m is a value that occurs most frequently in f (i.e.,
+                                                                         search may produce a suboptimal subset, but they are more
+the mode) and freq(·) is a frequency counting function. Such
+                                                                         practical than complete search as they run substantially faster.
+mode absolute deviation helps δ(·) address features with im-
+                                                                            A sequential search method, namely Recursive Backward
+balanced frequency distributions.
+                                                                         Elimination (RBE), is used with the functions φS and J to
+   Essentially, δ estimates the value outlierness influence in-
+                                                                         search for an approximately best subset. RBE recursively
+dependently from the values of other features. τ further uti-
+                                                                         eliminates one feature at a time until no feature remains, and
+lizes the homophily couplings between values from differ-
+                                                                         only retains the feature subset that results in the largest J.
+ent features to have a better estimation of value influence.
+                                                                         RBE is used because it can guarantee a 2-approximate J to
+This value influence is then used to infer the value outlierness
+                                                                         the optimal one (see Section 4.2).
+based on the coupling strength between feature values.
+Definition 2 (Value Outlierness). The outlierness of a feature           3.4    The Algorithm and Its Time Complexity
+value v ∈ V is defined as follows.                                       Algorithm 1 presents the procedure of HOUR. Steps (1-3)
+                             X
+                   ψ(v) =          ρ(u, v)τ (u),              (3)        evaluates the outlier ranking in the full feature set, followed
+                             u∈Nv                                        by the evaluation of outlier rankings in feature subsets gener-
+                     p(u,v)
+                                                                         ated by RBE in Steps (4-14).
+where ρ(u, v) = log p(u)p(v) is pointwise mutual information                Steps (1-2) require one database scan to perform ψ and
+to measure the coupling strength between two values.                     φS respectively, which is linear w.r.t. N . Step (3) needs to
+
+
+
+
+                                                                  2587
+                     Proceedings of the Twenty-Sixth International Joint Conference on Artificial Intelligence (IJCAI-17)
+
+Algorithm 1 HOUR(X , k)                                                        Theorem 1 indicates that given ∀u, v ∈ V, if value u
+Input: X - data objects, k - the number of targeted outliers                has lower frequency and stronger couplings with other infre-
+Output: R -P   an outlier ranking of objects, S - a feature subset          quent values compared to value v, i.e., d(u) > d(v), then
+ 1: ψ(v) ← u∈Nv ρ(u, v)τ (u), ∀v ∈ V                                        τ (u) > τ (v). This essentially models the homophily cou-
+ 2: Compute φF (x), ∀x ∈ X                                                  plings between outlying values. However, this homophily
+ 3: r ← J(RφF , k)                                                          coupling modeling does not take account of the coupling
+ 4: while |F | > 0 do                                                       strength between values. We further enhance the modeling
+ 5:   for i = 1 to |F | do                                                  by adding pointwise mutual information in Eqn. (3). There
+ 6:       Compute φF \fi (x), ∀x ∈ X                                        exist other ways to model homophily couplings. We use such
+ 7:       Compute Ji (Rφ0 F , k)                                            a two-stage modeling because it has a closed-form solution
+ 8:   end for                                                               which guarantees the efficiency of outlier scoring.
+ 9:   Find feature fi with the largest Ji (Rφ0 F , k)
+                                                                               Outlying Values vs. Noisy Values. Noisy values have sim-
+10:    F ← F \ fi and update ψ(v) for all v contained in F
+11:    if Ji (Rφ0 F , k) ≥ r then                                           ilarly low frequencies as outlying values, but they are sup-
+12:       R ← R0 , S ← F and r ← Ji (Rφ0 F , k)
+                                                                            posed to co-occur randomly or follow a Gaussian distribu-
+13:    end if                                                               tion. Their homophily couplings are therefore weaker than
+14: end while                                                               that of outlying values. As a result, HOUR assigns smaller
+15: return R and S                                                          outlierness ψ to noisy values than outlying values.
+                                                                               Outlying Values vs. Normal Values. Normal values have
+                                                                            much lower δ and τ than outlying values due to their high
+rank X , which has O(N logN ) in the worst case, and thus                   occurrence frequencies. Their high frequencies also result in
+they have O(N logN ). The two loops in Steps (4-14) re-                     weak couplings with infrequent values. As a result, they ob-
+sult in O(D2 ) in the worst case, and the core computation                  tain substantially smaller outlierness ψ than outlying values.
+within the loops performs outlier scoring and ranking, which                   At the feature level, HOUR prefers features that contain
+has the same time complexity as the first three steps. Hence,               values of higher outlierness to maximize its objective func-
+the worst time complexity of HOUR is O(D2 N logN ).                         tion. Since outlying values have higher outlierness than nor-
+                                                                            mal or noisy values, the features HOUR iteratively eliminates
+4     Theoretical Analysis                                                  are those containing normal and/or noisy values, resulting in
+4.1    Robustness w.r.t. Noisy Features                                     a cleaned feature subset for its outlier scoring function.
+We analyze the robustness of HOUR from the value level to
+                                                                            4.2   Theoretical Bound
+the feature level. At the value level, per definition of outliers,
+outlying values are infrequent values contained by outliers,                This section shows that HOUR is guaranteed to obtain an out-
+while noisy values are also infrequent but contained by nor-                lier ranking with the margin of at least half of the optimum
+mal objects. In contrast, normal values are frequent values                 value, provided that features are dependent on each other as
+contained by both outliers and normal objects. Below we dis-                in the homophily coupling modeling.
+cuss how the outlier scoring function in HOUR can efficiently               Theorem 2 (2-Approximation). Let R and S be the outlier
+distinguish outlying values from normal and noisy values.                   ranking and feature subset returned by HOUR. Assume Θf be
+Theorem 1 (Homophily Coupling Modeling). The value                          the contribution of feature f ∈ S to the outlier ranking R by
+influence estimation τ (v) in Eqn.(1) is equivalent to the                  integrating its conjunctive                         P θ(f ∧
+                                                                                                        functions with other features
+                                                                            f 0 ), i.e., Θf = f 0 ∈S θ(f ∧ f 0 ), and ∆S = 21 f ∈S Θf .
+                                                                                              P
+stationary probability of visiting v in random walks on a
+strongly connected undirected value-value graph G =<                        Then we have J(RφS , k) ≥ 21 Jopt , where Jopt is the optimum
+V, E, η(·, ·) >, where a feature value v represents a graph                 value of J.
+node, e(u, v) ∈ E denotes an edge between two nodes u and
+v, and η(u, v) = δ(u)I(u, v)δ(v) (I(u, v) = 1 if u and v                    Proof. Since Jopt is the optimum value of J, we have
+have occurrences, and I(u, v) = 0 otherwise) is the weight
+of edge e(u, v), ∀u, v ∈ V.                                                                     ∆S ∗     ∆S ∗ − Θ f
+                                                                                       Jopt =          ≥             , ∀f ∈ S ∗ .
+                                                                                                |S ∗ |    |S ∗ | − 1
+Proof. Let π ∗ (v) be the stationary probability,P
+                                                 P (u, v) be the
+transition probability from u to v, d(v) =
+                                                 Pu∈Nv
+                                                        η(v, u)             We obtain Θf ≥ Jopt after some replacements. Let f ∈ S ∗
+        weighted degree of v and vol (G) =         v∈V d(v) =
+                                                                            be the feature that HOUR removes first among those con-
+P the P
+be
+   v∈V    u∈Nv δ(v)δ(u) be the graph volume. Then we have:
+                                                                            tained in S ∗ during the iteration of RBE and T be the
+                                                                            feature set before f is removed, i.e., S ∗ ⊂ T . Since
+                                 X d(u) δ(u)I(u, v)δ(v)
+                                                                            HOUR removes the least contributive feature at a time, we
+          X
+π ∗ (v) =     π ∗ (u)P (u, v) =                                ,
+           u∈V
+                                      vol (G)
+                                    u∈V
+                                                    d(u)                    have Θf 0 ≥ Θf , ∀f 0 ∈ T when HOUR chooses to re-
+                                                                            move     f , and thus Θf 0 ≥ Jopt . As a result, we obtain
+and we obtain:                                                              P
+                                                                               f 0 ∈T Θf ≥ Jopt |T |, and thus 2∆T ≥ Jopt |T |, result-
+                                                                                          0
+                         P
+                             u∈Nv δ(v)δ(u)                                  ing in J(Rφ0 T , k) = ∆
+                                                                                                         J
+                                                                                                         opt
+                                                                                                  |T | ≥ 2 . Since HOUR retains S that
+            ∗                                                                                       T
+          π (v) = P           P                    = τ (v),
+                        v∈V       u∈Nv δ(v)δ(u)                             results in the largest J and T is one of the candidates, we
+                                                                                                                      J
+which completes the proof.                                                  finally obtain J(RφS , k) ≥ J(Rφ0 T , k) ≥ opt
+                                                                                                                        2 .
+
+
+
+
+                                                                     2588
+                    Proceedings of the Twenty-Sixth International Joint Conference on Artificial Intelligence (IJCAI-17)
+
+5     Experiments and Evaluation                                          CBRW and COMP and obtains more than 30%, 37% and 90%
+                                                                          improvements over CBRW, COMP and FPOF, respectively.
+5.1    Competitors and Parameter Settings
+HOUR is evaluated against three representative outlier detec-             Table 1: AUC and P @n Performance on 15 Data Sets. O = (|F | −
+tors for categorical data: FPOF [He et al., 2005], COMP                   |S|)/|F| indicates feature reduction rate of HOUR. FPOF runs out
+[Akoglu et al., 2012] and CBRW [Pang et al., 2016a].                      of memory in four high-dimensional data.
+FPOF is chosen because it is the most popular pattern-based
+method. COMP is a state-of-the-art subspace method that                                              AUC                           P@n
+                                                                           Data     O     HOUR CBRW COMP FPOF           HOUR CBRW COMP FPOF
+captures arbitrary-length outlying behaviors. CBRW is a
+                                                                           SylvaA 91%     0.9829 0.9353 0.8855 NA       0.7483 0.5914 0.3770 NA
+closely related value outlierness-based method. k in HOUR is               BM       50%   0.6939 0.6287 0.6267 0.5466   0.3265 0.2474 0.2565 0.1369
+set to the number of outliers by default. COMP is parameter-               AID362 93%     0.5147 0.6640 0.6480 NA       0.0833 0.0500 0.0167 NA
+free. FPOF and CBRW are used with their default settings.                  APAS 80%       0.9065 0.8190 0.6554 NA       0.0000 0.0000 0.0000 NA
+                                                                           SylvaP 83%     0.9725 0.9715 0.9537 NA       0.6907 0.6151 0.5700 NA
+   We also compare HOUR to the combination of outlier de-                  Census 91%     0.4867 0.6678 0.6352 0.6148   0.0616 0.0677 0.0675 0.0637
+tectors with two of the most recently proposed outlying fea-               CelebA 69%     0.8879 0.8462 0.7572 0.7380   0.2085 0.1748 0.1533 0.1256
+ture selection methods, CBFS [Pang et al., 2016a] and DSFS                 CUP14 57%      0.9833 0.9420 0.9398 0.6041   0.6730 0.2671 0.2671 0.0000
+                                                                           Alcohol 91%    0.9365 0.9254 0.8919 0.5468   0.3889 0.3333 0.3889 0.0556
+[Pang et al., 2016b]. CBFS returns a feature ranking. DSFS                 CMC      50%   0.6647 0.6339 0.5669 0.5614   0.0345 0.0345 0.0345 0.1034
+outputs a feature subset without any parameters. To have a                 CT       93%   0.9688 0.9703 0.9772 0.9770   0.0499 0.0386 0.0688 0.0644
+fair comparison, CBFS selects the top-ranked |S| features so               Chess 50%      0.8507 0.7897 0.6387 0.6160   0.0000 0.0000 0.0000 0.0000
+                                                                           Turkiye 34%    0.5256 0.5116 0.5101 0.4746   0.0776 0.0746 0.0687 0.0597
+that CBFS and HOUR select the same number of features.                     Credit 33%     0.7204 0.5804 0.6543 0.6428   0.4875 0.2215 0.3502 0.3333
+   All methods are in Java in WEKA [Hall et al., 2009] except              Probe 67%      0.9661 0.9906 0.9790 0.9867   0.8440 0.8579 0.7928 0.8548
+COMP which is in MATLAB. All these methods are executed                    Average 69%    0.8041 0.7918 0.7546 0.6644   0.3116 0.2383 0.2275 0.1634
+                                                                                p-value     -    0.1876 0.0730 0.0322     -    0.0068 0.0068 0.1055
+on a node in a 3.4GHz Phoenix Cluster with 32GB memory.
+
+5.2    Performance Evaluation Method                                         Using outlier scoring results to guide outlying feature se-
+Two of the most popular evaluation methods, the area under                lection enables HOUR to remove most, if not all, of the noisy
+ROC curve (AUC) and precision at n, i.e., P @n (where we                  features while having little or no loss in outlier separability
+set n as the number of outliers in a data set), are used. All the         on most data sets, i.e., the 11 data sets on which HOUR ob-
+outlier detectors produce an ascending ranking based on out-              tains the best AUC performance (see the fnl and sep results
+lier scores. AUC evaluates the global ranking quality, while              of HOUR in Table 2). Hence, although HOUR works with
+P @n considers the detection precision in the top n positions.            69% less features than its competitors, it performs substan-
+Higher AUC or P @n indicates better performance.                          tially better as it works on much cleaner data. Also, maximiz-
+   Two data indicators, feature noise level (fnl ) and outlier            ing the margin of the top-k objects from the others helps rank
+separability (sep), are defined to evaluate data complexity               more outliers in the top, resulting in significant improvement
+before and after applying feature selection. fnl is defined by            in P @n. On the other hand, HOUR opts for strongly relevant
+[Pang et al., 2016a; 2016b] as the percentage of individual               features that help rank outliers in the top, so it may remove
+noisy features. Inspired by the indicator feature efficiency in           weakly relevant features that distinguish outliers from normal
+[Ho and Basu, 2002; Leyva et al., 2015], sep is defined as the            objects in other positions. As a result, HOUR may obtain
+maximum feature efficiency per data, in which the efficiency              worse AUC performance while comparable P @n compared
+of a feature is quantified by the AUC performance of using                to its competitors, e.g., the results on AID362 and Census.
+frequency histogram to detect outliers on the single feature.                2) Defeating the Combination of Outlier Detectors with
+                                                                          Outlying Feature Selection Methods: HOUR is compared
+5.3    Data Sets                                                          with the combination of CBRW and COMP with outlying
+Fifteen publicly available real-world data sets with a range of           feature selection methods CBFS and DSFS in Table 2 1 . Al-
+feature noise levels are used, which cover diverse domains,               though the two feature selection methods largely improve
+e.g., image object recognition, intrusion detection and molec-            CBRW and COMP in terms of AUC and/or P @n, HOUR
+ular screening, as shown in Table 1. These data sets are                  remains as the best performer on most data sets. HOUR ob-
+transformed from extremely imbalanced data, where the rare                tains significantly better performance than the combination
+classes are treated as outliers versus the rest of classes as nor-        of CBRW and COMP with CBFS in AUC and significantly
+mal class [Lazarevic and Kumar, 2005; Pang et al., 2016a].                outperforms all the four different combinations in P @n.
+                                                                             The superiority of HOUR is because the wrapper-based
+5.4    Findings and Analysis                                              feature selection scheme enables HOUR to remove substan-
+                                                                          tially more noisy features than the filter-based methods CBFS
+1) Obtaining Significantly Better Global or Top-n Outlier
+                                                                          and DSFS. This is verified by the fnl and sep differences
+Ranking Than Other Outlier Detectors: We compare HOUR
+                                                                          between the full feature set and feature subsets selected by
+with CBRW, COMP and FPOF in terms of AUC and P @n
+                                                                          HOUR, CBFS and DSFS shown in Table 2. On average,
+in Table 1. In terms of AUC, HOUR obtains the best perfor-
+                                                                          HOUR removes over 50% of the noisy features, which out-
+mance on 11 data sets; and on average, it obtains about 2%,
+                                                                          performs CBFS (12%) and DSFS (22%) by a factor of more
+7% and 21% improvement over CBRW, COMP and FPOF, re-
+spectively. HOUR significantly outperforms FPOF in AUC.                       1
+                                                                                The combination of FPOF with CBFS or DSFS underperforms
+In terms of P @n, HOUR performs significantly better than                 that of CBRW and COMP and is omitted due to space limits.
+
+
+
+
+                                                                   2589
+                            Proceedings of the Twenty-Sixth International Joint Conference on Artificial Intelligence (IJCAI-17)
+
+Table 2: AUC and P @n Performance Comparison between HOUR and the Combination of CBRW and COMP with CBFS and DSFS, and
+Data Complexity Evaluation Results on F , S, S † and S ‡ . The results obtained using CBFS and DSFS are denoted by † and ‡ , respectively.
+
+                                 AUC                                          P@n                                    Feature Noise Level (fnl )                Outlier Separability (sep)
+  Data            HOUR CBRW† CBRW‡ COMP† COMP‡                 HOUR CBRW† CBRW‡ COMP† COMP‡                          F      S       S†      S‡                  F      S     S†      S‡
+  SylvaA          0.9829 0.8793 0.9381 0.8726 0.8858           0.7483 0.5327 0.5948 0.4831 0.3781                  91% 13%         75% 91%                     0.78 0.78 0.78 0.78
+  BM              0.6939 0.6104 0.6114 0.6239 0.6239           0.3265 0.2259 0.2269 0.2567 0.2575                  90% 80%         80% 75%                     0.63 0.63 0.63 0.63
+  AID362          0.5147 0.4659 0.6518 0.4982 0.6342           0.0833 0.0000 0.0500 0.0000 0.0167                  86% 100% 100% 85%                           0.60 0.49 0.47 0.60
+  APAS            0.9065 0.6621 0.8807 0.6532 0.8771           0.0000 0.0000 0.0000 0.0000 0.0000                  81% 38%         85% 50%                     0.87 0.87 0.72 0.87
+  SylvaP          0.9725 0.9582 0.9707 0.9307 0.9628           0.6907 0.5553 0.5609 0.6140 0.5892                  78%     0%      53% 71%                     0.78 0.78 0.78 0.78
+  Census          0.4867 0.4844 0.6999 0.4841 0.7135           0.0616 0.0604 0.0732 0.0635 0.0991                  58% 100% 100% 50%                           0.76 0.49 0.49 0.76
+  CelebA          0.8879 0.8865 0.8502 0.8855 0.7594           0.2085 0.2098 0.1698 0.2142 0.1482                  49%     0%       0%     50%                 0.80 0.78 0.78 0.80
+  CUP14           0.9833 0.9821 0.9358 0.9821 0.9618           0.6730 0.6686 0.2671 0.6686 0.3224                  43%     0%      33% 50%                     0.92 0.92 0.92 0.92
+  Alcohol         0.9365 0.9264 0.9294 0.8919 0.8595           0.3889 0.3889 0.4444 0.3889 0.0556                  38%     0%       0%     18%                 0.91 0.91 0.91 0.91
+  CMC             0.6647 0.6366 0.6444 0.6475 0.6586           0.0345 0.0345 0.0345 0.0345 0.0345                  38%     0%       0%      0%                 0.66 0.66 0.66 0.66
+  CT              0.9688 0.9192 0.9673 0.9187 0.9670           0.0499 0.0000 0.0386 0.0000 0.0386                  34%     0%      67%      0%                 0.97 0.97 0.97 0.97
+  Chess           0.8507 0.7268 0.7649 0.7529 0.6305           0.0000 0.0000 0.0000 0.0000 0.0000                  33% 33%          6%     25%                 0.74 0.59 0.74 0.74
+  Turkiye         0.5256 0.5161 0.5108 0.5145 0.5119           0.0776 0.0716 0.0716 0.0746 0.0776                  25% 14%         14% 21%                     0.58 0.55 0.55 0.55
+  Credit          0.7204 0.5712 0.5712 0.6566 0.6566           0.4875 0.2131 0.2131 0.3531 0.3531                  11%     0%       0%      0%                 0.70 0.70 0.70 0.70
+  Probe           0.9661 0.9591 0.9591 0.9794 0.9794           0.8440 0.8397 0.8397 0.7672 0.7672                   0%     0%       0%      0%                 0.94 0.94 0.94 0.94
+  Average         0.8041 0.7456 0.7924 0.7528 0.7788           0.3116 0.2533 0.2390 0.2612 0.2092                  50% 25%         44% 39%                     0.78 0.74 0.74 0.77
+  p-value           -    0.0001 0.0730 0.0006 0.1070             -    0.0029 0.0269 0.0098 0.0029
+
+
+
+than four and two, respectively; while at the same time, it ob-                          to false positives. A general guideline is to set k = 0.5% × N
+tains a very comparable outlier separability. In addition, we                            to leverage the effect of false negatives and false positives.
+observe that filter-based methods like DSFS generally retain                                4) Good Scalability w.r.t. Data Size and Dimensionality:
+many more features than HOUR. These extra features contain                               The scale-up test results are presented in Figure 3. HOUR
+noisy features as well as relevant features. This is why DSFS                            is linear w.r.t. data size and quadratic w.r.t. dimensionality.
+obtains a smaller noise reduction level but a better outlier sep-                        HOUR runs comparably fast to CBRW and FPOF w.r.t. dif-
+arability than HOUR in Table 2. The extra relevant features                              ferent data sizes. In the right panel, HOUR runs five orders of
+retained by DSFS enable CBRW and COMP to outperform                                      magnitude faster than FPOF, while the iterative optimization
+HOUR in data sets where HOUR makes very aggressive fea-                                  process makes HOUR run considerably slower than CBRW.
+ture reduction, e.g., on AID362 and Census.
+                                                                                                                   HOUR
+                                                                                                           105                                           105
+                                                                                                                                                                        HOUR
+                                                                                                                   CBRW                                                 CBRW
+
+
+
+
+                                                                                             Runtime (s)                                   Runtime (s)
+              Census (Outlier%=6.20%)                   CelebA (Outlier%=2.24%)                                    FPOF                                                 FPOF
+        0.8                                       0.9                                                              COMP                                                 COMP
+
+  AUC   0.6                               AUC
+                                                0.85
+        0.01% 0.05% 0.1% 0.5% 1.0%                0.01% 0.05% 0.1% 0.5% 1.0%                               100
+                        k                                         k                                                                                      100
+
+              CUP14 (Outlier%=5.93%)                      CT (Outlier%=0.47%)                              16000      256000     4096000                   20     40    80     160    320
+       0.99                                        1                                                                 Data Size                                  Data Dimensionality
+ AUC   0.98                                 AUC
+       0.97                                       0.5                                    Figure 3: Scale-up Test w.r.t. Data Size and Dimensionality. FPOF
+         0.01% 0.05% 0.1% 0.5% 1.0%               0.01% 0.05% 0.1% 0.5% 1.0%
+                                                                                         runs out of memory when dimensionality reaches 80.
+                        k                                         k
+
+
+Figure 2: Representative AUC Performance of HOUR w.r.t. k. The
+dashed line shows HOUR’s performance with k = outlier%.                                  6   Conclusions and Future work
+                                                                                         A wrapper-based outlier detection framework WrapperOD
+   3) Good Stability w.r.t. the Parameter k: We examine the                              and its instance HOUR are introduced to handle data with
+stability of HOUR w.r.t. k in Figure 2. HOUR shows stable                                noisy features. HOUR is more plausible than its competitors:
+performance in most of the 15 data sets. Here we illustrate                              (i) it guarantees the margin between the top-k outliers and the
+representative and interesting trends in its AUC performance                             other objects is a 2-approximation to the optimum value; (ii)
+w.r.t. a wide range of k on four data sets due to space limits.                          it performs significantly better in global and/or local outlier
+HOUR performs very stably on CelebA and CUP14. It is very                                ranking; and (iii) it obtains stable performance w.r.t. k and
+challenging to rank outliers in the top-k positions in data sets                         good scalability. The capability of returning the top k outliers
+which contain only a very small proportion of outliers but                               with superior P @n performance makes HOUR a good candi-
+have many noisy features (e.g., CT), as the outliers are easily                          date for real-world applications, since investigation resources
+masked as normal objects in those data. Due to these false                               are often only sufficient for limited suspicious objects.
+negatives, HOUR requires a large k (e.g., 0.5%) to perform
+well on CT. On the other hand, HOUR can identify outliers                                Acknowledgments
+more accurately using a smaller k in Census which contains a                             This work is partially supported by the ARC Discovery
+larger proportion of outliers, as the use of a large k might lead                        Grants DP130102691 and DP140100545.
+
+
+
+
+                                                                                  2590
+                   Proceedings of the Twenty-Sixth International Joint Conference on Artificial Intelligence (IJCAI-17)
+
+References                                                                  IEEE Transactions on Pattern Analysis and Machine In-
+[Akoglu et al., 2012] Leman Akoglu, Hanghang Tong, Jilles                   telligence, 24(3):289–300, 2002.
+   Vreeken, and Christos Faloutsos.         Fast and reliable            [Jeong et al., 2012] Young-Seon Jeong, In-Ho Kang,
+   anomaly detection in categorical data. In CIKM, pages                    Myong-Kee Jeong, and Dongjoon Kong. A new feature
+   415–424. ACM, 2012.                                                      selection method for one-class classification problems.
+[Angiulli et al., 2009] Fabrizio Angiulli, Fabio Fassetti, and              IEEE Transactions on Systems, Man, and Cybernetics,
+   Luigi Palopoli. Detecting outlying properties of excep-                  Part C (Applications and Reviews), 42(6):1500–1509,
+   tional objects. ACM Transactions on Database Systems,                    2012.
+   34(1):7, 2009.                                                        [Keller et al., 2012] Fabian Keller, Emmanuel Muller, and
+[Azmandian et al., 2012] Fatemeh Azmandian, Ayse Yil-                       Klemens Bohm. HiCS: High contrast subspaces for
+   mazer, Jennifer G Dy, Javed Aslam, David R Kaeli, et al.                 density-based outlier ranking. In ICDE, pages 1037–1048.
+   GPU-accelerated feature selection for outlier detection us-              IEEE, 2012.
+   ing the local kernel density ratio. In ICDM, pages 51–60.             [Kohavi and John, 1997] Ron Kohavi and George H John.
+   IEEE, 2012.                                                              Wrappers for feature subset selection. Artificial intelli-
+[Cao et al., 2012] Longbing Cao, Yuming Ou, and Philip S                    gence, 97(1):273–324, 1997.
+   Yu.       Coupled behavior analysis with applications.                [Lazarevic and Kumar, 2005] Aleksandar Lazarevic and
+   IEEE Transactions on Knowledge and Data Engineering,                     Vipin Kumar. Feature bagging for outlier detection. In
+   24(8):1378–1392, 2012.                                                   SIGKDD, pages 157–166. ACM, 2005.
+[Cao, 2014] Longbing Cao. Non-iidness learning in behav-                 [Leyva et al., 2015] Enrique Leyva, Antonio González, and
+   ioral and social data. The Computer Journal, 57(9):1358–                 Raul Perez. A set of complexity measures designed for
+   1370, 2014.                                                              applying meta-learning to instance selection. IEEE Trans-
+[Cao, 2015] Longbing Cao. Coupling learning of complex                      actions on Knowledge and Data Engineering, 27(2):354–
+   interactions. Information Processing & Management,                       367, 2015.
+   51(2):167–186, 2015.                                                  [Li et al., 2016] Jundong Li, Kewei Cheng, Suhang Wang,
+[Chandola et al., 2009] Varun Chandola, Arindam Banerjee,                   Fred Morstatter, Robert P Trevino, Jiliang Tang, and Huan
+   and Vipin Kumar. Anomaly detection: A survey. ACM                        Liu. Feature selection: A data perspective. CoRR,
+   Computing Surveys, 41(3):15, 2009.                                       abs/1601.07996, 2016.
+[Chau et al., 2011] Duen Horng Polo Chau, Carey Nachen-                  [Lorena et al., 2015] Luiz HN Lorena, André CPLF Car-
+   berg, Jeffrey Wilhelm, Adam Wright, and Christos Falout-                 valho, and Ana C Lorena. Filter feature selection for one-
+   sos. Polonium: Tera-scale graph mining and inference for                 class classification. Journal of Intelligent & Robotic Sys-
+   malware detection. In SDM, pages 131–142. SIAM, 2011.                    tems, 80(1):227–243, 2015.
+[Chen et al., 2016] Ting Chen, Lu-An Tang, Yizhou Sun,                   [Marques et al., 2015] Henrique O Marques, Ricardo JGB
+   Zhengzhang Chen, and Kai Zhang. Entity embedding-                        Campello, Arthur Zimek, and Jörg Sander. On the internal
+   based anomaly detection for heterogeneous categorical                    evaluation of unsupervised outlier detection. In SSDBM.
+   events. In IJCAI, pages 1396–1403. AAAI, 2016.                           ACM, 2015.
+                                                                         [Pang et al., 2016a] Guansong Pang, Longbing Cao, and
+[Cinbis et al., 2016] Ramazan Gokberk Cinbis, Jakob Ver-
+                                                                            Ling Chen. Outlier detection in complex categorical data
+   beek, and Cordelia Schmid. Approximate fisher kernels
+                                                                            by modelling the feature value couplings. In IJCAI, pages
+   of non-iid image models for image categorization. IEEE
+                                                                            1902–1908. AAAI, 2016.
+   Transactions on Pattern Analysis and Machine Intelli-
+   gence, 38(6):1084–1098, 2016.                                         [Pang et al., 2016b] Guansong Pang, Longbing Cao, Ling
+[Hall et al., 2009] Mark Hall, Eibe Frank, Geoffrey Holmes,                 Chen, and Huan Liu. Unsupervised feature selection for
+                                                                            outlier detection by modelling hierarchical value-feature
+   Bernhard Pfahringer, Peter Reutemann, and Ian H Wit-
+                                                                            couplings. In ICDM. IEEE, 2016.
+   ten. The WEKA data mining software: An update. ACM
+   SIGKDD Explorations Newsletter, 11(1):10–18, 2009.                    [Pang et al., 2016c] Guansong Pang, Kai Ming Ting, David
+[He and Carbonell, 2010] Jingrui He and Jaime Carbonell.                    Albrecht, and Huidong Jin. Zero++: Harnessing the power
+                                                                            of zero appearances to detect anomalies in large-scale data
+   Coselection of features and instances for unsupervised rare
+                                                                            sets. Journal of Artificial Intelligence Research, 57:593–
+   category analysis. Statistical Analysis and Data Mining,
+                                                                            620, 2016.
+   3(6):417–430, 2010.
+                                                                         [Zimek et al., 2012] Arthur Zimek, Erich Schubert, and
+[He et al., 2005] Zengyou He, Xiaofei Xu, Zhexue Joshua
+                                                                            Hans-Peter Kriegel. A survey on unsupervised outlier
+   Huang, and Shengchun Deng. FP-outlier: Frequent pat-
+                                                                            detection in high-dimensional numerical data. Statistical
+   tern based outlier detection. Computer Science and Infor-
+                                                                            Analysis and Data Mining, 5(5):363–387, 2012.
+   mation Systems, 2(1):103–118, 2005.
+[Ho and Basu, 2002] Tin Kam Ho and Mitra Basu. Com-
+   plexity measures of supervised classification problems.
+
+
+
+
+                                                                  2591
+

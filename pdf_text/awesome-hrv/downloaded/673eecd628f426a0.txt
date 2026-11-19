@@ -1,0 +1,1397 @@
+                                          TOD: GPU-accelerated Outlier Detection via Tensor Operations
+                                                               Yue Zhao                                            George H. Chen                                      Zhihao Jia
+                                                    Carnegie Mellon University                               Carnegie Mellon University                      Carnegie Mellon University
+                                                          Pittsburgh, PA                                          Pittsburgh, PA                                  Pittsburgh, PA
+                                                         zhaoy@cmu.edu                                         georgechen@cmu.edu                                zhihao@cmu.edu
+
+                                         ABSTRACT                                                                               serving a critical role in large cloud services for monitoring server
+                                         Outlier detection (OD) is a key learning task for finding rare and                     abnormality at Microsoft [81] and Amazon [11], as well as for fraud
+                                         deviant data samples, with many time-critical applications such as                     detection at eBay [2] and Alibaba [55].
+                                         fraud detection and intrusion detection. In this work, we propose                      Scalability challenges of OD . Numerous OD algorithms have
+
+
+
+
+arXiv:2110.14007v3 [cs.LG] 17 Sep 2022
+                                         TOD, the first tensor-based system for efficient and scalable outlier                  been proposed recently to detect outliers for different types of data
+                                         detection on distributed multi-GPU machines. A key idea behind                         (e.g., tabular data [4, 41, 54, 105], time series [16, 18, 23, 44], graphs
+                                         TOD is decomposing complex OD applications into a small collec-                        [5, 17]). Although there is no shortage of detection algorithms, OD
+                                         tion of basic tensor algebra operators. This decomposition enables                     applications face challenges in scaling to large datasets, both in terms
+                                         TOD to accelerate OD computations by leveraging recent advances                        of execution time and memory consumption, which prevents OD
+                                         in deep learning infrastructure in both hardware and software.                         algorithms from being deployed in data-intensive or time-critical
+                                         Moreover, to deploy memory-intensive OD applications on modern                         tasks such as real-time credit card fraud detection. To address these
+                                         GPUs with limited on-device memory, we introduce two key tech-                         challenges, recent work focuses on both developing distributed OD
+                                         niques. First, provable quantization speeds up OD computations and                     algorithms on CPUs [8, 13, 62, 72, 74, 91, 97, 102, 104] and acceler-
+                                         reduces its memory footprint by automatically performing specific                      ating certain OD algorithms on GPUs [9, 46]. However, existing
+                                         floating-point operations in lower precision while provably guaran-                    GPU-based OD solutions only target specific (families of) OD algo-
+                                         teeing no accuracy loss. Second, to exploit the aggregated compute                     rithms and cannot support generic OD computations. For instance,
+                                         resources and memory capacity of multiple GPUs, we introduce                           Angiulli et al. [9] showcases an example of using GPUs for distance-
+                                         automatic batching, which decomposes OD computations into small                        based algorithms, while how to handle linear and probabilistic OD
+                                         batches for both sequential execution on a single GPU and parallel                     algorithms remains unclear under the proposed solution.
+                                         execution on multiple GPUs.                                                            Advances in deep neural networks . On the other hand, deep neu-
+                                            TOD supports a diverse set of OD algorithms. Extensive eval-                        ral networks (DNNs) have revolutionized computer vision, natural
+                                         uation on 11 real and 3 synthetic OD datasets shows that TOD is                        language processing, and various other fields [32, 48, 98] over the
+                                         on average 10.9× faster than the leading CPU-based OD system                           last decade. This success is largely due to the recent development
+                                         PyOD (with a maximum speedup of 38.9×), and can handle much                            of DNN systems (e.g., TensorFlow [1] and PyTorch [77]). These
+                                         larger datasets than existing GPU-based OD systems. In addition,                       systems achieve fast tensor algebra computations (e.g., matrix mul-
+                                         TOD allows easy integration of new OD operators, enabling fast                         tiplication, convolution, etc.) on modern hardware accelerators (e.g.,
+                                         prototyping of emerging and yet-to-discovered OD algorithms.                           GPUs and TPUs) and use efficient parallelization strategies (e.g.,
+                                                                                                                                data, model, and pipeline parallelism [1, 39, 69]) to aggregate the
+                                         PVLDB Reference Format:                                                                compute resources across multiple accelerators, enabling efficient
+                                         Yue Zhao, George H. Chen, and Zhihao Jia. TOD: GPU-accelerated Outlier                 and scalable DNN computations.
+                                         Detection via Tensor Operations. PVLDB, 16(1): XXX-XXX, 2022.                             This paper explores a new approach to building GPU-accelerated
+                                         doi:XX.XX/XXX.XX                                                                       OD systems. Instead of following the methodology used in existing
+                                         PVLDB Artifact Availability:                                                           GPU-based OD frameworks (i.e., providing efficient GPU imple-
+                                         The source code, data, and other artifacts have been made available at                 mentations tailored to specific OD applications), we ask: can we
+                                         https://github.com/yzhao062/pytod.                                                     leverage the compilation and optimization techniques in DNN systems
+                                                                                                                                to minimize the time and memory consumption of a wide range of
+                                         1    INTRODUCTION                                                                      common OD computations?
+                                         Outlier detection (OD) is a crucial machine learning task for identi-
+                                         fying data points deviating from a general distribution [4, 57, 100].
+                                         OD has numerous real-world applications, including anti-money
+                                                                                                                                1.1    Our Approach
+                                         laundering [49], rare disease detection [75], rumor detection [89],                    In this paper, we present TOD, a tensor-based outlier detection
+                                         and network intrusion detection [45]. OD algorithms have been                          system that abstracts OD applications into tensor operations for
+                                                                                                                                efficient GPU acceleration. TOD leverages both the software and
+                                                This work is licensed under the Creative Commons BY-NC-ND 4.0 International     hardware optimizations in modern deep learning frameworks to
+                                         License. Visit https://creativecommons.org/licenses/by-nc-nd/4.0/ to view a copy of
+                                         this license. For any use beyond those covered by this license, obtain permission by
+                                                                                                                                enable efficient and scalable OD computations on distributed multi-
+                                         emailing info@vldb.org. Copyright is held by the owner/author(s). Publication rights   GPU clusters. To the best of our knowledge, TOD is the first GPU-
+                                         licensed to the VLDB Endowment.                                                        based system for generic OD applications. Fig. 1 shows an overview
+                                         Proceedings of the VLDB Endowment, Vol. 16, No. 1 ISSN 2150-8097.
+                                         doi:XX.XX/XXX.XX                                                                       of TOD. Building a tensor-based OD system requires addressing
+                                                                                                                                three major obstacles.
+                              An Outlier Detection Task                                  also use lower precision calculations at the expense of accuracy,
+                                              Decomposed to optimized operators          our proposed provable quantization technique provably guarantees
+                                Programming Model                                        no accuracy loss.
+                    Function          Function
+                                                            …                            Enabling scalable OD computations. Existing deep learning frame-
+                   operator 1        operator 2
+Section 4
+                                                                                         works cannot directly support large-scale OD applications, since
+            Basic tensor      Basic tensor      Basic tensor
+                                                                        …                modern deep learning systems are designed to iteratively process
+             operator 1        operator 2        operator 3
+                                                                                         a small batch of training samples even though the entire training
+                                         Save GPU memory without accuracy loss           dataset can be large. For example, to train ResNet-50 [35] on the
+                               Provable Quantization                                     ImageNet dataset [25], the DNN systems only handle small mini-
+Section 5
+               Data                Low-precision             Exactness                   batches (e.g., 256 samples) in each training iteration, while the
+            Quantization            Evaluation               Verification                dataset contains more than 14 million samples. However, many OD
+                                      Divide and conquer with single or multi-GPUs       applications involve operating on all samples, such as computing
+              Automatic Batching                  Multi-GPU Support                      distances between all sample pairs. Executing such an application
+                                                   GPU 1
+                                                                                         on a single GPU would typically run out of memory because GPUs
+Section 6
+                                                                                         nowadays have limited memory capacities (e.g., compared to those
+                                                                    Result
+                                                   GPU 2
+                                                                    Aggr.                of CPU RAM). To overcome the difficulty of executing OD applica-
+                                                     …                                   tions in iterations and the resource limits of a single GPU, TOD uses
+                                                                                         an automatic batching mechanism to execute memory-intensive OD
+                           Outlier Scores of the Input Task                              operators in small batches, which are distributed across multiple
+                                                                                         GPUs in parallel in a pipeline fashion. The automatic batching and
+Figure 1: System overview. TOD abstracts OD algorithms into                              multi-GPU support allow TOD to scale to datasets as large as those
+small building blocks via the programming model for deep                                 commonly encountered in deep learning.
+optimization, with a set of techniques including provable                                   We compare TOD against existing CPU- and GPU-based OD sys-
+quantization, automatic batching, and multi-GPU support.                                 tems on both real-world and synthetic datasets. TOD is on average
+                                                                                         10.9 times faster than PyOD, a state-of-the-art comprehensive CPU-
+                                                                                         based OD system [106], and can process a million samples within
+Representing OD computations using tensor operations. Un-                                an hour while PyOD cannot. Compared to existing GPU-based OD
+like DNN models, which are represented as a pipeline of tensor al-                       systems, TOD can handle much larger datasets, while the GPU
+gebra operators (e.g., matrix multiplication), many OD applications                      baselines run out of GPU memory. Our evaluation further shows
+involve a diverse collection of operators that have traditionally not                    that provable quantization, automatic batching, and multi-GPU
+been implemented in terms of tensor operations, such as proximity-                       support are all critical for efficient and scalable OD computations.
+based algorithms, statistical approaches, and linear methods (see                           In summary, this paper makes the following contributions:
+an overview of OD applications in §2.1). Implementing OD appli-                          • We propose TOD, the first tensor-based system for generic outlier
+cations one at a time and accounting for software and hardware                              detection, enabling efficient and scalable OD computations on
+optimizations is labor-intensive. To address this obstacle, TOD in-                         distributed multi-GPU clusters.
+troduces a new programming model for OD that decomposes a                                • TOD uses a new programming model that abstracts complex OD
+broad set of OD applications into a small collection of basic tensor                        applications into a small collection of basic tensor operators for
+operators and functional operators, which significantly reduces the                         efficient GPU acceleration.
+implementation and optimization effort and opens the possibility                         • We introduce provable quantization that accelerates unsuper-
+of easily supporting new OD algorithms.                                                     vised OD computations by performing specific floating-point
+Quantizing OD computations. Quantization is commonly used                                   operators in lower precision while provably guaranteeing no
+in existing DNN frameworks to reduce time and memory consump-                               accuracy loss.
+tion of DNN computations by executing intermediate operations of                         Extensibility and integration. TOD is open-sourced1 (see Appx.
+DNN models in a low-precision floating-point representation. Quan-                       §D for API demonstration), which enables easy development of new
+tization in general does not preserve the end-to-end equivalence of                      OD algorithms by leveraging highly optimized tensor operators or
+a DNN model and may introduce potential accuracy losses. To apply                        including new operators (see examples in §7.1). This extensibility
+quantization, the current practice is fine-tuning a quantized DNN                        of TOD yields a large number of yet-to-be-discovered OD methods.
+model on the training dataset in a supervised fashion and assessing                      Thus, we believe that TOD also provides a platform that enables
+the accuracy loss; however, this approach is not directly applicable                     rapid research and development of novel OD methods.
+to OD, since most OD algorithms are unsupervised and thus lack a
+direct way for measuring accuracy. To address this challenge, TOD                        2    BACKGROUND AND RELATED WORK
+introduces a novel quantization technique called provable quan-
+                                                                                         We provide background on existing OD algorithms for tabular
+tization, which leverages the numerical insensitivity of some OD
+                                                                                         data and which ones are accelerated by TOD (§2.1), on the DNN
+algorithms (e.g., 𝑘-nearest-neighbors may return identical results
+                                                                                         infrastructure that TOD builds off of to do acceleration (§2.2), and
+for some samples when computing with different floating-point
+                                                                                         on existing comprehensive OD systems (§2.3), including the current
+precisions) and automatically performs specific OD operators in
+lower precision. In contrast to prior quantization techniques that                           1 Open-sourced Library: https://github.com/yzhao062/pytod
+
+                                                                                     2
+Table 1: Key OD algorithms for tabular data and their time                     Its success is fueled by recent advances in both hardware and soft-
+and space complexity with a brute-force implementation (ad-                    ware [47]. Specifically, DNN systems depend on tensor operations
+ditional optimization is possible but not considered here),                    that can often be parallelized and executed in small batches. These
+where 𝑛 is the number of samples, and 𝑑 is the number of di-                   operations are well-suited for GPUs, especially as a single GPU
+mensions. Note that ensemble-based methods’ complexities                       nowadays often has many more cores than a single CPU; while
+depend on the underlying base estimators. Algorithms that                      GPU cores are not as general purpose as CPU cores, they suffice
+can be accelerated in TOD are marked with ✓.                                   in executing the tensor operations of deep learning. Moreover, the
+                                                                               maturity of DNN programming interfaces such as PyTorch [77] and
+                                 Time        Space     Optimized               TensorFlow [1] makes developing machine learning models easy
+  Category      Algorithm                                                      with a wide range of GPUs. Multiple works attempt to leverage
+                                Compl.      Compl.      in TOD
+                                                                               DNN systems for accelerating training data science and ML tasks,
+  Proximity     𝑘NNOD            𝑂 (𝑛 2 )   𝑂 (𝑛 2 )         ✓                 including Hummingbird [68], Tensors [42], and AC-DBSCAN [37].
+  Proximity     COF              𝑂 (𝑛 3 )   𝑂 (𝑛 2 )         ✓                    Differently, TOD for the first time, extends the acceleration us-
+  Proximity     LOF              𝑂 (𝑛 2 )   𝑂 (𝑛 2 )         ✓                 age of DNN systems to OD algorithms. We build TOD using the
+  Proximity     LOCI             𝑂 (𝑛 2 )   𝑂 (𝑛 2 )         ✓                 DNN ecosystem, taking advantage of its established hardware ac-
+  Statistical   KDE              𝑂 (𝑛 3 )   𝑂 (𝑛 2 )         ✗                 celeration and software accessibility. This design choice also opens
+  Statistical   HBOS             𝑂 (𝑛𝑑)     𝑂 (𝑛𝑑)           ✓                 the opportunity for unifying classical OD algorithms (see §2.1) and
+  Statistical   COPOD            𝑂 (𝑛𝑑)     𝑂 (𝑛𝑑)           ✓                 DNN-based OD algorithms on the same platform—this emerging
+  Statistical   ECOD             𝑂 (𝑛𝑑)     𝑂 (𝑛𝑑)           ✓                 direction has gained increasing attention in OD research [83].
+  Ensemble      LODA              N/A        N/A             ✓
+  Ensemble      FB                N/A        N/A             ✓
+  Ensemble      iForest           N/A        N/A             ✗                 2.3    Outlier Detection Systems
+  Ensemble      LSCP              N/A        N/A             ✓                 CPU-based systems . Over the years, comprehensive OD systems
+  Linear        PCA              𝑂 (𝑛𝑑)     𝑂 (𝑛)            ✓                 on CPUs that cover a diverse group of algorithms have been de-
+  Linear        OCSVM            𝑂 (𝑛 3 )   𝑂 (𝑛 2 )         ✗                 veloped in different programming languages, including ELKI Data
+                                                                               Mining [3] and RapidMiner [82] in Java, and PyOD [106] in Python.
+state-of-the-art PyOD [106]. In §2.4, we review additional systems,
+                                                                               Among these, PyOD is the state-of-the-art (SOTA) with deep op-
+algorithms, and applications for other data formats in addition to
+                                                                               timization including just-in-time compilation and parallelization.
+tabular data (e.g., time series and graphs). Note that TOD primarily
+                                                                               It is widely used in both academia and industry, with hundreds of
+focuses on OD in tabular data due to its popularity [4]; TOD can
+                                                                               citations [103] and millions of downloads per year [87]. Recently,
+be extended to support OD in other data types with modifications.
+                                                                               the PyOD team proposed an acceleration system called SUOD to
+                                                                               further speed up the training and prediction in PyOD with a large
+2.1    Existing OD Algorithms and Scalability                                  collection of heterogeneous OD models [104]. Specifically, SUOD
+Outlier detection (also called anomaly detection) is a key machine             uses algorithmic approximation and efficient parallelization to re-
+learning task that aims to find data points that deviate from a gen-           duce the computational cost and therefore runtime. There are other
+eral distribution [4, 57, 100]. As shown in Table 1, non-deep-learning         distributed/parallel systems designed for specific (family of) OD
+OD algorithms may be grouped into four categories (see the book                algorithms with non-GPU nodes (e.g., CPUs): (i) Parallel Bay, Paral-
+[4] by Aggarwal for more details on algorithms): (i) proximity-based           lel LOF, DLOF for local OD algorithms [62, 72, 97], (ii) DOoR for
+algorithms that rely on measuring sample similarity including 𝑘NN              distance-based OD [13], (iii) distributed OD for mixed-attributed
+[10], ABOD [43], COF [90], LOF [19], and LOCI [76]; (ii) statisti-             data [74] (iv) PROUD for stream data [91] and (v) Sparx for Apache
+cal approaches including KDE [85], HBOS [31], COPOD [53], and                  Spark [102]. These distributed non-GPU systems do not constitute
+ECOD [54]; (iii) ensemble-based methods that build a collection of             as baselines as TOD is a comprehensive system covering differ-
+detectors for aggregation like iForest [56], LODA [79], and LCSP               ent types OD algorithms, while the specialized systems only cover
+[105]; and (iv) linear models such as PCA [86].                                specific algorithms. Thus, we consider the SOTA comprehensive
+    Importantly, many OD algorithms suffer from scalability issues             system, PyOD, as the primary baseline (see exp. results in §7.3).
+[73, 104]. For example, Table 1 shows that various proximity-based
+OD algorithms have at least 𝑂 (𝑛 2 ) time and space complexities—              GPU-based systems . There are efforts to use GPUs for fast OD
+they all require estimating and storing pairwise distances among               calculations for LOF [6], distance-based methods [9], KDE [12],
+all 𝑛 samples. The high time complexities of many OD algorithms                and data stream [46]. These approaches rely on exploring the char-
+limit their applicability in real-world applications that require either       acteristics of a specific OD algorithm for GPU acceleration. This
+real-time responses (e.g., fraud detection [60]) or the concurrent             limits their generalization to a wide collection of OD algorithms.
+processing of millions of samples [107]. As shown in the table, TOD            Furthermore, none has direct multi-GPU support, leading to lim-
+supports nearly all the OD algorithms mentioned.                               ited scalability. To the best of our knowledge, there is no existing
+                                                                               comprehensive GPU-based OD system that covers a diverse group
+2.2    DNN Infrastructure and Acceleration                                     of algorithms. Thus, we use direct GPU implementations of OD
+Deep neural networks have dramatically improved the accuracy of                algorithms and selected works above as GPU baselines when ap-
+artificial intelligence systems across numerous fields [28, 32, 75].           propriate (see details in §7.2 and Table 3).
+                                                                           3
+       Outlier Detection Algorithms as Combinations of BTOs and FOs
+         kNNOD        ABOD       COF         LOF         LOCI         HBOS        SOD        LODA         PCA        COPOD      ECOD
+          (8+a)      (8+a+d)     (1+8)     (8+a+c)      (8+a+c)      (3+6+7)      (2+b)     (5+6+7)      (4+8)        (7+f)      (7+f)
+       Model Selection & Ensemble Learning from BTOs and FOs
+          FB          LSCP      MetaOD      SUOD
+                                                      …      …                            …        …             …       …         …
+         (6+7)      (7+8+a+b)    (4+8)       (8+e)
+
+
+        Functional Operators (FO) Assembled by BTOs
+         a. kNN    b. Shared neighbors   c. Neighbors within                 d. cosine sim.         e. Dim.             f. Density est.
+          (1+2)          (1+2+3)             Range (1+8)                         (1+8)           reduction (4,6)             (4,6)
+
+
+       Basic Tensor Operators (BTO) with Deep Optimization
+         1. cdist    2. topk      3. Intersect       4. SVD       5. Feat. sampler        6. Histogram      7. Agg.      8. Basic OPs
+
+
+Figure 2: With algorithmic abstraction, more than 20 OD algorithms (denoted by ) are abstracted into eight basic tensor
+operators (in ) and six functional operators (in ). This abstraction reduces the implementation and optimization effort, and
+opens the possibility of including new algorithms. All operators are executed on GPUs using automatic batching (see §6), and
+operators marked with ⋆ are further accelerated using provable quantization (see §5).
+
+
+2.4    Systems for Other Data Types and Scenarios                           and Table 1. For an outlier detection task, TOD decomposes it into
+Over the years, various algorithms and systems have been devel-             a combination of predefined tensor operators via the proposed pro-
+oped for OD with different types of data other than tabular, in-            gramming model for direct GPU acceleration (§4). Notably, TOD
+cluding time-series/sequence (TOP [23], NETS [99], GraphAn [17],            opportunistically performs provable quantization on tensor opera-
+CPOD [92], Series2graph [16], SAND [18], etc.), and graph (e.g.,            tors to enable faster computation and reduce memory requirements,
+Elle [41], PyGOD [58, 59], etc.). Also, different input data are also       while provably maintaining model accuracy (§5). To overcome the
+assumed in streaming and feature-evolving fashions (e.g., xStream           resource limitation of a single GPU, we further introduce automatic
+[63], etc.). Meanwhile, emphasis has also been given to building            batching and multi-GPU support in TOD (§6).
+systems for explaining outliers (VSOutlier [22] and Exathlon [36],
+etc.) and outlier repairing (IMR [101], etc.), other than detecting
+them. In this paper, we focus on the detection task in the most             4     PROGRAMMING MODEL
+prevalent setting (i.e., static tabular data) [4], while future works       Motivation. As a comprehensive system, TOD aims to include a
+may extend to other data types and scenarios.                               diverse collection of OD algorithms, including proximity-based
+                                                                            methods, statistical methods, and more (see §2.1). However, not
+3 OVERVIEW                                                                  all algorithms can be directly converted into tensor operations for
+                                                                            GPU acceleration. A key design goal of our programming model
+3.1 Definition and Problem Formulation                                      is to allow for many OD algorithms to be implemented by piecing
+A comprehensive OD system implements a collection of OD models              together some basic commonly recurring building blocks. In par-
+M = {𝑀1, ..., 𝑀𝑚 } such that given a user-specified OD model 𝑀 ∈            ticular, rather than manually implementing many OD algorithms
+                         R
+M and input data X ∈ 𝑛×𝑑 without ground truth labels (rows                  separately, which is a labor-intensive process, we instead define
+of X index data points, while columns index features), the system           OD algorithms in terms of basic building blocks that each just
+                                     R
+outputs outlier scores O := 𝑀 (X) ∈ 𝑛 , which should be roughly             needs to be implemented once. Moreover, the building blocks can
+deterministic and irrespective of the underlying system (higher             be optimized independently.
+values in O correspond to data points more likely to be identified
+as outliers; threshold on outlier scores can be used to determine
+which points are outliers). Given a hardware configuration C, e.g.,         4.1    Algorithmic Abstraction
+CPU, RAM, and GPU (if available), the system performance can be
+measured in efficiency (both runtime and memory consumption).               The key idea of our programming model is to decompose existing
+                                                                            OD algorithms into a set of low-level basic tensor operators (BTOs),
+                                                                            which can directly benefit from GPU acceleration. On top of these
+3.2    System Overview                                                      BTOs, we introduce higher-level OD operators called functional
+As a reminder from Section 1, TOD is a comprehensive (i.e., cov-            operators (FOs) with richer semantics. Consequently, OD algorithms
+ering a diverse group of methods) OD system as outlined in Fig. 1           can be constructed as combinations of BTOs and FOs.
+                                                                        4
+               ABOD                               COPOD                         denote the original function by 𝑟 (𝑥) and its quantization by 𝑟𝑞 (𝑥),
+              (8+a+d)                              (7+f)
+                                                                                the rounding error Err(·) of quantization is defined as the output dif-
+        a. kNN      d. cosine                       f. Density                  ference between 𝑟 (𝑥) and 𝑟𝑞 (𝑥), namely Err(𝑟𝑞 (𝑥)) = 𝑟 (𝑥) − 𝑟𝑞 (𝑥).
+         (1+2)      sim.(1+8)                       est. (4,6)                  Intuitively, quantization can save memory at the cost of accuracy.
+    2. topk   1. cdist
+                                                                                How to balance the tradeoff between the memory cost and algorithm
+                         8. Basic OPs   7. Agg.    4. SVD    6. Histogram
+                                                                                accuracy is a key challenge for quantizing in machine learning [24].
+      (a) Abstraction of ABOD            (b) Abstraction of COPOD               In supervised ML, one may measure the inaccuracy caused by quan-
+                                                                                tization via using ground truth labels to evaluate the performance.
+Figure 3: Examples of building complex OD algorithms with                       However, this is infeasible under unsupervised OD settings, where
+FO and BTO conveniently.                                                        no ground truth labels is available for evaluation as described in §3.
+                                                                                Thus, existing quantization techniques for supervised ML do not
+                                                                                suit the need of unsupervised OD.
+   Fig. 2 shows the hierarchy of TOD’s programming abstraction in                  In TOD, we design a correctness-preserving quantization for
+a bottom-up way, with increasing dependency: 8 BTOs are first con-              (unsupervised) OD applications, termed provable quantization. The
+structed as the foundation of TOD (shown at the bottom in gray),                key idea we use is that depending on the operator used, it is possible
+while 6 FOs are then created on top of them (shown in the middle).              to apply quantization to save memory consumption with no loss in
+Finally, OD algorithms and key functions on the top of the figure               accuracy. As a motivating example, consider the sign function 𝑟 (𝑥)
+can be assembled by BTOs and FOs. In other words, TOD uses a                    that returns “+” if 𝑥 > 0 and returns “−” otherwise. Clearly, even
+tree-structured dependency graph, where the BTOs (as leaves of                  if we quantize 𝑥 to have a single bit (that precisely indicates the
+the tree) are fully independent for deep optimization, and all the              sign of 𝑥), we can achieve an exact answer for 𝑟 (𝑥) that is the same
+algorithms depending on these BTOs can be collectively optimized.               as if instead 𝑥 had more bits. Similarly, the ranking between two
+Clearly, this abstraction process reduces the repetitive implementa-            floating-point numbers often only depends on the most significant
+tion and optimization effort, and improves system efficiency and                digits. Building on this simple intuition, we introduce provable
+generalization. Additionally, it also facilities fast prototyping and           quantization for a collection of OD operators, where the output and
+experimentation with new algorithms.                                            accuracy of the operators remain provably unchanged before and
+                                                                                after quantization.
+4.2      Building Complete Algorithms
+It is easy to build an end-to-end OD application by constructing its            5.1    (1 + 𝜖)-property for Rounding Errors
+computation graph using FOs and BTOs. For instance, angle-based                 Provable quantization relies on a standard analysis technique for
+outlier detection (ABOD) is a classical OD algorithm [43], where                floating-point numbers called the “(1 + 𝜖)-property” (e.g., [51]). Let
+each sample’s outlier score is calculated as the average cosine sim-            F denote the set of 64-bit floating-point numbers. For 𝑥, 𝑦 ∈ F, we
+ilarity of its neighbors. Fig. 3(a) highlights an implementation of             define the floating-point operation “⊛” as 𝑥 ⊛ 𝑦 ≜ fl(𝑥 ∗ 𝑦), where
+ABOD that uses an FO called 𝑘NN to obtain a list of neighbors for               ∗ ∈ {+, −, ×, /} and fl(·) refers to the IEEE 754 standard for rounding
+each sample and then applies another FO called cosine sim. for                  a real number to a 64-bit floating-point number [40]. For example, ⊕
+calculating cosine similarity. Note that the FOs are also built as              is floating-point addition and ⊗ is floating-point multiplication. The
+combinations of BTOs. For example, 𝑘NN is implemented as calcu-                 standard technique for calculating the rounding errors in floating-
+lating pairwise sample distance using cdist and then identifying                point operations is the (1 + 𝜖)-property [51], which is formally
+the 𝑘 “neighbor” with smallest distances using topk. Addition-                  defined as follows.
+ally, Fig. 3(b) shows the abstraction graph of copula-based outlier
+detection (COPOD) [53]. Other OD algorithms follow the same                        Theorem 1 (Theorem 3.2 of Lee et al. 51). Let 𝑥, 𝑦 ∈ F, and
+abstraction protocol as a combination of BTOs and FOs.                          ∗ ∈ {+, −, ×, /}. Suppose that |𝑥 ∗𝑦| ≤ max F. Then when we compute
+                                                                                𝑥 ∗ 𝑦 in floating-point, there exist multiplicative and additive error
+5     PROVABLE QUANTIZATION                                                     terms 𝛿 ∈ R and 𝛿 ′ ∈ R respectively such that
+Motivation. OD operators mainly depend on floating-point oper-                        𝑥 ⊛ 𝑦 = (𝑥 ∗ 𝑦)(1 + 𝛿) + 𝛿 ′,     where |𝛿 | ≤ 𝜖, |𝛿 ′ | ≤ 𝜖 ′ .   (1)
+ations, namely {+, −, ×, /}. For these operations, the main source              In the above equation, 𝜖 and 𝜖 ′ are constants that do not depend on 𝑥
+of the imprecision is rounding [51]. Of course, rounding errors in-             or 𝑦. For instance, when working with 64-bit floating-point numbers,
+crease when storing numbers using fewer bits, e.g., 16-bit precision            𝜖 = 2−53 and 𝜖 ′ = 2−1075 .
+leads to more inaccuracy than 64-bit precision. Many machine learn-
+                                                                                   As discussed by Lee et al. [51, Section 5], this property can be
+ing algorithms therefore use high-precision floating-points when
+                                                                                further simplified when the exact result of the floating operation is
+possible to minimize the impact of the rounding errors. However,
+                                                                                not in the so-called “subnormal” range: the addictive error term 𝛿 ′
+working with high-precision floating-point numbers can increase
+                                                                                can be soundly removed, leading to a simplified (1 + 𝜖)-property:
+computation time and storage costs. This is especially critical for
+GPU systems with limited memory.                                                              𝑥 ⊛ 𝑦 = (𝑥 ∗ 𝑦)(1 + 𝛿),     where |𝛿 | ≤ 𝜖.                (2)
+   To reduce memory usage and runtime, quantization has been
+applied to many machine learning algorithms [14] and data-driven                5.2    Provable Quantization in TOD
+applications [7, 95, 96]. Simply put, it refers to executing an opera-          TOD applies provable quantization for an applicable operator 𝑟 (·)
+tor (function) with lower-precision floating representations. If we             with input 𝑥 in three steps: (i) input quantization, (ii) low-precision
+                                                                            5
+evaluation, and (iii) exactness verification and, if needed, recalcula-                𝜖, we get
+tion. In a nutshell, the input is first quantized into lower precision,
+and then the operator is evaluated in the lower precision, where                        fl(∥𝑋𝑖 ∥ 22 ) = (𝑋𝑖,1
+                                                                                                          2                 2
+                                                                                                              (1+𝛿 1 )) ⊕ (𝑋𝑖,2                       2
+                                                                                                                                (1+𝛿 2 )) ⊕ · · · ⊕ (𝑋𝑖,𝑑 (1+𝛿𝑑 ))
+𝑟 (·) is evaluated as 𝑟𝑞 (𝑥). To verify the exactness of the quantiza-                                  2                 2                         2
+                                                                                                   ≤ [𝑥 max (1 + 𝜖)] ⊕ [𝑥 max (1 + 𝜖)] ⊕ · · · ⊕ [𝑥 max (1 + 𝜖)]
+tion, we calculate the rounding error Err(𝑟𝑞 (𝑥)) by the simplified                                  |                          {z                            }
+(1 + 𝜖)-property in eq. (2) and then check whether the result of 𝑟 (·)                                           𝑑 terms added via floating-point addition
+may change with the rounding error. If it passes the verification,                                        2
+                                                                                                   ≤𝑑 · 𝑥 max (1 + 𝜖) 1+ ⌈log2 𝑑 ⌉ ,
+then we output Err(𝑟𝑞 (𝑥)) as the final result; otherwise, we use
+the original precision of 𝑥 to recalculate 𝑟 (𝑥). Note that we apply                   where for the last step, log2 𝑑 shows up since summation of 𝑑
+                                                    R
+this technique to the entire input data X ∈ 𝑛×𝑑 , and only need                        elements in lower-level programming languages is implemented in
+to recalculate on the subset of X where the verification fails. Note                   a divide-and-conquer manner that reduces to ⌈log2 𝑑⌉ operations
+that provable quantization does not apply to all operators, and we                     (there is still a “1+” term in the exponent for the floating-point
+elaborate on the criteria in §5.4.                                                     multiplication/squaring). The rounding error is bounded as follows:
+
+5.3     Case Study: Neighbors Within Range                                                         Err(∥𝑋𝑖 ∥ 22 ) = ∥𝑋𝑖 ∥ 22 − fl(∥𝑋𝑖 ∥ 22 )
+                                                                                                                          2
+We show the usage of provable quantization in TOD on neighbors                                                    ≤ 𝑑 · 𝑥 max − fl(∥𝑋𝑖 ∥ 22 )
+within range (NWR, one of the FOs of our programming model), a                                                            2
+                                                                                                                  ≤ 𝑑 · 𝑥 max − fl(∥𝑋𝑖 ∥ 22 )
+common step in many OD algorithms, e.g., LOF [19] and LOCI [76].                                                          2
+NWR identifies nearest neighbors within a preset distance thresh-                                                 ≤ 𝑑 · 𝑥 max [(1 + 𝜖) 1+ ⌈log2 𝑑 ⌉ − 1].
+old (usually a small number), which may be considered as a vari-
+ant of 𝑘 nearest neighbors. More formally, given an input tensor                       This same analysis can be used to bound the floating-point errors
+                                                                                       of the other terms in eq. (3). Overall, we get
+X := [𝑋 1, 𝑋 2, ..., 𝑋𝑛 ] ∈ R𝑛×𝑑 (𝑛 samples and 𝑑 dimensions) and
+the distance threshold 𝜙, NWR first calculates the pairwise distance                                                   2
+                                                                                                   Err(D𝑖 𝑗 ) ≤ 4𝑑 · 𝑥 max [(1 + 𝜖) 1+ ⌈log2 𝑑 ⌉+2 − 1],             (4)
+among each sample via the cdist operator, yielding a distance
+matrix D ∈ R𝑛×𝑛 , where D𝑖,𝑗 is the pairwise distance between
+                                                                                       where the “+2” shows up in the exponent due to the addition and
+𝑋𝑖 and 𝑋 𝑗 . Then, each pairwise distance in D is compared with
+                                                                                       subtraction in the RHS of (3) that we compute in floating-point.
+𝜙, and NWR outputs the indices of samples where D𝑖,𝑗 ≤ 𝜙. As the
+                                                                                          Inequality (4) provides a numerical way for checking whether a
+pairwise distance calculation in NWR requires 𝑂 (𝑛 2 ) space, provable                 single entry D𝑖 𝑗 is within the range of 𝜙 as |D𝑖 𝑗 − 𝜙 | > Err(D𝑖 𝑗 ).
+quantization can provide significant GPU memory savings.                               More conveniently, we could scale the input X into the range of
+   NWR meets the criterion we outline in §5.2, where eq. (2) can be                    [0, 1] before the distance calculation [80], so that 𝑥 max ≤ 1 and
+applied to estimate the rounding errors. Recall that the pairwise                      the implementation complexity can be further reduced. With this
+Euclidean distance between two samples is                                              treatment, a large amount of GPU memory can be saved in NWR
+                                                                                       operations (see §7.5 for results).
+                               2                    2
+            D𝑖 𝑗 = 𝑋𝑖 − 𝑋 𝑗 2 = ∥𝑋𝑖 ∥ 22 + 𝑋 𝑗 2 − 2𝑋𝑖𝑇 𝑋 𝑗 .                (3)
+                                                                                       5.4    Applicability and Opportunities of
+                                                                                              Provable Quantization
+We shall compute this in floating-point. Importantly, in our analy-
+sis to follow, the ordering of floating-point operations matters in                    Not all operators can benefit from provable quantization. To benefit
+determining rounding errors. To this end, we calculate distance                        from provable quantization, an operator needs to satisfy two criteria.
+using the right-most expression in eq. (3) (note that we do not first                  First, the operator’s output values cannot require a floating-point
+compute the difference 𝑋𝑖 − 𝑋 𝑗 and then compute its squared Eu-                       representation in the original precision, otherwise the exactness
+clidean norm). When calculating the first term in the RHS of eq. (3)                   verification would require executing the operator in the original
+via floating-point operations, we get                                                  precision, resulting in no memory or time savings. For example,
+                                                                                       provable quantization is not applicable to cdist since its outputs
+                                                                                       are raw floating-point pairwise distances, and verifying its exact-
+  fl(∥𝑋𝑖 ∥ 22 ) = (𝑋𝑖,1 ⊗ 𝑋𝑖,1 ) ⊕ (𝑋𝑖,2 ⊗ 𝑋𝑖,2 ) ⊕ · · · ⊕ (𝑋𝑖,𝑑 ⊗ 𝑋𝑖,𝑑 )             ness requires calculating cdist in the original precision. Second,
+                 2
+             = (𝑋𝑖,1               2
+                     (1+𝛿 1 )) ⊕ (𝑋𝑖,2                       2
+                                       (1+𝛿 2 )) ⊕ · · · ⊕ (𝑋𝑖,𝑑 (1+𝛿𝑑 )),             the performance gain in low-precision evaluation of the operator
+                                                                                       needs to be larger than the overhead of verification. Based on these
+                                                                                       two criteria, we mark the operators generally applicable for prov-
+where the second equality uses eq. (2) and we note that the errors                     able quantization by ⋆ in Fig. 2. Also see §7.5 for experimental
+𝛿 1, . . . , 𝛿𝑑 across the floating-point multiplications (for squaring)               results on this. Although the design of provable quantization is
+need not be the same (in fact, these need not be the same across sam-                  motivated by unsupervised OD algorithms with extensive ranking
+ples 𝑖 = 1, 2, . . . , 𝑛 but we omit this indexing to keep the equation                and selecting operations, other ML algorithms can also benefit if
+from getting cluttered).                                                               they meet the above criteria. For OD algorithms in which provable
+    Next, by defining 𝑥 max ≜ max𝑖 ∈ {1,...,𝑛 },𝑘 ∈ {1,...,𝑑 } |𝑋𝑖,𝑘 | and re-         quantization does not apply, they could still benefit from TOD’s
+calling from Theorem 1 that each of 𝛿 1, 𝛿 2, . . . , 𝛿𝑑 above is at most              other optimizations such as automatic batching (§6).
+                                                                                   6
+6     AUTOMATIC BATCHING AND MULTI-GPU                                                                w/o inter-                     w/ inter-
+      SUPPORT                                                                                         sample dep.                    sample dep.
+Motivation. Unlike CPU nodes with up to terabytes of DRAM, to-                     w/o inter-        Direct batching               Direct batching
+                                                                                   feature dep.      across samples                across features
+day’s GPU nodes face much more stringent memory limitations [30,
+50, 66, 67]—modern GPUs are mostly equipped with 4-40 GB of                        w/ inter-         Direct batching                 Customized
+on-device memory [64, 88]. Out-of-memory (OOM) errors have                         feature dep.      across samples               batching strategies
+thus become common in GPU-based systems for machine learning
+tasks [29]. To overcome this challenge, we design an automatic                Figure 4: TOD applies automatic batching to operators with-
+batching mechanism to decompose memory-intensive BTOs into                    out inter-sample or inter-feature dependency, and uses cus-
+multiple batches, which are executed on GPUs in a pipeline fash-              tomized batching strategies for operators with both data de-
+ion. Automatic batching also allows TOD to equally distribute OD              pendencies.
+computation across multiple GPUs. TOD applies different mech-
+                                                                                                        𝑓 is sample-independent
+anisms to decompose an operator into batches based on its data
+                                                                                                                                    𝑓(batch 1)
+dependency. Specifically, an operator has inter-sample dependency
+if the computation of each sample requires accessing other samples,                  Input Dataset                                  𝑓(batch 2)
+
+such as cdist. On the other hand, an operator has inter-feature                                                                     𝑓(batch 3)    Aggregated
+                                                                                                                                                     results
+dependency if the computation of each feature depends on other                                                                                    from indep.
+                                                                                                        𝑓 is feature-independent                    batches
+features, such as Feat. sampler. Fig. 4 summarizes TOD batching
+mechanisms for operators with and without these dependencies.                        Operator 𝑓
+Direct batching. TOD automatically decomposes an operator into
+small batches if the operator is: (i) sample-independent: the estima-
+tion of each sample is independent, or (ii) feature-independent: the                                    𝑓(batch 1)   𝑓(batch 2)    𝑓(batch 3)
+
+contribution of each feature is independent. When either condition            Figure 5: Direct batching with independence assumption cre-
+holds, TOD directly partitions the operator into multiple batches             ates batches along the sample or feature index.
+by splitting along the sample or feature dimension, computes these
+batches in a pipeline fashion, and aggregates individual batches                Input Dataset        Split by Samples               Create Batches by
+                                                                                                                                    Pairing Data Splits
+to produce the final output, as shown in Fig. 5. For instance, topk
+is a sample-independent operator. For an input tensor X ∈ R𝑛×𝑑 ,                                                                       cdist(     cdist(
+                                                                                                                                       split 1,   split 1,
+topk outputs the indices of the largest 𝑘 values for each sample                                          split 1                      split 1)   split 2)
+(i.e., row), resulting in an output tensor IX := topk(X, 𝑘) ∈ R𝑛×𝑘 .
+                                                                                                                                       cdist(     cdist(
+Therefore, we could split X into batches with full features, each                                                                      split 2,   split 2,
+with 𝑏 samples (i.e.„ {X1, X2, ...} ∈ R𝑏×𝑑 ). As another example,                    cdist                                             split 1)   split 2)
+                                                                                                          split 2
+Histogram outputs the frequencies of each feature’s values, which
+is feature-independent. Thus, we could partition X into blocks of 𝑏            Figure 6: Customized batching solution for cdist in TOD.
+features, e.g., {X1, X2, ...} ∈ R𝑛×𝑏 .                                        Operator fusion. Although the simple concatenation discussed
+Customized batching. For operators with both inter-sample and                 above is straightforward, a closer look unlocks deeper optimization
+inter-feature dependencies, the computation of each data point                opportunities in automatic batching with a sequence of operators.
+involves all samples and features, and therefore cannot be directly           Notably, the output of 𝑘NN is the indices of the 𝑘 nearest neigh-
+decomposed into batches along the same or feature dimension. TOD              bors of an input dataset, where the pairwise distance generated
+provides customized batching strategies for these operators. For              by cdist is only used in an intermediate step but not returned.
+example, to automatically batch cdist, TOD uses the approach                  If we could prevent moving this large distance matrix between
+introduced in Neeb and Kurrus [70], which splits an input dataset             operators (i.e., cdist and topk), space efficiency can be improved.
+across samples and calculates the pairwise distance of each pair of           In deep learning systems, operator fusion is a common optimiza-
+split in batches.                                                             tion technique to fuse multiple operators into a single one in a
+                                                                              computational graph [15, 61, 65, 71, 93]. Fig. 7 compares simple
+6.1    Sequential Batching and Operator Fusion                                concatenation (subfigure a) and operator fusion (subfigure b) on
+Simple concatenation. Since BTOs are independent from each                    𝑘NN. Specifically, the latter executes the topk BTO on the cdist
+other, executing a sequence of BTOs in batches is straightforward,            BTO’s individual batches separately rather than running topk on
+i.e., simply feed the output of a batch operator as an input to another       the full distance matrix outputted by cdist. Note that the global
+one. For example, 𝑘NN (see Fig. 2) finds the 𝑘 nearest neighbors by           𝑘 nearest neighbors (of the full dataset) can be identified from the
+first calculating pairwise distances of input samples via the cdist           𝑘 local neighbor candidates from batches in the final aggregation,
+BTO and then returns the index of 𝑘 items with the smallest distance          so the result is still exact. This prevents moving the entire 𝑛 × 𝑛
+via the topk BTO. Thus, 𝑘NN batching is achieved by running cdist             distance matrix between operators, which often causes OOM. TOD
+and topk sequentially, where each uses automatic batching and                 uses a rule-based approach to opportunistically fusing operators
+the output of the former is the input of the latter. Note that simple         to reduce the kernel launch overhead and data transfers between
+concatenation applies to all BTOs and FOs as the default choice.              CPUs and GPUs. TOD provides an interface that allows users to
+                                                                          7
+                                                                         topk: Return the 𝑘
+ Input Dataset      Split by Samples    cdist: Calculate
+                                       Pairwise Distance 𝐃              neighbors by topk(𝐃)
+                                                                                                   (3) How effective are provable quantization and automatic batch-
+                                                                                                       ing), in comparison to PyTorch implementation? (§7.5 & 7.6)
+                                         cdist(        cdist(
+
+                         split 1
+                                         split 1,
+                                         split 1)
+                                                       split 1,
+                                                       split 2)                                    (4) How much performance gain can TOD achieve on the multiple
+                                         cdist(        cdist(                                          GPUs? (§7.7)
+                                         split 2,      split 2,
+                                         split 1)      split 2)
+    cdist+topk
+                        split 2                                                                    7.1    Implementation and Environment
+(a) Simple concatenation: topk is invoked on the full result of cdist—                             TOD is implemented on top of PyTorch [77]. We extend PyTorch in
+we need to communicate the large distance matrix D.                                                the following aspects to support efficient OD. First, we implement
+    Input Dataset   Split by Samples   topk+cdist: Get 𝑘 neighbor                 Final            a set of BTOs and FOs (see Fig. 2) for fast tensor operations in OD.
+                                         candidates on batches                 Aggregation
+                                                                                                   Second, for operators that support provable quantization (see §5)
+                                          topk(cdist       topk(cdist
+                                          (split 1,
+                                          split 1))
+                                                           (split 1,
+                                                           split 2))
+                                                                                                   and batching (see §6), we create corresponding versions of them to
+                         split 1
+                                                                                                   improve scalability. Additionally, we enable specialized multi-GPU
+                                          topk(cdist       topk(cdist
+                                          (split 2,
+                                          split 1))
+                                                           (split 2,
+                                                           split 2))
+                                                                                                   support in TOD by leveraging PyTorch’s multiprocessing. The
+     cdist+topk
+                         split 2                                                                   usage and APIs of the open-sourced system can be found in §D.
+                                                                                                   Adding new operators . In addition to the BTOs and FOs listed in
+(b) Operator fusion: topk is directly invoked on the batch result of
+                                                                                                   Fig. 2, users can add new operators in TOD by defining the oper-
+cdsit, preventing the communication of distance matrix D.
+                                                                                                   ator’s interface (i.e., the input and output tensors of the operator)
+                                                                                                   and providing an implementation of the operator in PyTorch. This
+Figure 7: The comparison of automatic batching for 𝑘NN be-
+                                                                                                   implementation will be used by TOD to decompose the operator
+tween simple concatenation and operator fusion. The latter
+                                                                                                   into PyTorch’s tensor algebra primitives and execute these primi-
+has better scalability by not creating and moving large dis-
+                                                                                                   tives in parallel on multiple GPUs. For operators that do not have
+tance matrix D.
+                                                                                                   inter-sample or inter-feature dependency (see §6), TOD automati-
+add fusion rules for new OD operators. Appx. C.3 provides a case                                   cally decomposes the operator’s computation into multiple batches.
+study on the effectiveness of operator fusion.                                                     For operators that involve both inter-sample and inter-feature de-
+                                                                                                   pendencies, TOD require users to provide a customized strategy to
+6.2       Multi-GPU Support                                                                        decompose the operator into batches.
+To further reduce the execution time of OD algorithms on GPUs,                                     Implementing new OD algorithms . One notable characteristic
+TOD also supports multi-GPU execution, which is important for                                      of OD is that most algorithms involve only straightforward compu-
+time-critical OD applications and has been widely used for other                                   tation, which can be decomposed into 2-3 BTOs and FOs. Therefore,
+data-intensive applications such as graph neural networks [38].                                    we expect that implementing new OD algorithms in TOD should
+Intuitively, if there is only one GPU, TOD iterates across multiple                                only involve low cognitive complexity. Appx. A demonstrates an
+batches sequentially and aggregates the results. When multiple                                     implementation of a recent ECOD [54] detection algorithm in TOD
+GPUs are available, we could achieve better performance by execut-                                 in less than ten lines of code.
+ing OD computations concurrently on multiple homogeneous GPUs.                                     Experimental setup. All the experiments were performed on an
+Specifically, TOD first applies automatic batching to an underly-                                  Amazon EC2 cluster with an Intel Xeon E5-2686 v4 CPU, 61GB
+ing task—multiple subtasks are created and assigned to available                                   DRAM, and an NVIDIA Tesla V100 GPU. For the multi-GPU support
+GPUs. TOD creates a subprocess for each available GPU to execute                                   evaluation, we extend it to multiple NVIDIA Tesla V100 GPUs with
+the assigned subtasks and a shared global container to store the re-                               the same CPU node.
+sults returned from each GPU. Since we equally distribute subtasks
+across GPUs, we deem the runtime of each GPU is close. Once all                                    7.2    Datasets, Baselines, and Evaluation Metrics
+the subtasks are complete, the final output is generated by aggregat-                              Datasets. Table 2 shows the 11 real-world benchmark datasets
+ing the results in the global container. For example, automatically                                used in this study, which are widely evaluated in OD research
+batching cdist in Fig. 6 leads to 4 subtasks, each of which calculates                             [21, 53, 83, 105] and available in the latest ADBench1 [33]. Given the
+the pairwise distances for a pair of splits (denoted as blue blocks in                             limited size of real-world OD datasets, we also build data generation
+the figure). Each of the four available GPUs executes an assigned                                  function in TOD to create larger synthetic datasets (up to 1.5 million
+subtask and sends the cdist results to the global container. Finally,                              samples) to evaluate the scalability of TOD (see §7.4 for details).
+the full cdist result is obtained by aggregating the intermediate                                  OD algorithms and operators. Throughout the experiments, we
+results in the global container. Note that the multi-GPU execution                                 compare the performance of five representative but diverse OD
+is at the operator level (e.g., cdist). §7.7 evaluates TOD’s scalability                           algorithms across different systems (see §2.1): proximity-based al-
+across multiple GPUs..                                                                             gorithms including LOF [19], ABOD [43], and 𝑘NN [10]; statistical
+                                                                                                   method HBOS [31], and linear model PCA [86]. We also provide an
+7      EXPERIMENTAL EVALUATION                                                                     operator-level analysis on selected BTOs and FOs to demonstrate
+Our experiments answer the following questions:                                                    the effectiveness of certain techniques.
+(1) Is TOD more efficient (in time and space) than SOTA CPU-based                                  Evaluation metrics. Since TOD and the baselines do not involve
+    OD system (i.e., PyOD) and selected GPU baselines? (§7.3)                                      any approximation, the output results are exact and consistent
+(2) How scalable is TOD while handling more and more data? (§7.4)                                     1 Datasets available at ADBench: https://github.com/Minqi824/ADBench
+
+                                                                                               8
+                                                                                                                                  85.25
+
+
+
+
+                                                                              Wall Time in Seconds
+Table 2: Real-world OD datasets used in the experiments. To                                          80                                                                             PyOD (cpu)
+demonstrate the results on larger datasets, we also create                                                                                                                          Ours
+                                                                                                     60
+and use synthetic datasets throughout the experiments.
+                                                                                                     40
+                                                                                                                21.32                                            21.73
+                                                                                                     20
+                                                                                                                         2.55              7.0                            2.44
+        Dataset            Pts (n)   Dim (d)    % Outlier                                             0                                             0.03 0.01                       0.08 0.0
+                                                                                                                LOF (8.37x) ABOD (12.18x) HBOS (2.08x)           KNN (8.9x)        PCA (20.75x)
+        musk               3,062     166        3.17
+                                                                                                               (a) ALOI (49,534 samples with 27 features)
+        speech             3,686     400        1.65                                                                              1096.13
+
+
+
+
+                                                                              Wall Time in Seconds
+        mnist              7,603     100        9.21                                                 1000                                                                           PyOD (cpu)
+                                                                                                                                                                                    Ours
+        mammography        11,183    6          2.32                                                  750
+        ALOI               49,534    27         3.04                                                  500                                                        424.25
+                                                                                                                  327.5
+        fashion-mnist      60,000    784        10                                                    250                                  173.65
+        cifar-10           60,000    3072       10                                                                        11.66                     34.05 3.93             10.9     5.96 1.91
+                                                                                                        0
+                                                                                                                 LOF (28.09x) ABOD (6.31x) HBOS (8.66x) KNN (38.93x)                PCA (3.13x)
+        celeba             202,599   39         2.24
+        fraud              284,807   29         0.17                                                          (b) cifar-10 (60,000 samples with 784 features)
+        census             299,285   500        6.20                                                                              414.88
+
+
+
+
+                                                                              Wall Time in Seconds
+                                                                                                     400                                                                            PyOD (cpu)
+        donors             619,326   10         5.93                                                                                                                                Ours
+                                                                                                     300
+                                                                                                     200
+                                                                                                                                                                 119.65
+                                                                                                     100         83.55
+                                                                                                                                           48.04
+across systems. Therefore, we omit the accuracy evaluation, and                                        0                  6.1                       7.17 1.0               4.53     1.05 0.35
+compare the wall-clock time and GPU memory consumption as                                                        LOF (13.7x)      ABOD (8.64x) HBOS (7.2x)       KNN (26.4x)       PCA (3.03x)
+measures of time and space efficiency.                                                           (c) fashion-mnist (60,000 samples with 3,072 features)
+Baselines. As discussed in Section 2, there is no existing GPU sys-                                                               695.47
+
+
+
+
+                                                                              Wall Time in Seconds
+                                                                                                                                                                                    PyOD (cpu)
+tem that covers a diverse group of OD algorithms (not even the                                       600                                                                            Ours
+                                                                                                                501.14                                           503.13
+above five algorithms) for a fair comparison. Therefore, we use                                      400
+the SOTA comprehensive system PyOD [106] as a CPU baseline in
+                                                                                                     200
+§7.3 and 7.4, which is deeply optimized with JIT compilation and                                                         38.34             56.79                          35.26
+                                                                                                       0                                            1.08 0.37                       0.45 0.14
+parallelization. Regarding GPU baselines, we compare two repre-                                                 LOF (13.07x) ABOD (12.25x) HBOS (2.97x) KNN (14.27x)               PCA (3.31x)
+sentative OD algorithms (i.e., 𝑘NN-CUDA [9] and LOF-CUDA [6])
+                                                                                                              (d) celeba (202,599 samples with 39 features)
+that have GPU support in §7.3, and direct implementation of opera-                                                                1237.46
+
+
+
+
+                                                                              Wall Time in Seconds
+tors in PyTorch in §7.5, 7.6, and 7.7. Note that the implementation                                                                                                                 PyOD (cpu)
+                                                                                                     1000        920.89                                          912.91             Ours
+of 𝑘NN-CUDA and LOF-CUDA are not open-sourced, so we follow
+the original papers to implement.                                                                    500
+                                                                                                                           79.0             98.53                         71.31
+7.3    End-to-end Evaluation                                                                              0                                          1.07 0.28                      0.63 0.17
+                                                                                                                 LOF (11.66x) ABOD (12.56x) HBOS (3.76x)         KNN (12.8x)        PCA (3.77x)
+TOD is significantly faster than the leading CPU-based sys-
+                                                                                                               (e) fraud (284,807 samples with 29 features)
+tem. We first present the runtime comparison between TOD and                                                                       2305.7
+
+
+
+
+                                                                              Wall Time in Seconds
+PyOD in Fig. 8 using seven real datasets (ALOI, fashion-mnist, and                                                                                                                  PyOD (cpu)
+                                                                                                     2000                                                                           Ours
+                                                                                                                 1655.76                                         1674.51
+cifar-10) and Appx. Fig. C3 with three synthetic datasets (where
+Synthetic 1 contains 100,000 samples, Synthetic 2 contains 200,000                                   1000
+samples, and Synthetic 3 contains 400,000 samples (all are with 200
+                                                                                                                          88.16             226.1                         80.43
+features). The results show that TOD is on average 10.9× faster                                           0                                          3.89 0.67                      6.88 0.21
+                                                                                                                 LOF (18.78x) ABOD (10.2x) HBOS (5.78x) KNN (20.82x) PCA (32.75x)
+than PyOD on the five benchmark algorithms (13.0×, 15.9×, 9.3×,
+7.2×, and 8.9× speed-up on LOF, 𝑘NN, ABOD, HBOS, and PCA,                                                     (f) census (299,285 samples with 500 features)
+                                                                                                                                  1287.43
+respectively). For proximity-based algorithms, a larger speed-up
+
+
+                                                                              Wall Time in Seconds
+                                                                                                                                                                                    PyOD (cpu)
+is observed for datasets with a higher number of dimensions: LOF                                     1000        967.94                                          927.23             Ours
+and 𝑘NN are 28.1× and 38.9× faster on cifar-10 with 3,072 features.
+This is expected as GPUs are well-suited for dense tensor multipli-                                  500                  331.9            375.27                         331.41
+cation, which is essential in proximity-based methods. Separately, a                                                                                 1.03 0.3                        0.7 0.16
+                                                                                                          0
+larger improvement can be achieved for HBOS and PCA on datasets                                                   LOF (2.92x)      ABOD (3.43x) HBOS (3.45x)      KNN (2.8x)        PCA (4.27x)
+with larger sample sizes. For instance, HBOS is 11.83× faster on                                              (g) donors (619,326 samples with 10 features)
+Synthetic 1 (100,000 samples), while the speedup is 17.16× on Syn-         Figure 8: Runtime comparison between PyOD and TOD in
+thetic 2 (200,000 samples). This is expected as HBOS treats each           seconds on both real-world and synthetic datasets (see Appx.
+feature independently for density estimation on GPUs, so a large           Fig C3 for synthetic data results). TOD significantly outper-
+number of samples with a small number of features should yield             forms PyOD in all w/ much smaller runtime, where the
+a significant speed-up. In summary, all the OD algorithms tested           speedup factor is shown in parenthesis by each algorithm.
+are significantly faster in TOD than in the SOTA PyOD system,              On avg., TOD is 10.9× faster than PyOD (up to 38.9×).
+                                                                       9
+Table 3: Runtime comparison among selected GPU baselines                       Table 4: Comparison of operator runtime (in seconds) with
+(𝑘NN-CUDA [9] and LOF-CUDA [6]; neither supports multi-                        provable quantization (i.e., 16-bit and 32-bit) and without
+GPU directly), and TOD (single GPU) and TOD-8 (8 GPUs).                        quantization (i.e., 64-bit) for nwr and topk. The best model
+The first column shows three synthetic datasets with an in-                    is highlighted in bold (per column), where provable quanti-
+creasing number of samples (100 dimensions), and the most                      zation in 16-bit outperforms the rest in most cases.
+efficient result is highlighted in bold for each setting. TOD-
+8 outperforms in all cases due to multi-GPU support, while                         Prec.     mammog.       mnist    musk      10k     20k     30k
+TOD with a single GPU is faster or on par with the baselines.
+Note that the GPU baselines run out-of-memory (OOM) on                             16-bit    2.66          0.54     0.06      0.87    3.02    6.56
+large datasets (e.g., the last row), while TOD does not.                           32-bit    2.92          1.51     0.09      2.57    10.09   22.51
+                                                                                   64-bit    3.31          1.53     0.09      3.49    12.7    27.32
+ Dataset     𝑘 NN-CUDA   TOD       TOD-8    LOF-CUDA   TOD       TOD-8             (a) For nwr, 16-bit provable quantization outperforms in all
+ 500,000     205.33      208.84    28.59    312.55     209       28.64
+ 1,000,000   850.12      827       112.35   OOM        819       113.72            Prec.     cifar-10    f-mnist    speech    1M      2M      5M
+ 2,000,000   OOM         3173.39   430.29   OOM        3174.05   434.18
+                                                                                   16-bit    0.31        0.09       0.0054    0.58    1.16    2.90
+                                                                                   32-bit    0.32        0.1        0.0048    0.70    1.40    3.52
+with the precise amount of speed improvement varying across algo-                  64-bit    0.34        0.07       0.0038    0.71    1.73    3.88
+rithms. Appx. C.2 shows that GPU computation takes most of the                    (b) For topk, 16-bit provable quantization wins for large data
+run time for various OD algorithms, explaining the significant time
+reduction by TOD. We also provide ablation studies to evaluate
+provable quantization and automatic batching in Appx. C.4.                     Multiple real-world and synthetic datasets are used in the compari-
+TOD can handle larger datasets than the GPU baselines. Due                     son (see Table 2), where synthetic datasets’ names, such as “10k”
+to the absence of GPU systems that support all five OD algorithms,             and “1M”, denote their sample sizes. We deem the 64-bit floating
+we specifically compare the performance of TOD to specialized                  point as the ground truth, and evaluate the provable quantization
+GPU algorithms 𝑘NN-CUDA [9] and LOF-CUDA [6]. Table 3 shows                    results in 32- and 16-bit floating-point.
+that TOD with 8-GPUs outperforms in all three datasets due to the                  The results demonstrate that provable quantization always leads
+multi-GPU support, which enables it to handle data more efficient              to memory savings. Specifically, Fig. 10 (a-b) shows nwr with prov-
+than the baselines and TOD with a single GPU. By focusing on the               able quantization on average saves 71.27% (with 16-bit precision)
+use of a single GPU, we find that TOD is faster or on par with both            and 47.59% (with 32-bit precision) of the full 64-bit precision GPU
+baselines due to provable quantization (e.g., 33.13% speedup to LOF-           memory. Similarly, Fig. 10 (c-d) shows that topk with provable
+CUDA). Also note that the GPU baselines face the out-of-memory                 quantization saves 73.49% (with 16-bit precision) and 49.58% (with
+issue (OOM) on large datasets (e.g., the last row of the table with            32-bit precision) of the full precision memory. Regarding the run-
+2,000,000 samples), while TOD can still handle it due to automatic             time comparison, operating in lower precision may also lead to
+batching. In comparison to these specialized GPU baselines, TOD                an edge. Table 4 shows the operator runtime comparison between
+does not only provide more coverage of diverse algorithms, but                 using provable quantization (in 16-bit and 32-bit precision) and
+also yields better efficiency and scalability.                                 using the full 64-bit precision. It shows that provable quantization
+                                                                               in 16-bit precision is faster than the computations in full preci-
+7.4    Scalability of TOD                                                      sion in most cases, especially for large datasets (e.g., the last three
+                                                                               columns of Table 4). This empirical finding can be attributed to
+We now gauge the scalability of TOD on datasets of varying sizes,
+                                                                               lower-precision operations typically being faster, and this speed
+including ones larger than fashion-mnist and cifar-10. In Fig. 9,
+                                                                               improvement outweighs the overhead of post verification (see §5.4).
+we plot TOD’s runtime with five OD algorithms on the synthetic
+                                                                               For small datasets (the first three columns of Table 4), provable
+datasets with sample sizes ranging from 50,000 to 1,500,000 (all with
+                                                                               quantization does not necessarily improve the run time due to the
+200 features). To the best of our knowledge, none of the existing
+                                                                               additional verification and data movement, both of which finish in
+comprehensive OD systems can handle datasets with more than
+                                                                               0.1 seconds.
+a million samples within a reasonable amount of time [4, 104],
+                                                                               Case study on runtime breakdown . In addition to comparing the
+as most of the OD algorithms are associated with quadratic time
+                                                                               total runtime of an operator with or without provable quantization
+complexity. Fig. 9 shows that TOD can process million-sample OD
+                                                                               (§7.5), it is interesting to see the time breakdown of each phase of
+datasets within an hour, providing a scalable approach to deploying
+                                                                               provable quantization. Specifically, the runtime of provable quanti-
+OD algorithms in many real-world tasks.
+                                                                               zation can be divided into (i) operator evaluation in lower precision,
+                                                                               (ii) result verification and (iii) recalculation in the original precision
+7.5    Provable Quantization                                                   for the ones that fail in the verification. Taking nwr on 30k samples
+Provable quantization (§5) in TOD can optimize the operator mem-               as an example (the last column of Table 4a), we show the time break-
+ory usage while provably preserving correctness (i.e., no accuracy             down of (i) low-precision evaluation (ii) correctness verification
+degradation). To demonstrate its effectiveness, we compare the GPU             and (iii) recalculation in higher precision in Table 5. In this case, the
+memory consumption of two applicable operators, nwr and topk,                  performance improvement of provable quantization comes from
+with and without provable quantization using the GPU baseline.                 the reduced evaluation time in lower precision, which outweighs
+                                                                          10
+                                                           4000                          1.4                                               3000
+                                    TOD runtime                        TOD runtime                 TOD runtime                                         TOD runtime         2.0
+
+
+
+
+Wall Time in Seconds
+                       3000                                                              1.2                                               2500
+                                                           3000                                                                                                            1.5
+                                                                                         1.0                                               2000
+                       2000
+                                                           2000                          0.8                                               1500                            1.0
+                                                                                         0.6                                               1000
+                       1000                                1000
+                                                                                         0.4                                                                               0.5
+                                                                                                                                            500
+                          0                                                              0.2                                                  0
+                                                                                                                                                                                          TOD runtime
+                                                              0                                                                                                            0.0
+                            50
+                           20 000
+                           50 00 00                            50
+                                                              20 000
+                                                              50 00 00                       50
+                                                                                            20 000
+                                                                                            5000  00                                           50
+                                                                                                                                              20 000
+                                                                                                                                              50 00 00                        50
+                                                                                                                                                                             20 000
+                                                                                                                                                                             5000  00
+                              00
+                           75 0
+                              00
+                          10 00  0                               00
+                                                              75 0
+                                                                 00
+                                                             10 00  0                         00
+                                                                                            75 0
+                                                                                              00
+                                                                                           10 0   0
+                                                                                                  0                                              00
+                                                                                                                                              75 0
+                                                                                                                                                 00
+                                                                                                                                             10 00  0                          00
+                                                                                                                                                                             75 0
+                                                                                                                                                                               00
+                                                                                                                                                                            10 0   0
+                                                                                                                                                                                   0
+                            00
+                          12 00
+                            50
+                          15 000
+                               0                               00
+                                                             12 00
+                                                               50
+                                                             15 000
+                                                                  0                          00
+                                                                                           12 0
+                                                                                             50
+                                                                                           15 0000
+                                                                                                0                                              00
+                                                                                                                                             12 00
+                                                                                                                                               50
+                                                                                                                                             15 000
+                                                                                                                                                  0                           00
+                                                                                                                                                                            12 0
+                                                                                                                                                                              50
+                                                                                                                                                                            15 0000
+                                                                                                                                                                                 0
+                            00 00 0                            00 00 0                       00 00 0                                           00 00 0                        00 00 0
+
+                              (a) LOF (quadratic)             (b) ABOD (quadratic)             (c) HBOS (linear)                                  (d) 𝑘NN (quadratic)            (e) PCA (linear)
+                           Figure 9: Scalability plot of selected algorithms in TOD, where it scales well with an increasing number of samples.
+
+                          1000                   956                                                                        8000                                                              6961
+                                                                                     16-bit (quant.)
+
+
+
+      Memory usage (mb)                                                                                 Memory usage (mb)
+                                                                                                                                            16-bit (quant.)
+                           750                                                       32-bit (quant.)                        6000            32-bit (quant.)
+                                                                                     64-bit (orig.)                                         64-bit (orig.)
+                           500             480                             477                                              4000                                          3116            3483
+                           250       239                             238                                                    2000                                      1557            1739
+                                                              119
+                                                                                     24 47 96                                            198 398 794            779
+                             0                                                                                                0
+                                    mammography                     mnist              musk                                              10k samples            20k samples           30k samples
+                                   (a) Neighbor within range (real-world datasets)                                                      (b) Neighbor within range (synthetic datasets)
+                          1500                   1452                                16-bit (quant.)                        10000             16-bit (quant.)                                 9155
+
+
+
+      Memory usage (mb)                                                                                 Memory usage (mb)
+                                                                                     32-bit (quant.)                         7500             32-bit (quant.)
+                          1000                                                       64-bit (orig.)                                           64-bit (orig.)                              5017
+                                           744                                                                               5000
+                                     498                                                                                                                                3664          2910
+                          500                                            361                                                 2500                1831               2006
+                                                                  93 183                                                                  5821003               1163
+                               0                                                      6 12 25                                      0
+                                    mammography                     mnist              musk                                               1M samples             2M samples            5M samples
+                                                 (c) topk (real-world datasets)                                                                     (d) topk (synthetic datasets)
+    Figure 10: GPU memory consumption comparison between using provable quantization (16-bit and 32-bit) and the full preci-
+    sion (64-bit). Clearly, provable quantization leads to significant memory consumption saving on nwr and topk.
+
+    Table 5: Runtime breakdown of using provable quantiza-                                                            7.6              Automatic Batching
+    tion on nwr operator with a 30,000 sample synthetic dataset.
+                                                                                                                     To evaluate the effectiveness of automatic batching, we compare
+    Column 1 shows the runtime for low-precision evaluation,
+                                                                                                                     the runtime of multiple BOs and FOs under (i) an Numpy imple-
+    where column 2 and 3 show the runtime for correctness
+                                                                                                                     mentation on a CPU [34], (ii) a direct PyTorch GPU implementation
+    verification and recalculation, respectively. It shows the pri-
+                                                                                                                     without batching [77], and (iii) TOD’s automatic batching.
+    mary speed-up comes from low-precision evaluation, while
+                                                                                                                        Table 6 compares the three implementations of key operators in
+    the overhead of verification and recalculation is marginal.
+                                                                                                                     OD systems. Clearly, TOD with automatic batching achieves the
+                                                                                                                     best balance of efficiency and scalability, leading to 7.22×, 17.46×,
+                 Prec.             Low Prec.        Verification       Recalculation      Total                      and 11.49× speedups compared to a highly optimized NumPy im-
+                 16-bit            5.91             0.05               0.61               6.56                       plementation on CPUs. TOD can also handle more than 10× larger
+                 32-bit            22               0.05               0.47               22.51                      datasets where the direct PyTorch implementation faces out of
+                 64-bit            N/A              N/A                N/A                27.32                      memory (OOM) errors. TOD is only marginally slower than Py-
+                                                                                                                     Torch when the input dataset is small (see the first row of each
+                                                                                                                     operator). In this case, batching is not needed, and TOD is equiva-
+                                                                                                                     lent to PyTorch; TOD is slightly slower due to the overhead of TOD
+                                                                                                                     deciding whether or not to enable automatic batching.
+    the cost of verification and recalculation. To further demonstrate
+    the necessity of post-verification, we also measure the accuracy                                                  7.7              Multi-GPU Results
+    variation (e.g., ROC-AUC [4]) by simply running 𝑘NN detector
+                                                                                                                     We now evaluate the scalability of TOD on multiple GPUs on a
+    on fraud, census, and donors datasets in 16-bit precision without
+                                                                                                                     single compute node. Specifically, we compare the run time of three
+    post-verification, which leads to −3.48%, +1.05%, −4.27% accuracy
+                                                                                                                     compute-intensive OD algorithms (i.e., LOF, ABOD, and 𝑘NN) with
+    variation. These results show the merit of provable quantization
+                                                                                                                     1,2,4, and 8 NVIDIA Tesla V100 GPUs.
+    over direct quantization.
+                                                                                                       11
+       Table 6: Operator runtime comparison among implementa-                                                            that have to be run on CPUs. To sum up, TOD can leverage multiple
+       tions in NumPy (no batching), PyTorch (no batching) and                                                           GPUs efficiently to process large datasets.
+       TOD (with automatic batching); the most efficient result is
+       highlighted in bold per row. Automatic batching in TOD                                                            8   LIMITATIONS AND FUTURE DIRECTIONS
+       prevents out-of-memory (OOM) errors yet shows great effi-                                                         Tree-based OD algorithms. One limitation of TOD is that it does
+       ciency, especially on large datasets.                                                                             not support tree-based OD algorithms such as isolation forests [56].
+                                                                                                                         Tree-based operations involve random data access [52], which is not
+                         Operator            Size                 NumPy             PyTorch        TOD                   friendly for GPUs designed for batch operations. Future work can
+                         topk                10,000,000           7.88              1.08           1.09                  consider converting trees to tensor operations [68] for acceleration.
+                         topk                20,000,000           15.77             OOM            2.44                  Approximate solutions. Our focus in this paper has been on exact
+                         topk                100,000,000          OOM               OOM            10.83                 efficient, scalable implementations of OD algorithms. In particular,
+                                                                                                                         we have not considered implementations that intentionally are
+                         intersect           20,000,000           1.99              0.12           0.14                  meant to be approximate, where for instance, one could trade off
+                         intersect           100,000,000          11                0.63           0.63                  between accuracy, computation time, and memory usage. Note
+                         intersect           200,000,000          21.65             OOM            2.11                  that even with our provable quantization technique, we ask for the
+                         𝑘NN                 50,000               20.15             0.27           0.28                  lower-precision computation to yield the correct (exact) output. A
+                         𝑘NN                 200,000              194.43            OOM            19.65                 future research direction is to extend TOD to support approximate
+                         𝑘NN                 400,000              818.32            OOM            71.22                 solutions for even better scalability and efficiency when reduced
+                                                                                                                         accuracy is acceptable. For instance, exact nearest neighbor search
+                                                                                                                         in can be switched to approximate nearest neighbor search [27, 94].
+                                  1 GPU                                                 3174.05
+                                                                                                                         Heterogeneous GPUs. Thus far, we have not studied the use of
+
+
+
+Wall Time in Seconds
+                       3000       2 GPUs
+                       2500       4 GPUs                                                                                 TOD with heterogeneous GPUs. In this setting, incorporating a
+                       2000       8 GPUs
+                                                                                             1680.81                     cost model could be helpful in balancing the workload between the
+                       1500
+                       1000                                                                        861.39
+                                                                                                                         different GPUs, accounting for their different characteristics such
+                                                          819.0
+                        500                                       423.39                                 434.18          as varying memory capacities.
+                               209.0 109.52 56.06 28.64                 222.05113.72
+                          0                                                                                              Gradient-based operators. Currently, TOD does not support op-
+                                  500,000 samples           1,000,000 samples              2,000,000 samples
+                                                                                                                         erators that involve solving an optimization problem via gradient
+                                  1 GPU                                                 3464.62                          descent. Future work may consider incorporating optimization-
+
+
+
+Wall Time in Seconds
+                       3000       2 GPUs                                                                                 based operators to support (a small group of) optimization-based
+                                  4 GPUs
+                                  8 GPUs                                                                                 OD algorithms, e.g., OCSVM [84].
+                       2000                                                                  1871.96
+                                                                                                                         Extension to classification. It is possible to use TOD to build
+                       1000                               920.22                                   971.9                 classification models, as the operators in TOD are generic and
+                                                                504.45                                     488.14
+                               252.86135.92 69.38
+                                                  35.5
+                                                                         250.0 127.85                                    may serve the tasks beyond OD. We provide an example of using
+                         0
+                                  500,000 samples           1,000,000 samples              2,000,000 samples             TOD to construct 𝑘 nearest neighbor classifier in Appx. B, which
+                                                                                        3173.79
+                                                                                                                         also exhibits a significant performance improvement over the CPU
+                                  1 GPU
+                                                                                                                         implementation in scikit-learn [78]. Note that classification tasks
+
+
+
+Wall Time in Seconds
+                       3000       2 GPUs
+                       2500       4 GPUs                                                                                 often involve optimization (e.g., via gradient descent), which we
+                       2000       8 GPUs
+                                                                                             1652.67                     already pointed out that TOD does not yet support. Thus, only
+                       1500
+                       1000                                                                        842.21
+                                                                                                                         calculation-based classifiers can be implemented by TOD for now.
+                                                          827.0
+                        500                                       431.54                                 430.29
+                               208.84108.64 56.14 28.59                 222.05112.35                                     9   CONCLUSION
+                          0
+                                  500,000 samples           1,000,000 samples              2,000,000 samples
+                                                                                                                         In this paper, we propose the first comprehensive GPU-based outlier
+       Figure 11: Runtime comparison of using different numbers                                                          detection system called TOD, which is on average 10.9 times faster
+       of GPUs (top: LOF; middle: ABOD; bottom: 𝑘NN). TOD can                                                            than the leading system PyOD and is capable of handling larger
+       efficiently leverage multiple GPUs for faster OD.                                                                 datasets than existing GPU baselines. The key idea is to decompose
+                                                                                                                         complex outlier detection algorithms into a combination of tensor
+          Fig. 11 shows that for three OD algorithms tested, TOD can                                                     operations for effective GPU acceleration. Our system enables many
+       achieve nearly linear speed-up with more GPUs—the GPU efficiency                                                  large-scale real-world outlier detection applications that could have
+       is mostly above 90%. For instance, the 𝑘NN result shows that using                                                stringent time constraints. With ease of extensibility, TOD can
+       2, 4, and 8 GPUs are 1.91×, 3.73×, and 7.34× faster than the single-                                              prototype and implement new detection algorithms.
+       GPU performance. As a comparison, using 2, 4, and 8 GPUs with
+       ABOD and LOF are 1.85×, 3.63×, 7.14× faster and 1.91×, 3.70×,                                                     ACKNOWLEDGEMENT
+       7.27× faster, respectively. First, there is inevitably a small overhead                                           We would like to thank the anonymous reviewers for their helpful
+       in multi-processing, causing the speed-up to not exactly be linear.                                               comments. Yue Zhao is partially supported by a Norton Graduate
+       Second, the minor efficiency difference between 𝑘NN and ABOD                                                      Fellowship. George H. Chen is supported by NSF CAREER award
+       is due to most OD operations in the former being executed on                                                      #2047981. Zhihao Jia is partially supported by a National Science
+       multiple GPUs, while the latter involves several sequential steps                                                 Foundation award CNS-2147909, and a Tang Endowment.
+                                                                                                                    12
+REFERENCES                                                                                          from the scikit-learn project. In Proceedings of ECML PKDD Workshop: Languages
+ [1] Martín Abadi, Paul Barham, Jianmin Chen, Zhifeng Chen, Andy Davis, Jeffrey                     for Data Mining and Machine Learning. ECML, 108–122.
+     Dean, Matthieu Devin, Sanjay Ghemawat, Geoffrey Irving, Michael Isard, Manju-             [21] Guilherme O Campos, Arthur Zimek, Jörg Sander, Ricardo JGB Campello,
+     nath Kudlur, Josh Levenberg, Rajat Monga, Sherry Moore, Derek Gordon Murray,                   Barbora Micenková, Erich Schubert, Ira Assent, and Michael E Houle. 2016.
+     Benoit Steiner, Paul A. Tucker, Vijay Vasudevan, Pete Warden, Martin Wicke,                    On the evaluation of unsupervised outlier detection: measures, datasets, and an
+     Yuan Yu, and Xiaoqiang Zheng. 2016. TensorFlow: A System for Large-Scale                       empirical study. Data mining and knowledge discovery 30, 4 (2016), 891–927.
+     Machine Learning. In 12th USENIX Symposium on Operating Systems Design                    [22] Lei Cao, Qingyang Wang, and Elke A Rundensteiner. 2014. Interactive outlier
+     and Implementation, OSDI 2016, Savannah, GA, USA, November 2-4, 2016, Kim-                     exploration in big data streams. VLDB 7, 13 (2014), 1621–1624.
+     berly Keeton and Timothy Roscoe (Eds.). USENIX Association, 265–283. https:               [23] Lei Cao, Yizhou Yan, Samuel Madden, Elke A Rundensteiner, and Mathan Gopal-
+     //www.usenix.org/conference/osdi16/technical-sessions/presentation/abadi                       samy. 2019. Efficient discovery of sequence outlier patterns. VLDB 12, 8 (2019),
+ [2] Ahmed Abdulaal, Zhuanghua Liu, and Tomer Lancewicki. 2021. Practical ap-                       920–932.
+     proach to asynchronous multivariate time series anomaly detection and localiza-           [24] Steve Dai, Rangharajan Venkatesan, Haoxing Ren, Brian Zimmer, William J.
+     tion. In Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery                  Dally, and Brucek Khailany. 2021. VS-Quant: Per-vector Scaled Quantiza-
+     & Data Mining. ACM, 2485–2494.                                                                 tion for Accurate Low-Precision Neural Network Inference. CoRR (2021).
+ [3] Elke Achtert, Hans-Peter Kriegel, Lisa Reichert, Erich Schubert, Remigius                      arXiv:2102.04503
+     Wojdanowski, and Arthur Zimek. 2010. Visual Evaluation of Outlier De-                     [25] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. 2009.
+     tection Models. In Database Systems for Advanced Applications, 15th Inter-                     Imagenet: A large-scale hierarchical image database. In 2009 IEEE conference on
+     national Conference, DASFAA 2010, Tsukuba, Japan, April 1-4, 2010, Proceed-                    computer vision and pattern recognition. IEEE, 248–255.
+     ings, Part II (Lecture Notes in Computer Science), Hiroyuki Kitagawa, Yoshiharu           [26] Evelyn Fix and Joseph Lawson Hodges. 1989. Discriminatory analysis. Non-
+     Ishikawa, Qing Li, and Chiemi Watanabe (Eds.), Vol. 5982. Springer, 396–399.                   parametric discrimination: Consistency properties. International Statistical
+     https://doi.org/10.1007/978-3-642-12098-5_34                                                   Review/Revue Internationale de Statistique 57, 3 (1989), 238–247.
+ [4] Charu C. Aggarwal. 2013. Outlier Analysis. Springer.                                      [27] Cong Fu, Chao Xiang, Changxu Wang, and Deng Cai. 2019. Fast approximate
+ [5] Charu C Aggarwal, Yuchen Zhao, and S Yu Philip. 2011. Outlier detection in                     nearest neighbor search with the navigating spreading-out graph. VLDB 12, 5
+     graph streams. In 2011 IEEE 27th international conference on data engineering.                 (2019), 461–474.
+     IEEE, IEEE, 399–409.                                                                      [28] Tianfan Fu, Cao Xiao, Cheng Qian, Lucas M Glass, and Jimeng Sun. 2021. Proba-
+ [6] Malak Alshawabkeh, Byunghyun Jang, and David R. Kaeli. 2010. Accelerating                      bilistic and Dynamic Molecule-Disease Interaction Modeling for Drug Discovery.
+     the local outlier factor algorithm on a GPU for intrusion detection systems. In                In KDD. ACM, 404–414.
+     Proceedings of 3rd Workshop on General Purpose Processing on Graphics Process-            [29] Yanjie Gao, Yu Liu, Hongyu Zhang, Zhengxian Li, Yonghao Zhu, Haoxiang Lin,
+     ing Units, GPGPU 2010, Pittsburgh, Pennsylvania, USA, March 14, 2010 (ACM                      and Mao Yang. 2020. Estimating GPU memory consumption of deep learning
+     International Conference Proceeding Series), David R. Kaeli and Miriam Leeser                  models. In ESEC/FSE. ACM, 1342–1352.
+     (Eds.), Vol. 425. ACM, 104–110. https://doi.org/10.1145/1735688.1735707                   [30] Prasun Gera, Hyojong Kim, Piyush Sao, Hyesoon Kim, and David Bader. 2020.
+ [7] Fabien André, Anne-Marie Kermarrec, and Nicolas Le Scouarnec. 2016. Cache                      Traversing large graphs on GPUs with unified memory. VLDB 13, 7 (2020),
+     locality is not enough: High-performance nearest neighbor search with product                  1119–1133.
+     quantization fast scan. In VLDB, Vol. 9. VLDB Endowment, 12.                              [31] Markus Goldstein and Andreas Dengel. 2012. Histogram-based outlier score
+ [8] Fabrizio Angiulli, Stefano Basta, Stefano Lodi, and Claudio Sartori. 2010. A                   (hbos): A fast unsupervised anomaly detection algorithm. KI (2012), 59–63.
+     Distributed Approach to Detect Outliers in Very Large Data Sets. In Euro-Par              [32] Ian Goodfellow, Yoshua Bengio, and Aaron Courville. 2016. Deep learning. MIT.
+     2010 - Parallel Processing. Springer Berlin Heidelberg, Berlin, Heidelberg, 329–          [33] Songqiao Han, Xiyang Hu, Hailiang Huang, Mingqi Jiang, and Yue Zhao. 2022.
+     340.                                                                                           ADBench: Anomaly Detection Benchmark. arXiv preprint arXiv:2206.09426
+ [9] Fabrizio Angiulli, Stefano Basta, Stefano Lodi, and Claudio Sartori. 2016. GPU                 (2022).
+     Strategies for Distance-Based Outlier Detection. IEEE Trans. Parallel Distributed         [34] Charles R Harris, K Jarrod Millman, Stéfan J van der Walt, Ralf Gommers,
+     Syst. 27, 11 (2016), 3256–3268.                                                                Pauli Virtanen, David Cournapeau, Eric Wieser, Julian Taylor, Sebastian Berg,
+[10] Fabrizio Angiulli and Clara Pizzuti. 2002. Fast Outlier Detection in High Dimen-               Nathaniel J Smith, et al. 2020. Array programming with NumPy. Nature (2020).
+     sional Spaces. In Principles of Data Mining and Knowledge Discovery, 6th European         [35] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. 2016. Deep residual
+     Conference, PKDD 2002, Helsinki, Finland, August 19-23, 2002, Proceedings (Lecture             learning for image recognition. In Proceedings of the IEEE conference on computer
+     Notes in Computer Science), Tapio Elomaa, Heikki Mannila, and Hannu Toivonen                   vision and pattern recognition. IEEE, 770–778.
+     (Eds.), Vol. 2431. Springer, 15–26. https://doi.org/10.1007/3-540-45681-3_2               [36] Vincent Jacob, Fei Song, Arnaud Stiegler, Bijan Rad, Yanlei Diao, and Nesime
+[11] Fadhel Ayed, Lorenzo Stella, Tim Januschowski, and Jan Gasthaus. 2020. Anom-                   Tatbul. 2021. A demonstration of the exathlon benchmarking platform for
+     aly detection at scale: The case for deep distributional time series models. In                explainable anomaly detection. VLDB (PVLDB) (2021).
+     International Conference on Service-Oriented Computing. Springer, 97–109.                 [37] Zhuoran Ji and Cho-Li Wang. 2021. Accelerating DBSCAN Algorithm with
+[12] Fatemeh Azmandian, Ayse Yilmazer, Jennifer G. Dy, Javed A. Aslam, and David R.                 AI Chips for Large Datasets. In ICPP 2021: 50th International Conference on
+     Kaeli. 2012. GPU-Accelerated Feature Selection for Outlier Detection Using the                 Parallel Processing, Lemont, IL, USA, August 9 - 12, 2021, Xian-He Sun, Sameer
+     Local Kernel Density Ratio. In 12th IEEE International Conference on Data Mining,              Shende, Laxmikant V. Kalé, and Yong Chen (Eds.). ACM, 51:1–51:11. https:
+     ICDM 2012, Brussels, Belgium, December 10-13, 2012, Mohammed Javeed Zaki,                      //doi.org/10.1145/3472456.3473518
+     Arno Siebes, Jeffrey Xu Yu, Bart Goethals, Geoffrey I. Webb, and Xindong Wu               [38] Zhihao Jia, Sina Lin, Mingyu Gao, Matei Zaharia, and Alex Aiken. 2020. Im-
+     (Eds.). IEEE Computer Society, 51–60. https://doi.org/10.1109/ICDM.2012.51                     proving the Accuracy, Scalability, and Performance of Graph Neural Networks
+[13] Kanishka Bhaduri, Bryan L Matthews, and Chris R Giannella. 2011. Algorithms                    with Roc. In MLSys. mlsys.org.
+     for speeding up distance-based outlier detection. In KDD. ACM, 859–867.                   [39] Zhihao Jia, Matei Zaharia, and Alex Aiken. 2019. Beyond Data and Model
+[14] Davis W Blalock and John V Guttag. 2017. Bolt: Accelerated data mining with                    Parallelism for Deep Neural Networks. In Proceedings of Machine Learning
+     fast vector compression. In KDD. ACM, 727–735.                                                 and Systems 2019, MLSys 2019, Stanford, CA, USA, March 31 - April 2, 2019,
+[15] Matthias Boehm, Berthold Reinwald, Dylan Hutchison, Prithviraj Sen, Alexan-                    Ameet Talwalkar, Virginia Smith, and Matei Zaharia (Eds.). mlsys.org. https:
+     dre V. Evfimievski, and Niketan Pansare. 2018. On Optimizing Operator Fusion                   //proceedings.mlsys.org/book/265.pdf
+     Plans for Large-Scale Machine Learning in SystemML. Proc. VLDB Endow. 11,                 [40] William Kahan. 1996. IEEE standard 754 for binary floating-point arithmetic.
+     12 (2018), 1755–1768. https://doi.org/10.14778/3229863.3229865                                 Lecture Notes on the Status of IEEE 754, 94720-1776 (1996), 11.
+[16] Paul Boniol and Themis Palpanas. 2020. Series2graph: Graph-based subsequence              [41] Kyle Kingsbury and Peter Alvaro. 2020. Elle: inferring isolation anomalies from
+     anomaly detection for time series. VLDB 13, 12 (2020), 1821–1834.                              experimental observations. VLDB 14, 3 (2020), 268–280.
+[17] Paul Boniol, Themis Palpanas, Mohammed Meftah, and Emmanuel Remy. 2020.                   [42] Dimitrios Koutsoukos, Supun Nakandala, Konstantinos Karanasos, Karla Saur,
+     GraphAn: Graph-based subsequence anomaly detection. VLDB 13, 12 (2020),                        Gustavo Alonso, and Matteo Interlandi. 2021. Tensors: An abstraction for
+     2941–2944.                                                                                     general data processing. VLDB 14, 10 (2021), 1797–1804.
+[18] Paul Boniol, John Paparrizos, Themis Palpanas, and Michael J Franklin. 2021.              [43] Hans-Peter Kriegel, Matthias Schubert, and Arthur Zimek. 2008. Angle-based
+     SAND: streaming subsequence anomaly detection. VLDB 14, 10 (2021), 1717–                       outlier detection in high-dimensional data.. In KDD. ACM, 444–452.
+     1729.                                                                                     [44] Kwei-Herng Lai, Daochen Zha, Junjie Xu, Yue Zhao, Guanchu Wang,
+[19] Markus M. Breunig, Hans-Peter Kriegel, Raymond T. Ng, and Jörg Sander. 2000.                   and Xia Hu. 2021. Revisiting Time Series Outlier Detection: Definitions
+     LOF: Identifying Density-Based Local Outliers.. In SIGMOD. ACM, 93–104.                        and Benchmarks. In Proceedings of the Neural Information Processing Sys-
+[20] Lars Buitinck, Gilles Louppe, Mathieu Blondel, Fabian Pedregosa, Andreas                       tems Track on Datasets and Benchmarks 1, NeurIPS Datasets and Bench-
+     Mueller, Olivier Grisel, Vlad Niculae, Peter Prettenhofer, Alexandre Gramfort,                 marks 2021, December 2021, virtual. Joaquin Vanschoren and Sai-Kit Ye-
+     Jaques Grobler, Robert Layton, Jake VanderPlas, Arnaud Joly, Brian Holt, and                   ung. https://datasets-benchmarks-proceedings.neurips.cc/paper/2021/hash/
+     Gaël Varoquaux. 2013. API design for machine learning software: experiences                    ec5decca5ed3d6b8079e2e7e7bacc9f2-Abstract-round1.html
+
+                                                                                          13
+[45] Aleksandar Lazarevic, Levent Ertöz, Vipin Kumar, Aysel Ozgur, and Jaideep               [71] Graham Neubig, Yoav Goldberg, and Chris Dyer. 2017. On-the-fly Operation
+     Srivastava. 2003. A Comparative Study of Anomaly Detection Schemes in                        Batching in Dynamic Computation Graphs. In NeurIPS. 3971–3981.
+     Network Intrusion Detection. In SDM. SIAM, 25–36.                                       [72] Junki Oku, Keiichi Tamura, and Hajime Kitakami. 2014. Parallel processing
+[46] Eleazar Leal and Le Gruenwald. 2018. Research Issues of Outlier Detection in                 for distance-based outlier detection on a multi-core CPU. In IEEE International
+     Trajectory Streams Using GPUs. SIGKDD Explor. 20, 2 (2018), 13–20.                           Workshop on Computational Intelligence and Applications (IWCIA). IEEE, 65–70.
+[47] Yann LeCun. 2019. 1.1 deep learning hardware: past, present, and future. In             [73] Gustavo H Orair, Carlos HC Teixeira, Wagner Meira Jr, Ye Wang, and Srini-
+     2019 IEEE International Solid-State Circuits Conference-(ISSCC). IEEE, 12–19.                vasan Parthasarathy. 2010. Distance-based outlier detection: consolidation and
+[48] Yann LeCun, Yoshua Bengio, and Geoffrey Hinton. 2015. Deep learning. nature                  renewed bearing. VLDB 3, 1-2 (2010), 1469–1480.
+     521, 7553 (2015), 436–444.                                                              [74] Matthew Eric Otey, Amol Ghoting, and Srinivasan Parthasarathy. 2006. Fast
+[49] Meng-Chieh Lee, Yue Zhao, Aluna Wang, Pierre Jinghong Liang, Leman Akoglu,                   Distributed Outlier Detection in Mixed-Attribute Data Sets. Data Min. Knowl.
+     Vincent S. Tseng, and Christos Faloutsos. 2020. AutoAudit: Mining Accounting                 Discov. 12, 2-3 (2006), 203–228. https://doi.org/10.1007/s10618-005-0014-6
+     and Time-Evolving Graphs. In Big Data. IEEE, 950–956.                                   [75] Guansong Pang, Chunhua Shen, Longbing Cao, and Anton Van Den Hengel.
+[50] Rubao Lee, Minghong Zhou, Chi Li, Shenggang Hu, Jianping Teng, Dongyang                      2021. Deep learning for anomaly detection: A review. CSUR 54, 2 (2021), 1–38.
+     Li, and Xiaodong Zhang. 2021. The art of balance: a RateupDB™ experience of             [76] Spiros Papadimitriou, Hiroyuki Kitagawa, Phillip B. Gibbons, and Christos
+     building a CPU/GPU hybrid database product. VLDB 14, 12 (2021), 2999–3013.                   Faloutsos. 2003. LOCI: Fast Outlier Detection Using the Local Correlation
+[51] Wonyeol Lee, Rahul Sharma, and Alex Aiken. 2018. On automatically proving                    Integral. In ICDE. IEEE Computer Society, 315–326.
+     the correctness of math.h implementations. Proc. ACM Program. Lang. 2, POPL             [77] Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gre-
+     (2018), 47:1–47:32. https://doi.org/10.1145/3158135                                          gory Chanan, Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, et al.
+[52] Aaron E Lefohn, Shubhabrata Sengupta, Joe Kniss, Robert Strzodka, and John D                 2019. Pytorch: An imperative style, high-performance deep learning library.
+     Owens. 2006. Glift: Generic, efficient, random-access GPU data structures. ACM               NeuIPS 32 (2019), 8026–8037.
+     Transactions on Graphics (TOG) 25, 1 (2006), 60–99.                                     [78] Fabian Pedregosa, Gaël Varoquaux, Alexandre Gramfort, Vincent Michel,
+[53] Zheng Li, Yue Zhao, Nicola Botta, Cezar Ionescu, and Xiyang Hu. 2020. COPOD:                 Bertrand Thirion, Olivier Grisel, Mathieu Blondel, Peter Prettenhofer, Ron Weiss,
+     Copula-Based Outlier Detection. In ICDM. IEEE, 1118–1123.                                    Vincent Dubourg, et al. 2011. Scikit-learn: Machine learning in Python. the
+[54] Zheng Li, Yue Zhao, Xiyang Hu, Nicola Botta, Cezar Ionescu, and George Chen.                 Journal of machine Learning research 12 (2011), 2825–2830.
+     2022. ECOD: Unsupervised Outlier Detection Using Empirical Cumulative                   [79] Tomás Pevný. 2016. Loda: Lightweight on-line detector of anomalies. Mach.
+     Distribution Functions. IEEE Transactions on Knowledge and Data Engineering                  Learn. 102, 2 (2016), 275–304.
+     (2022), 1–1. https://doi.org/10.1109/TKDE.2022.3159580                                  [80] Sebastian Raschka. 2015. Python machine learning. Packt publishing ltd.
+[55] Can Liu, Li Sun, Xiang Ao, Jinghua Feng, Qing He, and Hao Yang. 2021. Intention-        [81] Hansheng Ren, Bixiong Xu, Yujing Wang, Chao Yi, Congrui Huang, Xiaoyu Kou,
+     aware heterogeneous graph attention networks for fraud transactions detection.               Tony Xing, Mao Yang, Jie Tong, and Qi Zhang. 2019. Time-series anomaly detec-
+     In Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery &                    tion service at microsoft. In Proceedings of the 25th ACM SIGKDD international
+     Data Mining. 3280–3288.                                                                      conference on knowledge discovery & data mining. ACM, 3009–3017.
+[56] Fei Tony Liu, Kai Ming Ting, and Zhi-Hua Zhou. 2008. Isolation Forest. In ICDM.         [82] Petar Ristoski, Christian Bizer, and Heiko Paulheim. 2015. Mining the Web
+     IEEE Computer Society, 413–422.                                                              of Linked Data with RapidMiner. J. Web Semant. 35 (2015), 142–151. https:
+[57] Haoyu Liu, Fenglong Ma, Shibo He, Jiming Chen, and Jing Gao. 2021. Fairness-                 //doi.org/10.1016/j.websem.2015.06.004
+     aware Outlier Ensemble. arXiv preprint arXiv:2103.09419 (2021).                         [83] Lukas Ruff, Robert A. Vandermeulen, Nico Görnitz, Alexander Binder, Emmanuel
+[58] Kay Liu, Yingtong Dou, Yue Zhao, Xueying Ding, Xiyang Hu, Ruitong Zhang,                     Müller, Klaus-Robert Müller, and Marius Kloft. 2020. Deep Semi-Supervised
+     Kaize Ding, Canyu Chen, Hao Peng, Kai Shu, et al. 2022. Benchmarking Node                    Anomaly Detection. In 8th International Conference on Learning Representations,
+     Outlier Detection on Graphs. arXiv preprint arXiv:2206.10071 (2022).                         ICLR 2020, Addis Ababa, Ethiopia, April 26-30, 2020. OpenReview.net. https:
+[59] Kay Liu, Yingtong Dou, Yue Zhao, Xueying Ding, Xiyang Hu, Ruitong Zhang,                     //openreview.net/forum?id=HkgH0TEYwH
+     Kaize Ding, Canyu Chen, Hao Peng, Kai Shu, et al. 2022. PyGOD: A Python                 [84] Bernhard Schölkopf, John C. Platt, John Shawe-Taylor, Alexander J. Smola, and
+     Library for Graph Outlier Detection. arXiv preprint arXiv:2204.12095 (2022).                 Robert C. Williamson. 2001. Estimating the Support of a High-Dimensional
+[60] Zhiwei Liu, Yingtong Dou, Philip S. Yu, Yutong Deng, and Hao Peng. 2020.                     Distribution. Neural Comput. 13, 7 (2001), 1443–1471.
+     Alleviating the Inconsistency Problem of Applying Graph Neural Network to               [85] Erich Schubert, Arthur Zimek, and Hans-Peter Kriegel. 2014. Generalized Outlier
+     Fraud Detection. In Proceedings of the 43rd International ACM SIGIR conference               Detection with Flexible Kernel Density Estimates. In SDM. SIAM, 542–550.
+     on research and development in Information Retrieval, SIGIR 2020, Virtual Event,        [86] Mei-Ling Shyu, Shu-Ching Chen, Kanoksri Sarinnapakorn, and LiWu Chang.
+     China, July 25-30, 2020, Jimmy Huang, Yi Chang, Xueqi Cheng, Jaap Kamps,                     2003. A novel anomaly detection scheme based on principal component classifier.
+     Vanessa Murdock, Ji-Rong Wen, and Yiqun Liu (Eds.). ACM, 1569–1572. https:                   Technical Report.
+     //doi.org/10.1145/3397271.3401253                                                       [87] Petru Sincraian. 2021. PyOD Download Statistics. https://pepy.tech/project/
+[61] Moshe Looks, Marcello Herreshoff, DeLesley Hutchins, and Peter Norvig. 2017.                 pyod. Accessed: 2021-09-09.
+     Deep Learning with Dynamic Computation Graphs. In ICLR. OpenReview.net.                 [88] Martin Svedin, Steven Wei Der Chien, Gibson Chikafa, Niclas Jansson, and
+[62] Elio Lozano and Edgar Acuña. 2005. Parallel Algorithms for Distance-Based                    Artur Podobas. 2021. Benchmarking the Nvidia GPU Lineage: From Early K80
+     and Density-Based Outliers. In ICDM. IEEE Computer Society, 729–732.                         to Modern A100 with Asynchronous Memory Transfers. In HEART ’21. ACM,
+[63] Emaad Manzoor, Hemank Lamba, and Leman Akoglu. 2018. xstream: Outlier                        9:1–9:6.
+     detection in feature-evolving data streams. In KDD. ACM, 1963–1972.                     [89] Nguyen Thanh Tam, Matthias Weidlich, Bolong Zheng, Hongzhi Yin, Nguyen
+[64] Chen Meng, Minmin Sun, Jun Yang, Minghui Qiu, and Yang Gu. 2017. Training                    Quoc Viet Hung, and Bela Stantic. 2019. From anomaly detection to rumour
+     deeper models by GPU memory optimization on TensorFlow. In Proc. of ML                       detection using data streams of social platforms. VLDB 12, 9 (2019), 1016–1029.
+     Systems Workshop in NIPS. NIPS.                                                         [90] Jian Tang, Zhixiang Chen, Ada Wai-Chee Fu, and David Wai-Lok Cheung. 2002.
+[65] Prashanth Menon, Todd C Mowry, and Andrew Pavlo. 2017. Relaxed opera-                        Enhancing Effectiveness of Outlier Detections for Low Density Patterns. In
+     tor fusion for in-memory databases: Making compilation, vectorization, and                   PAKDD (Lecture Notes in Computer Science), Vol. 2336. Springer, 535–548.
+     prefetching work together at last. VLDB 11, 1 (2017), 1–13.                             [91] Theodoros Toliopoulos, Christos Bellas, Anastasios Gounaris, and Apostolos Pa-
+[66] Seung Won Min, Vikram Sharma Mailthody, Zaid Qureshi, Jinjun Xiong, Eiman                    padopoulos. 2020. PROUD: PaRallel OUtlier Detection for Streams. In Proceedings
+     Ebrahimi, and Wen-mei Hwu. 2020. EMOGI: efficient memory-access for out-                     of the 2020 International Conference on Management of Data, SIGMOD Conference
+     of-memory graph-traversal in GPUs. VLDB 14, 2 (2020), 114–127.                               2020, online conference [Portland, OR, USA], June 14-19, 2020, David Maier, Rachel
+[67] Seung Won Min, Kun Wu, Sitao Huang, Mert Hidayetoğlu, Jinjun Xiong, Eiman                    Pottinger, AnHai Doan, Wang-Chiew Tan, Abdussalam Alawini, and Hung Q.
+     Ebrahimi, Deming Chen, and Wen Mei Hwu. 2021. Large graph convolutional                      Ngo (Eds.). ACM, 2717–2720. https://doi.org/10.1145/3318464.3384688
+     network training with GPU-oriented data communication architecture. VLDB                [92] Luan Tran, Min Y Mun, and Cyrus Shahabi. 2020. Real-time distance-based
+     14, 11 (2021), 2087–2100.                                                                    outlier detection in data streams. VLDB 14, 2 (2020), 141–153.
+[68] Supun Nakandala, Karla Saur, Gyeong-In Yu, Konstantinos Karanasos, Carlo                [93] Haojie Wang, Jidong Zhai, Mingyu Gao, Zixuan Ma, Shizhi Tang, Liyan Zheng,
+     Curino, Markus Weimer, and Matteo Interlandi. 2020. A Tensor Compiler for                    Yuanzhi Li, Kaiyuan Rong, Yuanyong Chen, and Zhihao Jia. 2021. PET: Optimiz-
+     Unified Machine Learning Prediction Serving. In OSDI. OSDI, 899–917.                         ing Tensor Programs with Partially Equivalent Transformations and Automated
+[69] Deepak Narayanan, Aaron Harlap, Amar Phanishayee, Vivek Seshadri, Nikhil R.                  Corrections. In OSDI. OSDI, 37–54.
+     Devanur, Gregory R. Ganger, Phillip B. Gibbons, and Matei Zaharia. 2019.                [94] Mengzhao Wang, Xiaoliang Xu, Qiang Yue, and Yuxiang Wang. 2021. A Com-
+     PipeDream: Generalized Pipeline Parallelism for DNN Training. In Proceed-                    prehensive Survey and Experimental Comparison of Graph-Based Approxi-
+     ings of the 27th ACM Symposium on Operating Systems Principles (Huntsville,                  mate Nearest Neighbor Search. Proc. VLDB Endow. 14, 11 (2021), 1964–1978.
+     Ontario, Canada) (SOSP ’19). Association for Computing Machinery, New York,                  https://doi.org/10.14778/3476249.3476255
+     NY, USA, 1–15. https://doi.org/10.1145/3341301.3359646                                  [95] Runhui Wang and Dong Deng. 2020. DeltaPQ: lossless product quantization
+[70] Henry Neeb and Christopher Kurrus. 2016. Distributed k-nearest neighbors.                    code compression for high dimensional similarity search. VLDB 13, 13 (2020),
+                                                                                                  3603–3616.
+                                                                                        14
+ [96] Shuang Wang and Hakan Ferhatosmanoglu. 2020. PPQ-trajectory: spatio-
+      temporal quantization for querying in large trajectory repositories. VLDB
+      14, 2 (2020), 215–227.
+ [97] Yizhou Yan, Lei Cao, Caitlin Kulhman, and Elke Rundensteiner. 2017. Distributed
+      local outlier detection in big data. In KDD. ACM, 1225–1234.
+ [98] Ling Yang, Zhilong Zhang, Shenda Hong, Runsheng Xu, Yue Zhao, Yingxia Shao,
+      Wentao Zhang, Ming-Hsuan Yang, and Bin Cui. 2022. Diffusion Models: A Com-
+      prehensive Survey of Methods and Applications. arXiv preprint arXiv:2209.00796
+      (2022).
+ [99] Susik Yoon, Jae-Gil Lee, and Byung Suk Lee. 2019. NETS: extremely fast outlier
+      detection from a data stream via set-based processing. VLDB 12, 11 (2019),
+      1303–1315.
+[100] Rose Yu, Huida Qiu, Zhen Wen, ChingYung Lin, and Yan Liu. 2016. A survey on
+      social media anomaly detection. SIGKDD Explorations 18 (2016), 1–14.
+[101] Aoqian Zhang, Shaoxu Song, Jianmin Wang, and Philip S Yu. 2017. Time series
+      data cleaning: From anomaly detection to anomaly repairing. VLDB 10, 10
+      (2017), 1046–1057.
+[102] Sean Zhang, Varun Ursekar, and Leman Akoglu. 2022. Sparx: Distributed Outlier
+      Detection at Scale. arXiv preprint arXiv:2206.01281 (2022).
+[103] Yue Zhao. 2021. PyOD Citation Statistics. https://scholar.google.ca/scholar?
+      cites=3726241381117726876&as_sdt=5,39&sciodt=0,39&hl=en. Accessed: 2021-
+      09-09.
+[104] Yue Zhao, Xiyang Hu, Cheng Cheng, Cong Wang, Changlin Wan, Wen Wang,
+      Jianing Yang, Haoping Bai, Zheng Li, Cao Xiao, Yunlong Wang, Zhi Qiao, Jimeng
+      Sun, and Leman Akoglu. 2021. SUOD: Accelerating Large-Scale Unsupervised
+      Heterogeneous Outlier Detection. In Proceedings of Machine Learning and Sys-
+      tems 2021, MLSys 2021, virtual, April 5-9, 2021, Alex Smola, Alex Dimakis, and
+      Ion Stoica (Eds.). mlsys.org. https://proceedings.mlsys.org/paper/2021/hash/
+      98dce83da57b0395e163467c9dae521b-Abstract.html
+[105] Yue Zhao, Zain Nasrullah, Maciej K. Hryniewicki, and Zheng Li. 2019. LSCP:
+      Locally Selective Combination in Parallel Outlier Ensembles. In Proceedings
+      of the 2019 SIAM International Conference on Data Mining, SDM 2019, Calgary,
+      Alberta, Canada, May 2-4, 2019, Tanya Y. Berger-Wolf and Nitesh V. Chawla
+      (Eds.). SIAM, 585–593. https://doi.org/10.1137/1.9781611975673.66
+[106] Yue Zhao, Zain Nasrullah, and Zheng Li. 2019. PyOD: A Python Toolbox for
+      Scalable Outlier Detection. JMLR 20 (2019), 96:1–96:7.
+[107] Qiwei Zhong, Yang Liu, Xiang Ao, Binbin Hu, Jinghua Feng, Jiayu Tang, and
+      Qing He. 2020. Financial defaulter detection on online credit payment via
+      multi-view attributed heterogeneous information network. In WWW. ACM,
+      785–795.
+
+
+
+
+                                                                                        15
+SUPPLEMENTARY MATERIAL FOR TOD                                                          # take the negative log
+Details on system design and experiments.                                               self.U_l = -1 * torch.log(self.U_l)
+                                                                                        self.U_r = -1 * torch.log(self.U_r)
+A    DEMO ON USING TOD TO IMPLEMENT
+                                                                                        # aggregate and generate outlier scores
+     NEW OD ALGORITHMS FROM SCRATCH                                                     self.O = torch.maximum(self.U_l, self.U_r)
+Overview of implementing new OD algorithms with TOD . As                                self.decision_scores_ = torch.sum(self.O,
+shown in §4, TOD takes a modular approach to implement an OD                                 dim=1).cpu().numpy() * -1
+algorithm. Thus, using TOD to implement a new OD algorithm re-
+quires conceptualizing the algorithm as a combination of operators                                 (ii) code of density aggregation in ECOD
+(BTOs and FOs) in TOD (see Fig. 2). Thanks to the nature of OD
+applications that do not involve complex optimization, most OD                      B    EXAMPLE OF USING TOD TO BUILD
+algorithms can be decomposed as a combination of 2 to 3 operators.
+Overview of ECOD . We provide an example of using TOD to
+                                                                                         CLASSIFICATION ALGORITHMS
+implement the latest OD algorithm with empirical cumulative dis-                    As discussed in §8, TOD may be used to construct algorithms be-
+tribution functions (ECOD) [54], which is just published in early                   yond OD, e.g., classification and regression. In this section, we
+2022. In a nutshell, ECOD estimates the empirical distribution of                   demonstrate the use of TOD to build a popular classifier called 𝑘
+each feature (i.e., density estimation), where it considers that out-               nearest neighbor classifiers (𝑘NN_CLF)[26].
+liers locate in low-density regions. After that, ECOD aggregates all                    In short, 𝑘NN_CLF is a lazy classifier and does not involve a
+density estimation results per feature into final outlier scores.                   training stage. For a test sample Xtest , it calculates the pairwise
+Turning ECOD into abstraction. ECOD mainly involves two op-                         distance between the test sample with each “training” data. It then
+erators: (i) it estimates the density (“f. Density est.”) of each                   uses the aggregation (e.g., majority vote or avg.) to decide the
+features by “8. Basic OPs (ECDF)” and (ii) then aggregates den-                     predicted classes of each test sample. Thus, it can be decomposed
+sity results across all features via “7. Agg.”. By having the process               as the combination of (i) calculating pairwise distance by cdist
+in mind, we could sketch the abstraction of ECOD in Fig. A1.                        (ii) identifying the top 𝑘 neighbors by topk and (iii) predicting the
+                                                                                    class labels by aggregating the labels from the neighbors (i.e., Basic
+                               ECOD                                                 OPs).
+                                (7+f)
+                                                                                                                 kNN Classifier
+                                  f. Density
+                                                                                                                    (1+2)
+                                    est. (8)
+
+                     7. Agg.      8. Basic Ops (ECDF)
+
+                                                                                                          1. cdist     2. topk    7. Agg.
+Figure A1: Examples of building latest OD algorithm ECOD
+with FOs and BTOs conveniently.
+                                                                                     Figure B2: Examples of building 𝑘NN classifier with TOD
+Turning abstraction into code . We provide the code breakdown                          Table B1 provides a detailed comparison between CPU-based im-
+to show how to use TOD to implement ECOD, and the full imple-                       plementation of 𝑘NN_CLF in scikit-learn (sklearn) [78] and TOD’s
+mentation is available for further reference1 . The code snippet (i)                implementation. On average, TOD’s 𝑘NN_CLF is 10.1 times faster
+shows that we use the basic operator ECDF for density estimation                    than that of sklearn due to the GPU acceleration.
+and (ii) shows the aggregation step of density estimation as outlier
+scores. Putting these core parts together with some skeleton code,                  Table B1: Runtime (in seconds) comparison of 𝑘NN classifier
+we could conveniently include ECOD in TOD. It is noted that we                      using CPU-based scikit-learn (sklearn) [78] vs. GPU-enabled
+still need to glue the operators together, while the use of predefined              TOD. On average, TOD’s implementation is 10.1 times faster
+TOD operators helps us to achieve acceleration.                                     than that of sklearn.
+
+        from .basic_operators import ecdf_multiple
+                                                                                      Train Size     Test Size   Number of Features         𝑘 NN-sklearn   𝑘 NN-TOD
+
+        # density estimation via ECDF                                                 50,000         50,000      100                        41.35          4.76
+                                                                                      50,000         50,000      200                        52.26          4.83
+        self.U_l = ecdf_multiple(X, device=self.device)                               100,000        50,000      100                        84.84          8.09
+        self.U_r = ecdf_multiple(-X, device=self.device)                              100,000        50,000      200                        88.13          8.36
+
+             (i) code of density estimation in ECOD
+                                                                                    C ADDITIONAL EXPERIMENT RESULTS
+                                                                                    C.1 End-to-end Results on Synthetic Datasets
+                                                                                    Consistent with the results presented in §7.3, TOD is significantly
+                                                                                    faster than the leading CPU-based system on large synthetic
+    1 ECOD: https://github.com/yzhao062/pytod/blob/main/pytod/models/ecod.py        datasets. Fig. C3 shows the results on three synthetic datasets
+                                                                               16
+                                                                                                                                           10.0                         8.96 9.47
+
+
+
+
+                                                                                                                    Wall Time in Seconds
+      (where Synthetic 1 contains 100,000 samples, Synthetic 2 contains                                                                                                                                             GPU time
+      200,000 samples, and Synthetic 3 contains 400,000 samples (all are                                                                    7.5                                                                     Total runtime
+      with 200 features). The results show that TOD is on average 10.9×                                                                     5.0
+      faster than PyOD on the five benchmark algorithms (13.0×, 15.9×,
+                                                                                                                                            2.5        2.26 2.88                                     1.99 2.36
+      9.3×, 7.2×, and 8.9× speed-up on LOF, 𝑘NN, ABOD, HBOS, and
+      PCA, respectively).                                                                                                                                                              0.17 0.23                     0.12 0.15
+                                                                                                                                            0.0
+                                                                                                                                                       LOF (79%)        ABOD (95%)    HBOS (77%)     KNN (84%)       PCA (83%)
+
+                       400                       389.98                                                                                         (a) Synthetic dataset 1 (20,000 samples with 200 features)
+
+
+
+
+Wall Time in Seconds
+                                                                                                 PyOD (cpu)
+                                                                                                 Ours                                      60                       57.69 59.62
+
+
+
+
+                                                                                                                    Wall Time in Seconds
+                       300                                                                                                                                                                                        GPU time
+                                                                                                                                                                                                                  Total runtime
+                       200     198.02                                          186.14                                                      40
+                       100                                                                                                                         25.07 25.81
+                                                          59.62                                                                                                                                     20.84 21.28
+                                        25.81                                           21.28                                              20
+                         0                                         2.69 0.23                     1.38 0.18
+                               LOF (7.67x)       ABOD (6.54x) HBOS (11.83x) KNN (8.75x)          PCA (7.68x)                                                                          0.18 0.23                      0.15 0.18
+                                                                                                                                            0
+                         (a) Synthetic dataset 1 (100,000 samples with 200 features)                                                                LOF (97%)       ABOD (97%)        HBOS (80%)    KNN (98%)        PCA (84%)
+                                                 1194.74                                                                                     (b) Synthetic dataset 2 (100,000 samples with 200 features)
+
+
+
+
+Wall Time in Seconds
+                                                                                                 PyOD (cpu)
+                       1000                                                                      Ours
+                                735.53
+                                                                                                                           Figure C4: GPU time and total runtime of TOD in seconds
+                                                                               706.13
+                                                                                                                           on synthetic datasets (where the percentage is shown in
+                       500                                                                                                 parenthesis). TOD achieves significant efficiency improve-
+                                         75.44            144.93                        70.78                              ment with high GPU usages (e.g., mostly > 80%).
+                         0                                         4.97 0.29                     2.53 0.4
+                                LOF (9.75x)      ABOD (8.24x) HBOS (17.16x) KNN (9.98x)          PCA (6.33x)
+                         (b) Synthetic dataset 2 (200,000 samples with 200 features)                                      sequentially, where each uses automatic batching and the output
+                       3000                                                                                               of the former is the input of the latter.
+                                                 2788.19
+
+
+
+
+Wall Time in Seconds
+                                                                                                 PyOD (cpu)                  Differently, we could further optimize this simple concatenation
+                               2276.16                                         2273.4            Ours
+                       2000                                                                                               execution by fusing cdist and topk together for better efficiency.
+                                                                                                                          Fig. 7 compares simple concatenation (subfigure a) and operator
+                       1000                                                                                               fusion (subfigure b) on 𝑘NN. Specifically, the latter executes the topk
+                                                          228.02                                                          BTO on the cdist BTO’s individual batches separately rather than
+                                        142.38                     3.84 0.42            141.58   3.18 0.91
+                         0                                                                                                running topk on the full distance matrix outputted by cdist. This
+                                LOF (15.99x) ABOD (12.23x) HBOS (9.06x) KNN (16.06x)             PCA (3.49x)
+                                                                                                                          prevents moving the entire 𝑛 ×𝑛 distance matrix between operators,
+                         (c) Synthetic dataset 3 (400,000 samples with 200 features)                                      which often causes OOM.
+                                                                                                                             In Table C2, we compare the performance of simple concatena-
+       Figure C3: Runtime comparison between PyOD and TOD in                                                              tion (i.e., cdist and then topk) and operator fusion regarding both
+       seconds on synthetic datasets (see §7.3 Fig. 8 for results on                                                      GPU memory and time consumption, where operator fusion shows
+       real-world datasets). TOD significantly outperforms PyOD                                                           great performance improvement.
+       in all w/ much smaller runtime, where the speedup factor
+       is shown in parenthesis by each algorithm. On avg., TOD is                                                         Table C2: GPU memory consumption (in Mb) and runtime
+       10.9× faster than PyOD (up to 38.9×).                                                                              (in seconds) comparison of simple concatenation (SC) and
+                                                                                                                          operator fusion (OF) for 𝑘NN. Operator fusion brings huge
+                                                                                                                          savings in both GPU memory consumption and runtime.
+
+       C.2                    Further Time Analysis                                                                                          Sample Size         GPU-SC        GPU-OF       Runtime-SC       Runtime-OF
+       Fig. C4 shows the comparison between GPU time and the total                                                                           50,000              5280          3060         8.47             2.80
+       runtime, where GPU time consists of a large portion of the total                                                                      100,000             9010          3060         33.48            9.12
+       runtime, and verifies that the acceleration of TOD mainly comes
+       from the use of GPU(s). Moreover, we also notice that the GPU                                                       C.4                    Ablation Studies on Provable Quantization
+       efficiency increases for larger datasets with higher percentages.                                                                          and Automatic Batching
+       This also explains why we observe more acceleration of TOD on                                                      In addition to the end-to-end analysis in §7.3, we also provide
+       large datasets in Fig. 8 and Appx. Fig. C3.                                                                        further ablations on provable quantization (PQ) and automatic
+                                                                                                                          batching (AB) in this section. We demonstrate this experiment with
+       C.3                    Case Study on Operator Fusion                                                               𝑘-NN OD algorithm where both techniques apply. Table C3 shows
+      Although automatic batching applies to all BTOs and FOs, we in-                                                     that automatic batching addresses the issue of out-of-memory on
+      troduce an additional technique called operator fusion in §6.1 to                                                   large datasets, while provable quantization reduces GPU memory
+      further optimize the execution of selected operators in sequence.                                                   consumption and runtime. The ablations show that using both
+      For instance, 𝑘NN batching is achieved by running cdist and topk                                                    techniques leads to the best performance.
+                                                                                                               17
+Table C3: Ablations on provable quantization (PQ) and au-
+                                                                                     from pytod.utils.data import generate_data
+tomatic batching (AB) for 𝑘NN. We set batch size equal to
+                                                                                     from pytod.utils.data import evaluate_print
+40,000, and thus AB does not apply to the first row of the ta-                       from pytod.models.knn import KNN
+ble. The best performing combination is highlighted in bold,
+where using both techniques achieves the best performance.                           # Generate sample data
+                                                                                     X_train, y_train, X_test, y_test = \
+                                                                                         generate_data(n_train=50000, n_test=10000)
+      # Samples         PQ&AB         AB only        PQ only        None
+      40,000            5.34          N/A            5.34           10.88            device = validate_device(0) # get the GPU 0
+      80,000            15.12         20.91          17.56          OOM
+      160,000           45.37         67.22          OOM            OOM              # initialize a kNN model in TOD with k=10 and
+                                                                                          batch=10000
+                          (a) Runtime in seconds
+                                                                                     clf = KNN(n_neighbors=k, batch_size=10000,
+                                                                                          device=device)
+      # Samples         PQ&AB         AB only        PQ only        None
+      40,000            3,040         N/A            3040           12,170           # fit the kNN model
+      80,000            3,040         12,050         12,020         OOM              clf.fit(X_train)
+      160,000           3,040         12,050         OOM            OOM
+                                                                                     # get the train labels and outlier scores
+                  (b) GPU memory consumption in Mb                                   y_train_scores = clf.decision_scores_ # raw outlier
+                                                                                          scores
+                                                                                     y_train_pred = clf.labels_ # binary labels
+D     OPEN-SOURCE SYSTEM AND API
+                                                                                     # evaluate and print the results
+      DEMONSTRATION                                                                  evaluate_print(clf_name, y_train, y_train_scores)
+Accessibility . To facilitate accessibility of TOD, we release it under
+the open BSD 2 license1 , which can be easily installed via Python                   # get the prediction labels and outlier scores on test
+Package Index (PyPI)2 with name pytod.                                               y_test_scores = clf.decision_function(X_test) # raw
+API design and demonstration . Follow by the mature API design                            scores
+of scikit-learn [20] and PyOD [106], all the supported OD algorithms                 API demo of invoking 𝑘NN in TOD; other OD
+have a unified API design: (i) fit processes the input data and calcu-               algorithms follow the same API design
+lates necessary statistics for prediction, where the outlier scores are
+also calculated on the input data (ii) decision_function returns                  Utility functions. To facilitate system comparison and evaluation,
+the raw outlier scores of newcoming samples based on the fitted                   we also create a set of helper functions including (i) generate_data
+outlier detector in the inductive setting and (iii) predict returns               that can creates synthetic OD datasets by modeling normal samples
+the binary labels of newcoming samples based on the fitted outlier                by Gaussian distribution and outliers by uniform distribution and
+detector. We demonstrate these APIs in TOD with 𝑘NN detector                      (ii) evaluate_print to provide OD specific evaluations by the
+below, and other supported OD algorithms have the same APIs.                      metrics described in §7.2.
+
+
+
+
+    1 Github Repo: https://github.com/yzhao062/pytod
+    2 Python Package Index (PyPI: https://pypi.org/project/pytod/
+
+                                                                             18
+

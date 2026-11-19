@@ -1,0 +1,887 @@
+                                             AutoOD: Automated Outlier Detection via
+                                         Curiosity-guided Search and Self-imitation Learning
+                                             Yuening Li1 , Zhengzhang Chen2 , Daochen Zha1 , Kaixiong Zhou1 , Haifeng Jin1 , Haifeng Chen2 , Xia Hu1
+                                                                1
+                                                                    Department of Computer Science and Engineering, Texas A&M University, USA
+                                                                                 {yueningl,daochen.zha,zkxiong,jin,xiahu}@tamu.edu
+                                                                                         2
+                                                                                           NEC Laboratories America, USA
+                                                                                           {zchen,haifeng}@nec-labs.com
+
+
+                                            Abstract—Outlier detection is an important data mining task          usually still heavily relies on human expertise to fine-tune
+
+
+
+
+arXiv:2006.11321v1 [cs.LG] 19 Jun 2020
+                                         with numerous applications such as intrusion detection, credit          the hyperparameters and design the neural architectures. These
+                                         card fraud detection, and video surveillance. However, given            efforts are usually time-consuming and the resulting solutions
+                                         a specific complicated task with complicated data, the process
+                                         of building an effective deep learning based system for outlier         may still have sub-optimal performance.
+                                         detection still highly relies on human expertise and laboring              Neural Architecture Search (NAS) [19], [20] is one promis-
+                                         trials. Also, while Neural Architecture Search (NAS) has shown          ing means for automating the design of neural networks,
+                                         its promise in discovering effective deep architectures in various      where reinforcement learning and evolution have been used
+                                         domains, such as image classification, object detection and seman-      to discover optimal model architectures from data [21], [22].
+                                         tic segmentation, contemporary NAS methods are not suitable for
+                                         outlier detection due to the lack of intrinsic search space, unstable   Designing an effective NAS algorithm requires two key com-
+                                         search process, and low sample efficiency. To bridge the gap, in        ponents: the search space and the search strategy, which define
+                                         this paper, we propose AutoOD, an automated outlier detection           what architectures can be represented in principles and how to
+                                         framework, which aims to search for an optimal neural network           explore the search space, respectively. The discovered neural
+                                         model within a predefined search space. Specifically, we firstly        architectures by NAS have been demonstrated to be on par or
+                                         design a curiosity-guided search strategy to overcome the curse
+                                         of local optimality. A controller, which acts as a search agent,        outperforms hand-crafted neural architectures.
+                                         is encouraged to take actions to maximize the information gain             Although the recent years have witnessed significant
+                                         about the controller’s internal belief. We further introduce an         progress of NAS techniques in some supervised learning tasks
+                                         experience replay mechanism based on self-imitation learning to         such as image classification and text classification [19], [22],
+                                         improve the sample efficiency. Experimental results on various          the unsupervised setting and the naturally imbalanced data
+                                         real-world benchmark datasets demonstrate that the deep model
+                                         identified by AutoOD achieves the best performance, comparing           have introduced new challenges in designing an automated
+                                         with existing handcrafted models and traditional search methods.        outlier detection framework. (1) Lack of search space. It
+                                            Index Terms—outlier detection, neural architecture search,           is non-trivial to determine the search space for an outlier
+                                         experience replay, curiosity-guided search, self-imitation learning     detection task. In particular, since there is no class label
+                                                                                                                 information in the training data of an outlier detection task,
+                                                                                                                 objective functions play an important role to differentiate
+                                                                I. I NTRODUCTION                                 between normal and anomalous behaviors. Thus, in contrast
+                                            With the increasing amount of surveillance data collected            to the supervised learning tasks, we often need to find a
+                                         from large-scale information systems such as the Web, so-               suitable definition of the outlier and its corresponding objective
+                                         cial networks, and cyber-physical systems, it becomes more              function for a given real-world data. One typical way to define
+                                         and more important for people to understand the underlying              the outliers is to estimate the relative density of each sample,
+                                         regularity of the vast amount of data, and to identify the              and declare instances that lie in a neighborhood with low
+                                         unusual or abnormal instances [1]–[3]. Centered around this             density as anomalies [16]. Yet these density-based techniques
+                                         goal, outlier detection plays a very important role in various          perform poorly if the data have regions of varying densities.
+                                         real-world applications, such as fraud detection [4], [5], cyber        Another way to define anomalies is through clustering. An
+                                         security [6]–[8], medical diagnosis [9], and social network             instance will be classified as normal data if it is close to
+                                         analysis [10]–[13].                                                     the existing clusters, while the anomalies are assumed to
+                                            Driven by the success of deep learning, there has been               be far away from any existing clusters [14]. However, these
+                                         a surge of interests [14]–[17] in adopting deep neural net-             clustering-based techniques will be less effective if the anoma-
+                                         works for outlier detection. Deep neural networks can learn             lies form significant clusters among themselves [4]. The proper
+                                         to represent the data as a nested hierarchy of concepts to              definition of outliers not only requires domain knowledge
+                                         capture the complex structure in the data, and thus significantly       from researchers and experience from data scientists, but
+                                         surpass traditional outlier detection methods as the scale              also needs thorough and detailed raw data analysis efforts.
+                                         of data increases [18]. However, building a powerful deep               Thus, different from the search spaces defined by the existing
+                                         neural network system for a real-world complex application              NAS, the search space of automated outlier detection needs
+to cover not only the architecture configurations, but also           • We introduce an experience replay mechanism based on the
+the outlier definitions with corresponding objective functions.         self-imitation learning to improve the sample efficiency.
+(2) Unstable search process. The search process may easily            • We conduct extensive experiments on eight benchmark
+become unstable and fragile when outlier detection compounds            datasets to demonstrate the effectiveness of AutoOD, and
+with architecture search. On the one hand, the imbalanced               provide insights on how to incorporate AutoOD to the real-
+data distributions make the search process easily fall into the         world scenarios.
+local optima [23]. On the other hand, the internal mechanisms
+of the traditional NAS may introduce bias in the search                   II. P RELIMINARIES AND P ROBLEM F ORMULATION
+process. For instance, the weight sharing mechanism makes the
+                                                                        In this section, we present the preliminaries and problem
+architectures who have better initial performance with similar
+                                                                      definition of our work.
+structures more likely to be sampled [24], [25], which leads
+to misjudgments of the child model’s performance. (3) Low             A. Deep AutoEncoder Based Outlier Detection
+sample efficiency. Existing NAS algorithms usually require
+training a large number of child models to achieve good                  Classical outlier detection methods, such as Local Out-
+performance, which is computationally expensive. While in             lier Factor [26] and One-Class SVMs [27], suffer from bad
+real-world outlier detection tasks, outliers or abnormal samples      computational scalability and the curse of dimensionality in
+are very rare. Thus, it requires the search strategy to exploit       high-dimensional and data-rich scenarios [17]. To tackle these
+samples and historical search experiences more effectively.           problems, deep structured models have been proposed to
+   To tackle the aforementioned challenges, in this paper, we         process the features in a more efficient way. Among recent
+propose AutoOD, an automated outlier detection algorithm to           deep structured studies, Deep AutoEncoder is one of the most
+find an optimal deep neural network model for a given dataset.        promising approaches for outlier detection. The AutoEncoder
+In particular, we first design a comprehensive search space           learns a representation by minimizing the reconstruction error
+specifically tailored for outlier detection. It covers architecture   from normal samples [28]. Therefore, it can be used to extract
+settings, outlier definitions, and corresponding loss functions.      the common factors of variation from normal samples and re-
+Given the predefined search space, we further propose a               construct them easily, and vice versa. Besides directly employ-
+curiosity-guided search strategy to overcome the curse of the         ing the reconstruction error as the denoter, recent studies [14],
+local optimality. The search agent is encouraged to seek out          [16], [17] demonstrate the effectiveness of collaborating Deep
+regions in the search space that are relatively unexplored.           AutoEncoders with classical outlier detection techniques, by
+The uncertainty about the dynamics of the search agent is             introducing regularizers through plugging learned representa-
+interpreted as the information gain between the agent’s new           tions into classical outlier definition hypotheses. Specifically,
+belief over the old one. Moreover, we introduce an experi-            there are three typical outlier assumptions: density, cluster,
+ence replay mechanism based on self-imitation learning to             and centroid. The density based approaches [16] estimate the
+enhance sample efficiency. It can benefit the search process          relative density of each sample, and declare instances that
+through exploiting good experience in the historical episodes.        lie in a neighborhood with low density as anomalies. Under
+To evaluate the performance of AutoOD, we perform an                  the clustering based assumption, normal instances belong to
+extensive set of experiments on eight benchmark datasets.             an existing cluster in the dataset, while anomalies are not
+When tested on the two important outlier detection tasks—             contained in any existing cluster [14]. The centroid based
+instance-level outlier sample detection and pixel-level defect        approaches [17] rely on the assumption that normal data
+region segmentation—our algorithm demonstrated the superior           instances lie close to their closest cluster centroid, while
+performance, comparing with existing handcrafted models               anomalies are far away from them. In this work, we illustrate
+and traditional search methods. The experimental results also         the proposed AutoOD by utilizing Deep AutoEncoder with a
+show that AutoOD has the potential to be applied in more              variety of regularizers as the basic outlier detection algorithm.
+complicated real-world applications.                                  The framework of AutoOD could be easily extended to other
+   The contributions of this paper are summarized as follows:         deep-structured outlier detection approaches.
+• We identify a novel and challenging problem (i.e., auto-
+   mated outlier detection) and propose a generic framework           B. Problem Statement
+   AutoOD. To the best of our knowledge, AutoOD describes                Different from the traditional Neural Architecture Search,
+   the first attempt to incorporate AutoML with an outlier            which focuses on optimizing neural network architectures for
+   detection task, and one of the first to extend AutoML              supervised learning tasks, automated outlier detection has the
+   concepts into applications from data mining fields.                following two unique characteristics. First, the neural archi-
+• We carefully design a search space specifically tailored to         tecture in the Autoencoder needs to be adaptive in the given
+   the automated outlier detection problem, covering archi-           dataset to achieve competitive performance. The hyperparam-
+   tecture settings, outlier definitions, and the corresponding       eter configurations of neural architecture include the number
+   objective functions.                                               of layers, the size of convolutional kernels and filters, etc.;
+• We propose a curiosity-guided search strategy to overcome           Second, the outlier detection requires the designs of definition-
+   the curse of local optimality and stabilize search process.        hypothesis and corresponding objective function. Formally, we
+                                                                    Self-imitation
+                                                                       learning
+                                                         actions                              Validation set
+
+
+
+
+                                                                                                   Reward
+                                                                    sample                 train            update
+
+
+
+                                                                                                                 Experience
+      Training set                     LSTM controller                       Child model                       replay buffers   Best model
+                                                                             Information
+                                                          update             maximization
+
+
+Fig. 1: An overview of AutoOD. With the pre-defined search space and the given dataset, we use an LSTM based controller
+to generate actions a. Child models are sampled from actions a and evaluated with the reward r. Once the search process
+of one iteration is done, the controller samples M child models as candidate architectures and then picks the top K from
+them. The top K architectures’ controller outputs will fed as the input of the next iteration’s controller. Parameters θ of the
+controller are updated with the reward r. r is also shaped by information maximization about the controller’s internal belief
+of the model, which is designed to guide the search process (shown as the green line). Good past experiences evaluated by
+the reward function are stored in replay buffers for future self-imitations (shown as the blue line).
+
+
+define the outlier detection model and the unified optimization       the past good experience and enhance the sample efficiency.
+problem of automated outlier detection as follows.                    An overview of AutoOD is given in Fig. 1.
+Outlier Detection Model: The model of outlier detection
+                                                                      A. Search Space Design
+consists of three key components: the neural network architec-
+ture A of AutoEncoder, the definition-hypothesis H of outlier            Because there is a lack of intrinsic search space for outlier
+assumption, and the loss function L. We represent the model           detection tasks, here we design the search space for the Deep
+as a triple (A, H, L).                                                AutoEncoder based algorithms, which is composed of global
+Automated Outlier Detection: Let the triple (A, H, L) denote          settings for the whole model, and local settings in each layer
+the search space of outlier detection models, where A denotes         independently. Formally, we have:
+the architecture subspace, H denotes the definition-hypothesis
+subspace, and L denotes the loss functions subspace. Given               A = {f 1 (·), ..., f N (·), g 1 (·), ..., g N (·)},
+training set Dtrain and validation set Dvalid , we aim to find           f i (x; ωi ) = ACT(NORMA(POOL(CONV(x))),
+the optimal model (A? , H ? , L? ) to minimize the objective             g i (x; ωi ) = ACT(NORMA(UPPOOL(DECONV(f (x)))),
+function J as follows:                                                   score = DIST(g(f (x; ω)), x) + DEFINEREG(f (x; ω)),
+                                                                                                                                   (2)
+  (A? , H ? , L? ) =     arg min J(A(ω), H, L, Dtrain , Dvalid ),     where x denotes the set of instances as input data, and ω
+                       A∈A,H∈H,L∈L
+                                                         (1)          denotes the trainable weight matrix. The architecture space
+where ω denotes the weights well trained on architecture A.           A contains N encoder-decoder layers. f (·) and g(·) denote
+J denotes the loss on Dvalid using the model trained on the           encoder and decoder functions, respectively. ACT(·) is the
+Dtrain with definition-hypothesis H and loss function L.              activation function set. NORMA denotes the normalization
+                                                                      functions. POOL(·) and UPPOOL(·) are pooling methods.
+                     III. P ROPOSED M ETHOD                           CONV(·) and DECONV(·) are convolution functions. As we
+                                                                      discussed in the Section II (A), the encoder-decoder based out-
+   In this section, we propose an automated outlier detection         lier score score contains two terms: a reconstruction distance
+framework to find the optimal neural network model for a              and an outlier regularizer. DIST(·) is the metric to measure the
+given dataset. A general search space is designed to include          distance between the original inputs and the reconstruction
+the neural architecture hyperparameters, definition-hypothesis,       results. DEFINEREG(·) acts as an regularizer to introduce
+and objective functions. To overcome the curse of local               the definition-hypothesis from H. We revisit and extract the
+optimality under certain unstable search circumstances, we            outlier detection hypotheses and their mathematical formulas
+propose a curiosity-guided search strategy to improve search          from state-of-the-art approaches as shown in the Table I. We
+effectiveness. Moreover, we introduce an experience replay            decompose the search space defined in Eq. 2 into the following
+mechanism based on self-imitation learning to better exploit          8 classes of actions:
+    Definitions H     Regularizer Equations
+                                                                                                                                                                                                  •           Batch
+                                                                                                      Definition hypothesis                                                      •      Sigmoid •           Instance                  •   Channel
+                                                                     −1
+                                                                                    
+                                         exp − 1 f xi ;ω −µ̂k T Σ̂                                                                                                                                                                      •   Kernel size
+                                                                             
+                                                                        f xi ;ω −µ̂k                                                                                               •      ReLU    •           No
+    Density [16]
+                            PK
+                      − log         φ̂         2                    k                  
+                             k=1 k                                                                                                                                                •      Tanh
+                                                                                        
+                                                                                                                                                                                                                          •   Pooling type
+                                                            r
+
+
+
+                                                                                                                Regularizer
+                                                                                        
+                                                              2π Σ̂k                                                                                                               •      …                               •   Kernel size                 ACT NORMA POOL CONV
+                                                                 −1 −1
+                                                                2
+                                               1+ f xi ;ω −µj
+
+
+
+                                                                                                                               Reconstruction    Deconvolution   Deconvolution                            Normalization                                                Normalization
+                                                                                               Loss/
+
+                                                                                                                                                                                                                                            Convolution                                            Convolution
+                      P P                                               
+
+
+                                                                                                                                                                                             Activation                                                   Activation
+     Cluster [14]       i   j pij log pij  P 
+                                                                        
+
+                                                                                                                                                                                                                                                                                                                  Input x
+                                                                   2 −1 
+                                                                                                                                                                                                                              Pooling                                                    Pooling
+                                                                     
+
+                                                                                                                                                                                 Latent
+                                                            
+                                              j 1+ f xi ;ω −µj                                              +
+
+                                                                                            Outlier score
+                                        n                          o
+                      R2 +     n                            2 − R2
+                            P                        
+    Centroid [17]              i=1 max 0, f xi ; ω − c
+
+
+                                                                                                                Distance
+                      1 Pn                          2
+Reconstruction [28]
+                      n    i=1 g f xi ; ω − xi 2
+
+                                                                                                                                                g! (#) g " (#)
+TABLE I: The set of four representative outlier detection                                                                                                                                                             f " (#)                                                      f ! (#)
+                                                                                                       Distance measurement
+hypotheses, where f (·) and g(·) denote encoder and decoder
+functions, respectively.                                                                    Fig. 2: An example of the search space in AutoOD with two
+                                                                                            layers, which is composed of global settings for the whole
+                                                                                            model (blue and purple parts), and local settings in each layer
+  Global Settings:
+                                                                                            (red and green parts), respectively. All building blocks are
+•  Definition-hypothesis determines the way to define
+                                                                                            wired together to form a direct acyclic graph.
+   the “outliers”, which acts as a regularization term in the ob-
+   jective functions. We consider density-based, cluster-based,
+   centroid-based, and reconstruction-based assumptions, as                                 neural network. We use the controller to generate a sequence of
+   shown in Table I.                                                                        actions for the child model. The whole process can be treated
+• Distance measurement stands for the matrix measur-                                        as a reinforcement learning problem with an action a1:T , and
+   ing the distance for the reconstruction purpose, including                               a reward function r. To find the optimal model, we ask our
+   l1 , l2 , l2,1 norms, and the structural similarity (SSIM).                              controller to maximize its expected reward r, which is the
+  Local Settings in Each Layer:                                                             expected performance in the validation set of the child models.
+• Output channel is the number of channels produced by                                         There are two sets of learnable parameters: one of them is
+   the convolution operations in each layer, i.e., 3, 8, 16, 32,                            the shared parameters of the child models, denoted by ω, and
+   64, 128, and 256.                                                                        the other one is from the LSTM controller, denoted by θ. ω
+• Convolution kernel denotes the size of the kernel                                         is optimized using stochastic gradient descent (SGD) with the
+   produced by the convolution operations in each layer, i.e.,                              gradient ∇ω as:
+   1 × 1, 3 × 3, 5 × 5, and 7 × 7.
+• Pooling type denotes the type of pooling in each layer,                                                                     ∇ω Em∼π(m;θ) [L(m; ω)] ≈ ∇ω L(m, ω),                                                                                                                                               (3)
+   including the max pooling and the average pooling.                                       where child model m is sampled from the controller’s actions
+• Pooling kernel denotes the kernel size of pooling
+                                                                                            π(m; θ), L(m, ω) is the loss function composed from the
+   operations in each layer, i.e., 1 × 1, 3 × 3, 5 × 5, and 7 × 7.s                         search space above, computed on a minibatch of training data.
+• Normalization type denotes the normalization type
+                                                                                            The gradient is estimated using the Monte Carlo method.
+   in each layer, including three options: batch normalization,                                Since the reward signal r is non-differentiable, to maximize
+   instance normalization, and no normalization.                                            the expected reward r, we fix ω and apply the REINFORCE
+• Activation function is a set of activation functions
+                                                                                            rule [29] to update the controller’s parameters θ as:
+   in each layer, including Sigmoid, Tanh, ReLU, Linear,
+   Softplus, LeakyReLU, ReLU6, and ELU.                                                                                       ∇θ EP (a1:t ;θ) [r∇θ log P (at |a1:t−1 ; θ)],                                                                                                                                      (4)
+   Thus, we use a (6N + 2) element tuple to represent the                                   where r is computed as the performance on the validation
+model, where N is the number of layers in the encoder-                                      set, rather than on the label-free training set. We define the
+decoder-wise structure. Our search space includes an exponen-                               reward r as the detection accuracy of the sampled child model.
+tial number of settings. Specifically, if the encoder-decoder cell                          We also adopt different evaluation metrics, including AUROC,
+has N layers and we allow action classes as above, it provides                              AUPR, and RPRO in the experiment section. An empirical
+4 × 4 × (7 × 4 × 2 × 4 × 3 × 8)N possible settings. Suppose                                 approximation of the Eq. 4 is:
+we have a N = 6, the number of points in our search space is
+                                                                                                                                                n                T
+3.9e+23, which requires an efficient search strategy to find an                                                                  1 XX
+                                                                                                                L=                      (rk − b)∇θ log P (at |a1:t−1 ; θ),                                                                                                                                       (5)
+optimal model out of the large search space. Fig. 2 illustrates                                                                  n  t=1         k=1
+an example of the proposed search space in AutoOD.
+                                                                                            where n is the number of different child models that the
+B. Curiosity-guided Search                                                                  controller samples in one batch and T is the number of tokens.
+  We now describe how to search the optimal model within                                    b acts as a baseline function to reduce the estimate variance.
+the given search space. Inspired by the recent NAS work,                                       1) Curiosity-driven Exploration: Despite being widely uti-
+the search strategy is considered as a meta-learning process.                               lized due to search efficiency, weight sharing approaches are
+A controller is introduced to explore a given search space                                  roughly built on empirical experiments instead of solid theo-
+by training a child model to get an evaluation for guiding                                  retical ground [24]. The unfair bias will make the controller
+exploration [22]. The controller is implemented as a recurrent                              misjudge the child-model performance: those who have better
+initial performance with similar child models are more likely            The denominator can be computed through the integral:
+to be sampled. In the meanwhile, due to the imbalanced label                                       Z
+distribution in outlier detection tasks, it is easy to make the                   p(at |a1:t−1 ) =   p(at |a1:t−1 ; θ)p(θ)dθ.             (9)
+                                                                                                       Θ
+controller fall into local optima.
+   To address these problems, AutoOD builds on the theory                As controllers are highly expressive parametrized LSTM net-
+of curiosity-driven exploration [30], aiming to encourage the            works, which are usually intractable as high-dimensionality.
+controller to seek out regions in the searching spaces that              Instead of calculating the posterior p(θ|Dtrain ) for a train-
+are relatively unexplored. It brings us a typical exploration-           ing dataset Dtrain . We approximate the posterior through an
+exploitation dilemma to guide the controller.                            alternative probability densities over the latent variables θ
+   Bayesian reinforcement learning [31], [32] offers us a for-           as q(θ), by minimizing the Kullback-Leibler(KL) divergence
+mal guarantees as coherent probabilistic model for reinforce-            DKL [q(θ) || p(θ)]. We use D instead of Dtrain in the following
+ment learning. It provides a principled framework to express             parts of this subsection for brevity.
+the classic exploration-exploitation dilemma, by keeping an                                            |Φ|
+                                                                                                       Y
+explicit representation of uncertainty, and selecting actions that                            q(θ) =         N(θi |µi ; σi2 ).           (10)
+are optimal with respect to a version of the problem that incor-                                       i=1
+porates this uncertainty [32]. Here, instead of a vanilla RNN,           q(θ) is given by a Gaussian distribution, with µ as the
+we use a Bayesian LSTM as the structure of the controller                Gaussian’s mean vector and σ as the covariance matrix.
+to guide the search. The controller’s understanding of the                  Once minimized the KL divergence, q(·) would be the
+search space is represented dynamically over the uncertainty             closest approximation to the true posterior. Let log p(D|θ)
+of the parameters of the controller. Assuming a prior p(θ), it           be the log-likelihood of the model. Then, the network can
+maintains a distribution prior over the controller’s parameters          be trained by minimizing the variational free energy as the
+through a distribution over θ. The controller models the actions         expected lower bound:
+via p(at |a1:t ; θ), paratetrized by θ. According to curiosity-
+                                                                           L[q(θ), D] = −Eθ∼q(·) log p(D|θ) + DKL q(θ) || p(θ) ,
+                                                                                                                               
+driven exploration [30], the uncertainty about the controller’s
+                                                                                                                                  (11)
+dynamics can be formalized as maximizing the information:
+                                                                       which can be approximated using N Monte Carlo samples
+  I(at ; θ|a1:t−1 ) = Eat ∼P (·|a1:t−1 ) DKL [p(θ|a1:t−1 ) || p(θ)] ,    from the variational posterior with N samples drawn according
+                                                                   (6)   to θ ∼ q(·):
+where the KL divergence can be interpreted as information                               N
+                                                                                        X
+gain, which denotes the mutual information between the                   L[q(θ), D] ≈         − log p(D|θ(i) ) + log q(θ(i) ) − log p(θ(i) ).
+controller’s new belief over the model to the old one.                                  i=1
+   Thus, the information gain of the posterior dynamics dis-                                                                         (12)
+tribution of the controller can be approximated as an intrinsic             3) Posterior Sharpening: We discuss how to derive a
+reward, which captures the controller’s surprise in the form             distribution q(θ|D) to improve the gradient estimates of
+of a reward function. We can also use the REINFORCE rule                 the intractable likelihood function p(D), which is related to
+to approximate planning for maximal mutual information by                Variational AutoEncoders (VAEs) [34]. Inspired from strong
+adding the intrinsic reward along with the external reward               empirical evidence and extensive work on VAEs, the “sharp-
+(accuracy on the validation set) as a new reward function.               ened” posterior yields more stable optimization. We now use
+It can also be interpreted as a trade-off between exploitation           posterior sharpening strategy to benefit our search process.
+and exploration as:                                                         The challenging part of modelling the variational posterior
+                                                                         q(θ|D) is the high dimensional θ ∈ Rd , which makes the mod-
+         rnew (at ) = r(at ) + ηDKL [p(θ|a1:t−1 ) || p(θ)],       (7)    elling unfeasible. Given the first term of the loss − log p(D|θ)
+where η ∈ R+ is a hyperparameter controlling the urge to                 is differentiable with respect to θ, we propose to parameterize
+explore. However, it is generally intractable to calculate the           q as a linear combination of θ and − log p(D|θ). Thus, we can
+posterior p(θ|a1:t−1 ) in Eq. 7.                                         define the hierarchical posterior of the form in Eq. 10:
+                                                                                                    Z
+   2) Variational Bayes-by-Backprop: In this subsection, we                               q(θ|D) = q(θ|φ, D)q(φ)dφ,                  (13)
+propose a tractable solution to maximize the information gain
+objective presented in the previous subsection. To learn a                   q(θ|φ, D) = N(θ|φ − η ∗ −∇φ log p(D|φ), σ 2 I)              (14)
+probability distribution over network parameters θ, we propose
+a practical solution through a back-propagation compatible               with µ, σ ∈ R , and q(φ) = N(φ|µ, σ) as the same setting
+                                                                                        d
+
+algorithm, bayes-by-backprop [31], [33].                                 in the standard variational inference method. η ∈ Rd can be
+   In Bayesian models, latent variables are drawn from a                 treated as a per-parameter learning rate.
+prior density p(θ). During inference, the posterior distribution            In the training phrase, we have θ ∼ q(θ|D) via ancestral
+p(θ|x) is computed given a new action through Bayes’ rule:               sampling to optimise the loss as:
+                                 p(θ)p(at |a1:t−1 ; θ)                   Lexplore = L(µ, σ, η) = ED [Eq(φ)q(θ|φ,D) [L(D, θ, φ|µ, σ, η)]]
+              p(at |a1:t−1 ) =                         .          (8)                                                               (15)
+                                    p(at |a1:t−1 )
+Algorithm 1 Automated Outlier Detection                                     from historical episodes into experience replay buffers [35]:
+ 1: Input: Input datasets Dtrain , Dvalid , and search space S.             B = (a1:t , ra ), where (a1:t and ra ) are the actions and the
+ 2: Output: Optimal model with the best performance.                        corresponding reward. To exploit good past experiences, we
+ 3: Initialize parameter θ, ω;                                              update the experience replay buffer for child models with
+ 4: Initialize replay buffer B ← ∅;
+ 5: for each iteration do
+                                                                            better rewards, and amplify the contribution from them to the
+ 6:    Perform curiosity-guided search via a LSTM controller                gradient of θ. More specifically, we sample child models from
+ 7:    for each step t do                                                   the replay buffer using the clipped advantage (r − b)+ , where
+ 8:       Sample an action at ∼ π(a1:t−1 ; θ);                              the rewards r in the past experiences outperform the current
+ 9:       ω ← ω − η∇ω Eat ∼π(a1:t−1 ;θ) [L(a1:t−1 ; ω)];         // Eq. 3   baseline b. Comparing with the Eq. 5, the objective to update
+10:       θ ← θ − ηLexplore (Dtrain , θ) ;                    // Eq. 15
+11:       rnew (at ) ← r(at ) + ηDKL [p(θ|a1:t−1 ) || p(θ)]; // Eq. 7       the controller’s parameter θ through the replay buffer is:
+12:       Update controller via the new reward rnew (at ); // Eq. 4
+13:       if the performance of at on Dval outperforms the actions
+          stored in B then                                                      ∇θ Ea1:t ∼πθ ,b∼B [− log πθ (at |a1:t−1 ) (ra − b)+ ].   (18)
+14:         B ← {a, r} ∪ B; Update replay buffer;
+15:      end if                                                             Then, an empirical approximation of the Eq. 18 is:
+16:   end for                                                                              n   T
+17:   Perform self-imitation learning                                                  1 XX
+                                                                             Lreplay =        ∇θ − log πθ (at |a1:t−1 ) (ra − b)+ , (19)
+18:   for each step t do                                                               n  t=1
+                                                                                         k=1
+19:      Sample a mini-batch {a, r} from B;
+20:      ω ← ω − η∇ω Eat ∼π(a1:t−1 ;θ) [L(a1:t−1 ; ω)];         // Eq. 3    where n is the number of different child models that the
+21:      θ ← θ − ηLreplay (Dvalid , θ);                        // Eq. 19    controller samples in one batch and T is the number of tokens.
+22:   end for                                                                  Overall, the joint optimization process is specified in Algo-
+23: end for
+                                                                            rithm 1, which consists of two phrases: the curiosity-guided
+                                                                            search process and the self-imitation learning process. The
+with L(D, θ, φ|µ, σ, η) given by:                                           optimal model with the best performance on the validation
+                                                                            set is utilized for the outlier detection tasks.
+  L(D, θ, φ|µ, σ, η) = − log p(D|θ) + KL[q(θ|φ, D) || p(θ|φ)]
+                          1                                                                        IV. E XPERIMENTS
+                       + KL[q(φ) || p(φ)],
+                         C                                                    In this section, we conduct extensive experiments to answer
+                                                          (16)              the following four research questions.
+ where the constant C is the number of truncated sequences.
+                                                                            • Q1: How effective is AutoOD compared with state-of-the-
+   Thus, we turn to deriving the training loss function for
+                                                                              art handcrafted algorithms?
+posterior sharpening. With the discussion above, we assume
+                                                                            • Q2: Whether or not the two key components of AutoOD,
+aR hierarchical prior for the parameters such that p(D) =
+                                                                              i.e., curiosity-guided search and experience replay, are
+   p(D|θ)p(θ|φ)p(φ)dθdφ. Then, the expected lower bound on
+                                                                              effective in the search process?
+p(D) is defined as follows:
+                                                                            • Q3: Compared with random search, how effective is the
+    log p(D)                                                                  proposed search strategy?
+                                                                            • Q4: Does AutoOD have the potential to be applied in more
+        Z                           
+ = log      p(D|θ)p(θ|φ)p(φ)dθdφ                                              complicated real-world applications?
+                                     
+                    p(D|θ)p(θ|φ)p(φ)                             A. Datasets and Tasks
+ ⩾ Eq(φ,θ|D) log
+                         q(φ, θ|D)                                  We evaluate AutoOD on seven benchmark datasets for
+                                        
+                        p(D|θ)p(θ|φ)p(φ)                         instance-level  outlier sample detection and pixel-level defect
+ = Eq(θ|φ,D)q(φ) log
+                          q(θ|φ, D)q(φ)                          region  segmentation    tasks. We also conduct a case study on
+                                                            
+                                         p(θ|φ)           p(φ) the CAT [36] dataset.
+ = Eq(φ) Eq(θ|φ,D) log p(D|θ) + log                 + log
+                                        q(θ|φ, D)         q(φ) • MNIST [37]: An image dataset consists of handwritten
+          h
+ = Eq(φ) Eq(θ|φ,D) log p(D|θ) − KL[q(θ|φ, D) || p(θ|φ)]
+                                                                  digits. It has a training set of 60, 000 examples, and a test
+                        i                                           set of 10, 000 examples.
+    − KL[q(φ) || p(φ)] .                                         • Fashion-MNIST [38]: A MNIST-like dataset contains fash-
+
+                                                          (17)      ion product with a training set of 60, 000 examples and a
+                                                                    test set of 10, 000 examples. Each example is a 28 × 28
+C. Experience Replay via Self-Imitation Learning                    grayscale image associated with a label from 10 classes.
+   The goal of this subsection is to exploit the past good • CIFAR-10 [39]: A image dataset consists of 50, 000 training
+experiences for the controller to benefit the search process        images and 10, 000 test images in 10 different classes. Each
+by enhancing the sample efficiency, especially considering          example is a 32 × 32 3-channel image.
+there are only a limited number of negative samples in outlier • Tiny-ImageNet [40]: An image dataset consists of a subset
+detection tasks. In this paper, we propose to store rewards         of ImageNet images. It contains 10, 000 test images from
+   200 different classes. We downsample each image to the               language processing, and automatic speech. The outlier
+   size of 64 × 64.                                                     detection is performed based on the following assumption:
+• MVTec-AD [41]: A benchmark dataset relates to industrial              the correctly classified examples have greater maximum
+   inspection in the application of anomaly detection. It con-          softmax probabilities than those of erroneously classified
+   tains over 5000 high-resolution images divided into fifteen          and out-of-distribution examples.
+   categories in terms of different objects and textures. Each        • ODIN [43]: The pre-trained neural networks is reused
+   category comprises two parts: a training set of defect-free          to detect the out-of-distribution images. ODIN separates
+   images, as well as a test set composed of defect-free images         the softmax probability distributions between in- and out-
+   and the ones with various defects. We downsample each                of-distribution instance, by using temperature scaling and
+   image to size 224 × 224.                                             adding small perturbations on the image data.
+• CAT [36]: A cat dataset includes 10, 000 cat images. We             • AutoEncoder [44]: The structure of convolutional AutoEn-
+   downsample each image to size 224 × 224.                             coders is applied for unsupervised defect segmentation on
+• Gaussian Noise: A synthetic Gaussian noise dataset consists           image data. More specifically, it utilizes the loss function
+   of 1, 000 random 2D images, where the value of each pixel            based on structural similarity, and successfully examines
+   is sampled from an i.i.d Gaussian distribution with mean             inter-dependencies between local image regions to reveal
+   0.5 and unit variance. We further clip each pixel into the           the defective regions.
+   range [0, 1].                                                      • AnoGAN [45]: It is a deep convolutional generative adver-
+• Uniform Noise: A synthetic uniform noise dataset consists             sarial network used to identify the anomalous image data. It
+   of 1, 000 images, at which the value of each pixel is sampled        learns a manifold of normal anatomical variability, and maps
+   from an i.i.d uniform distribution on [0, 1].                        images to a latent space to estimate the anomaly scores.
+   For the instance-level outlier sample detection task, we           • Feature Dictionary [46]: It applies the convolutional neural
+use four benchmark datasets (i.e., MNIST [37], Fashion-                 networks and self-similarity to detect and localize anomalies
+MNIST [38], CIFAR-10 [39], and Tiny-ImageNet [40]), and                 in image data. More specifically, the abnormality degree of
+two synthetic noise datasets (i.e., Gaussian and Uniform).              each image region is obtained by estimating its similarity
+Synthetic noise datasets consist of 1, 000 random 2D images,            to a dictionary of anomaly-free subregions in a training set.
+where the value of each pixel is sampled from an i.i.d Gaussian       • Random Search [47], [48]: Instead of learning a policy
+distribution with mean 0.5 and unit variance. We further clip           to optimize the search progress, random search generates a
+each pixel into the range [0, 1], or an i.i.d uniform distri-           neural architecture randomly at each step. It has been widely
+bution on [0, 1]. Different datasets contain different classes          demonstrated that random search is a strong baseline hard
+of images. We manually injected outlier samples (a.k.a. out-            to be surpassed in NAS.
+of-distribution samples), which consists of images randomly
+sampled from other datasets. For all six datasets, we train an        C. Experiment Setup
+outlier detection model on the training set, which only contains         We train the child models on the training set under the
+in-distribution samples, and use a validation set with out-of-        outlier-free settings, and update the controller on the validation
+distribution samples to guide the search, and another test set        set via the reward signal. The controller RNN is a two-layer
+with out-of-distribution samples to evaluate the performance.         LSTM with 50 hidden units on each layer. It is trained with
+The contamination ratio in the validation set and the test set are    the ADAM optimizer with a learning rate of 3.5e − 4. Weights
+both 0.05. The train/validation/test split ratio is 6 : 2 : 2. Two    are initialized uniformly in [−0.1, 0.1]. The search process is
+state-of-the-art methods including MSP [42] and ODIN [43]             conducted for a total of 500 epochs. The size of the self-
+are used as baselines.                                                imitation buffer is 10. We use a Tanh constant of 2.5 and a
+   For the pixel-level defect region segmentation task, we use        sample temperature of 5 to the hidden output of the RNN
+a real-world dataset MVTec-AD [41]. MVTec-AD contains                 controller. We train the child models by utilizing a batch size
+high-resolution images with different objects and texture cat-        of 64 and a momentum of 0.9 with the ADAM optimizer. The
+egories. Each category comprises a set of defect-free training        learning rate starts at 0.1, and is dropped by a factor of 10 at
+images and a test set of images with various kinds of defects         50% and 75% of the training progress, respectively.
+and images without defects. We train the model on the defect-
+                                                                      D. Evaluation Metrics
+free training set, and split the whole test set into two halves for
+validation and testing. Three state-of-the-art methods including        We adopt the following metrics to measure the effectiveness:
+AutoEncoder [44], AnoGAN [45], and Feature Dictionary [46]            • AUROC [49] is the Area Under the Receiver Operating
+are used as baselines.                                                  Characteristic curve, which is a threshold-independent met-
+                                                                        ric [49]. The ROC curve depicts the relationship between
+B. Baselines                                                            TPR and FPR. The AUROC can be interpreted as the
+   We compare AutoOD with five state-of-the-art handcrafted             probability that a positive example is assigned a higher
+algorithms and the random search strategy.                              detection score than a negative example [50].
+• MSP [42]: The softmax probability distribution is used to           • AUPR [51] is the Area under the Precision-Recall curve,
+   detect the anomalies in tasks of computer vision, natural            which is another threshold-independent metric [51], [52].
+                           (a) In-distribution dataset: MNIST                                        (b) In-distribution dataset: Fashion-MNIST
+
+           OOD Dataset           AUROC                AUPR In         AUPR Out             OOD Dataset        AUROC            AUPR In          AUPR Out
+           Fashion-MNIST      99.9/97.9/97.9       99.9/99.7/99.6   100/90.5/91.0          MNIST           99.9/92.9/72.9    99.9/82.8/91.6    99.9/94.2/46.1
+           notMNIST           99.8/97.2/98.2       99.8/97.5/98.4   100/97.4/98.0          notMNIST        99.8/96.9/80.2    99.1/81.6/94.2    100/99.4/57.7
+           CIFAR-10           99.9/99.9/99.7       91.3/90.3/99.9   99.2/99.9/97.6         CIFAR-10        99.9/88.2/96.6    99.5/80.6/99.3    99.9/97.2/80.4
+           LSUN               99.9/99.9/99.8       99.9/96.8/100    99.9/99.2/99.0         LSUN            99.5/89.7/96.0    97.9/81.9/99.2    99.9/97.7/79.9
+           Tiny-ImageNet      99.9/99.4/99.6       99.8/99.6/99.9   99.8/96.8/97.5         Tiny-ImageNet   98.2/87.7/95.5    90.7/80.4/99.0    95.3/97.1/82.5
+           Gaussian           99.9/99.7/99.9        100/99.8/100     100/99.7/100          Gaussian        99.9/97.2/89.6   99.9/82.24/98.0    100/99.5/48.2
+           Uniform             100/99.9/100         100/99.9/100     100/99.9/100          Uniform         99.9/95.8/63.6    99.9/82.9/91.4    99.9/99.0/19.8
+
+                          (c) In-distribution dataset: CIFAR-10                                     (d) In-distribution dataset: Tiny-ImageNet
+
+           OOD Dataset           AUROC               AUPR In         AUPR Out             OOD Dataset         AUROC           AUPR In          AUPR Out
+           MNIST              100/98.4/99.9        100/99.4/100     100/89.4/99.4         MNIST            100/99.8/94.8    100/98.2/98.9     100/98.2/79.9
+           Fashion-MNIST      99.6/98.2/99.4       98.1/96.1/99.9   99.9/98.8/97.3        Fashion-MNIST    99.7/70.4/73.8   98.6/88.4/92.6    100/85.5/39.5
+           notMNIST           99.9/96.8/98.1       99.4/99.0/99.2   100/89.4/90.2         notMNIST         99.9/80.6/82.7   99.7/90.4/95.2    100/85.8/56.0
+           LSUN               80.0/75.2/85.6       81.2/73.1/83.5   85.8/73.3/85.1        CIFAR-10         86.7/82.9/58.0   95.8/75.3/85.7    89.1/75.3/28.2
+           Tiny-ImageNet      84.0/72.6/81.6       87.5/73.5/76.9   87.8/80.6/84.8        LSUN             88.6/74.2/55.6   92.7/99.5/86.7    93.9/99.5/18.7
+           Gaussian           99.9/86.3/98.8       99.9/90.5/99.1   99.3/77.0/97.9        Gaussian         99.9/97.0/95.4   100/98.0/99.0     99.9/94.8/80.5
+           Uniform            99.9/86.4/99.0       99.9/90.2/99.2   99.9/78.6/98.6        Uniform          100/96.0/87.5    100/97.4/96.8     100/99.3/62.8
+
+
+TABLE II: Performance comparison on instance-level outlier sample detection. The results from AutoOD and the two baselines
+MSP [42] and ODIN [43] are listed as AutoOD/MSP/ODIN. OOD: Out-of-distribution.
+
+
+                                                                            Feature      search framework of AutoOD, we represent its performance
+            Category       Our Model     AutoEncoder          AnoGAN
+                                                                           Dictionary
+                                                                                         by the best model found during the search process. In these
+              Carpet       0.69 / 0.92    0.38 / 0.59        0.34 / 0.54   0.20 / 0.72   experiments, we follow the setting in [42], [53]: Each model is
+Textures
+               Grid        0.89 / 0.94    0.83 / 0.90        0.04 / 0.58   0.02 / 0.59
+              Leather      0.81 / 0.92    0.67 / 0.75        0.34 / 0.64   0.74 / 0.87   trained on individual dataset Din , which is taken from MNIST,
+               Tile        0.26 / 0.94    0.23 / 0.51        0.08 / 0.50   0.14 / 0.73   Fashion-MNIST, CIFAR-10, and Tiny-ImageNet, respectively.
+               Wood        0.47 / 0.97    0.29 / 0.73        0.14 / 0.62   0.47 / 0.91   At test time, the test images from Din dataset can be viewed
+               Bottle      0.33 / 0.93    0.22 / 0.86        0.05 / 0.86   0.07 / 0.78   as the in-distribution (positive) samples. We sample out-
+               Cable       0.17 / 0.87    0.05 / 0.86        0.01 / 0.78   0.13 / 0.79   of-distribution (negative) images from another real-world or
+              Capsule      0.16 / 0.95    0.11 / 0.88        0.04 / 0.84   0.00 / 0.84
+              Hazelnut     0.46 / 0.97    0.41 / 0.95        0.02 / 0.87   0.00 / 0.72   synthetic noise dataset, after down-sampling/up-sampling and
+Objects
+             Metal Nut     0.30 / 0.88    0.26 / 0.86        0.00 / 0.76   0.13 / 0.82   reshaping their sizes as the same as Din .
+                Pill       0.30 / 0.92    0.25 / 0.85        0.17 / 0.87   0.00 / 0.68      As can be seen from Table II, in most of the test cases,
+               Screw       0.34 / 0.96    0.34 / 0.96        0.01 / 0.80   0.00 / 0.87
+             Toothbrush    0.60 / 0.90    0.51 / 0.83        0.07 / 0.90   0.00 / 0.77   the models discovered by AutoOD consistently outperform
+             Transistor    0.23 / 0.96    0.22 / 0.86        0.08 / 0.80   0.03 / 0.66   the handcrafted out-of-distribution detection methods with pre-
+               Zipper      0.20 / 0.88    0.13 / 0.77        0.01 / 0.78   0.00 / 0.76   trained models (ODIN [43]) and without pre-trained models
+TABLE III: Performance comparison on pixel-level defect                                  (MSP [42]). It indicates that AutoOD could achieve higher
+region segmentation. The results of RPRO and AUROC are                                   performance in accuracy, precision, and recall simultaneously,
+listed as RPRO/AUROC. Baseline results are directly collected                            with a more precise detection rate and fewer nuisance alarms.
+from the original paper [41].                                                               2) Performance on Defect Sample Detection: To further
+                                               .                                         answer question Q1, we test AutoOD on the pixel-level defect
+                                                                                         region segmentation task. The results from Table III show
+  The PR curve is a graph showing the precision=TP/(TP+FP)                               that AutoOD consistently outperforms the baseline methods
+  and recall=TP/(TP+FN) against each other. The metrics                                  by a large margin in terms of AUROC and RPRO. The
+  AUPR-In and AUPR-Out denote the area under the                                         higher AUROC demonstrates that the model found by AutoOD
+  precision-recall curve, where positive samples and negative                            precisely detects images with defect sections out of the positive
+  samples are specified as positives, respectively.                                      samples. The results also show that AutoOD has a better
+• RPRO [41] stands for the relative per-region overlap. It                               performance in RPRO. This indicates the search process of
+  denotes the pixel-wise overlap rate of the segmentations                               AutoOD helps the model to locate and represent the outlier
+  with the ground truth.                                                                 regions in negative images.
+                                                                                            Table IV illustrates the best architectures discovered by
+E. Results                                                                               AutoOD on both instance-level outlier sample detection and
+   1) Performance on Out-of-distribution Sample Detection:                               pixel-level defect region segmentation tasks.
+To answer the research question Q1, we compare Au-                                          3) Effectiveness of Curiosity-guided Search: To qualita-
+toOD with the state-of-the-art handcrafted algorithms for the                            tively evaluate the effectiveness of the curiosity-guided search
+instance-level outlier sample detection task using metrics AU-                           for research question Q2, we perform ablation and hyper-
+ROC, AUPR-In and AUPR-Out. Considering the automated                                     parameter analysis on Fashion-MNIST dataset with samples
+                    Actions                    MNIST         Fashion-MNIST     CIFAR-10       Tiny-ImageNet         MVTec-AD
+                    Definition hypothesis   reconstruction      cluster         centroid         reconstruction    reconstruction
+                    Distance measurement          l1             l2,1             l2,1                l2,1          l2,1 + SSIM
+                    Layer-1
+                      Output-channel             32                16              16                   16             32
+                      Convolution kernel        5×5              1×1             1×1                  5×5             1×1
+                      Pooling type              mean            average         average              average         average
+                      Pooling kernel            1×1              1×1             1×1                  1×1             3×3
+                      Normalization type         no                no              no                   no             no
+                      Activation function       ReLU            Sigmoid         Sigmoid               Linear       LeakyReLU
+                    Layer-2
+                      Output-channel              8               32               32                  32               32
+                      Convolution kernel        3×3             5×5              5×5                  3×3              5×5
+                      Pooling type             average           mean            mean                 mean             mean
+                      Pooling kernel            1×1             7×7              7×7                  7×7              5×5
+                      Normalization type         no               no               no                  no              batch
+                      Activation function       ELU             ReLU6           Sigmoid              Softplus          Tanh
+                    Layer-3
+                      Output-channel              8               16               16                16                 16
+                      Convolution kernel        7×7              1×1             1×1                7×7               1×1
+                      Pooling type             average          average         average            average             mean
+                      Pooling kernel            5×5              1×1             1×1                1×1               5×5
+                      Normalization type         no            instance         instance          instance           instance
+                      Activation function      ReLU6          LeakyReLU         Sigmoid          LeakyReLU             Tanh
+
+TABLE IV: The architectures discovered by AutoOD for MNIST, Fashion-MNIST, CIFAR-10, Tiny-ImageNet, and MVTec-AD.
+
+                                                                                                   (a) Curiosity-guided Search
+from CIFAR-10 as outliers. Specifically, we control the hyper-
+parameter η in Eq. 7 for illustration. Note that mathematical                          AUROC20          AUROC100      AUROC200      mean200    std200
+expression of η = 0 represents that there is no exploration.                η=0          85.27             96.23         96.51       90.01     0.093
+From Table V (a) we can observe that: (1) The absence of                   η=0.01        85.46             96.54         98.50       91.20     0.097
+exploration would negatively impact the final performance.                 η=0.1         85.46             96.93         98.41       91.84     0.131
+The AUROC after 200 epochs could drop 1.9%. (2) The cu-                                           (b) Experience Replay Buffer
+riosity guided explorations help the controller find the optimal
+model faster. The better performance could be achieved in                                               AUROC20      AUROC100       AUROC200
+the 20-th, 100-th epochs when the controller has a larger                              no buffer           85.43        96.57         98.00
+weight η on explorations. This indicates that curiosity-guided                       buffer size=5         88.05        97.12         98.04
+                                                                                    buffer size=10         87.44        97.70         98.12
+search is a promising way for exploring more unseen spaces.
+(3) Comparing AUROC between η = 0.01 and η = 0.1,                         TABLE V: Ablations and parameter analysis on Fashion-
+we observe that there is no significant increase in the final             MNIST (In-distribution: normal data) and CIFAR-10 (Out-of-
+performance after 200 epochs. This indicates that a higher                distribution: outliers). We report the performance of AutoOD
+rate of explorations can not always guarantee a higher per-               under different search strategies and hyper-parameter settings,
+formance. (4) If we treat the performance of the searched                 with 20th , 100th , and 200th iterations, respectively.
+result as Gaussian distributions, the standard deviations of the
+AutoOD’s performance keep increasing when η increases. This
+validates that the curiosity-guided search strategy increases the            5) Comparison Against Traditional NAS: Instead of ap-
+opportunity for the controller to generate child models in a              plying the policy gradient based search strategy, one can
+more diverse way.                                                         use random search to find the best model. Although this
+                                                                          baseline seems simple, it is often hard to surpass [47], [48].
+   4) Effectiveness of Experience Replay: To further answer               We compare AutoOD with random search to answer the
+the question Q2, we evaluate the effectiveness of the experi-             research question Q3. The quality of the search strategy can
+ence replay buffers, by altering the size of the replay buffers           be quantified by the following three metrics: (1) the average
+B in Eq. 19. Corresponding results are reported in Table V                performance of the top-5 models found so far, (2) the mean
+(b). The results indicate that the increase of the buffer size            performance of the searched models in every 20 epochs, (3)
+could enhance model performance after 200 epochs. We also                 the standard deviation of the model performance in every
+observe that the size of the buffer is sensitive to the final             20 epochs. From Fig. 3, we can observe that: Firstly, our
+performance, as better performance would be achieved in the               proposed search strategy is more efficient to find the well-
+20th, 100th epoch with a larger buffer size. This indicates that          performed models during the search process. As shown in
+self-imitation learning based experience replay is useful in the          the first row of Fig. 3, the performance of the top-5 models
+search process. Larger buffer size brings benefits to exploit             found by AutoOD consistently outperform the random search.
+past good experiences.                                                    The results also show that not only the best model of our
+                    MNIST                    Fashion-MNIST                            CIFAR-10                     Tiny-ImageNet
+          1                              1                                1                                 1
+
+
+AUROC
+        0.95                          0.95                             0.98
+                                                                                                         0.98
+                                       0.9                             0.96
+         0.9                          0.85                             0.94                              0.96           Random search
+        0.85                           0.8                             0.92                                             AutoOD
+        1.00                                                              1                                 1
+                                      0.95
+                                                                       0.98                              0.98
+                                       0.9
+Mean
+        0.90                                                           0.96
+                                      0.85                                                               0.96
+                                                                       0.94
+        0.80                           0.8                             0.92                              0.94
+                                      0.75                              0.9                              0.92
+                                                                              ·10−2                             ·10−2
+                                      0.15                            8.00                               8.00
+        0.20                                                          6.00                               6.00
+                                      0.10
+Std     0.10
+                                                                      4.00                               4.00
+                                      0.05                            2.00                               2.00
+        0.00                          0.00                            0.00                               0.00
+               50   100   150   200          50   100   150   200               50     100   150   200            50    100   150   200
+                    Epoch                         Epoch                               Epoch                             Epoch
+Fig. 3: Performance comparison with random search. (Top row) The progression of average performance in top-5 models for different search
+methods, i.e., AutoOD (red lines with circles), and random search (blue lines with asterisks). (Middle row and bottom row) The mean and
+standard deviation of model performances in every 20 epochs along the search progress.
+
+
+search strategy is better than that of random search, but            target salient object, in order to eliminate the negative effect
+also the improvement of average top models is much more              caused by background noises and other objects in the same im-
+significant. This indicates that AutoOD explores better models       age. In our experiment, we introduce s from DeepLabV3 [54],
+faster than the random search. Secondly, there is a clear            which is pre-trained on PASCAL VOC 2012 [55].
+increasing tendency in the mean performance of AutoOD,               Feature augmentation via gradient-based localization. In
+which can not be observed in random search. It indicates that        order to amplify the contribution of the irrelevance features
+our search controller can gradually find better strategies from      from the salient object, we introduce the feature augmen-
+the past search experiences along the learning process, while        tation map to re-weight the reconstruction result. We also
+the random search’s controller has a relatively low chance to        introduce a coarse localization map to highlight the irrele-
+find a good child model. Thirdly, compared with the random           vance regions in the image from an interpretability perspec-
+search, there is a clear dropping of standard deviation along        tive. Feature importance is reflected as gradients signal via
+the search process. It verifies that our search strategy provides    backpropagation. Here, we follow the interpretation method
+a more stable search process.                                        from Grad-CAM [56], which designed to highlight impor-
+                                                                     tant features, and pre-trained on VGG-16 [57]. The feature
+F. Case Study                                                        augmentationmap is defined      as opposite to the Grad-CAM:
+                                                                                                 
+                                                                       1
+                                                                          P P              ∂yi
+   To answer the research question Q4, we provide further            mn      m    n 1 − ∂Amn .
+analysis for the pixel-level defect region segmentation task, to         After the two steps above, we reweight the reconstructions:
+get some insights about how to further improve the detection                                                                  
+performance in more complicated real-world settings. To make                                       2   1 XX              ∂yi
+                                                                     αi = kg (f (xi ; W)) − xi k2                   1−              si
+the outlier sections and the rest sections more distinguishable                                       mn m n            ∂Amn
+in the latent space, we use the reconstruction error to learn                                                                    (20)
+intrinsic representation for positive samples to extract common      where xi ∈ Rm×n is a training sample and yi is its tar-
+patterns. Yet, it is hard to directly apply AutoOD into more         get object class. f (·), g(·) denotes encoder-decoder structures
+complicated, real-world settings. Due to the pure data-driven        produced by AutoOD, A denotes the feature map activation
+strategy, the reconstruction based denoters might be misled by       of a latent layer. We use a real-world dataset CAT [36] for
+background noises, other objects, or irrelevance features. We        illustration. We find the optimal model via AutoOD and get the
+hereby introduce two strategies into AutoOD for regularization       pixel-level reconstruction map. Then, we further refine the map
+without increasing the model complexity.                             via saliency recognition and feature localization strategies. As
+Saliency refinement via target object recognition. We intro-         can be seen from Fig. 4, AutoOD achieves better visualization
+duce a mask map s into the reconstruction based denoters from        results after applying the reweighting tricks discussed above.
+pre-trained models. It is used for localizing and identifying        We also observe that the model can successfully identify the
+                                   Relevance Features                      Irrelevance Features
+
+
+
+
+                                                        Segmentation Map
+
+
+
+
+                                                        Reconstruction Errors
+
+
+
+
+Fig. 4: A case study of outlier segmentation. The pixel-level reconstruction is regularized by conducting pixel-level
+collaboratively with the results of feature localization and saliency recognition. AutoOD accurately identifies the outlier regions
+(cola bin and collar) of the target object (cat) in the first two images, and treats the third target object (cat) as outlier-region-free.
+
+
+outlier regions (cola bins, collars) within the salient objects            space to keep consistent with previous works. Yet the contri-
+(kitties). In the meanwhile, it reduces the effect caused by the           bution of AutoOD in search space is to design a hierarchical,
+background noises and irrelevant objects.                                  general-purpose search space, including global settings for the
+                                                                           whole model, and local settings in each layer independently.
+                      V. R ELATED W ORK                                    Moreover, our proposed search space not only covers the
+                                                                           hyperparameters as architecture configurations, such as the
+   In this section, we review the related work on Neural
+                                                                           size of convolutional kernels and filters in each layer, but also
+Architecture Search (NAS). Recently, NAS has attracted in-
+                                                                           incorporates the definition-hypothesis and its corresponding
+creasing research interests. Its goal is to find the optimal
+                                                                           objective function.
+neural architecture in a predefined search space to maximize
+the model performance on a given task. Designing a NAS
+algorithm requires two key components: the search space and                   The search strategy focuses on how to explore the
+the search strategy (optimization algorithm) [58].                         search space. Recent approaches include reinforcement learn-
+   The search space defines which architectures can be repre-              ing (RL) [19], [22], [63], Bayesian optimization [64], and
+sented in principles. The existing work of search space follows            gradient-based methods [65]–[67]. Although these methods
+two trends: the macro and micro search [22], [59], [60]. The               have improved upon human-designed architectures, directly
+macro search provides an exhaustive-architecture search space              borrowing existing NAS ideas from image classification to
+to encourage the controller to explore the space and discover              outlier detection will not work. Due to the imbalanced data,
+novel architectures, while the micro search inductively limits             the search process becomes more unstable in outlier detection
+the search space to accelerate the search process. The choice              tasks [23]. As an internal mechanism in the traditional NAS,
+and the size of the search space determine the difficulty                  weight sharing, also introduces the inductive bias in the
+of the optimization problem. Yet, even for the case of the                 search process which intensifies the tendency [24]. Weight
+search space based on a single cell, it is still a challenging             sharing [22] is proposed to transfer the well-trained weight
+problem due to the discrete search space and the curse of                  before to a sampled architecture, to avoid training the offspring
+high-dimensionality (since more complex models tend to per-                architecture from scratch. Recent research has validated that
+form better, resulting in more design choices) [58]. Thereby,              the weight sharing mechanism makes the architectures who
+incorporating prior knowledge about the typical properties of              have better initial performance with similar structures more
+architectures well-suited for a task can significantly reduce              likely to be sampled [24], which leads to misjudgments of the
+the size of the search space and simplify the search process.              child model’s performance. Our work builds upon RL-based
+[48] has validated the importance of the search space in the               method, which uses a recurrent neural network controller to
+search process. With extensive experimental reproducibility                choose blocks from its search space. Beyond that, we pro-
+studies, a task-tailored, carefully-designed search space plays            pose a curiosity-guided search strategy to stabilize the search
+a more important role than the other search strategies. Re-                process via encouraging the controller to seek out unexplored
+cent works have proposed tailored search spaces with their                 regions in the search space. Our search strategy formulates the
+applications, including image segmentation [61], adversarial               search process as a classical exploration-exploitation trade-off.
+training [62], and augmentation strategies [21]. To the best               On one hand, it is encouraged to find the optimal child model
+of our knowledge, our proposed AutoOD describes the first                  more efficiently; on the other hand, it avoids the premature
+attempt to design the search space specifically customized                 convergence to a sub-optimal region due to the inductive bias
+to the outlier detection task. AutoOD uses the micro search                or insufficient search.
+                          VI. C ONCLUSIONS                                        [19] B. Zoph and Q. V. Le, “Neural architecture search with reinforcement
+                                                                                       learning,” ICLR, 2016.
+   In this paper, we investigated a novel and challenging                         [20] T. Elsken, J. H. Metzen, and F. Hutter, “Neural architecture search: A
+problem of automated deep model search for outlier detection.                          survey,” JMLR, 2019.
+Different from the existing Neural Architecture Search meth-                      [21] E. D. Cubuk, B. Zoph, D. Mane, V. Vasudevan, and Q. V. Le, “Autoaug-
+                                                                                       ment: Learning augmentation strategies from data,” in CVPR, 2019.
+ods that focus on discovering effective deep architectures for                    [22] H. Pham, M. Guan, B. Zoph, Q. Le, and J. Dean, “Efficient neural
+supervised learning tasks, we proposed AutoOD, an automated                            architecture search via parameter sharing,” in ICML, 2018.
+unsupervised outlier detection framework, which aims to find                      [23] G. Swirszcz, W. M. Czarnecki, and R. Pascanu, “Local minima in
+                                                                                       training of neural networks,” arXiv preprint arXiv:1611.06310, 2016.
+an optimal neural network model within a predefined search                        [24] X. Chu, B. Zhang, R. Xu, and J. Li, “Fairnas: Rethinking evaluation
+space for a given dataset. AutoOD builds on the theory                                 fairness of weight sharing neural architecture search,” arXiv preprint
+of curiosity-driven exploration and self-imitation learning.                           arXiv:1907.01845, 2019.
+It overcomes the curse of local optimality, the unfair bias,                      [25] G. Bender, H. Liu, B. Chen, G. Chu, S. Cheng, P.-J. Kindermans, and
+                                                                                       Q. V. Le, “Can weight sharing outperform random architecture search?
+and inefficient sample exploitation problems in the traditional                        an investigation with tunas,” in CVPR, 2020.
+search methods. We evaluated the proposed framework us-                           [26] M. M. Breunig, H.-P. Kriegel, R. T. Ng, and J. Sander, “Lof: identifying
+ing extensive experiments on eight benchmark datasets for                              density-based local outliers,” in ACM sigmod record, 2000.
+                                                                                  [27] Y. Chen, X. S. Zhou, and T. S. Huang, “One-class svm for learning in
+instance-level outlier sample detection and pixel-level defect                         image retrieval,” in ICIP, 2001.
+region segmentation. The experimental results demonstrated                        [28] C. Zhou and R. C. Paffenroth, “Anomaly detection with robust deep
+the effectiveness of our approach.                                                     autoencoders,” in KDD, pp. 665–674, 2017.
+                                                                                  [29] R. J. Williams, “Simple statistical gradient-following algorithms for
+                              R EFERENCES                                              connectionist reinforcement learning,” Machine learning, 1992.
+                                                                                  [30] Y. Sun, F. Gomez, and J. Schmidhuber, “Planning to be surprised:
+ [1] K. Padmanabhan, Z. Chen, S. Lakshminarasimhan, S. S. Ramaswamy,                   Optimal bayesian exploration in dynamic environments,” in AGI, 2011.
+     and B. T. Richardson, “Graph-based anomaly detection,” Practical             [31] M. Fortunato, C. Blundell, and O. Vinyals, “Bayesian recurrent neural
+     Graph Mining with R (2013), 2013.                                                 networks,” ICLR, 2017.
+ [2] Y. Lin, Z. Chen, C. Cao, L.-A. Tang, K. Zhang, W. Cheng, and Z. Li,          [32] M. Ghavamzadeh, S. Mannor, J. Pineau, A. Tamar, et al., “Bayesian
+     “Collaborative alert ranking for anomaly detection,” in CIKM, 2018.               reinforcement learning: A survey,” Foundations and Trends® in Machine
+ [3] Y. Li, N. Liu, J. Li, M. Du, and X. Hu, “Deep structured cross-modal              Learning, 2015.
+     anomaly detection,” in 2019 International Joint Conference on Neural         [33] C. Blundell, J. Cornebise, K. Kavukcuoglu, and D. Wierstra, “Weight
+     Networks (IJCNN), pp. 1–8, IEEE, 2019.                                            uncertainty in neural networks,” in ICML, 2015.
+ [4] V. Chandola and et al, “Anomaly detection: A survey,” CSUR, 2009.            [34] D. P. Kingma and M. Welling, “Auto-encoding variational bayes,” arXiv
+ [5] W. Cheng, K. Zhang, H. Chen, G. Jiang, Z. Chen, and W. Wang,                      preprint arXiv:1312.6114, 2013.
+     “Ranking causal anomalies via temporal and dynamical analysis on             [35] J. Oh, Y. Guo, S. Singh, and H. Lee, “Self-imitation learning,” ICML,
+     vanishing correlations,” in KDD, 2016.                                            2018.
+ [6] T. Chen, L.-A. Tang, Y. Sun, Z. Chen, and K. Zhang, “Entity embedding-       [36] W. Zhang, J. Sun, and X. Tang, “Cat dataset.” https://archive.org/details/
+     based anomaly detection for heterogeneous categorical events,” in IJCAI,          CAT DATASET, 2009.
+     2016.                                                                        [37] Y. LeCun, L. Bottou, Y. Bengio, and P. Haffner, “Gradient-based learning
+ [7] B. Dong, Z. Chen, H. W. Wang, L.-A. Tang, K. Zhang, Y. Lin, Z. Li, and            applied to document recognition,” Proceedings of the IEEE, 1998.
+     H. Chen, “Efficient discovery of abnormal event sequences in enterprise
+                                                                                  [38] H. Xiao, K. Rasul, and R. Vollgraf, “Fashion-mnist: a novel image
+     security systems,” in CIKM, 2017.
+                                                                                       dataset for benchmarking machine learning algorithms,” arXiv preprint
+ [8] S. Wang, Z. Chen, D. Li, Z. Li, L.-A. Tang, J. Ni, J. Rhee, H. Chen, and
+                                                                                       arXiv:1708.07747, 2017.
+     S. P. Yu, “Attentional heterogeneous graph neural network: Application
+                                                                                  [39] A. Krizhevsky, G. Hinton, et al., “Learning multiple layers of features
+     to program reidentification,” in SDM, 2019.
+                                                                                       from tiny images,” tech. rep., Citeseer, 2009.
+ [9] J. Lin, E. Keogh, A. Fu, and H. Van Herle, “Approximations to magic:
+                                                                                  [40] J. Deng, W. Dong, R. Socher, L.-J. Li, K. Li, and L. Fei-Fei, “Imagenet:
+     Finding unusual medical time series,” in CBMS, 2005.
+                                                                                       A large-scale hierarchical image database,” in CVPR, 2009.
+[10] Z. Chen, W. Hendrix, and N. F. Samatova, “Community-based anomaly
+     detection in evolutionary networks,” J. Intell. Inf. Syst., 2012.            [41] P. Bergmann, M. Fauser, D. Sattlegger, and C. Steger, “Mvtec ad–a
+[11] Y. Li, X. Huang, J. Li, M. Du, and N. Zou, “Specae: Spectral autoen-              comprehensive real-world dataset for unsupervised anomaly detection,”
+     coder for anomaly detection in attributed networks,” in Proceedings of            in CVPR, 2019.
+     the 28th ACM International Conference on Information and Knowledge           [42] D. Hendrycks and K. Gimpel, “A baseline for detecting misclassified
+     Management, pp. 2233–2236, 2019.                                                  and out-of-distribution examples in neural networks,” ICLR, 2017.
+[12] X. Huang, Q. Song, Y. Li, and X. Hu, “Graph recurrent networks with          [43] S. Liang, Y. Li, and R. Srikant, “Enhancing the reliability of out-of-
+     attributed random walks,” in Proceedings of the 25th ACM SIGKDD                   distribution image detection in neural networks,” ICLR, 2017.
+     International Conference on Knowledge Discovery & Data Mining,               [44] P. Bergmann, S. Löwe, M. Fauser, D. Sattlegger, and C. Steger, “Improv-
+     pp. 732–740, 2019.                                                                ing unsupervised defect segmentation by applying structural similarity
+[13] N. Liu, Q. Tan, Y. Li, H. Yang, J. Zhou, and X. Hu, “Is a single                  to autoencoders,” arXiv preprint arXiv:1807.02011, 2018.
+     vector enough? exploring node polysemy for network embedding,” in            [45] T. Schlegl, P. Seeböck, S. M. Waldstein, U. Schmidt-Erfurth, and
+     Proceedings of the 25th ACM SIGKDD International Conference on                    G. Langs, “Unsupervised anomaly detection with generative adversarial
+     Knowledge Discovery & Data Mining, pp. 932–940, 2019.                             networks to guide marker discovery,” in IPMI, 2017.
+[14] X. Guo, X. Liu, E. Zhu, and J. Yin, “Deep clustering with convolutional      [46] P. Napoletano, F. Piccoli, and R. Schettini, “Anomaly detection in
+     autoencoders,” in NIPS, 2017.                                                     nanofibrous materials by cnn-based self-similarity,” Sensors, 2018.
+[15] S. Wang, Z. Chen, X. Yu, D. Li, J. Ni, L.-A. Tang, J. Gui, Z. Li, H. Chen,   [47] J. Bergstra and Y. Bengio, “Random search for hyper-parameter opti-
+     and S. P. Yu, “Heterogeneous graph matching networks for unknown                  mization,” JMLR, 2012.
+     malware detection,” in IJCAI, 2019.                                          [48] L. Li and A. Talwalkar, “Random search and reproducibility for neural
+[16] B. Zong and et al, “Deep autoencoding gaussian mixture model for                  architecture search,” arXiv preprint arXiv:1902.07638, 2019.
+     unsupervised anomaly detection,” ICLR, 2018.                                 [49] J. Davis and M. Goadrich, “The relationship between precision-recall
+[17] L. Ruff, R. Vandermeulen, N. Goernitz, L. Deecke, S. A. Siddiqui,                 and roc curves,” in ICML, 2006.
+     A. Binder, E. Müller, and M. Kloft, “Deep one-class classification,”        [50] T. Fawcett, “An introduction to roc analysis,” Pattern recognition letters,
+     in ICML, 2018.                                                                    2006.
+[18] D. Hendrycks, M. Mazeika, and T. Dietterich, “Deep anomaly detection         [51] C. D. Manning, C. D. Manning, and H. Schütze, Foundations of
+     with outlier exposure,” arXiv preprint arXiv:1812.04606, 2018.                    statistical natural language processing. 1999.
+[52] T. Saito and M. Rehmsmeier, “The precision-recall plot is more informa-
+     tive than the roc plot when evaluating binary classifiers on imbalanced
+     datasets,” PloS one, 2015.
+[53] T. DeVries and G. W. Taylor, “Learning confidence for out-of-
+     distribution detection in neural networks,” ICLR, 2018.
+[54] L.-C. Chen, G. Papandreou, F. Schroff, and H. Adam, “Rethinking
+     atrous convolution for semantic image segmentation,” arXiv preprint
+     arXiv:1706.05587, 2017.
+[55] M. Everingham, L. Van Gool, C. K. I. Williams, J. Winn, and A. Zisser-
+     man, “The PASCAL Visual Object Classes Challenge 2012 (VOC2012)
+     Results,” 2012.
+[56] R. R. Selvaraju, M. Cogswell, A. Das, R. Vedantam, D. Parikh, and
+     D. Batra, “Grad-cam: Visual explanations from deep networks via
+     gradient-based localization,” in ICCV, 2017.
+[57] K. Simonyan and A. Zisserman, “Very deep convolutional networks for
+     large-scale image recognition,” ICLR, 2015.
+[58] T. Elsken, J. H. Metzen, and F. Hutter, “Neural architecture search: A
+     survey,” JMLR, 2019.
+[59] Y. Li, D. Zha, N. Zou, and X. Hu, “Pyodds: An end-to-end outlier
+     detection system,” arXiv preprint arXiv:1910.02575, 2019.
+[60] Y. Li, D. Zha, P. Venugopal, N. Zou, and X. Hu, “Pyodds: An end-
+     to-end outlier detection system with automated machine learning,” in
+     Companion Proceedings of the Web Conference 2020, pp. 153–157,
+     2020.
+[61] C. Liu, L.-C. Chen, F. Schroff, H. Adam, W. Hua, A. L. Yuille, and
+     L. Fei-Fei, “Auto-deeplab: Hierarchical neural architecture search for
+     semantic image segmentation,” in CVPR, pp. 82–92, 2019.
+[62] X. Gong, S. Chang, Y. Jiang, and Z. Wang, “Autogan: Neural architec-
+     ture search for generative adversarial networks,” in ICCV, 2019.
+[63] H. Cai, L. Zhu, and S. Han, “Proxylessnas: Direct neural architecture
+     search on target task and hardware,” ICLR, 2018.
+[64] H. Jin, Q. Song, and X. Hu, “Auto-keras: An efficient neural architecture
+     search system,” in KDD, 2019.
+[65] H. Liu, K. Simonyan, and Y. Yang, “Darts: Differentiable architecture
+     search,” ICLR, 2019.
+[66] A. Brock, T. Lim, J. M. Ritchie, and N. Weston, “Smash: one-shot model
+     architecture search through hypernetworks,” ICLR, 2018.
+[67] C. Liu, B. Zoph, M. Neumann, J. Shlens, W. Hua, L.-J. Li, L. Fei-Fei,
+     A. Yuille, J. Huang, and K. Murphy, “Progressive neural architecture
+     search,” in ECCV, 2018.
+

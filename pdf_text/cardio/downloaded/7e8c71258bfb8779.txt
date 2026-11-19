@@ -1,0 +1,967 @@
+                                                                                                                                                                                            1
+
+
+
+
+                                                                Squeeze-and-Excitation Networks
+                                                  Jie Hu[0000−0002−5150−1003] Li Shen[0000−0002−2283−4976] Samuel Albanie[0000−0001−9736−5134]
+                                                                  Gang Sun[0000−0001−6913−6799] Enhua Wu[0000−0002−2174−1428]
+
+                                               Abstract—The central building block of convolutional neural networks (CNNs) is the convolution operator, which enables networks to
+                                               construct informative features by fusing both spatial and channel-wise information within local receptive fields at each layer. A broad
+                                               range of prior research has investigated the spatial component of this relationship, seeking to strengthen the representational power of
+                                               a CNN by enhancing the quality of spatial encodings throughout its feature hierarchy. In this work, we focus instead on the channel
+                                               relationship and propose a novel architectural unit, which we term the “Squeeze-and-Excitation” (SE) block, that adaptively recalibrates
+                                               channel-wise feature responses by explicitly modelling interdependencies between channels. We show that these blocks can be
+
+
+
+
+arXiv:1709.01507v4 [cs.CV] 16 May 2019
+                                               stacked together to form SENet architectures that generalise extremely effectively across different datasets. We further demonstrate
+                                               that SE blocks bring significant improvements in performance for existing state-of-the-art CNNs at slight additional computational cost.
+                                               Squeeze-and-Excitation Networks formed the foundation of our ILSVRC 2017 classification submission which won first place and
+                                               reduced the top-5 error to 2.251%, surpassing the winning entry of 2016 by a relative improvement of ∼25%. Models and code are
+                                               available at https://github.com/hujie-frank/SENet.
+
+                                               Index Terms—Squeeze-and-Excitation, Image representations, Attention, Convolutional Neural Networks.
+
+                                                                                                                          F
+
+                                         1    I NTRODUCTION
+
+
+                                         C     ONVOLUTIONAL neural networks (CNNs) have proven
+                                               to be useful models for tackling a wide range of visual
+                                         tasks [1], [2], [3], [4]. At each convolutional layer in the net-
+                                                                                                                              mance. Further work has sought to better model spatial
+                                                                                                                              dependencies [7], [8] and incorporate spatial attention into
+                                                                                                                              the structure of the network [9].
+                                         work, a collection of filters expresses neighbourhood spatial                            In this paper, we investigate a different aspect of network
+                                         connectivity patterns along input channels—fusing spatial                            design - the relationship between channels. We introduce
+                                         and channel-wise information together within local recep-                            a new architectural unit, which we term the Squeeze-and-
+                                         tive fields. By interleaving a series of convolutional layers                        Excitation (SE) block, with the goal of improving the quality
+                                         with non-linear activation functions and downsampling op-                            of representations produced by a network by explicitly mod-
+                                         erators, CNNs are able to produce image representations                              elling the interdependencies between the channels of its con-
+                                         that capture hierarchical patterns and attain global theo-                           volutional features. To this end, we propose a mechanism
+                                         retical receptive fields. A central theme of computer vision                         that allows the network to perform feature recalibration,
+                                         research is the search for more powerful representations that                        through which it can learn to use global information to
+                                         capture only those properties of an image that are most                              selectively emphasise informative features and suppress less
+                                         salient for a given task, enabling improved performance.                             useful ones.
+                                         As a widely-used family of models for vision tasks, the                                  The structure of the SE building block is depicted in
+                                         development of new neural network architecture designs                               Fig. 1. For any given transformation Ftr mapping the
+                                         now represents a key frontier in this search. Recent research                        input X to the feature maps U where U ∈ RH×W ×C ,
+                                         has shown that the representations produced by CNNs can                              e.g. a convolution, we can construct a corresponding SE
+                                         be strengthened by integrating learning mechanisms into                              block to perform feature recalibration. The features U are
+                                         the network that help capture spatial correlations between                           first passed through a squeeze operation, which produces a
+                                         features. One such approach, popularised by the Inception                            channel descriptor by aggregating feature maps across their
+                                         family of architectures [5], [6], incorporates multi-scale pro-                      spatial dimensions (H × W ). The function of this descriptor
+                                         cesses into network modules to achieve improved perfor-                              is to produce an embedding of the global distribution of
+                                                                                                                              channel-wise feature responses, allowing information from
+                                                                                                                              the global receptive field of the network to be used by
+                                         •   Jie Hu and Enhua Wu are with the State Key Laboratory of Computer
+                                             Science, Institute of Software, Chinese Academy of Sciences, Beijing,            all its layers. The aggregation is followed by an excitation
+                                             100190, China.                                                                   operation, which takes the form of a simple self-gating
+                                             They are also with the University of Chinese Academy of Sciences, Beijing,       mechanism that takes the embedding as input and pro-
+                                             100049, China.
+                                             Jie Hu is also with Momenta and Enhua Wu is also with the Faculty of
+                                                                                                                              duces a collection of per-channel modulation weights. These
+                                             Science and Technology & AI Center at University of Macau.                       weights are applied to the feature maps U to generate
+                                             E-mail: hujie@ios.ac.cn ehwu@umac.mo                                             the output of the SE block which can be fed directly into
+                                         •   Gang Sun is with LIAMA-NLPR at the Institute of Automation, Chinese              subsequent layers of the network.
+                                             Academy of Sciences. He is also with Momenta.
+                                             E-mail: sungang@momenta.ai                                                           It is possible to construct an SE network (SENet) by
+                                         •   Li Shen and Samuel Albanie are with the Visual Geometry Group at the             simply stacking a collection of SE blocks. Moreover, these
+                                             University of Oxford.                                                            SE blocks can also be used as a drop-in replacement for the
+                                             E-mail: {lishen,albanie}@robots.ox.ac.uk
+                                                                                                                              original block at a range of depths in the network architec-
+                                                                                                                                 2
+
+
+
+
+Fig. 1. A Squeeze-and-Excitation block.
+
+
+ture (Section 6.4). While the template for the building block     which show promising improvements to the learning and
+is generic, the role it performs at different depths differs      representational properties of deep networks.
+throughout the network. In earlier layers, it excites infor-          An alternative, but closely related line of research has
+mative features in a class-agnostic manner, strengthening         focused on methods to improve the functional form of
+the shared low-level representations. In later layers, the SE     the computational elements contained within a network.
+blocks become increasingly specialised, and respond to dif-       Grouped convolutions have proven to be a popular ap-
+ferent inputs in a highly class-specific manner (Section 7.2).    proach for increasing the cardinality of learned transforma-
+As a consequence, the benefits of the feature recalibration       tions [18], [19]. More flexible compositions of operators can
+performed by SE blocks can be accumulated through the             be achieved with multi-branch convolutions [5], [6], [20],
+network.                                                          [21], which can be viewed as a natural extension of the
+    The design and development of new CNN architectures           grouping operator. In prior work, cross-channel correlations
+is a difficult engineering task, typically requiring the se-      are typically mapped as new combinations of features, ei-
+lection of many new hyperparameters and layer configura-          ther independently of spatial structure [22], [23] or jointly
+tions. By contrast, the structure of the SE block is simple and   by using standard convolutional filters [24] with 1 × 1
+can be used directly in existing state-of-the-art architectures   convolutions. Much of this research has concentrated on the
+by replacing components with their SE counterparts, where         objective of reducing model and computational complexity,
+the performance can be effectively enhanced. SE blocks are        reflecting an assumption that channel relationships can be
+also computationally lightweight and impose only a slight         formulated as a composition of instance-agnostic functions
+increase in model complexity and computational burden.            with local receptive fields. In contrast, we claim that provid-
+    To provide evidence for these claims, we develop several      ing the unit with a mechanism to explicitly model dynamic,
+SENets and conduct an extensive evaluation on the Ima-            non-linear dependencies between channels using global in-
+geNet dataset [10]. We also present results beyond ImageNet       formation can ease the learning process, and significantly
+that indicate that the benefits of our approach are not           enhance the representational power of the network.
+restricted to a specific dataset or task. By making use of
+SENets, we ranked first in the ILSVRC 2017 classification         Algorithmic Architecture Search. Alongside the works
+competition. Our best model ensemble achieves a 2.251%            described above, there is also a rich history of research
+top-5 error on the test set1 . This represents roughly a 25%      that aims to forgo manual architecture design and instead
+relative improvement when compared to the winner entry            seeks to learn the structure of the network automatically.
+of the previous year (top-5 error of 2.991%).                     Much of the early work in this domain was conducted in
+                                                                  the neuro-evolution community, which established methods
+                                                                  for searching across network topologies with evolutionary
+                                                                  methods [25], [26]. While often computationally demand-
+2     R ELATED W ORK
+                                                                  ing, evolutionary search has had notable successes which
+Deeper architectures. VGGNets [11] and Inception mod-             include finding good memory cells for sequence models
+els [5] showed that increasing the depth of a network could       [27], [28] and learning sophisticated architectures for large-
+significantly increase the quality of representations that        scale image classification [29], [30], [31]. With the goal of re-
+it was capable of learning. By regulating the distribution        ducing the computational burden of these methods, efficient
+of the inputs to each layer, Batch Normalization (BN) [6]         alternatives to this approach have been proposed based on
+added stability to the learning process in deep networks          Lamarckian inheritance [32] and differentiable architecture
+and produced smoother optimisation surfaces [12]. Building        search [33].
+on these works, ResNets demonstrated that it was pos-                 By formulating architecture search as hyperparameter
+sible to learn considerably deeper and stronger networks          optimisation, random search [34] and other more sophis-
+through the use of identity-based skip connections [13], [14].    ticated model-based optimisation techniques [35], [36] can
+Highway networks [15] introduced a gating mechanism to            also be used to tackle the problem. Topology selection
+regulate the flow of information along shortcut connections.      as a path through a fabric of possible designs [37] and
+Following these works, there have been further reformula-         direct architecture prediction [38], [39] have been proposed
+tions of the connections between network layers [16], [17],       as additional viable architecture search tools. Particularly
+                                                                  strong results have been achieved with techniques from
+    1. http://image-net.org/challenges/LSVRC/2017/results         reinforcement learning [40], [41], [42], [43], [44]. SE blocks
+                                                                                                                                        3
+
+can be used as atomic building blocks for these search               output features. Each of the learned filters operates with
+algorithms, and were demonstrated to be highly effective             a local receptive field and consequently each unit of the
+in this capacity in concurrent work [45].                            transformation output U is unable to exploit contextual
+Attention and gating mechanisms. Attention can be in-                information outside of this region.
+terpreted as a means of biasing the allocation of available              To mitigate this problem, we propose to squeeze global
+computational resources towards the most informative com-            spatial information into a channel descriptor. This is
+ponents of a signal [46], [47], [48], [49], [50], [51]. Attention    achieved by using global average pooling to generate
+mechanisms have demonstrated their utility across many               channel-wise statistics. Formally, a statistic z ∈ RC is gener-
+tasks including sequence learning [52], [53], localisation           ated by shrinking U through its spatial dimensions H × W ,
+and understanding in images [9], [54], image captioning              such that the c-th element of z is calculated by:
+[55], [56] and lip reading [57]. In these applications, it                                                H X W
+                                                                                                     1   X
+can be incorporated as an operator following one or more                        zc = Fsq (uc ) =                 uc (i, j).           (2)
+layers representing higher-level abstractions for adaptation                                       H × W i=1 j=1
+between modalities. Some works provide interesting studies
+                                                                         Discussion. The output of the transformation U can be
+into the combined use of spatial and channel attention [58],
+                                                                     interpreted as a collection of the local descriptors whose
+[59]. Wang et al. [58] introduced a powerful trunk-and-mask
+                                                                     statistics are expressive for the whole image. Exploiting
+attention mechanism based on hourglass modules [8] that is
+                                                                     such information is prevalent in prior feature engineering
+inserted between the intermediate stages of deep residual
+                                                                     work [60], [61], [62]. We opt for the simplest aggregation
+networks. By contrast, our proposed SE block comprises a
+                                                                     technique, global average pooling, noting that more sophis-
+lightweight gating mechanism which focuses on enhancing
+                                                                     ticated strategies could be employed here as well.
+the representational power of the network by modelling
+channel-wise relationships in a computationally efficient
+manner.                                                              3.2   Excitation: Adaptive Recalibration
+                                                                     To make use of the information aggregated in the squeeze
+3     S QUEEZE - AND -E XCITATION B LOCKS                            operation, we follow it with a second operation which aims
+A Squeeze-and-Excitation block is a computational unit               to fully capture channel-wise dependencies. To fulfil this
+which can be built upon a transformation Ftr mapping an              objective, the function must meet two criteria: first, it must
+                  0       0   0
+input X ∈ RH ×W ×C to feature maps U ∈ RH×W ×C .                     be flexible (in particular, it must be capable of learning
+In the notation that follows we take Ftr to be a convo-              a nonlinear interaction between channels) and second, it
+lutional operator and use V = [v1 , v2 , . . . , vC ] to denote      must learn a non-mutually-exclusive relationship since we
+the learned set of filter kernels, where vc refers to the            would like to ensure that multiple channels are allowed to
+parameters of the c-th filter. We can then write the outputs         be emphasised (rather than enforcing a one-hot activation).
+as U = [u1 , u2 , . . . , uC ], where                                To meet these criteria, we opt to employ a simple gating
+                                     0
+                                                                     mechanism with a sigmoid activation:
+                                   C
+                                   X
+                  uc = vc ∗ X =          vcs ∗ xs .            (1)
+                                   s=1                                     s = Fex (z, W) = σ(g(z, W)) = σ(W2 δ(W1 z)),               (3)
+                                                         0
+Here ∗ denotes convolution, vc = [vc1 , vc2 , . . . , vcC ], X =     where δ refers to the ReLU [63] function, W1 ∈ R
+                                                                                                                               C
+                                                                                                                               r ×C
+                                                                                                                              and
+                     0
+[x1 , x2 , . . . , xC ] and uc ∈ RH×W . vcs is a 2D spatial kernel                 C
+                                                                     W2 ∈ RC× r . To limit model complexity and aid general-
+representing a single channel of vc that acts on the corre-          isation, we parameterise the gating mechanism by forming
+sponding channel of X. To simplify the notation, bias terms          a bottleneck with two fully-connected (FC) layers around
+are omitted. Since the output is produced by a summation             the non-linearity, i.e. a dimensionality-reduction layer with
+through all channels, channel dependencies are implicitly            reduction ratio r (this parameter choice is discussed in Sec-
+embedded in vc , but are entangled with the local spatial            tion 6.1), a ReLU and then a dimensionality-increasing layer
+correlation captured by the filters. The channel relationships       returning to the channel dimension of the transformation
+modelled by convolution are inherently implicit and local            output U. The final output of the block is obtained by
+(except the ones at top-most layers). We expect the learning         rescaling U with the activations s:
+of convolutional features to be enhanced by explicitly mod-
+elling channel interdependencies, so that the network is able
+                                                                                       x
+                                                                                       e c = Fscale (uc , sc ) = sc uc ,              (4)
+to increase its sensitivity to informative features which can
+be exploited by subsequent transformations. Consequently,            where X e = [x  e1, x
+                                                                                         e2, . . . , x
+                                                                                                     e C ] and Fscale (uc , sc ) refers to
+we would like to provide it with access to global information        channel-wise multiplication between the scalar sc and the
+and recalibrate filter responses in two steps, squeeze and           feature map uc ∈ RH×W .
+excitation, before they are fed into the next transformation.            Discussion. The excitation operator maps the input-
+A diagram illustrating the structure of an SE block is shown         specific descriptor z to a set of channel weights. In this
+in Fig. 1.                                                           regard, SE blocks intrinsically introduce dynamics condi-
+                                                                     tioned on the input, which can be regarded as a self-
+3.1   Squeeze: Global Information Embedding                          attention function on channels whose relationships are not
+In order to tackle the issue of exploiting channel depen-            confined to the local receptive field the convolutional filters
+dencies, we first consider the signal to each channel in the         are responsive to.
+                                                                                                                                                    4
+
+                                                                                              X                  X
+                     X               X
+                                                                                       Residual             Residual
+               Inception       Inception                                                                                    𝐻×W×C
+                                              𝐻×W×C
+
+                                                                                          +                            Global pooling
+                     X                                                                                                                  1×1×C
+                                           Global pooling
+            Inception Module                                1×1×C                             X
+                                                                                                                            FC                 C
+                                                                                                                                        1×1×
+                                                FC               C                   ResNet Module                                             𝑟
+                                                            1×1×
+                                                                 𝑟                                                         ReLU                C
+                                                                                                                                        1×1×
+                                               ReLU              C                                                                             𝑟
+                                                            1×1×
+                                                                 𝑟                                                          FC
+                                                                                                                                        1×1×C
+                                                FC          1×1×C
+                                                                                                                          Sigmoid
+                                                                                                                                        1×1×C
+                                              Sigmoid       1×1×C
+                                                                                                             Scale
+                                                                                                                            𝐻×W×C
+                                 Scale
+                                              𝐻×W×C                                                            + 𝐻×W×C
+                                     X
+                                                                                                                     X
+                                SE-Inception Module                                                          SE-ResNet Module
+
+Fig. 2. The schema of the original Inception module (left) and the SE-   Fig. 3. The schema of the original Residual module (left) and the SE-
+Inception module (right).                                                ResNet module (right).
+
+
+3.3   Instantiations                                                     the squeeze phase and two small FC layers in the excitation
+The SE block can be integrated into standard architectures               phase, followed by an inexpensive channel-wise scaling
+such as VGGNet [11] by insertion after the non-linearity                 operation. In the aggregate, when setting the reduction ratio
+following each convolution. Moreover, the flexibility of the             r (introduced in Section 3.2) to 16, SE-ResNet-50 requires
+SE block means that it can be directly applied to transforma-            ∼3.87 GFLOPs, corresponding to a 0.26% relative increase
+tions beyond standard convolutions. To illustrate this point,            over the original ResNet-50. In exchange for this slight addi-
+we develop SENets by incorporating SE blocks into several                tional computational burden, the accuracy of SE-ResNet-50
+examples of more complex architectures, described next.                  surpasses that of ResNet-50 and indeed, approaches that
+    We first consider the construction of SE blocks for Incep-           of a deeper ResNet-101 network requiring ∼7.58 GFLOPs
+tion networks [5]. Here, we simply take the transformation               (Table 2).
+Ftr to be an entire Inception module (see Fig. 2) and by                     In practical terms, a single pass forwards and backwards
+making this change for each such module in the archi-                    through ResNet-50 takes 190 ms, compared to 209 ms for
+tecture, we obtain an SE-Inception network. SE blocks can                SE-ResNet-50 with a training minibatch of 256 images (both
+also be used directly with residual networks (Fig. 3 depicts             timings are performed on a server with 8 NVIDIA Titan X
+the schema of an SE-ResNet module). Here, the SE block                   GPUs). We suggest that this represents a reasonable runtime
+transformation Ftr is taken to be the non-identity branch                overhead, which may be further reduced as global pooling
+of a residual module. Squeeze and Excitation both act before             and small inner-product operations receive further opti-
+summation with the identity branch. Further variants that                misation in popular GPU libraries. Due to its importance
+integrate SE blocks with ResNeXt [19], Inception-ResNet                  for embedded device applications, we further benchmark
+[21], MobileNet [64] and ShuffleNet [65] can be constructed              CPU inference time for each model: for a 224 × 224 pixel
+by following similar schemes. For concrete examples of                   input image, ResNet-50 takes 164 ms in comparison to 167
+SENet architectures, a detailed description of SE-ResNet-50              ms for SE-ResNet-50. We believe that the small additional
+and SE-ResNeXt-50 is given in Table 1.                                   computational cost incurred by the SE block is justified by
+    One consequence of the flexible nature of the SE block               its contribution to model performance.
+is that there are several viable ways in which it could                      We next consider the additional parameters introduced
+be integrated into these architectures. Therefore, to assess             by the proposed SE block. These additional parameters
+sensitivity to the integration strategy used to incorporate SE           result solely from the two FC layers of the gating mechanism
+blocks into a network architecture, we also provide ablation             and therefore constitute a small fraction of the total network
+experiments exploring different designs for block inclusion              capacity. Concretely, the total number introduced by the
+in Section 6.5.                                                          weight parameters of these FC layers is given by:
+                                                                                                        S
+                                                                                                     2X
+                                                                                                           Ns · Cs 2 ,                             (5)
+4     M ODEL AND C OMPUTATIONAL C OMPLEXITY                                                          r s=1
+
+For the proposed SE block design to be of practical use, it              where r denotes the reduction ratio, S refers to the number
+must offer a good trade-off between improved performance                 of stages (a stage refers to the collection of blocks operat-
+and increased model complexity. To illustrate the compu-                 ing on feature maps of a common spatial dimension), Cs
+tational burden associated with the module, we consider                  denotes the dimension of the output channels and Ns de-
+a comparison between ResNet-50 and SE-ResNet-50 as an                    notes the number of repeated blocks for stage s (when bias
+example. ResNet-50 requires ∼3.86 GFLOPs in a single                     terms are used in FC layers, the introduced parameters and
+forward pass for a 224 × 224 pixel input image. Each SE                  computational cost are typically negligible). SE-ResNet-50
+block makes use of a global average pooling operation in                 introduces ∼2.5 million additional parameters beyond the
+                                                                                                                                                     5
+
+                                                                         TABLE 1
+(Left) ResNet-50 [13]. (Middle) SE-ResNet-50. (Right) SE-ResNeXt-50 with a 32×4d template. The shapes and operations with specific parameter
+   settings of a residual building block are listed inside the brackets and the number of stacked blocks in a stage is presented outside. The inner
+                      brackets following by fc indicates the output dimension of the two fully connected layers in an SE module.
+          Output size             ResNet-50                           SE-ResNet-50                          SE-ResNeXt-50 (32 × 4d)
+          112 × 112                                                     conv, 7 × 7, 64, stride 2
+                                                                        max pool, 3× 3, stride 2
+            56 × 56                                                                                                             
+                                                                conv, 1 × 1, 64                        conv, 1 × 1, 128
+                            conv, 1 × 1, 64                     conv, 3 × 3, 64                      conv, 3 × 3, 128 C = 32
+                           conv, 3 × 3, 64  × 3
+                                                                conv, 1 × 1, 256 × 3
+                                                                                                                               ×3
+                                                                                                       conv, 1 × 1, 256          
+                            conv, 1 × 1, 256
+                                                                  f c, [16, 256]                         f c, [16, 256]
+                                                                                                                               
+                                                                conv, 1 × 1, 128                       conv, 1 × 1, 256
+                            conv, 1 × 1, 128                    conv, 3 × 3, 128                     conv, 3 × 3, 256 C = 32
+                           conv, 3 × 3, 128 × 4
+                                                                conv, 1 × 1, 512 × 4
+            28 × 28                                                                                                            ×4
+                                                                                                       conv, 1 × 1, 512          
+                            conv, 1 × 1, 512
+                                                                  f c, [32, 512]                         f c, [32, 512]
+                                                                                                                                
+                                                               conv, 1 × 1, 256                       conv, 1 × 1, 512
+                            conv, 1 × 1, 256                   conv, 3 × 3, 256                     conv, 3 × 3, 512
+                           conv, 3 × 3, 256  × 6                                                                         C  = 32 
+            14 × 14                                            conv, 1 × 1, 1024 × 6
+                                                                                                    
+                                                                                                      conv, 1 × 1, 1024
+                                                                                                                                   ×6
+                                                                                                                                   
+                            conv, 1 × 1, 1024
+                                                                 f c, [64, 1024]                        f c, [64, 1024]
+                                                                                                                                
+                                                               conv, 1 × 1, 512                       conv, 1 × 1, 1024
+                            conv, 1 × 1, 512                   conv, 3 × 3, 512                     conv, 3 × 3, 1024 C = 32
+                           conv, 3 × 3, 512  × 3
+                                                               conv, 1 × 1, 2048 × 3
+              7×7                                                                                                               ×3
+                                                                                                      conv, 1 × 1, 2048           
+                            conv, 1 × 1, 2048
+                                                                 f c, [128, 2048]                       f c, [128, 2048]
+             1×1                                              global average pool, 1000-d f c, softmax
+
+
+                                                                       TABLE 2
+ Single-crop error rates (%) on the ImageNet validation set and complexity comparisons. The original column refers to the results reported in the
+  original papers (the results of ResNets are obtained from the website: https://github.com/Kaiminghe/deep-residual-networks). To enable a fair
+       comparison, we re-train the baseline models and report the scores in the re-implementation column. The SENet column refers to the
+    corresponding architectures in which SE blocks have been added. The numbers in brackets denote the performance improvement over the
+ re-implemented baselines. † indicates that the model has been evaluated on the non-blacklisted subset of the validation set (this is discussed in
+              more detail in [21]), which may slightly improve results. VGG-16 and SE-VGG-16 are trained with batch normalization.
+                                           original                    re-implementation                            SENet
+                                   top-1 err.    top-5 err.   top-1 err.    top-5 err.  GFLOPs       top-1 err.     top-5 err.     GFLOPs
+       ResNet-50 [13]                24.7           7.8         24.80         7.48       3.86       23.29(1.51)     6.62(0.86)      3.87
+       ResNet-101 [13]               23.6           7.1         23.17         6.52       7.58       22.38(0.79)     6.07(0.45)      7.60
+       ResNet-152 [13]               23.0           6.7         22.42         6.34       11.30      21.57(0.85)     5.73(0.61)      11.32
+       ResNeXt-50 [19]               22.2             -         22.11         5.90       4.24       21.10(1.01)     5.49(0.41)      4.25
+       ResNeXt-101 [19]              21.2           5.6         21.18         5.57       7.99       20.70(0.48)     5.01(0.56)      8.00
+       VGG-16 [11]                     -              -         27.02         8.81       15.47      25.22(1.80)     7.70(1.11)      15.48
+       BN-Inception [6]              25.2           7.82        25.38         7.89       2.03       24.23(1.15)     7.14(0.75)      2.04
+       Inception-ResNet-v2 [21]      19.9†          4.9†        20.37         5.21       11.75      19.80(0.57)     4.79(0.42)      11.76
+
+
+
+
+∼25 million parameters required by ResNet-50, correspond-                  images from 1000 different classes. We train networks on
+ing to a ∼10% increase. In practice, the majority of these                 the training set and report the top-1 and top-5 error on the
+parameters come from the final stage of the network, where                 validation set.
+the excitation operation is performed across the greatest                      Each baseline network architecture and its correspond-
+number of channels. However, we found that this compara-                   ing SE counterpart are trained with identical optimisation
+tively costly final stage of SE blocks could be removed at                 schemes. We follow standard practices and perform data
+only a small cost in performance (<0.1% top-5 error on                     augmentation with random cropping using scale and as-
+ImageNet) reducing the relative parameter increase to ∼4%,                 pect ratio [5] to a size of 224 × 224 pixels (or 299 × 299
+which may prove useful in cases where parameter usage                      for Inception-ResNet-v2 [21] and SE-Inception-ResNet-v2)
+is a key consideration (see Section 6.4 and 7.2 for further                and perform random horizontal flipping. Each input im-
+discussion).                                                               age is normalised through mean RGB-channel subtraction.
+                                                                           All models are trained on our distributed learning system
+5     E XPERIMENTS                                                         ROCS which is designed to handle efficient parallel training
+                                                                           of large networks. Optimisation is performed using syn-
+In this section, we conduct experiments to investigate the
+                                                                           chronous SGD with momentum 0.9 and a minibatch size
+effectiveness of SE blocks across a range of tasks, datasets
+                                                                           of 1024. The initial learning rate is set to 0.6 and decreased
+and model architectures.
+                                                                           by a factor of 10 every 30 epochs. Models are trained for 100
+                                                                           epochs from scratch, using the weight initialisation strategy
+5.1   Image Classification                                                 described in [66]. The reduction ratio r (in Section 3.2) is set
+To evaluate the influence of SE blocks, we first perform                   to 16 by default (except where stated otherwise).
+experiments on the ImageNet 2012 dataset [10] which                            When evaluating the models we apply centre-cropping
+comprises 1.28 million training images and 50K validation                  so that 224 × 224 pixels are cropped from each image, after
+                                                                                                                                                 6
+
+                                                                     TABLE 3
+   Single-crop error rates (%) on the ImageNet validation set and complexity comparisons. MobileNet refers to “1.0 MobileNet-224” in [64] and
+ ShuffleNet refers to “ShuffleNet 1 × (g = 3)” in [65]. The numbers in brackets denote the performance improvement over the re-implementation.
+                             original                          re-implementation                                     SENet
+                      top-1 err.   top-5 err.   top-1 err.   top-5 err.  MFLOPs    Params      top-1 err.   top-5 err.   MFLOPs      Params
+    MobileNet [64]      29.4           -          28.4          9.4        569      4.2M       25.3(3.1)     7.7(1.7)      572        4.7M
+    ShuffleNet [65]     32.6           -          32.6         12.5        140      1.8M       31.0(1.6)    11.1(1.4)      142        2.4M
+
+
+
+
+Fig. 4. Training baseline architectures and their SENet counterparts on ImageNet. SENets exhibit improved optimisation characteristics and produce
+consistent gains in performance which are sustained throughout the training process.
+
+
+its shorter edge is first resized to 256 (299 × 299 from                    top-5 error) as well as the deeper ResNeXt-101 (5.57% top-5
+each image whose shorter edge is first resized to 352 for                   error), a model which has almost twice the total number of
+Inception-ResNet-v2 and SE-Inception-ResNet-v2).                            parameters and computational overhead. We note a slight
+                                                                            difference in performance between our re-implementation
+Network depth. We begin by comparing SE-ResNet against                      of Inception-ResNet-v2 and the result reported in [21].
+ResNet architectures with different depths and report the                   However, we observe a similar trend with regard to the
+results in Table 2. We observe that SE blocks consistently                  effect of SE blocks, finding that SE counterpart (4.79% top-5
+improve performance across different depths with an ex-                     error) outperforms our reimplemented Inception-ResNet-v2
+tremely small increase in computational complexity. Re-                     baseline (5.21% top-5 error) by 0.42% as well as the reported
+markably, SE-ResNet-50 achieves a single-crop top-5 valida-                 result in [21].
+tion error of 6.62%, exceeding ResNet-50 (7.48%) by 0.86%                       We also assess the effect of SE blocks when operating on
+and approaching the performance achieved by the much                        non-residual networks by conducting experiments with the
+deeper ResNet-101 network (6.52% top-5 error) with only                     VGG-16 [11] and BN-Inception architecture [6]. To facilitate
+half of the total computational burden (3.87 GFLOPs vs.                     the training of VGG-16 from scratch, we add Batch Normal-
+7.58 GFLOPs). This pattern is repeated at greater depth,                    ization layers after each convolution. We use identical train-
+where SE-ResNet-101 (6.07% top-5 error) not only matches,                   ing schemes for both VGG-16 and SE-VGG-16. The results of
+but outperforms the deeper ResNet-152 network (6.34%                        the comparison are shown in Table 2. Similarly to the results
+top-5 error) by 0.27%. While it should be noted that the SE                 reported for the residual baseline architectures, we observe
+blocks themselves add depth, they do so in an extremely                     that SE blocks bring improvements in performance on the
+computationally efficient manner and yield good returns                     non-residual settings.
+even at the point at which extending the depth of the base                      To provide some insight into influence of SE blocks on
+architecture achieves diminishing returns. Moreover, we see                 the optimisation of these models, example training curves
+that the gains are consistent across a range of different                   for runs of the baseline architectures and their respective
+network depths, suggesting that the improvements induced                    SE counterparts are depicted in Fig. 4. We observe that SE
+by SE blocks may be complementary to those obtained by                      blocks yield a steady improvement throughout the optimi-
+simply increasing the depth of the base architecture.                       sation procedure. Moreover, this trend is fairly consistent
+                                                                            across a range of network architectures considered as base-
+Integration with modern architectures. We next study the
+                                                                            lines.
+effect of integrating SE blocks with two further state-of-
+the-art architectures, Inception-ResNet-v2 [21] and ResNeXt                 Mobile setting. Finally, we consider two representative
+(using the setting of 32 × 4d) [19], both of which introduce                architectures from the class of mobile-optimised networks,
+additional computational building blocks into the base net-                 MobileNet [64] and ShuffleNet [65]. For these experiments,
+work. We construct SENet equivalents of these networks,                     we used a minibatch size of 256 and slightly less aggressive
+SE-Inception-ResNet-v2 and SE-ResNeXt (the configuration                    data augmentation and regularisation as in [65]. We trained
+of SE-ResNeXt-50 is given in Table 1) and report results                    the models across 8 GPUs using SGD with momentum (set
+in Table 2. As with the previous experiments, we observe                    to 0.9) and an initial learning rate of 0.1 which was reduced
+significant performance improvements induced by the in-                     by a factor of 10 each time the validation loss plateaued. The
+troduction of SE blocks into both architectures. In partic-                 total training process required ∼ 400 epochs (enabling us
+ular, SE-ResNeXt-50 has a top-5 error of 5.49% which is                     to reproduce the baseline performance of [65]). The results
+superior to both its direct counterpart ResNeXt-50 (5.90%                   reported in Table 3 show that SE blocks consistently improve
+                                                                                                                                        7
+
+                                 TABLE 4                                                            TABLE 6
+                  Classification error (%) on CIFAR-10.                     Single-crop error rates (%) on Places365 validation set.
+                                                  original   SENet                                       top-1 err.    top-5 err.
+      ResNet-110 [14]                               6.37      5.21             Places-365-CNN [72]         41.07         11.48
+      ResNet-164 [14]                               5.46      4.39             ResNet-152 (ours)           41.15         11.61
+      WRN-16-8 [67]                                 4.27      3.88
+                                                                               SE-ResNet-152               40.37         11.01
+      Shake-Shake 26 2x96d [68] + Cutout [69]       2.56      2.12
+
+
+                                                                                                  TABLE 7
+                              TABLE 5                                  Faster R-CNN object detection results (%) on COCO minival set.
+              Classification error (%) on CIFAR-100.
+                                               original      SENet                              AP@IoU=0.5               AP
+  ResNet-110 [14]                               26.88        23.85          ResNet-50              57.9                  38.0
+  ResNet-164 [14]                               24.33        21.31          SE-ResNet-50           61.0                  40.4
+  WRN-16-8 [67]                                 20.43        19.14          ResNet-101             60.1                  39.9
+  Shake-Even 29 2x4x64d [68] + Cutout [69]      15.85        15.41          SE-ResNet-101          62.7                  41.9
+
+
+
+the accuracy by a large margin at a minimal increase in              providing evidence that SE blocks can also yield improve-
+computational cost.                                                  ments for scene classification. This SENet surpasses the
+                                                                     previous state-of-the-art model Places-365-CNN [72] which
+Additional datasets. We next investigate whether the bene-
+                                                                     has a top-5 error of 11.48% on this task.
+fits of SE blocks generalise to datasets beyond ImageNet. We
+perform experiments with several popular baseline archi-
+tectures and techniques (ResNet-110 [14], ResNet-164 [14],           5.3   Object Detection on COCO
+WideResNet-16-8 [67], Shake-Shake [68] and Cutout [69]) on           We further assess the generalisation of SE blocks on the
+the CIFAR-10 and CIFAR-100 datasets [70]. These comprise             task of object detection using the COCO dataset [75]. As
+a collection of 50k training and 10k test 32 × 32 pixel RGB          in previous work [19], we use the minival protocol, i.e.,
+images, labelled with 10 and 100 classes respectively. The in-       training the models on the union of the 80k training set
+tegration of SE blocks into these networks follows the same          and a 35k val subset and evaluating on the remaining
+approach that was described in Section 3.3. Each baseline            5k val subset. Weights are initialised by the parameters
+and its SENet counterpart are trained with standard data             of the model trained on the ImageNet dataset. We use
+augmentation strategies [24], [71]. During training, images          the Faster R-CNN [4] detection framework as the basis
+are randomly horizontally flipped and zero-padded on each            for evaluating our models and follow the hyperparameter
+side with four pixels before taking a random 32 × 32 crop.           setting described in [76] (i.e., end-to-end training with the
+Mean and standard deviation normalisation is also applied.           ’2x’ learning schedule). Our goal is to evaluate the effect
+The setting of the training hyperparameters (e.g. minibatch          of replacing the trunk architecture (ResNet) in the object
+size, initial learning rate, weight decay) match those sug-          detector with SE-ResNet, so that any changes in perfor-
+gested by the original papers. We report the performance             mance can be attributed to better representations. Table 7
+of each baseline and its SENet counterpart on CIFAR-10               reports the validation set performance of the object detector
+in Table 4 and performance on CIFAR-100 in Table 5. We               using ResNet-50, ResNet-101 and their SE counterparts as
+observe that in every comparison SENets outperform the               trunk architectures. SE-ResNet-50 outperforms ResNet-50
+baseline architectures, suggesting that the benefits of SE           by 2.4% (a relative 6.3% improvement) on COCO’s stan-
+blocks are not confined to the ImageNet dataset.                     dard AP metric and by 3.1% on AP@IoU=0.5. SE blocks
+                                                                     also benefit the deeper ResNet-101 architecture achieving
+                                                                     a 2.0% improvement (5.0% relative improvement) on the
+5.2     Scene Classification
+                                                                     AP metric. In summary, this set of experiments demonstrate
+We also conduct experiments on the Places365-Challenge               the generalisability of SE blocks. The induced improvements
+dataset [73] for scene classification. This dataset comprises        can be realised across a broad range of architectures, tasks
+8 million training images and 36, 500 validation images              and datasets.
+across 365 categories. Relative to classification, the task of
+scene understanding offers an alternative assessment of a
+model’s ability to generalise well and handle abstraction.           5.4   ILSVRC 2017 Classification Competition
+This is because it often requires the model to handle more           SENets formed the foundation of our submission to the
+complex data associations and to be robust to a greater level        ILSVRC competition where we achieved first place. Our
+of appearance variation.                                             winning entry comprised a small ensemble of SENets that
+    We opted to use ResNet-152 as a strong baseline to               employed a standard multi-scale and multi-crop fusion
+assess the effectiveness of SE blocks and follow the training        strategy to obtain a top-5 error of 2.251% on the test set.
+and evaluation protocols described in [72], [74]. In these           As part of this submission, we constructed an additional
+experiments, models are trained from scratch. We report              model, SENet-154, by integrating SE blocks with a modified
+the results in Table 6, comparing also with prior work. We           ResNeXt [19] (the details of the architecture are provided
+observe that SE-ResNet-152 (11.01% top-5 error) achieves a           in Appendix). We compare this model with prior work on
+lower validation error than ResNet-152 (11.61% top-5 error),         the ImageNet validation set in Table 8 using standard crop
+                                                                                                                                                   8
+
+                                   TABLE 8                                                              TABLE 10
+     Single-crop error rates (%) of state-of-the-art CNNs on ImageNet       Single-crop error rates (%) on ImageNet and parameter sizes for
+    validation set with crop sizes 224 × 224 and 320 × 320 / 299 × 299.     SE-ResNet-50 at different reduction ratios. Here, original refers to
+                                                                                                       ResNet-50.
+                                     224 × 224         320 × 320 /
+                                                        299 × 299                    Ratio r    top-1 err.    top-5 err.     Params
+                                   top-1     top-5    top-1     top-5                    2        22.29         6.00         45.7M
+                                    err.      err.     err.      err.                    4        22.25         6.09         35.7M
+    ResNet-152 [13]                 23.0      6.7      21.3      5.5                     8        22.26         5.99         30.7M
+    ResNet-200 [14]                 21.7      5.8      20.1      4.8                    16        22.28         6.03         28.1M
+    Inception-v3 [20]                -          -      21.2      5.6                    32        22.72         6.20         26.9M
+    Inception-v4 [21]                -          -      20.0      5.0
+                                                                                     original     23.30         6.55         25.6M
+    Inception-ResNet-v2 [21]         -          -      19.9      4.9
+    ResNeXt-101 (64 × 4d) [19]      20.4      5.3      19.1      4.4
+    DenseNet-264 [17]              22.15      6.12       -         -
+    Attention-92 [58]                -          -      19.5      4.8      experiments. The data augmentation strategy follows the
+    PyramidNet-200 [77]             20.1      5.4      19.2      4.7
+    DPN-131 [16]                   19.93      5.12    18.55      4.16
+                                                                          approach described in Section 5.1. To allow us to study the
+    SENet-154                      18.68      4.47    17.28     3.79      upper limit of performance for each variant, the learning
+                                                                          rate is initialised to 0.1 and training continues until the
+                                                                          validation loss plateaus2 (∼300 epochs in total). The learn-
+                               TABLE 9                                    ing rate is then reduced by a factor of 10 and then this
+Comparison (%) with state-of-the-art CNNs on ImageNet validation set
+                                                                          process is repeated (three times in total). Label-smoothing
+  using larger crop sizes/additional training data. † This model was
+                trained with a crop size of 320 × 320.                    regularisation [20] is used during training.
+                                     extra    crop     top-1    top-5
+                                     data     size      err.     err.     6.1   Reduction ratio
+    Very Deep PolyNet [78]             -      331      18.71     4.25
+    NASNet-A (6 @ 4032) [42]           -      331       17.3      3.8     The reduction ratio r introduced in Eqn. 5 is a hyperpa-
+    PNASNet-5 (N=4,F=216) [35]         -      331       17.1      3.8     rameter which allows us to vary the capacity and compu-
+    SENet-154†                         -      320      16.88     3.58     tational cost of the SE blocks in the network. To investigate
+    AmoebaNet-C [79]                   -      331       16.5      3.5     the trade-off between performance and computational cost
+    ResNeXt-101 32 × 48d [80]         X       224       14.6      2.4     mediated by this hyperparameter, we conduct experiments
+                                                                          with SE-ResNet-50 for a range of different r values. The
+                                                                          comparison in Table 10 shows that performance is robust to
+sizes (224 × 224 and 320 × 320). We observe that SENet-154                a range of reduction ratios. Increased complexity does not
+achieves a top-1 error of 18.68% and a top-5 error of 4.47%               improve performance monotonically while a smaller ratio
+using a 224 × 224 centre crop evaluation, which represents                dramatically increases the parameter size of the model. Set-
+the strongest reported result.                                            ting r = 16 achieves a good balance between accuracy and
+    Following the challenge there has been a great deal of                complexity. In practice, using an identical ratio throughout
+further progress on the ImageNet benchmark. For compar-                   a network may not be optimal (due to the distinct roles
+ison, we include the strongest results that we are currently              performed by different layers), so further improvements
+aware of in Table 9. The best performance using only Im-                  may be achievable by tuning the ratios to meet the needs
+ageNet data was recently reported by [79]. This method                    of a given base architecture.
+uses reinforcement learning to develop new policies for
+data augmentation during training to improve the perfor-
+                                                                          6.2   Squeeze Operator
+mance of the architecture searched by [31]. The best overall
+performance was reported by [80] using a ResNeXt-101                      We examine the significance of using global average pooling
+32×48d architecture. This was achieved by pretraining their               as opposed to global max pooling as our choice of squeeze
+model on approximately one billion weakly labelled images                 operator (since this worked well, we did not consider more
+and finetuning on ImageNet. The improvements yielded by                   sophisticated alternatives). The results are reported in Ta-
+more sophisticated data augmentation [79] and extensive                   ble 11. While both max and average pooling are effective,
+pretraining [80] may be complementary to our proposed                     average pooling achieves slightly better performance, jus-
+changes to the network architecture.                                      tifying its selection as the basis of the squeeze operation.
+                                                                          However, we note that the performance of SE blocks is fairly
+                                                                          robust to the choice of specific aggregation operator.
+6     A BLATION S TUDY
+In this section we conduct ablation experiments to gain a
+                                                                          6.3   Excitation Operator
+better understanding of the effect of using different con-
+figurations on components of the SE blocks. All ablation                  We next assess the choice of non-linearity for the excitation
+experiments are performed on the ImageNet dataset on a                    mechanism. We consider two further options: ReLU and
+single machine (with 8 GPUs). ResNet-50 is used as the                    tanh, and experiment with replacing the sigmoid with these
+backbone architecture. We found empirically that on ResNet
+architectures, removing the biases of the FC layers in the                  2. For reference, training with a 270 epoch fixed schedule (reducing
+                                                                          the learning rate at 125, 200 and 250 epochs) achieves top-1 and top-5
+excitation operation facilitates the modelling of channel                 error rates for ResNet-50 and SE-ResNet-50 of (23.21%, 6.53%) and
+dependencies, and use this configuration in the following                 (22.20%, 6.00%) respectively.
+                                                                                                                                                         9
+
+                                  TABLE 11                                                                      TABLE 14
+      Effect of using different squeeze operators in SE-ResNet-50 on             Effect of different SE block integration strategies with ResNet-50 on
+                           ImageNet (error rates %).                                                   ImageNet (error rates %).
+                    Squeeze           top-1 err.    top-5 err.                                  Design          top-1 err.    top-5 err.
+                      Max               22.57         6.09                                      SE                22.28         6.03
+                      Avg               22.28         6.03                                      SE-PRE            22.23         6.00
+                                                                                                SE-POST           22.78         6.35
+                                                                                                SE-Identity       22.20         6.15
+                                TABLE 12
+  Effect of using different non-linearities for the excitation operator in
+              SE-ResNet-50 on ImageNet (error rates %).                                                     TABLE 15
+                                                                              Effect of integrating SE blocks at the 3x3 convolutional layer of each
+                   Excitation         top-1 err.    top-5 err.                     residual branch in ResNet-50 on ImageNet (error rates %).
+                     ReLU               23.47         6.98
+                      Tanh              23.00         6.38                          Design      top-1 err.    top-5 err.     GFLOPs        Params
+                    Sigmoid             22.28         6.03                          SE            22.28         6.03          3.87         28.1M
+                                                                                    SE 3×3        22.48         6.02          3.86         25.8M
+
+
+
+alternative non-linearities. The results are reported in Ta-
+                                                                             of the SE-POST block leads to a drop in performance. This
+ble 12. We see that exchanging the sigmoid for tanh slightly
+                                                                             experiment suggests that the performance improvements
+worsens performance, while using ReLU is dramatically
+                                                                             produced by SE units are fairly robust to their location,
+worse and in fact causes the performance of SE-ResNet-50
+                                                                             provided that they are applied prior to branch aggregation.
+to drop below that of the ResNet-50 baseline. This suggests
+                                                                                 In the experiments above, each SE block was placed
+that for the SE block to be effective, careful construction of
+                                                                             outside the structure of a residual unit. We also construct
+the excitation operator is important.
+                                                                             a variant of the design which moves the SE block inside
+                                                                             the residual unit, placing it directly after the 3 × 3 convo-
+6.4     Different stages                                                     lutional layer. Since the 3 × 3 convolutional layer possesses
+We explore the influence of SE blocks at different stages by                 fewer channels, the number of parameters introduced by the
+integrating SE blocks into ResNet-50, one stage at a time.                   corresponding SE block is also reduced. The comparison in
+Specifically, we add SE blocks to the intermediate stages:                   Table 15 shows that the SE 3×3 variant achieves comparable
+stage 2, stage 3 and stage 4, and report the results in Ta-                  classification accuracy with fewer parameters than the stan-
+ble 13. We observe that SE blocks bring performance benefits                 dard SE block. Although it is beyond the scope of this work,
+when introduced at each of these stages of the architecture.                 we anticipate that further efficiency gains will be achievable
+Moreover, the gains induced by SE blocks at different stages                 by tailoring SE block usage for specific architectures.
+are complementary, in the sense that they can be combined
+effectively to further bolster network performance.                          7      R OLE OF SE BLOCKS
+                                                                             Although the proposed SE block has been shown to im-
+6.5     Integration strategy                                                 prove network performance on multiple visual tasks, we
+                                                                             would also like to understand the relative importance of
+Finally, we perform an ablation study to assess the influence
+                                                                             the squeeze operation and how the excitation mechanism
+of the location of the SE block when integrating it into exist-
+                                                                             operates in practice. A rigorous theoretical analysis of the
+ing architectures. In addition to the proposed SE design, we
+                                                                             representations learned by deep neural networks remains
+consider three variants: (1) SE-PRE block, in which the SE
+                                                                             challenging, we therefore take an empirical approach to
+block is moved before the residual unit; (2) SE-POST block,
+                                                                             examining the role played by the SE block with the goal of
+in which the SE unit is moved after the summation with
+                                                                             attaining at least a primitive understanding of its practical
+the identity branch (after ReLU) and (3) SE-Identity block,
+                                                                             function.
+in which the SE unit is placed on the identity connection in
+parallel to the residual unit. These variants are illustrated
+in Figure 5 and the performance of each variant is reported                  7.1     Effect of Squeeze
+in Table 14. We observe that the SE-PRE, SE-Identity and                     To assess whether the global embedding produced by the
+proposed SE block each perform similarly well, while usage                   squeeze operation plays an important role in performance,
+                                                                             we experiment with a variant of the SE block that adds an
+                                                                             equal number of parameters, but does not perform global
+                               TABLE 13                                      average pooling. Specifically, we remove the pooling op-
+ Effect of integrating SE blocks with ResNet-50 at different stages on
+                        ImageNet (error rates %).                            eration and replace the two FC layers with corresponding
+                                                                             1 × 1 convolutions with identical channel dimensions in
+   Stage             top-1 err.    top-5 err.      GFLOPs        Params
+                                                                             the excitation operator, namely NoSqueeze, where the ex-
+   ResNet-50           23.30         6.55           3.86          25.6M
+                                                                             citation output maintains the spatial dimensions as input.
+   SE Stage 2          23.03         6.48           3.86          25.6M
+   SE Stage 3          23.04         6.32           3.86          25.7M      In contrast to the SE block, these point-wise convolutions
+   SE Stage 4          22.68         6.22           3.86          26.4M      can only remap the channels as a function of the output
+   SE All              22.28         6.03           3.87          28.1M      of a local operator. While in practice, the later layers of a
+                                                                             deep network will typically possess a (theoretical) global
+                                                                                                                                             10
+
+
+
+
+                                                 Residual                   SE                    Residual
+                                                                                                                          SE
+
+                  Residual
+                                                   SE                     Residual                                               Residual
+
+
+
+                                                                                                     SE
+
+
+
+
+         (a) Residual block           (b) Standard SE block       (c) SE-PRE block          (d) SE-POST block        (e) SE-Identity block
+Fig. 5. SE block integration designs explored in the ablation study.
+
+
+
+
+                             (a) SE_2_3                                (b) SE_3_4                               (c) SE_4_6
+
+
+
+
+                         (d) SE_5_1                                    (e) SE_5_2                               (f) SE_5_3
+Fig. 6. Activations induced by the Excitation operator at different depths in the SE-ResNet-50 on ImageNet. Each set of activations is named
+according to the following scheme: SE_stageID_blockID. With the exception of the unusual behaviour at SE_5_2, the activations become
+increasingly class-specific with increasing depth.
+
+
+                              TABLE 16                                        activations from the SE-ResNet-50 model and examine their
+        Effect of Squeeze operator on ImageNet (error rates %).               distribution with respect to different classes and different
+                     top-1 err.     top-5 err.      GFLOPs    Params          input images at various depths in the network. In particular,
+      ResNet-50        23.30          6.55           3.86     25.6M           we would like to understand how excitations vary across
+      NoSqueeze        22.93          6.39           4.27     28.1M           images of different classes, and across images within a class.
+      SE               22.28          6.03           3.87     28.1M
+                                                                                  We first consider the distribution of excitations for dif-
+                                                                              ferent classes. Specifically, we sample four classes from the
+                                                                              ImageNet dataset that exhibit semantic and appearance di-
+receptive field, global embeddings are no longer directly                     versity, namely goldfish, pug, plane and cliff (example images
+accessible throughout the network in the NoSqueeze variant.                   from these classes are shown in Appendix). We then draw
+The accuracy and computational complexity of both models                      fifty samples for each class from the validation set and
+are compared to a standard ResNet-50 model in Table 16. We                    compute the average activations for fifty uniformly sampled
+observe that the use of global information has a significant                  channels in the last SE block of each stage (immediately
+influence on the model performance, underlining the im-                       prior to downsampling) and plot their distribution in Fig. 6.
+portance of the squeeze operation. Moreover, in comparison                    For reference, we also plot the distribution of the mean
+to the NoSqueeze design, the SE block allows this global                      activations across all of the 1000 classes.
+information to be used in a computationally parsimonious
+                                                                                  We make the following three observations about the
+manner.
+                                                                              role of the excitation operation. First, the distribution across
+                                                                              different classes is very similar at the earlier layers of the
+7.2    Role of Excitation                                                     network, e.g. SE 2 3. This suggests that the importance of
+To provide a clearer picture of the function of the excitation                feature channels is likely to be shared by different classes in
+operator in SE blocks, in this section we study example                       the early stages. The second observation is that at greater
+                                                                                                                                       11
+
+
+
+
+                     (a) SE_2_3                                (b) SE_3_4                                (c) SE_4_6
+
+
+
+
+                     (d) SE_5_1                                (e) SE_5_2                               (f) SE_5_3
+Fig. 7. Activations induced by Excitation in the different modules of SE-ResNet-50 on image samples from the goldfish and plane classes of
+ImageNet. The module is named “SE_stageID_blockID”.
+
+
+depth, the value of each channel becomes much more                    ertheless function to support the increasingly class-specific
+class-specific as different classes exhibit different prefer-         needs of the model at different layers in the architecture.
+ences to the discriminative value of features, e.g. SE 4 6 and
+SE 5 1. These observations are consistent with findings in
+previous work [81], [82], namely that earlier layer features
+                                                                      8     C ONCLUSION
+are typically more general (e.g. class agnostic in the context        In this paper we proposed the SE block, an architectural
+of the classification task) while later layer features exhibit        unit designed to improve the representational power of a
+greater levels of specificity [83].                                   network by enabling it to perform dynamic channel-wise
+                                                                      feature recalibration. A wide range of experiments show
+    Next, we observe a somewhat different phenomena in
+                                                                      the effectiveness of SENets, which achieve state-of-the-art
+the last stage of the network. SE 5 2 exhibits an interesting
+                                                                      performance across multiple datasets and tasks. In addition,
+tendency towards a saturated state in which most of the
+                                                                      SE blocks shed some light on the inability of previous
+activations are close to one. At the point at which all
+                                                                      architectures to adequately model channel-wise feature de-
+activations take the value one, an SE block reduces to the
+                                                                      pendencies. We hope this insight may prove useful for other
+identity operator. At the end of the network in the SE 5 3
+                                                                      tasks requiring strong discriminative features. Finally, the
+(which is immediately followed by global pooling prior
+                                                                      feature importance values produced by SE blocks may be
+before classifiers), a similar pattern emerges over different
+                                                                      of use for other tasks such as network pruning for model
+classes, up to a modest change in scale (which could be
+                                                                      compression.
+tuned by the classifiers). This suggests that SE 5 2 and
+SE 5 3 are less important than previous blocks in providing
+recalibration to the network. This finding is consistent with         ACKNOWLEDGMENTS
+the result of the empirical investigation in Section 4 which
+                                                                      The authors would like to thank Chao Li and Guangyuan
+demonstrated that the additional parameter count could be
+                                                                      Wang from Momenta for their contributions in the training
+significantly reduced by removing the SE blocks for the last
+                                                                      system optimisation and experiments on CIFAR dataset. We
+stage with only a marginal loss of performance.
+                                                                      would also like to thank Andrew Zisserman, Aravindh Ma-
+    Finally, we show the mean and standard deviations of              hendran and Andrea Vedaldi for many helpful discussions.
+the activations for image instances within the same class             The work is supported in part by NSFC Grants (61632003,
+for two sample classes (goldfish and plane) in Fig. 7. We             61620106003, 61672502, 61571439), National Key R&D Pro-
+observe a trend consistent with the inter-class visualisation,        gram of China (2017YFB1002701), and Macao FDCT Grant
+indicating that the dynamic behaviour of SE blocks varies             (068/2015/A2). Samuel Albanie is supported by EPSRC
+over both classes and instances within a class. Particularly          AIMS CDT EP/L015897/1.
+in the later layers of the network where there is consider-
+able diversity of representation within a single class, the
+network learns to take advantage of feature recalibration to          A PPENDIX : D ETAILS OF SEN ET-154
+improve its discriminative performance [84]. In summary,              SENet-154 is constructed by incorporating SE blocks into a
+SE blocks produce instance-specific responses which nev-              modified version of the 64×4d ResNeXt-152 which extends
+                                                                                                                                                     12
+
+                                                                             [15] R. K. Srivastava, K. Greff, and J. Schmidhuber, “Training very deep
+                                                                                  networks,” in Conference on Neural Information Processing Systems,
+                                                                                  2015.
+                                                                             [16] Y. Chen, J. Li, H. Xiao, X. Jin, S. Yan, and J. Feng, “Dual path
+                                                                                  networks,” in Conference on Neural Information Processing Systems,
+                                                                                  2017.
+(a) goldfish       (b) pug            (c) plane             (d) cliff        [17] G. Huang, Z. Liu, K. Q. Weinberger, and L. Maaten, “Densely
+Fig. 8. Sample images from the four classes of ImageNet used in the               connected convolutional networks,” in CVPR, 2017.
+experiments described in Sec. 7.2.                                           [18] Y. Ioannou, D. Robertson, R. Cipolla, and A. Criminisi, “Deep
+                                                                                  roots: Improving CNN efficiency with hierarchical filter groups,”
+                                                                                  in CVPR, 2017.
+                                                                             [19] S. Xie, R. Girshick, P. Dollár, Z. Tu, and K. He, “Aggregated
+the original ResNeXt-101 [19] by adopting the block stack-                        residual transformations for deep neural networks,” in CVPR,
+ing strategy of ResNet-152 [13]. Further differences to the                       2017.
+design and training of this model (beyond the use of SE                      [20] C. Szegedy, V. Vanhoucke, S. Ioffe, J. Shlens, and Z. Wojna, “Re-
+blocks) are as follows: (a) The number of the first 1 × 1                         thinking the inception architecture for computer vision,” in CVPR,
+                                                                                  2016.
+convolutional channels for each bottleneck building block                    [21] C. Szegedy, S. Ioffe, V. Vanhoucke, and A. Alemi, “Inception-
+was halved to reduce the computational cost of the model                          v4, inception-resnet and the impact of residual connections on
+with a minimal decrease in performance. (b) The first 7 × 7                       learning,” in AAAI Conference on Artificial Intelligence, 2016.
+convolutional layer was replaced with three consecutive                      [22] M. Jaderberg, A. Vedaldi, and A. Zisserman, “Speeding up con-
+                                                                                  volutional neural networks with low rank expansions,” in BMVC,
+3 × 3 convolutional layers. (c) The 1 × 1 down-sampling                           2014.
+projection with stride-2 convolution was replaced with a                     [23] F. Chollet, “Xception: Deep learning with depthwise separable
+3 × 3 stride-2 convolution to preserve information. (d) A                         convolutions,” in CVPR, 2017.
+dropout layer (with a dropout ratio of 0.2) was inserted                     [24] M. Lin, Q. Chen, and S. Yan, “Network in network,” in ICLR, 2014.
+                                                                             [25] G. F. Miller, P. M. Todd, and S. U. Hegde, “Designing neural
+before the classification layer to reduce overfitting. (e) Label-                 networks using genetic algorithms.” in ICGA, 1989.
+smoothing regularisation (as introduced in [20]) was used                    [26] K. O. Stanley and R. Miikkulainen, “Evolving neural networks
+during training. (f) The parameters of all BN layers were                         through augmenting topologies,” Evolutionary computation, 2002.
+frozen for the last few training epochs to ensure consistency                [27] J. Bayer, D. Wierstra, J. Togelius, and J. Schmidhuber, “Evolving
+                                                                                  memory cell structures for sequence learning,” in ICANN, 2009.
+between training and testing. (g) Training was performed                     [28] R. Jozefowicz, W. Zaremba, and I. Sutskever, “An empirical explo-
+with 8 servers (64 GPUs) in parallel to enable large batch                        ration of recurrent network architectures,” in ICML, 2015.
+sizes (2048). The initial learning rate was set to 1.0.                      [29] L. Xie and A. L. Yuille, “Genetic CNN,” in ICCV, 2017.
+                                                                             [30] E. Real, S. Moore, A. Selle, S. Saxena, Y. L. Suematsu, J. Tan, Q. Le,
+                                                                                  and A. Kurakin, “Large-scale evolution of image classifiers,” in
+R EFERENCES                                                                       ICML, 2017.
+                                                                             [31] E. Real, A. Aggarwal, Y. Huang, and Q. V. Le, “Regularized
+[1]  A. Krizhevsky, I. Sutskever, and G. E. Hinton, “ImageNet classifi-           evolution for image classifier architecture search,” arXiv preprint
+     cation with deep convolutional neural networks,” in Conference on            arXiv:1802.01548, 2018.
+     Neural Information Processing Systems, 2012.                            [32] T. Elsken, J. H. Metzen, and F. Hutter, “Efficient multi-objective
+[2] A. Toshev and C. Szegedy, “DeepPose: Human pose estimation                    neural architecture search via lamarckian evolution,” arXiv
+     via deep neural networks,” in CVPR, 2014.                                    preprint arXiv:1804.09081, 2018.
+[3] J. Long, E. Shelhamer, and T. Darrell, “Fully convolutional net-         [33] H. Liu, K. Simonyan, and Y. Yang, “DARTS: Differentiable archi-
+     works for semantic segmentation,” in CVPR, 2015.                             tecture search,” arXiv preprint arXiv:1806.09055, 2018.
+[4] S. Ren, K. He, R. Girshick, and J. Sun, “Faster R-CNN: Towards           [34] J. Bergstra and Y. Bengio, “Random search for hyper-parameter
+     real-time object detection with region proposal networks,” in                optimization,” JMLR, 2012.
+     Conference on Neural Information Processing Systems, 2015.              [35] C. Liu, B. Zoph, J. Shlens, W. Hua, L.-J. Li, L. Fei-Fei, A. Yuille,
+[5] C. Szegedy, W. Liu, Y. Jia, P. Sermanet, S. Reed, D. Anguelov,                J. Huang, and K. Murphy, “Progressive neural architecture
+     D. Erhan, V. Vanhoucke, and A. Rabinovich, “Going deeper with                search,” in ECCV, 2018.
+     convolutions,” in CVPR, 2015.                                           [36] R. Negrinho and G. Gordon, “Deeparchitect: Automatically
+[6] S. Ioffe and C. Szegedy, “Batch normalization: Accelerating deep              designing and training deep architectures,” arXiv preprint
+     network training by reducing internal covariate shift,” in ICML,             arXiv:1704.08792, 2017.
+     2015.
+                                                                             [37] S. Saxena and J. Verbeek, “Convolutional neural fabrics,” in Con-
+[7] S. Bell, C. L. Zitnick, K. Bala, and R. Girshick, “Inside-outside net:
+                                                                                  ference on Neural Information Processing Systems, 2016.
+     Detecting objects in context with skip pooling and recurrent neural
+     networks,” in CVPR, 2016.                                               [38] A. Brock, T. Lim, J. M. Ritchie, and N. Weston, “SMASH: one-shot
+[8] A. Newell, K. Yang, and J. Deng, “Stacked hourglass networks for              model architecture search through hypernetworks,” in ICLR, 2018.
+     human pose estimation,” in ECCV, 2016.                                  [39] B. Baker, O. Gupta, R. Raskar, and N. Naik, “Accelerating neural
+[9] M. Jaderberg, K. Simonyan, A. Zisserman, and K. Kavukcuoglu,                  architecture search using performance prediction,” in ICLR Work-
+     “Spatial transformer networks,” in Conference on Neural Information          shop, 2018.
+     Processing Systems, 2015.                                               [40] B. Baker, O. Gupta, N. Naik, and R. Raskar, “Designing neural
+[10] O. Russakovsky, J. Deng, H. Su, J. Krause, S. Satheesh, S. Ma,               network architectures using reinforcement learning,” in ICLR,
+     Z. Huang, A. Karpathy, A. Khosla, M. Bernstein, A. C. Berg, and              2017.
+     L. Fei-Fei, “ImageNet large scale visual recognition challenge,”        [41] B. Zoph and Q. V. Le, “Neural architecture search with reinforce-
+     International Journal of Computer Vision, 2015.                              ment learning,” in ICLR, 2017.
+[11] K. Simonyan and A. Zisserman, “Very deep convolutional net-             [42] B. Zoph, V. Vasudevan, J. Shlens, and Q. V. Le, “Learning transfer-
+     works for large-scale image recognition,” in ICLR, 2015.                     able architectures for scalable image recognition,” in CVPR, 2018.
+[12] S. Santurkar, D. Tsipras, A. Ilyas, and A. Madry, “How does             [43] H. Liu, K. Simonyan, O. Vinyals, C. Fernando, and
+     batch normalization help optimization? (no, it is not about internal         K. Kavukcuoglu, “Hierarchical representations for efficient
+     covariate shift),” in Conference on Neural Information Processing            architecture search,” in ICLR, 2018.
+     Systems, 2018.                                                          [44] H. Pham, M. Y. Guan, B. Zoph, Q. V. Le, and J. Dean, “Efficient
+[13] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for             neural architecture search via parameter sharing,” in ICML, 2018.
+     image recognition,” in CVPR, 2016.                                      [45] M. Tan, B. Chen, R. Pang, V. Vasudevan, and Q. V. Le, “Mnas-
+[14] K. He, X. Zhang, S. Ren, and J. Sun, “Identity mappings in deep              net: Platform-aware neural architecture search for mobile,” arXiv
+     residual networks,” in ECCV, 2016.                                           preprint arXiv:1807.11626, 2018.
+                                                                                                                                                   13
+
+[46] B. A. Olshausen, C. H. Anderson, and D. C. V. Essen, “A neurobio-      [74] L. Shen, Z. Lin, and Q. Huang, “Relay backpropagation for effec-
+     logical model of visual attention and invariant pattern recognition         tive learning of deep convolutional neural networks,” in ECCV,
+     based on dynamic routing of information,” Journal of Neuroscience,          2016.
+     1993.                                                                  [75] T.-Y. Lin, M. Maire, S. Belongie, J. Hays, P. Perona, D. Ramanan,
+[47] L. Itti, C. Koch, and E. Niebur, “A model of saliency-based visual          P. Dollár, and C. L. Zitnick, “Microsoft COCO: Common objects in
+     attention for rapid scene analysis,” IEEE Transactions on Pattern           context,” in ECCV, 2014.
+     Analysis and Machine Intelligence, 1998.                               [76] R. Girshick, I. Radosavovic, G. Gkioxari, P. Dollár, and K. He, “De-
+[48] L. Itti and C. Koch, “Computational modelling of visual attention,”         tectron,” https://github.com/facebookresearch/detectron, 2018.
+     Nature reviews neuroscience, 2001.                                     [77] D. Han, J. Kim, and J. Kim, “Deep pyramidal residual networks,”
+[49] H. Larochelle and G. E. Hinton, “Learning to combine foveal                 in CVPR, 2017.
+     glimpses with a third-order boltzmann machine,” in Conference          [78] X. Zhang, Z. Li, C. C. Loy, and D. Lin, “Polynet: A pursuit of
+     on Neural Information Processing Systems, 2010.                             structural diversity in very deep networks,” in CVPR, 2017.
+[50] V. Mnih, N. Heess, A. Graves, and K. Kavukcuoglu, “Recurrent           [79] E. D. Cubuk, B. Zoph, D. Mane, V. Vasudevan, and Q. V. Le,
+     models of visual attention,” in Conference on Neural Information            “Autoaugment: Learning augmentation policies from data,” arXiv
+     Processing Systems, 2014.                                                   preprint arXiv:1805.09501, 2018.
+[51] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N.       [80] D. Mahajan, R. Girshick, V. Ramanathan, K. He, M. Paluri, Y. Li,
+     Gomez, Ł. Kaiser, and I. Polosukhin, “Attention is all you need,”           A. Bharambe, and L. van der Maaten, “Exploring the limits of
+     in Conference on Neural Information Processing Systems, 2017.               weakly supervised pretraining,” in ECCV, 2018.
+[52] T. Bluche, “Joint line segmentation and transcription for end-to-      [81] H. Lee, R. Grosse, R. Ranganath, and A. Y. Ng, “Convolutional
+     end handwritten paragraph recognition,” in Conference on Neural             deep belief networks for scalable unsupervised learning of hierar-
+     Information Processing Systems, 2016.                                       chical representations,” in ICML, 2009.
+[53] A. Miech, I. Laptev, and J. Sivic, “Learnable pooling with context     [82] J. Yosinski, J. Clune, Y. Bengio, and H. Lipson, “How transferable
+     gating for video classification,” arXiv:1706.06905, 2017.                   are features in deep neural networks?” in Conference on Neural
+[54] C. Cao, X. Liu, Y. Yang, Y. Yu, J. Wang, Z. Wang, Y. Huang, L. Wang,        Information Processing Systems, 2014.
+     C. Huang, W. Xu, D. Ramanan, and T. S. Huang, “Look and                [83] A. S. Morcos, D. G. Barrett, N. C. Rabinowitz, and M. Botvinick,
+     think twice: Capturing top-down visual attention with feedback              “On the importance of single directions for generalization,” in
+     convolutional neural networks,” in ICCV, 2015.                              ICLR, 2018.
+[55] K. Xu, J. Ba, R. Kiros, K. Cho, A. Courville, R. Salakhudinov,         [84] J. Hu, L. Shen, S. Albanie, G. Sun, and A. Vedaldi, “Gather-excite:
+     R. Zemel, and Y. Bengio, “Show, attend and tell: Neural image               Exploiting feature context in convolutional neural networks,” in
+     caption generation with visual attention,” in ICML, 2015.                   Conference on Neural Information Processing Systems, 2018.
+[56] L. Chen, H. Zhang, J. Xiao, L. Nie, J. Shao, W. Liu, and T. Chua,
+     “SCA-CNN: Spatial and channel-wise attention in convolutional
+     networks for image captioning,” in CVPR, 2017.
+[57] J. S. Chung, A. Senior, O. Vinyals, and A. Zisserman, “Lip reading
+     sentences in the wild,” in CVPR, 2017.
+[58] F. Wang, M. Jiang, C. Qian, S. Yang, C. Li, H. Zhang, X. Wang, and
+     X. Tang, “Residual attention network for image classification,” in
+     CVPR, 2017.
+[59] S. Woo, J. Park, J.-Y. Lee, and I. S. Kweon, “CBAM: Convolutional
+     block attention module,” in ECCV, 2018.
+[60] J. Yang, K. Yu, Y. Gong, and T. Huang, “Linear spatial pyramid
+     matching using sparse coding for image classification,” in CVPR,
+     2009.
+[61] J. Sanchez, F. Perronnin, T. Mensink, and J. Verbeek, “Image classi-
+     fication with the fisher vector: Theory and practice,” International
+     Journal of Computer Vision, 2013.
+[62] L. Shen, G. Sun, Q. Huang, S. Wang, Z. Lin, and E. Wu, “Multi-
+     level discriminative dictionary learning with application to large
+     scale image classification,” IEEE TIP, 2015.
+[63] V. Nair and G. E. Hinton, “Rectified linear units improve restricted
+     boltzmann machines,” in ICML, 2010.
+[64] A. G. Howard, M. Zhu, B. Chen, D. Kalenichenko, W. Wang,
+     T. Weyand, M. Andreetto, and H. Adam, “MobileNets: Efficient
+     convolutional neural networks for mobile vision applications,”
+     arXiv:1704.04861, 2017.
+[65] X. Zhang, X. Zhou, M. Lin, and J. Sun, “ShuffleNet: An extremely
+     efficient convolutional neural network for mobile devices,” in
+     CVPR, 2018.
+[66] K. He, X. Zhang, S. Ren, and J. Sun, “Delving deep into rectifiers:
+     Surpassing human-level performance on ImageNet classification,”
+     in ICCV, 2015.
+[67] S. Zagoruyko and N. Komodakis, “Wide residual networks,” in
+     BMVC, 2016.
+[68] X. Gastaldi, “Shake-shake regularization,” arXiv preprint
+     arXiv:1705.07485, 2017.
+[69] T. DeVries and G. W. Taylor, “Improved regularization of
+     convolutional neural networks with cutout,” arXiv preprint
+     arXiv:1708.04552, 2017.
+[70] A. Krizhevsky and G. Hinton, “Learning multiple layers of fea-
+     tures from tiny images,” Citeseer, Tech. Rep., 2009.
+[71] G. Huang, Y. Sun, Z. Liu, D. Sedra, and K. Q. Weinberger, “Deep
+     networks with stochastic depth,” in ECCV, 2016.
+[72] L. Shen, Z. Lin, G. Sun, and J. Hu, “Places401 and places365 mod-
+     els,” https://github.com/lishen-shirley/Places2-CNNs, 2016.
+[73] B. Zhou, A. Lapedriza, A. Khosla, A. Oliva, and A. Torralba,
+     “Places: A 10 million image database for scene recognition,” IEEE
+     Transactions on Pattern Analysis and Machine Intelligence, 2017.
+

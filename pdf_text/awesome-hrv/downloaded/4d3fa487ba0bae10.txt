@@ -1,0 +1,670 @@
+HRnV-Calc: A software package for heart rate n-variability and
+heart rate variability analysis
+
+Chenglin Niu1#, Dagang Guo1#, Marcus Eng Hock Ong1,2, Zhi Xiong Koh1,2, Andrew Fu Wah
+Ho1,2, Zhiping Lin3, Chengyu Liu4, Gari D. Clifford5,6, Nan Liu1,7,8*
+
+1
+  Duke-NUS Medical School, National University of Singapore, Singapore, Singapore
+2
+  Department of Emergency Medicine, Singapore General Hospital, Singapore, Singapore
+3
+  School of Electrical and Electronic Engineering, Nanyang Technological University, Singapore
+4
+  School of Instrument Science and Engineering, Southeast University, Nanjing, China
+5
+  Department of Biomedical Informatics, Emory University, Atlanta, GA, United States of
+America
+6
+  Department of Biomedical Engineering, Georgia Institute of Technology, Atlanta, GA, United
+States of America
+7
+  SingHealth AI Health Program, Singapore Health Services, Singapore, Singapore
+8
+  Institute of Data Science, National University of Singapore, Singapore, Singapore
+
+#
+ Contributed equally
+* Corresponding Author:
+Nan Liu
+Programme in Health Services and Systems Research
+Duke-NUS Medical School
+8 College Road
+Singapore 169857
+Singapore
+Phone: +65 6601 6503
+Email: liu.nan@duke-nus.edu.sg
+
+
+Abstract
+Objective: Heart rate variability (HRV) has been proven to be an important indicator of
+physiological status for numerous applications. Despite the progress and active developments
+made in HRV metric research over the last few decades, the representation of the heartbeat
+sequence upon which HRV is based has received relatively little attention. The recently
+introduced heart rate n-variability (HRnV) offers an alternative to R-to-R peak interval
+representations which complements conventional HRV analysis by considering HRV behavior
+on varying scales. Although HRnV has been shown to improve triage in pilot studies, there is
+
+                                                                                               1
+currently no open and standard software to support future research of HRnV and its broader
+clinical applications. We aimed to develop an open, reliable, and easy to use software package
+implementing HRnV for further research and improvements of HRnV. This package has been
+designed to facilitate collaborative investigations between clinicians and researchers to study
+HRnV in various contexts and applications.
+Approach: We developed an open-source software, HRnV-Calc, based on the PhysioNet
+Cardiovascular Signal Toolbox (PCST), which features comprehensive graphical user interfaces
+(GUIs) for HRnV and HRV analysis.
+Main results: While preserving the core functionalities and performance of PCST, HRnV-Calc
+enables step-by-step manual inspection and configuration of HRV and HRnV analysis, so that
+results can be debugged, easily interpreted, and integrated to downstream applications.
+Significance: The open-source HRnV-Calc software, an accessible and standardized HRV and
+HRnV analysis platform, enhances the scope of HRV assessment and is designed to assist in
+future improvements and applications of HRnV and related research.
+
+Key Words: Heart rate n-variability, Heart rate variability, HRV software, RR interval
+representation
+
+
+HRnV-Calc Software: https://github.com/nliulab/HRnV-Calc
+
+
+
+
+                                                                                                  2
+1 Introduction
+Variation of the time interval between a consistent point in time of each heartbeat (generally
+related to ventricular contraction), known as heart rate variability (HRV) [1], has been proven by
+numerous studies to be a useful indicator of physiological status [1-3]. Thanks to its non-invasive
+nature and strong connection to the autonomic nervous system (ANS) [1, 3], HRV has been
+adopted to study a wide range of diseases and clinical conditions, which include myocardial
+infarction [4-6], sudden cardiac death [5, 7], diabetes [8-10], renal failure [11, 12], sepsis [13,
+14], and cancer [15-17]. In addition, the emergence of wearable devices with heart monitoring
+capabilities has also allowed researchers to study the above-mentioned medical conditions in
+real-world settings [18-20], as well as in non-clinical applications such as sports [21], stress [22],
+and sleep monitoring [23].
+
+A variety of HRV metrics can be derived from the heartbeat time sequence known as the inter-
+beat interval (IBI), or the R-to-R peak interval (RR interval [RRI]). Such sequences are often
+extracted from biomedical signals such as electrocardiograms (ECG) and photoplethysmograms
+(PPG). It is believed that a decrease of complexity in HRV is associated with an increase in both
+morbidity and mortality [1, 3-5]. To qualify and quantify the complexity, various conventional
+HRV metrics in linear and non-linear domains [24] have been established to reflect the dynamic
+of HRV [1, 25]. However, the exact mechanism regulating HRV is not well understood [1-3].
+Recent developments in HRV have been mainly focused on non-linear metrics such as variants
+of approximate entropy (ApEn) and sample entropy (SampEn) [26-28].
+
+Despite progress in HRV metrics research, the representation of RRI upon which HRV is based
+has rarely been examined. Cysarz et al. [29] proposed a binary symbolization of RRI, which
+combined with ApEn provides new information about the normal heart period regularity. The
+multiscale entropy (MSE) metrics [30] calculate SampEn on multiscale coarse-gained series
+derived from RRI to reflect the nonlinear behavior of the heart on multiple time scales. To
+generalize the averaging multiscale approach, Liu et al. [31] proposed heart rate n-variability
+(HRnV) that utilizes sliding and stridden summation windows over RRI to obtain new RRI-like
+intervals denoted 𝑅𝑅𝑛 𝐼 and 𝑅𝑅𝑛 𝐼𝑚 . Using these novel RRI representations, new HRnV metrics
+can be calculated with conventional HRV analysis metrics, providing an entire family of new
+metrics, and potentially additional insights into the dynamics and long-term dependencies of the
+original RRI. For example, research has shown that HRnV improves the accuracy of triage for
+patients with chest pain [31] and sepsis [32].
+
+For the reliable and repeatable implementation of HRnV in both clinical and research settings, an
+open-source and standardized software platform is necessary to facilitate further research on
+
+                                                                                                    3
+HRnV and its possible variations. There is an abundance of HRV software tools for commercial
+and non-commercial use, including Kubios HRV [33], ECGlab [34], ARTiiFACT [35], rHRV
+[36], and RR-APET [37]. However, none of these tools is suitable for incorporating HRnV
+analysis. Moreover, with the exception of two open-source toolboxes, none of the available tools
+provide equivalent results, making comparisons between research impossible [38]. Since HRnV
+shares some common processing methods with conventional HRV analysis [31], it is natural to
+develop a HRnV platform based on existing benchmarked software. We therefore developed an
+open-source HRnV software, HRnV-Calc, based on the PhysioNet Cardiovascular Signal
+Toolbox (PCST) [38]. Compared to other HRV freeware, the PCST is standardized and well-
+documented. More importantly, the PCST is an open-source HRV software suite which has gone
+through rigorous testing and benchmarking in both technical and clinical settings. Based on the
+fully functional HRV command-line code provided by the PCST, HRnV-Calc has integrated
+graphical user interfaces (GUIs) that enable manual inspection and correction of RRI extraction
+from ECG signals, flexible configuration, and batch-processing. Its inherent functions support
+the analysis of both HRnV and conventional HRV metrics. Therefore, HRnV-Calc facilitates
+new methodological developments, but also provide clinicians and researchers with standardized
+HRnV and HRV analyses.
+
+
+2 Computational Methods
+In HRnV-Calc (https://github.com/nliulab/HRnV-Calc), the main components of signal
+processing and HRV analysis are built upon the PCST. This section provides an overview of the
+methods implemented in HRnV-Calc as well as the HRnV method it integrates. Table 1 contains
+a complete list of metrics provided by HRnV-Calc.
+
+2.1 QRS Detection
+If inputs to HRnV-Calc are raw ECG waveforms, the software will first attempt to detect QRS
+features. The QRS detector used in HRnV-Calc is jqrs [39, 40], as the same implemented in the
+PCST [38]. Upon finalization of the R peak detection results, the ECG data will be converted to
+RRI sequence for downstream analysis.
+
+2.2 Preprocessing of RRI
+Both user-provided RRI and ECG-derived RRI will undergo a preprocessing phase to determine
+whether the input data contains non-sinus intervals or outliers [38]. A non-sinus interval is
+detected by measuring whether the current interval exceeds the median of five adjacent intervals
+by a user-prespecified threshold, which has a default value of 20% [38]. Users may choose to
+remove such intervals from the data or to interpolate new intervals using cubic spline, piecewise
+cubic Hermite interpolating polynomial (PCHIP), or linear interpolation.
+
+                                                                                                  4
+2.3 HRnV Method
+The HRnV method [31] for alternative RRI representation is a unique and the main feature
+implemented in HRnV-Calc. HRnV utilizes sliding and stridden summation windows on the
+original RRI, resulting in new 𝑅𝑅𝑛 𝐼 and 𝑅𝑅𝑛 𝐼𝑚 intervals, which can then be fed into
+conventional HRV analysis to calculate corresponding 𝐻𝑅𝑛 𝑉and 𝐻𝑅𝑛 𝑉𝑚 metrics. For
+clarification, the term ‘HRnV’ refers to the name of the method (i.e., heart rate n-variability),
+while 𝐻𝑅𝑛 𝑉 and 𝐻𝑅𝑛 𝑉𝑚 refer to the analysis and derived metrics based on 𝑅𝑅𝑛 𝐼 and 𝑅𝑅𝑛 𝐼𝑚
+intervals, respectively.
+
+HRnV analysis requires specifications of two parameters: the summation parameter 𝑛 and the
+stride parameter 𝑚. Originally, 𝑅𝑅𝑛 𝐼 and 𝑅𝑅𝑛 𝐼𝑚 are two distinct representations derived from
+RRI [31]. 𝑅𝑅𝑛 𝐼 is generated by non-overlapping summation windows, while 𝑅𝑅𝑛 𝐼𝑚 is created
+from overlapping ones. Mathematically, 𝑅𝑅𝑛 𝐼 can be treated as a special case of 𝑅𝑅𝑛 𝐼𝑚 (i.e.,
+𝑚 = 𝑛, or 𝑅𝑅𝑛 𝐼𝑛 ). To simplify the terminology, in the remainder of this paper we only use
+𝑅𝑅𝑛 𝐼𝑚 and 𝐻𝑅𝑛 𝑉𝑚 to represent the intervals and analysis provided by HRnV, unless specifically
+stated.
+
+Both 𝑛 and 𝑚 can take any positive integer values (i.e., 𝑛, 𝑚 >= 1) given 𝑚 <= 𝑛. To describe
+the process of HRnV, consider a series of clean input RRI as 𝑋𝑖 (𝑖 = 1,2,3, … , 𝑁) of length 𝑁.
+With specified parameters 𝑛 and 𝑚, a new series of 𝑅𝑅𝑛 𝐼𝑚 intervals, 𝑌𝑖 (𝑖 = 1,2,3, … , 𝑀) of
+length 𝑀 (𝑀 <= 𝑁) can be expressed as:
+                                     𝑛
+
+                              𝑌𝑖 = ∑ 𝑋(𝑖−1)∗𝑚+𝑗 , (𝑖 = 1,2,3, … , 𝑀)
+                                    𝑗=1
+                                                        𝑁−𝑛+1
+The length of the new intervals, 𝑀, is given by 𝑀 = ⌊         ⌋, where ⌊ ⋅ ⌋ represents the floor
+                                                          𝑚
+function. Essentially, the original RRI is equivalent to 𝑅𝑅1 𝐼 intervals.
+
+The 𝑅𝑅𝑛 𝐼𝑚 intervals capture and amplify the dependencies and dynamics within the original
+RRI. The parameter 𝑛 determines how HRnV smooths and amplifies the original RRI, while the
+parameter 𝑚 indicates how much dynamics it attempts to capture.
+
+All conventional HRV metrics mentioned in the subsequent subsections can be calculated from
+𝑅𝑅𝑛 𝐼𝑚 intervals. These metrics, also known as 𝐻𝑅𝑛 𝑉𝑚 metrics (e.g., 𝐻𝑅2 𝑉1 _𝑆𝑎𝑚𝑝𝐸𝑛), provide
+potential new insights of the original RRI, especially in the frequency and nonlinear domains. A
+single 𝐻𝑅𝑛 𝑉𝑚 analysis with specified 𝑛 and 𝑚 is an HRV analysis performed on the
+
+
+                                                                                                    5
+corresponding 𝑅𝑅𝑛 𝐼𝑚 interval. Consequently, the conventional HRV analysis is equivalent to the
+𝐻𝑅1 𝑉 analysis.
+
+2.4 Time-domain Methods
+HRnV-Calc provides the majority of commonly used time-domain metrics [25]. Statistically
+descriptive metrics such as the mean, standard deviation (SDRR), skewness, kurtosis, and the
+root mean square of successive differences (RMSSD) are calculated based on functions provided
+in the PCST. Additionally, HRnV-Calc calculates the mean and standard deviation of heart rates
+(HR) as well as the HRV triangular index [25].
+
+2.5 Frequency-domain Methods
+In frequency-domain analysis, the power spectral density (PSD) estimation is first derived from
+input intervals. Methods for such an estimation provided in HRnV-Calc include the default
+Lomb-Scargle periodogram [38, 41, 42], Welch PSD estimate, discrete fast Fourier transform
+(FFT), and Burg PSD estimate.
+
+The estimates of PSD are divided into three bands: very low frequency (VLF), low frequency
+(LF), and high frequency (HF). Default limits of these three bands are 0 to 0.04 Hz for VLF, 0.04
+to 0.15 Hz for LF, and 0.15 to 0.4 Hz for HF.
+
+The frequency-domain HRV metrics computed in HRnV-Calc include the peak frequency for
+each of the three specified bands, absolute and relative powers of each band, normalized power
+of LF and HF, LF/HF power ratio, and the total power of PSD.
+
+2.6 Nonlinear Methods
+The nonlinear methods included in HRnV-Calc are the Poincaré plot [43], approximate entropy,
+sample entropy [26], and detrended fluctuation analysis (DFA) [44].
+
+Poincaré plot is a graphical examination of the correlation within the input intervals [43]. The
+width (𝑆𝐷1) and the length (𝑆𝐷2) of the eclipse fitted on the plot capture short-term and long-
+term dependencies of RRI, respectively.
+
+ApEn and SampEn measure the degree of irregularities in the intervals. The embedding 𝑚 and
+tolerance 𝑟 must be specified to calculate such entropies. By default, HRnV-Calc sets 𝑚 = 2 and
+𝑟 = 0.15 SDRR [38].
+
+
+
+
+                                                                                                   6
+DFA captures short-term and long-term fluctuations by fitting two slopes (α1 and α2 ) in the log-
+log plot [44], which is a graphical representation of correlations within RRI for different time
+scales. In HRnV-Calc, α1 is fitted in the plot within 4 to 16 beats, while α2 is fitted for beats no
+less than 16 [38].
+
+
+3 Software Description
+The main features of HRnV-Calc are HRnV metrics calculations and GUIs for both HRV and
+HRnV analysis, which are built upon the core HRV analysis command-line code provided by the
+PCST. Therefore, installation of the PCST is required before using HRnV-Calc, which is
+available on GitHub [45].
+
+In this section, we will introduce the functionalities built-in HRnV-Calc. The ECG file
+‘Demo_NSR16786.txt’, extracted from MIT-BIH Normal Sinus Dataset [46, 47] is used as the
+demonstrative input to HRnV-Calc. Details of the demo input file can be found in section 5.
+
+HRnV-Calc is primarily operated using its step-by-step GUIs, which include four main
+interfaces: (1) Data Loader, (2) QRS Detection & Edits viewer, (3) 𝐻𝑅𝑛 𝑉𝑚 Setting viewer, and
+(4) 𝐻𝑅𝑛 𝑉𝑚 Results Display. Each of these interfaces will be presented one at a time for every
+step of HRnV and HRV analysis.
+
+3.1 Data Loader
+As shown in Figure 1(a), the initial GUI of HRnV-Calc is Data Loader, which provides basic
+settings for users to begin HRV/HRnV analysis, such as the data type of the input and the
+sampling rate of the signal. Users can choose to perform analysis on a single file or multiple files
+as batch-processing. It is noteworthy that the current version of HRnV-Calc only supports batch
+processing on RRI inputs, which do not require manual QRS inspection to complete the
+HRV/HRnV analysis.
+
+The ‘Fetal ECG’ section allows users to select QRS detection profiles based on the type of input
+ECG, since a fetal ECG requires completely different QRS detection settings from ECG captured
+from an individual. The two profiles currently provided in HRnV-Calc are based on the profiles
+given in the PCST [38].
+
+HRnV-Calc provides three options for input data type: Raw ECG (*.txt, *.csv), IBI (*.txt, *.csv),
+and ECG PC (peak corrections) with peak annotations (*.csv) saved by HRnV-Calc. For ECG
+files, currently HRnV-Calc only supports single channel signals. Both single channel ECG and
+RRI data should be stored in a single column or row in the supported file formats. Examples of
+
+                                                                                                       7
+the data formats currently supported by HRnV-Calc can also be found in the sample data inputs
+provided in the supplementary.
+
+By default, HRnV-Calc will use the full name of input files as the record ID to display and store
+downstream HRV/HRnV analysis results. Users may choose to specify the prefix and postfix of
+the file name for ID extraction. Once all settings of the input are set, the ‘Next’ button will bring
+up a confirmation window (Figure 1(b)) to remind users of the initial settings before proceeding
+to the subsequent step.
+
+3.2 QRS Detection and Edits (QDE) Viewer
+The QDE viewer (Figure 2) is designed to configure and inspect QRS detection on ECG inputs.
+All settings and tools for QRS detection and inspection can be found in the setting section at the
+top. The ‘Signal Type’ option allows users to choose whether the full ECG or a segment of it
+should be analyzed.
+
+Once the segmentation of ECG is finalized, users may proceed to perform R peak detection on
+the selected segment. Additionally, baseline drift can be removed before QRS detection. Users
+may also choose to perform local checkup on the ECG input to modify the R peaks to local
+maximum or minimum of the signal. Details of the local checkup can be found in the
+supplementary. The processed ECG and R peak positions (marked as red dots in Figure 2) will
+be plotted at the bottom of the QDE viewer when QRS detection is initiated.
+
+Inspection of QRS detection results can be done in the Denoised ECG Plot in QDE viewer as
+shown in Figure 2. If manual correction of R peaks is required, first remove the incorrect R
+peaks by clicking on the ‘Remove Peak’ button, and then add new annotations using ‘Add Peak’
+button.
+
+3.3 𝑯𝑹𝒏 𝑽𝒎 Setting
+𝐻𝑅𝑛 𝑉𝑚 analyses are configured in the 𝐻𝑅𝑛 𝑉𝑚 Setting viewer (Figure 3). In 𝐻𝑅𝑛 𝑉𝑚
+configuration, users may choose to perform a single 𝐻𝑅𝑛 𝑉𝑚 analysis by choosing the option
+‘Single’ and specifying the desired 𝑛 and 𝑚 values. When choosing the option ‘𝑚 = 𝑛’, HRnV-
+Calc will perform 𝐻𝑅𝑛 𝑉 (i.e., 𝐻𝑅𝑛 𝑉𝑛 ) analysis on the input depending on the specified 𝑛. By
+default, HRnV-Calc will perform the conventional HRV analysis with 𝑛 = 1 and 𝑚 = 1.
+
+The option ‘All’ lets users perform all 𝐻𝑅𝑛 𝑉𝑚 analyses with 𝑛 and 𝑚 no greater than the
+specified 𝑛. For example, if 𝑛 is set to be 2, HRnV-Calc will conduct 𝐻𝑅1 𝑉 (i.e., conventional
+
+
+
+                                                                                                     8
+HRV), 𝐻𝑅2 𝑉1, and 𝐻𝑅2 𝑉 analyses on the input signal altogether. The default value of 𝑛 for this
+option is 1, indicating only the conventional HRV analysis to be performed.
+
+The ‘Ectopic Beats’ section allows users to specify the threshold for a beat to be considered as an
+outlier and to select how outliers should be processed. It should be noted that the detection and
+processing of ectopic beats will only be conducted on the original RRI. All 𝑅𝑅𝑛 𝐼𝑚 intervals will
+be generated from the processed RRI intervals without further processing. In the ‘Frequency
+Domain’ section, users may choose one of the four PSD estimation methods provided in the
+PCST [38].
+
+3.4 𝑯𝑹𝒏 𝑽𝒎 Results Display
+HRnV-Calc will display (Figure 4) the results of a single 𝐻𝑅𝑛 𝑉𝑚 analysis (e.g., 𝐻𝑅2 𝑉1) in the
+𝐻𝑅𝑛 𝑉𝑚 Results Display window. Note the display window will not be activated if users choose
+to perform multiple 𝐻𝑅𝑛 𝑉𝑚 analyses (by selecting the ‘All’ option in 𝐻𝑅𝑛 𝑉𝑚 Setting) or to
+conduct batch processing on multiple input files.
+
+As shown in Figure 4, the 𝐻𝑅𝑛 𝑉𝑚 Results Display viewer provides a comprehensive overview of
+the 𝐻𝑅𝑛 𝑉𝑚 analysis. If the conventional HRV analysis is performed, the ‘IBI Statistics’ section
+provides an overview of the abnormal beats presented in the original RRI and the percentage of
+clean beats in the entire input. For 𝐻𝑅𝑛 𝑉𝑚 analyses other than conventional HRV, the ‘IBI
+Statistics’ section will only display the number of beats in the corresponding 𝑅𝑅𝑛 𝐼𝑚 intervals, as
+preprocessing is only performed on the original RRI before converting to 𝑅𝑅𝑛 𝐼𝑚 intervals.
+
+
+4 HRnV-Calc Validation
+To ascertain the quality and credibility of HRnV-Calc, we compared it with the PCST. Since
+HRnV-Calc is built upon the PCST, both QRS detection and HRV metrics calculation in HRnV-
+Calc should be compared with the PCST to ensure that core functionalities of the PCST are
+properly inherited.
+
+In this section, we validate the QRS detection, HRV, and 𝐻𝑅𝑛 𝑉𝑚 calculations from HRnV-Calc
+with the PCST. The MIT-BIH Normal Sinus Dataset [46, 47] was used as the input to test QRS
+detection. For each patient in the dataset, a five-minute ECG recording was randomly selected. A
+total of 18 five-minute ECG recordings were fed into both software under identical analysis
+configurations.
+
+First, we compared the QRS detection results obtained by the PCST and HRnV-Calc. The
+𝑙1 distance, 𝑑𝑙1 , was used to measure differences between R peak annotations generated by the
+
+                                                                                                   9
+two software. The average distance, ̅̅̅̅
+                                    𝑑𝑙1 , of all test inputs was 0. Therefore, QRS detection from
+HRnV-Calc yielded identical results to those obtained using the PCST. Details of the QRS
+annotation comparison can be found in the supplementary material.
+
+Subsequently, we compared HRV metrics calculations between the two software packages using
+RRIs derived from ECGs. To examine the differences between the calculated HRV metrics, we
+                                                         |𝑋 −𝑋 |
+used the relative error єx of metric 𝑋, defined as єx = |𝑋 𝐻|+10𝑃−8 , where 𝑋𝐻 and 𝑋𝑃 represented
+                                                          𝑃
+
+the same metric 𝑋 generated by HRnV-Calc and the PCST for one patient, respectively. For
+every common metric calculated by the PCST and HRnV-Calc, we calculated the average
+relative error of the metric among all 18 patients. As a result, all average errors for all commonly
+shared HRV metrics were negligible (i.e., smaller than 10−4 ), indicating that HRnV-Calc
+performed HRV analysis identically to PCST.
+
+Furthermore, we compare the 𝐻𝑅𝑛 𝑉𝑚 metrics calculated by the PCST and HRnV-Calc. Since
+conventional HRV software packages do not have built-in functions for HRnV analysis, we
+exported the 𝑅𝑅𝑛 𝐼𝑚 intervals from HRnV-Calc and provided them as normal inputs to the PCST.
+Such analyses, however, are not recommended as most HRV software packages are not designed
+to analyze 𝑅𝑅𝑛 𝐼𝑚 intervals. To simplify the comparison procedure, we only performed
+𝐻𝑅2 𝑉1 and 𝐻𝑅2 𝑉 analyses for demonstration.
+
+Thanks to the open-source command-line code provided by the PCST, we were able to configure
+the PCST to properly process the 𝑅𝑅𝑛 𝐼𝑚 intervals constructed from the 18 RRIs, which were
+derived from ECGs as previously described. As a result, the averaged relative error for
+every 𝐻𝑅2 𝑉1 or 𝐻𝑅2 𝑉 metric calculated by the two software was negligible (i.e., smaller than
+10−4), demonstrating identical results.
+
+We therefore conclude that HRnV-Calc performs identical to the PCST in terms of QRS
+detection and HRV metrics calculation under the same configuration. The PCST can also be
+modified to process 𝑅𝑅𝑛 𝐼𝑚 intervals identical to HRnV-Calc. Details of the exact HRV and
+HRnV metrics calculated by both software can be found in the supplementary materials. For
+more comparisons between the PCST and other HRV analysis software, see Vest et al. [38].
+
+
+5 Demonstration Code
+To provide a demonstration run of the software, a ten-minute ECG signal (sampling rate of
+128Hz) was randomly segmented from patient #16786 in the MIT-BIH Normal Sinus Database
+[46, 48](found in file ‘Demo_NSR16786.txt’). A five-minute segment (the second half of the
+
+                                                                                                    10
+signal) was then selected in the QDE viewer. Baseline drift was removed from the segment prior
+to QRS detection, after which no manual R peak correction was made. HRV metrics calculated
+from the selected segment are shown in Figure 4.
+
+
+
+6 Discussion
+In this paper, we introduce HRnV-Calc, a software package based on the PCST, that allows for a
+standardized and reliable implementation of HRnV and HRV analyses in both research and
+clinical settings. While preserving core functionalities and performance of the PCST, HRnV-
+Calc provides intuitive GUIs for manual inspection and configuration at each step of HRnV and
+HRV analyses, in addition to the fully automated processing provided in the PCST [38]. Such
+inspection and configuration are vital to achieving scientifically valid and universally
+comparable HRnV and HRV results, particularly for clinical applications, while also increasing
+the credibility and interpretability of analysis results. The batch-processing function enhances
+processing efficiency when analyzing multiple RRI records simultaneously. More importantly,
+the standardized and well-benchmarked methods included in the PCST and HRnV-Calc greatly
+facilitate the establishment of transparency and consensus on method configurations among
+HRV researchers, thereby reducing misunderstandings and sometimes conflicting results
+between studies using different HRV software packages [38].
+
+HRnV is a novel HRV analysis method unique to HRnV-Calc. The 𝑅𝑅𝑛 𝐼𝑚 intervals generated by
+HRnV can be viewed as natural extensions of the RRI representations. By incorporating 𝑅𝑅𝑛 𝐼𝑚
+intervals into existing HRV analysis, HRnV provides new insights into the dynamic and long-
+term dependencies of the original RRI. In recent studies, HRnV has shown promising results in
+boosting the accuracy of triage for patients with chest pain [31] and sepsis [32], as compared to
+triage based on conventional HRV. HRnV can be used to complement conventional HRV
+analysis to provide additional insight. Using HRnV-Calc, HRnV can now be easily incorporated
+into any conventional HRV study by a few configurations in the GUI, regardless of users’
+programming knowledge.
+
+Although HRnV has been shown to provide new insights, its physiological interpretation, and the
+exact mechanism it captures new information remain unclear. Moreover, the abundance of
+metrics generated by HRnV provides may also raise concerns about redundancy and
+intercorrelation within the data [31]. Based on previous studies utilizing HRnV, correlation
+analysis may be necessary to provide more informative HRnV results [31, 32]. However, the
+standard data processing method for HRnV metrics remains unclear and requires further research
+of HRnV in various contexts and applications. An alternative way to uncover insights in HRnV
+
+                                                                                              11
+metrics may be trend analysis over multiple 𝑚 or 𝑛 parameters, which is similar to the analysis
+proposed in MSE [30]. In addition, little consensus exists regarding the selection of HRnV
+parameters 𝑛 and 𝑚, which seem to capture more long-term dependencies with larger values, at
+the cost of a significant reduction in signal length. The introduction of HRnV-Calc aims to
+address these concerns about HRnV by providing an easily accessible and user-friendly software
+platform for clinicians and researchers to utilize and study HRnV in their own research. In doing
+so, we hope HRnV-Calc will facilitate future applications and improvements to HRnV, while
+potentially supporting further research into biomedical signal representations.
+
+The HRnV-Calc tool remains in active development. There are several limitations in the
+software. First, the current version of HRnV-Calc was primarily designed for short ECG/RRI
+recordings (between five minutes and one hour). The software has not been optimized for
+analyzing long signals, such as 24-hour ECG recordings. Second, although HRnV-Calc supports
+batch-processing of multiple RRI inputs, which do not require manual inspections to proceed to
+HRV or HRnV analysis, the step-by-step workflow in HRnV-Calc may prevent the analysis of
+large quantities of raw ECG data in certain use cases. On the other hand, for general clinical use,
+the GUIs and manual operations in HRnV-Calc provide users with opportunities to fully control
+the processing of raw signals, thereby ascertaining the quality of RRI extraction from raw ECG
+data for subsequent HRnV and HRV analysis. Moreover, users with sufficient programming
+skills can use the source code provided in HRnV-Calc and the PCST to conduct fully automated
+and customized HRnV analysis.
+
+
+7 Conclusions
+HRnV is a useful method for providing new insights into biomedical signals. Its software
+implementation, HRnV-Calc, is a GUI-based, reliable software package for HRnV and HRV
+analyses. HRnV-Calc is an open-source project, and we encourage collaboration and
+improvements from researchers and programmers within the larger HRV research community to
+bring new features and experiences into future editions of the software.
+
+
+
+
+                                                                                                 12
+References
+1.    Rajendra Acharya, U., et al., Heart rate variability: a review. Med Biol Eng Comput,
+      2006. 44(12): p. 1031-51.
+2.    Billman, G.E., Heart rate variability - a historical perspective. Front Physiol, 2011. 2: p.
+      86.
+3.    Ernst, G., Heart-Rate Variability—More than Heart Beats? Front. Public Health, 2017.
+4.    Rothschild, M., A. Rothschild, and M. Pfeifer, Temporary decrease in cardiac
+      parasympathetic tone after acute myocardial infarction. Am J Cardiol, 1988. 62(9): p.
+      637-9.
+5.    Kleiger, R.E., et al., Decreased heart rate variability and its association with increased
+      mortality after acute myocardial infarction. Am J Cardiol, 1987. 59(4): p. 256-62.
+6.    Carney, R.M., et al., Depression, heart rate variability, and acute myocardial infarction.
+      Circulation, 2001. 104(17): p. 2024-8.
+7.    Lengyel, C., et al., Baroreflex sensitivity and heart-rate variability in insulin-dependent
+      diabetics with polyneuropathy. Lancet, 1998. 351(9113): p. 1436-7.
+8.    Pfeifer, M.A., et al., Quantitative evaluation of cardiac parasympathetic activity in
+      normal and diabetic man. Diabetes, 1982. 31(4 Pt 1): p. 339-45.
+9.    Wheeler, T. and P.J. Watkins, Cardiac denervation in diabetes. Br Med J, 1973. 4(5892):
+      p. 584-6.
+10.   Singh, J.P., et al., Association of hyperglycemia with reduced heart rate variability (The
+      Framingham Heart Study). Am J Cardiol, 2000. 86(3): p. 309-12.
+11.   Forsstrom, J., et al., Effects of haemodialysis on heart rate variability in chronic renal
+      failure. Scand J Clin Lab Invest, 1986. 46(7): p. 665-70.
+12.   Axelrod, S., et al., Spectral analysis of fluctuations in heart rate: an objective evaluation
+      of autonomic nervous control in chronic renal failure. Nephron, 1987. 45(3): p. 202-6.
+13.   Chiew, C.J., et al., Heart rate variability based machine learning models for risk
+      prediction of suspected sepsis patients in the emergency department. Medicine
+      (Baltimore), 2019. 98(6): p. e14197.
+14.   Ghasemi, P. and M.R. Raoufy. Prediction of mortality in patients with sepsis using
+      detrended fluctuation analysis of Heart Rate Variability. in 2016 23rd Iranian
+      Conference on Biomedical Engineering and 2016 1st International Iranian Conference
+      on Biomedical Engineering (ICBME). 2016.
+15.   Crosswell, A.D., et al., Low heart rate variability and cancer-related fatigue in breast
+      cancer survivors. Psychoneuroendocrinology, 2014. 45: p. 58-66.
+16.   Guo, Y., et al., Prognostic Value of Heart Rate Variability in Patients With Cancer. J
+      Clin Neurophysiol, 2015. 32(6): p. 516-20.
+17.   Arab, C., et al., Heart rate variability measure in breast cancer patients and survivors: A
+      systematic review. Psychoneuroendocrinology, 2016. 68: p. 57-68.
+18.   Karmen, C.L., et al., The Clinical Value of Heart Rate Monitoring Using an Apple
+      Watch. Cardiol Rev, 2019. 27(2): p. 60-62.
+19.   Avila, C.O., Novel Use of Apple Watch 4 to Obtain 3-Lead Electrocardiogram and
+      Detect Cardiac Ischemia. Perm J, 2019. 23.
+20.   Raja, J.M., et al., Apple Watch, Wearables, and Heart Rhythm: where do we stand? Ann
+      Transl Med, 2019. 7(17): p. 417.
+21.   Dong, J.G., The role of heart rate variability in sports physiology. Exp Ther Med, 2016.
+      11(5): p. 1531-1536.
+
+                                                                                                13
+22.   Hernando, D., et al., Validation of the Apple Watch for Heart Rate Variability
+      Measurements during Relax and Mental Stress in Healthy Subjects. Sensors (Basel),
+      2018. 18(8).
+23.   Roche, F., et al., Screening of obstructive sleep apnea syndrome by heart rate variability
+      analysis. Circulation, 1999. 100(13): p. 1411-5.
+24.   Schumacher, A., Linear and nonlinear approaches to the analysis of R-R interval
+      variability. Biol Res Nurs, 2004. 5(3): p. 211-21.
+25.   Heart rate variability. Standards of measurement, physiological interpretation, and
+      clinical use. Task Force of the European Society of Cardiology and the North American
+      Society of Pacing and Electrophysiology. Eur Heart J, 1996. 17(3): p. 354-81.
+26.   Richman, J.S. and J.R. Moorman, Physiological time-series analysis using approximate
+      entropy and sample entropy. Am J Physiol Heart Circ Physiol, 2000. 278(6): p. H2039-
+      49.
+27.   Liu, C., et al., Analysis of heart rate variability using fuzzy measure entropy. Comput
+      Biol Med, 2013. 43(2): p. 100-8.
+28.   Ho, Y.L., et al., The prognostic value of non-linear analysis of heart rate variability in
+      patients with congestive heart failure--a pilot study of multiscale entropy. PLoS One,
+      2011. 6(4): p. e18699.
+29.   Cysarz, D., H. Bettermann, and P. van Leeuwen, Entropies of short binary sequences in
+      heart period dynamics. Am J Physiol Heart Circ Physiol, 2000. 278(6): p. H2163-72.
+30.   Costa, M., A.L. Goldberger, and C.K. Peng, Multiscale entropy analysis of complex
+      physiologic time series. Phys Rev Lett, 2002. 89(6): p. 068102.
+31.   Liu, N., et al., Heart rate n-variability (HRnV) and its application to risk stratification of
+      chest pain patients in the emergency department. BMC Cardiovasc Disord, 2020. 20(1):
+      p. 168.
+32.   Liu, N., et al., Heart rate n-variability (HRnV) measures for prediction of mortality in
+      sepsis patients presenting at the emergency department. PLOS ONE, 2021. 16(8): p.
+      e0249868.
+33.   Tarvainen, M.P., et al., Kubios HRV--heart rate variability analysis software. Comput
+      Methods Programs Biomed, 2014. 113(1): p. 210-20.
+34.   Vicente, J., et al. ECGlab: User friendly ECG/VCG analysis tool for research
+      environments. in Computing in Cardiology 2013. 2013.
+35.   Kaufmann, T., et al., ARTiiFACT: a tool for heart rate artifact processing and heart rate
+      variability analysis. Behavior Research Methods, 2011. 43(4): p. 1161-1170.
+36.   Rodr´ıguez-Li˜nares L, V.X., Mendez A, Lado M, Olivieri D., RHRV: An R-based
+      software package for heart rate variability analysis of ECG recordings. In 3rd Iberian
+      Conference in Systems and Information Technologies (CISTI 2008), 2008.
+37.   McConnell, M., et al., RR-APET - Heart rate variability analysis software. Comput
+      Methods Programs Biomed, 2020. 185: p. 105127.
+38.   Vest, A.N., et al., An open source benchmarked toolbox for cardiovascular waveform and
+      interval analysis. Physiol Meas, 2018. 39(10): p. 105004.
+39.   Behar, J., et al., A comparison of single channel fetal ECG extraction methods. Ann
+      Biomed Eng, 2014. 42(6): p. 1340-53.
+40.   Johnson, A.E., et al., Multimodal heart beat detection using signal quality indices.
+      Physiol Meas, 2015. 36(8): p. 1665-77.
+
+
+
+                                                                                                 14
+41.   Lomb, N.R., Least-squares frequency analysis of unequally spaced data. Astrophysics
+      and Space Science, 1976. 39(2): p. 447-462.
+42.   Scargle, J.D., Studies in astronomical time series analysis. II. Statistical aspects of
+      spectral analysis of unevenly spaced data. The Astrophysical Journal, 1982. 263: p. 835-
+      853.
+43.   Brennan, M., M. Palaniswami, and P. Kamen, Do existing measures of Poincare plot
+      geometry reflect nonlinear features of heart rate variability? IEEE Trans Biomed Eng,
+      2001. 48(11): p. 1342-7.
+44.   Peng, C.K., et al., Quantification of scaling exponents and crossover phenomena in
+      nonstationary heartbeat time series. Chaos: An Interdisciplinary Journal of Nonlinear
+      Science, 1995. 5(1): p. 82-87.
+45.   Vest, A.N., et al. An Open Source Benchmarked Toolbox for Cardiovascular Waveform
+      and Interval Analysis. 2018; Available from: https://physionet.org/content/pcst.
+46.   Goldberger, A., Amaral, L., Glass, L., Hausdorff, J., Ivanov, P.C., Mark, R., Mietus, J.E.,
+      Moody, G.B., Peng, C.K. and Stanley, H.E., MIT-BIH Normal Sinus Rhythm Database.
+      1999, PhysioBank, PhysioToolkit, and PhysioNet: Components of a new research
+      resource for complex physiologic signals: Circulation [Online].
+47.   Goldberger, A.L., et al., PhysioBank, PhysioToolkit, and PhysioNet: components of a
+      new research resource for complex physiologic signals. Circulation, 2000. 101(23): p.
+      E215-20.
+48.   Goldberger, A., Amaral, L., Glass, L., Hausdorff, J., Ivanov, P.C., Mark, R., Mietus, J.E.,
+      Moody, G.B., Peng, C.K. and Stanley, H.E, PhysioBank, PhysioToolkit, and PhysioNet:
+      Components of a new research resource for complex physiologic signals. Circulation
+      [Online]. , 2000. 101 (23).
+
+
+
+
+                                                                                               15
+                             (a)                                             (b)
+                   Figure 1 – Data Loader (a) and Setting Confirmation (b)
+  Data Loader (a) allows users to specific basic settings of the input data before the analysis
+begins. Once the settings are finalized, the ‘Next’ button will bring up the confirmation window
+                       (b) before proceeding to the next step of analysis.
+
+
+
+
+                                                                                              16
+                    Figure 2 – The QRS Detection and Edits (QDE) Viewer
+   The QDE Viewer allows users to configure and inspect QRS detection on ECG input. ECG
+display and segmentation settings along with QRS preprocessing settings are located at the top of
+  the viewer. R peak annotations can be checked and modified in the Denoised ECG Plot at the
+                                     bottom of the viewer.
+
+
+
+
+                                                                                              17
+                                 Figure 3 – 𝐻𝑅𝑛 𝑉𝑚 Setting
+The 𝐻𝑅𝑛 𝑉𝑚 setting window allows the users to specify which 𝐻𝑅𝑛 𝑉𝑚 analysis (choice of 𝑚 and
+𝑛) to perform along with preprocessing options (Ectopic Beats) and frequency domain analysis
+                                           options.
+
+
+
+
+                                                                                          18
+                             Figure 4 – 𝐻𝑅𝑛 𝑉𝑚 Results Display
+𝐻𝑅𝑛 𝑉𝑚 Results Display provides a comprehensive overview of the results from a single HRV or
+                                      HRnV analysis
+
+
+
+
+                                                                                          19
+              Table 1 – Summary of HRV/HRnV Metrics provided in HRnV-Calc
+Metrics                  Units      Description
+Time Domain
+Average RR               ms         The mean of 𝑅𝑅𝑛 𝐼𝑚 intervals
+SDRR                     ms         The standard deviation of 𝑅𝑅𝑛 𝐼𝑚 intervals
+Average HR               1/min      The mean of heart rates
+SDHR                     1/min      The standard deviation of heart rates
+RMSSD                    ms         Square root of the mean squared differences between successive RR intervals
+NN50(x)                  count      Numbers of 𝑅𝑅𝑛 𝐼𝑚 intervals differ more than 50 ms from the previous intervals.
+                                    For NN50x, the difference will be set to x times of 50 ms, where x = 𝑛 in the
+                                    corresponding 𝐻𝑅𝑛 𝑉𝑚 analysis
+pNN50(x)                 %          Percentage of NN50(x) intervals within the entire 𝑅𝑅𝑛 𝐼𝑚 intervals
+RR Skewness              -          The skewness of the 𝑅𝑅𝑛 𝐼𝑚 intervals distribution
+RR Kurtosis              -          The kurtosis of the 𝑅𝑅𝑛 𝐼𝑚 intervals distribution
+RR Triangular Index      -          The integral of the 𝑅𝑅𝑛 𝐼𝑚 intervals histogram divided by the height of the
+                                    histogram
+Frequency Domain
+VLF, LF, and HF Peak     Hz         The peak frequencies in the power spectral distribution (PSD) for VLF, LF, and
+frequencies                         HF bands
+VLF, LF, and HF Powers   𝑚𝑠 2       Absolute powers of VLF, LF, and HF bands
+VLF, LF, and HF Power    %          The percentage for powers of VLF, LF, and HF bands within the overall spectrum
+Percentages
+LF and HF Normalized     n.u.       Normalized powers for LF and HF bands
+Powers
+Total Power                  𝑚𝑠 2   The overall power of the PSD
+LF/HF                    -          The ratio between the powers of LF and HF bands
+Nolinear Domain
+Poincare SD1 and SD2     ms         The width and length of the eclipse fitted in the Poincare plot
+App_Ent                  -          Approximate entropy
+Sam_Ent                  -          Sample entropy
+DFA 𝜶𝟏 and 𝜶𝟐            -          Short-term and long-term fluctuations of detrended fluctuation analysis (DFA)
+
+
+
+
+                                                                                                                      20
+

@@ -1,0 +1,230 @@
+                    Cardiac Arrhythmia Detection from ECG Combining
+                   Convolutional and Long Short-Term Memory Networks
+
+                                      Philip Warrick1, Masun Nabhan Homsi2
+                                         1
+                                          PeriGen. Inc., Montreal, Canada
+                                2
+                                    Simon Bolivar University, Caracas, Venezuela
+
+
+                        Abstract                              The most common type of arrhythmia is atrial fibrillation
+                                                              (AF), which causes an irregular and fast heartbeat [1].
+   Objectives: Atrial fibrillation (AF) is a common heart         Automatic ECG classification is an emerging tool for
+rhythm disorder associated with deadly and debilitating       the cardiologists in medical diagnosis for effective
+consequences including heart failure, stroke, poor mental     treatments. Traditional methods to classify ECG signal
+health, reduced quality of life and death. Having an          include     pre-processing,     feature    extraction   and
+automatic system that diagnoses various types of cardiac      classification steps. Various kinds of noise and artefacts
+arrhythmias would assist cardiologists to initiate            are first removed, and then the signal is segmented to
+appropriate preventive measures and to improve the            calculate features vectors over time, possibly using a
+analysis of cardiac disease. To this end, this paper          feature reduction algorithm to reduce dimensionality.
+introduces a new approach to detect and classify              Finally, for classification the features form the input to a
+automatically cardiac arrhythmias in electrocardiograms       machine learning algorithm such as Support Vector
+(ECG) recordings.                                             Machines (SVMs) [2], Neural Networks (NNs) [3] or
+   Methods: The proposed approach used a combination          ensemble learning [4].
+of Convolution Neural Networks (CNNs) and a sequence             Deep learning (DL) based neural network models have
+of Long Short-Term Memory (LSTM) units, with pooling,         achieved great success in multiple fields such as natural
+dropout and normalization techniques to improve their         language processing, computer vision, biomedical signal
+accuracy. The network predicted a classification at every     processing and others. DLs can overcome the challenge
+18th input sample and we selected the final prediction for    of the often tedious feature engineering task and helps
+classification. Results were cross-validated on the           with parameterizing traditional NN with many layers [5].
+Physionet Challenge 2017 training dataset, which              Convolution Neural Networks (CNNs) and Recurrent
+contains 8,528 single lead ECG recordings lasting from        Neural Networks (RNNs) especially Long Short-term
+9s to just over 60s.                                          Memory Network (LSTM) are two widely used
+   Results: Using the proposed structure and no explicit      architectures among these models. CNNs learn
+feature selection, 10-fold stratified cross-validation gave   appropriate filters that reduce the input dimensionality,
+an overall F-measure of 0.83.10±0.015 on the held-out         while LSTMs are useful to model system dynamics [5].
+test data (mean ± standard deviation over all folds) and         Many approaches have been performed to classify
+0.80 on the hidden dataset of the Challenge entry server.     various cardiac arrhythmias that used DL models.
+                                                              Authors in [6] developed a new model that predicted 12
+1.       Introduction                                         arrhythmias from single-lead ECG. It consisted of 34-
+                                                              layer CNN that maps a sequence of ECG samples to a
+   Electrocardiogram (ECG) represents electrical activity     sequence of rhythm classes. A new neural network
+of human heart. It is composite from 5 waves: P, Q, R, S      architecture was proposed in [7] for anomaly detection in
+and T. P wave is the Atria depolarization (Atrial             ECG time signals. It consisted by stacking multiple
+Contraction), T wave is the depolarization of ventricles      recurrent LSTM layers. Another approach based on DL
+(Ventricular relaxation). QRS complex represents              for classification of ECG signals was proposed in [8]. It
+ventricles depolarization (Ventricular contraction). The      consisted of two layers: feature representation layer and
+QRS complex, ST segment, PR interval, RR interval, PR         softmax regression layer. The feature representation layer
+segment, QT interval are the most important sections in       was trained from the raw ECG data in an unsupervised
+an ECG signal for the diagnosis of different cardiac          way employing stacked denoising autoencoders with
+diseases, especially arrhythmia. An arrhythmia is an          sparsity constraint.
+alteration of the regular rate or rhythm of the heartbeat.       In this paper, we propose a novel deep neural network
+that combines CNN and LSTM to effectively learn               learning. We used 10 filters to be comparative to other
+sequence data containing longer term patterns of              filtering schemes (e.g., the use of up to 10 PCA or
+unknown length extracted from ECG signals. The model          wavelet components is typical for biomedical signals).
+does not require explicit pre-processing, but can             All system parameters including the number of filters and
+adaptively discover hidden structures of different ECG        pooling size can be found in section 3. Dropout and Batch
+entities and automatically learn their dependencies. . The    Normalization blocks are also explained later in section
+output of a one-layer CNN is fed into a stack of three        2.2. Each ECG recording is considered a univariate time
+recurrent LSTM layers. The CNN is constructed on top of       series and it is denoted by X={x1, x2,…,xN}, where N
+the signal vectors from a large corpus of ECG data to         represents the length of the ECG signal. CNN extracts the
+learn higher-level representations of PQRST regions. In       i-th feature ai from the i-th ECG sample xi as follows:
+our approach, the task is formulated as a temporal                𝑎𝑖 = 𝐶𝑁𝑁𝜃 (𝑥𝑖 )                                     (1)
+sequence predicting problem that can be solved under a            where CNNθ(xi) is a function that transforms an ECG
+sequence-to-sequence learning framework. The new              signal into a feature vector ai using a CNN with θ
+model classifies ECG signals into normal sinus rhythm         parameter to represent the number of filters. These
+(N), atrial fibrillation (A), an alternative rhythm (O), or   features vectors {a1, a2,…, aN} are then forwarded to the
+noisy (~). We used the PhysioNet Challenge 2017 dataset       sequence learning component.
+[9] which consists of 8528 ECG signals sampled at 300
+Hz and mostly lasting between 30 and 60 s although there
+were some records as short as 6 s. We will refer to our
+proposed deep architecture by CL3 (One CNN and three
+LSTMs).
+   The rest of the paper is organized as follows. Detailed
+descriptions of our proposed deep model are presented in
+sections 2. Section 3 reports experimental settings and
+evaluation metrics, and discusses experimental results.
+Finally, conclusions and future directions are outlined in
+section 4.
+
+2. CL3 Model
+   The architecture of the CL3 model is illustrated in
+Figure 1, which consists of two main components: one is
+representation learning, CNN, and the other one is the
+sequence learning, a stack of three LSTMs. After
+applying one-layer CNN on the raw input sequence to
+extract local and discriminative features, three layers of      Figure 1. CL3 architecture.
+LSTMs are put up on top of the previous CNN to encode
+the sequential patterns. Then, one dense layer is added to    2.1.2. Sequence learning
+process the output of the third LSTM. Finally, a softmax
+function is adopted to predict the class.                        This component is created by stacking multiple LSTM
+                                                              hidden layers on top of each other, with the output
+2.1. Model architecture                                       sequence of one layer forming the input sequence for the
+                                                              next. Here three LSTM layers are used. Specifically,
+2.1.1. Representation learning                                input of the upper LSTM layer (u) takes hm(t) from the
+                                                              middle LSTM layer (m), and again the middle LSTM
+   This component consists of CNN and one max-pooling         layer takes hl(t) from the lower LSTM layer (l). The
+layer. The convolution layer performs three operations        outputs of the second layer and the third layer are as same
+sequentially: 1D-convolution with its filters, batch          operation as LSTMl and LSTMm.
+normalization, with rectified linear unit (ReLU)                 Formally, suppose there are N features obtained from
+activation. Pooling layer downsamples the inputs using        the CNN {a1, a2,…,aN} organized sequentially and
+the max operation. There are two reasons to use a max-        t=1…N denotes the time index of ECG samples, the
+pooling layer here. First, it reduces computation for upper   sequence learning component is defines as follows:
+layers. Second, it can extract local dependencies and keep       ℎ𝑡𝑙 , 𝑐𝑡1 = 𝐿𝑆𝑇𝑀𝜃𝑙 𝑙 (ℎ𝑡−1
+                                                                                        𝑙      𝑙
+                                                                                            , 𝑐𝑡−1 , 𝑎𝑡 )             (2)
+                                                                   𝑚 𝑚                𝑚     𝑚      𝑚
+the most salient information. The obtained vectors are           ℎ𝑡 , 𝑐𝑡 = 𝐿𝑆𝑇𝑀𝜃𝑚 (ℎ𝑡−1 , 𝑐𝑡−1        , ℎ𝑡𝑙 )         (3)
+                                                                   𝑢 𝑢             𝑢      𝑢      𝑢      𝑚
+then fed to the second component which is sequence               ℎ𝑡 , 𝑐𝑡 = 𝐿𝑆𝑇𝑀𝜃𝑢 (ℎ𝑡−1 , 𝑐𝑡−1 , ℎ𝑡 )                 (4)
+   where LSTM denotes a function that processes                 3. Experimental settings and results
+sequences of features at using a stacked of three LSTMs
+parametrized by θl, θm and θu for lower, middle and upper          Our deep model was implemented in Python using the
+layers; h and c are vectors of hidden and cell states of        Keras library with a TensorFlow backend, which provides
+LSTMs; ℎ0𝑙 , 𝑐0𝑙 , ℎ𝑁+1
+                    𝑢        𝑢
+                        𝑎𝑛𝑑 𝑐𝑁+1 are set to zero vectors.       efficient functionality on CPUs and GPUs. The hyper-
+   A dense layer forms the final layer and its output is        parameters were chosen according to experiment results
+passed to a softmax function whose output is the                and they are as follows:
+probability distribution over labels [5].                       a) Batch size is 500, Max_length of input sequence is
+                                                                9000, and the weight matrix is initialized to 1. b) For
+2.2. Learning CL3 for ECG Classification                        CNN layer, both the number of filters and kernel size are
+                                                                equal to 10. c) For Max pooling layer, the pool size is 18.
+   The entire model is trained by minimizing the cross-         d) For the three LSTM layers, the number of cells is equal
+entropy error. Given a training sample x and its                to 100 and both dropout and recurrent dropout are 0.1. e)
+corresponding label y∈{1,2,…,K} where K is the number           For BN layers, 0.99, 0.001, zeros, ones, zeros, ones are
+of possible labels (ECG classes), and the estimated             used for momentum, epsilon, beta initializer, gamma
+probabilities 𝑦̃𝑗 ∈ [0,1] for each label j ∈{1, 2, …, K}, the   initializer, moving mean initializer and moving variance
+error is defined by equation 5, where 1{condition} could        initializer, respectively [5]. f) For the dense layer, a
+be 1 or 0. We used the Root Mean Square Propagation             normal distribution centered on zero is used for kernel
+(RMSprop) optimization method that calculates the               initializer and output shape is (9000, 500, 5). 500 is the
+magnitude of recent gradients to normalize the gradients        result of the target_factor=18 sample decimation effect
+to optimize model parameters over the following                 of the max pooling layer, while 5 represents number of
+objective function:                                             classes.
+   𝐿(𝑥, 𝑦) = ∑𝑘𝑗=1 1{𝑦 = 𝑗}log(𝑦̃𝑗 )                    (5)        The classifier performance was evaluated in terms of
+                                                                F1-measure and it is calculated by F1=2*(P*R)/(P+R). It
+   Dropout was employed to prevent overfitting during
+                                                                represents the harmonic mean of Precision (P) and Recall
+training: it was applied to the input of each LSTM, while
+                                                                (R). P is the ratio of true positives to all predicted
+Recurrent Dropout was employed to drop neurons
+                                                                positives and given by P=TP/(TP+FP). For more
+directly in recurrent connections of each LSTM Batch
+                                                                information, refer to [9].
+Normalization was used to keep values in-bounds and
+avoid saturation at the various processing steps. It was        Table 1. Results of different experiments and entries. σ is
+performed on the outputs of the CNN and all LSTM                the cross-validation F1 standard deviation.
+layers.                                                           #    Model     Network          10-folds CV        Entry
+   Efficient batch-oriented training requires fixed-length                       variant(s)   Class    F1 σ (%)        F1
+input; therefore we defined a maximum length                                                          (%)             (%)
+(max_length) for the ECG signals in the dataset. Each             1    CL3     Batch          N      90.10 0.30    92
+ECG signal that has a length less than max_length was                          size=500       AF     76.00 6.20    85
+padded with zeros. Zero label is also added to the                                            O      75.20 3.50    75
+sequence of labels to be referred as PAD class. On the                                        ~      47.10 10.90   -
+                                                                  I               Overall            83.10 1.50    84
+other hand, those ECG signals that are longer than
+                                                                  2    CL3     Batch          N      90.20 1.00    91
+max_length were split into multiple sequences in such
+                                                                               size=500 &     AF     75.90 6.50    82
+that each new sequence length was less than or equal to                        Class          O      75.50 3.70    74
+max_length. Because a large majority of signals had 9000                       weight         ~      48.50 1.34    -
+samples (30 s), and a significant number were twice this          II              Overall            83.30 2.20    82
+length (18000), we chose a max_length of 9000.                    3    CL3     Dilated        N      89.70 0.80    92
+   The class vector now contains five different labels                         CNN=2          AF     75.70 5.50    83
+[PAD, N, AF, O, ~] which are one-hot encoded. The final                                       O      74.10 3.40    75
+target sequence for each input sequence is constructed by                                     ~      47.10 9.00    -
+repeating the binary vector rep_length times, defined by         III             Overall             82.60 1.70    83
+equation 6.
+   𝑟𝑒𝑝_𝑙𝑒𝑛𝑔𝑡ℎ = 𝑚𝑎𝑥_𝑙𝑒𝑛𝑔𝑡ℎ/𝑡𝑎𝑟𝑔𝑒𝑡_𝑓𝑎𝑐𝑡𝑜𝑟                (6)        Three experiments were conducted to evaluate the
+   where target_factor is determined experimentally. The        effectiveness of the proposed deep architecture for ECG
+final train input shape is (Number of sequences to be           signal classification. Table 1 displays 10-fold cross
+trained* max_length*1), where 1 refers the single input         validation scores of those experiments along with the 3
+signal dimension, while the final output shape is given by      best entries submitted to the challenge server. It can be
+(Number of sequences to be trained * rep_length *               noted that Experiment 2 exhibited the best F1 (83.30%),
+number of classes).                                             but its standard deviation (σ) (1.80) is higher than
+Experiment 1 (1.50). In Experiment 2, imbalanced class         showed that CL3 is suitable for diagnosis of different
+issue was dealt by applying weights to misclassification       cardiac diseases with good accuracy. Future work will
+sequences. F1 was better than Experiment 1, but its σ is       focus on refining our model by applying an ensemble
+higher and as result its Entry II performed poorer than the    deep learning framework to decrease information loss and
+first one with F1 of 82%. Dilated convolution layer was        overfitting problems, and to overcome the class
+employed in experiment 3 and its results showed that it        imbalance problem.
+performed also worse than Experiment 1; yielding lower
+F1s and higher σ with an entry score that reached up to
+83%. We can conclude that Entry I yielded our best
+overall score of the submitted entries of 83.10±1.50 in
+training and 82 using the hidden dataset. Our final score
+after version 3 relabelling was 80.
+
+
+
+
+                                                               Figure 3. F1-measure curves per class vs training
+                                                               prediction for Entry I.
+
+                                                               References
+                                                               [1] Davey P. ECG at a glance. John Wiley & Sons, 2013.
+Figure 2. Class prediction vs original class.                  [2] Zhao Q, Zhang L. ECG Feature extraction and classification
+                                                                    using wavelet transform and support vector machines.
+                                                                    ICNN&B'05. 2005; 2:1089 -1092.
+   Figure 2 depicts 6 sample ECG examples A00001,              [3] Prasad GK, Sahambi JS. Classification of ECG arrhythmias
+A00002, A00003, A00004, A00005 and A00006 that                      using multi-resolution analysis and neural networks.
+were labelled manually by cardiologists as N, N, N, A, A            TENCON2003. 2003; 1: 227-231.
+and N, and automatically by our CL3 in Entry I. It can be      [4] Zeng XD, Chao S, Wong F. Ensemble learning on heartbeat
+seen that for A00001, A00002, A00003 and A00006                     type classification. ICSSE2011. 2011; 320-325.
+recordings, CL3 could predict perfectly almost all ECG         [5] Buduma N, Locascio N, Fundamentals of Deep Learning:
+samples with the same label assigned by the expert, while           Designing Next-Generation Machine, O’Reilly, 2017.
+for A00004 and A0005, there are some ECG samples               [6] Rajpurkar P, Hannun AY, Haghpanahi M, Bourn C, Ng AY.
+                                                                    Cardiologist-Level       Arrhythmia     Detection     with
+could not be learnt completely by our new deep
+                                                                    Convolutional Neural Networks. 2017; arXiv:1707.01836.
+architecture. In addition to that, Figure 3 shows F1 results   [7] Chauhan S, Vig L. Anomaly detection in ECG time signals
+over time per class. It can be noticed from this figure that        via deep long short-term memory networks. DSAA, 2015;
+the model performance begun to degrade for classes ~                1-7.
+and AF, from the middle of training. This is due to the        [8] Al Rahhal MM, Bazi Y, AlHichri H, Alajlan N, Melgani F,
+fact that both are the minority classes, while                      Yager RR. Deep learning approach for active classification
+performances of majority classes keep significantly                 of electrocardiogram signals. Information Sciences. 2016;
+increasing throughout the training (and supporting our              1:340-54.
+decision to use the final prediction for classification).      [9] Gari Clifford, Chengyu Liu, Benjamin Moody, Ikaro Silva,
+                                                                    Qiao Li, Alistair Johnson, Roger Mark. AF Classification
+                                                                    from a Short Single Lead ECG Recording: the PhysioNet
+4. Conclusions                                                      Computing in Cardiology Challenge 2017. Computing in
+                                                                    Cardiology (Rennes: IEEE). 2017;44 (In Press)
+A new deep learning model, named CL3, for automatic
+classification of cardiac arrhythmias based on raw single-     Address for correspondence.
+lead ECGs is proposed. CL3 uses CNN to extract features
+                                                               Philip Warrick, PeriGen. Inc. Montreal, Canada.
+which are introduced to a stack of LSTMs to learn              philip.warrick@gmail.com
+automatically hidden patterns from ECG epochs with             Masun Nabhan Homsi, Universidad Simón Bolívar.
+very little manual parameter tuning required. Our results      mnabhan@usb.ve
+

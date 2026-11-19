@@ -1,0 +1,236 @@
+      The PhysioNet/Computing in Cardiology Challenge 2015: Reducing False
+                        Arrhythmia Alarms in the ICU
+
+     Gari D Clifford1,2 , Ikaro Silva3 , Benjamin Moody3 , Qiao Li1 , Danesh Kella4 , Abdullah Shahin5 ,
+                             Tristan Kooistra5 , Diane Perry5 and Roger G. Mark3
+                1
+                  Department of Biomedical Informatics, Emory University, Atlanta, GA USA
+      2
+         Department of Biomedical Engineering, Georgia Institute of Technology, Atlanta, GA, USA
+        3
+          Institute for Medical Engineering & Science, Massachusetts Institute of Technology, USA
+                         Emory School of Medicine, Emory Univesrity, Atlanta, GA
+                     5
+                       Beth Israel Medical Center, Harvard University, Boston MA, USA
+
+                       Abstract                                     threatening arrhythmia events, which we have defined as
+                                                                    follows:
+   High false alarm rates in the ICU decrease quality of
+care by slowing staff response times while increasing pa-           Asystole (ASY): There are no heartbeats at all for a period
+tient delirium through noise pollution. The 2015 Physio-            of four seconds or more.
+Net/Computing in Cardiology Challenge provides a set of             Extreme bradycardia (EBR): The patient’s heart rate is
+1,250 multi-parameter ICU data segments associated with             lower than 40 beats per minute; fewer than five beats occur
+critical arrhythmia alarms, and challenges the general re-          within a period of six seconds.
+search community to address the issue of false alarm sup-           Extreme tachycardia (ETC): The heart rate is higher than
+pression using all available signals. Each data segment             140 beats per minute; more than 17 beats occur within a
+was 5 minutes long (for real time analysis), ending at the          period of 6.85 seconds.
+time of the alarm. For retrospective analysis, we provided          Ventricular tachycardia (VTA): There are five or more
+a further 30 seconds of data after the alarm was triggered.         consecutive ventricular beats within a period of 2.4 sec-
+   A collection of 750 data segments was made available             onds (a rate of 100 per minute.)
+for training and a set of 500 was held back for testing.            Ventricular fibrillation or flutter (VFB): The heart exhibits
+Each alarm was reviewed by expert annotators, at least              a rapid fibrillatory, flutter, or oscillatory waveform for at
+two of whom agreed that the alarm was either true or false.         least four seconds.
+Challenge participants were invited to submit a complete,
+working algorithm to distinguish true from false alarms,               Participants in the Challenge were given samples of ICU
+and received a score based on their program’s perfor-               patient waveforms that were identified by the bedside mon-
+mance on the hidden test set. This score was based on               itor as falling into one of the above categories, and were
+the percentage of alarms correct, but with a penalty that           tasked with devising an algorithm to determine which of
+weights the suppression of true alarms five times more              these alarms represented true arrhythmias, and which were
+heavily than acceptance of false alarms.                            caused by other factors (such as noise, patient movement,
+   We provided three example entries based on well-known,           leads falling off, or mis-identification of ECG features on
+open source signal processing algorithms, to serve as a ba-         the part of the monitor.)
+sis for comparison and as a starting point for participants
+                                                                       The Challenge was divided into two events. Event 1
+to develop their own code. A total of 38 teams submitted a
+                                                                    was a simulation of the real-time alarm suppression prob-
+total of 215 entries in this year’s Challenge.
+                                                                    lem: the algorithm needed to determine whether the alarm
+                                                                    was true or false based solely on the information available
+1.       Introduction                                               before the alarm was first triggered. In Event 2, algorithms
+                                                                    were also able to see 30 seconds’ worth of waveform data
+   In the 2015 PhysioNet/Computing in Cardiology Chal-              following the time of the alarm, and could use this infor-
+lenge, we aim to address the problem of high false rrhyth-          mation to retrospectively classify the alarm as true or false.
+mia alarm rates by encouraging the development of new               The development of an algorithm that could reliably solve
+algorithms to improve the specificity of ICU alarms. In             either of these problems would be a major step forward in
+this Challenge, we have focused on five types of life-              patient care.
+
+
+ISSN 2325-8861                                                273                    Computing in Cardiology 2015; 42:273-276.
+2.       Example algorithms                                           dynamic time warping, simple matching, linear resampling
+                                                                      matching and a clipping detection. When the signal quality
+   Key to rhythm detection is accurate heart rate estima-             was equal or greater than 0.9 and the corresponding HR or
+tion. Several ECG R-peak detection algorithms are freely              beat-to-beat interval derived from either the ABP or PPG
+available, several of which were used in the Challenge ex-            did not surpass a predefined HR threshold (4s for ASY, 40
+ample entries.                                                        bpm for EBR, 140 bpm for ETC, 100 bpm for VTA and
+eplimited (available at www.eplimited.com) [1], which                 250 bpm for VFB), the alarm was suppressed (i.e. false).
+used digital filtering and a group of decision rules.                    Finally, the last sample entry (#3) was provided for Oc-
+sqrs (available on PhysioNet [2]) [3], which uses a single            tave users, with functions from by WFDB Toolbox for Oc-
+scan of the sampled data and combines digital filter pre-             tave/MATLAB [12]. This sample entry ran three QRS de-
+processing with a detector and feature extractor based on             tectors from the WFDB Toolbox: wqrs on signal 1, sqrs
+dynamically adjusted slope and timing criteria.                       on signals 1 and 2, and gqrs on signals 1 and 2. The re-
+wqrs (available on PhysioNet) [4], which is based on the              sults of the QRS detectors where then used to compute
+length transform.                                                     three tachograms. A decision was made on the truthful-
+gqrs (available on PhysioNet), which consists of a QRS                ness of the alarm based on the average pair-wise correla-
+matched filter with a custom built set of heuristics (such as         tion between the tachograms 30 seconds prior to the alarm
+search back).                                                         (a threshold was set arbitrarily based on the training data).
+coqrs [5–7] based on the peak energy (no search back).                   It should be noted that no ECG signal quality was used,
+jqrs [8] consists of a window-based peak energy detector              although previous studies using the agreement of beat de-
+but with replacement of the original band-pass filter with a          tectors have shown great promise in this area [13]. We
+QRS matched filter (Mexican hat) and an additional heuris-            also note that no ECG-based rhythm detection was used,
+tic ensuring no detections were made during flat lines.               although various open source algorithms have been made
+   Detection of the onset of the pulses in the ABP and                available to the Challenge participants [14].
+PPG signals can provide further information on rhythm                    We also implemented two voting algorithms. One used
+and rate. An open-source algorithm, wabp [9], is available            a simple unweighted voting of all the competition entrants’
+from PhysioNet. The algorithm consists of three compo-                final scores. The second used the N best performing final
+nents: 1) a low-pass filter which is to suppress high fre-            entries ranked by their score on the training data. A tied,
+quency noise that might affect the onset detection; 2) a              absent or no vote was treated as ‘true’.
+windowed and weighted slope sum function (SSF) which
+is to enhance the upslope of the pulse and to suppress the            3.       Challenge data
+remainder of the pressure wave; 3) a decision rule which
+allows for detection of each SSF pulse onset.                            Data for the Challenge consisted of waveform record-
+   We provided three example Challenge entries, based on              ings from ICU patients in four hospitals in the USA and
+these and other open-source algorithms, and implemented               Europe, representing three major manufacturers of ICU
+in various programming languages, to serve as a basis on              monitoring equipment. For each arrhythmia alarm match-
+which participants could develop their own code.                      ing our selection criteria, we collected all available multi-
+   The simplest example entry (#1) used wabp and gqrs,                parameter waveforms (including at least five minutes of
+along with the gqfuse tool (available on PhysioNet), to an-           data before and after each alarm), as well as the alarm
+alyze all available signals and select the most stable se-            messages themselves, and any other status messages re-
+quence of RR intervals, in order to detect asystole, brady-           ported by the monitor. If possible, we also collected a list
+cardia, and tachycardia. To detect the onset of VF, this en-          of the fiducial points and types of beats that were detected
+try analyzed the ECG and pulsatile signals separately (us-            by the monitor; in some cases, the monitor did not pro-
+ing gqfuse for each), and searched for a 10-second interval           vide this information. All of the signals were filtered in
+where the QRS rate and pulse rate were equal, followed                order to remove spectral characteristics that might identify
+by a 3-second interval in which the QRS rate increased by             the manufacturer or the country of origin. They were then
+at least 25% and the pulse rate decreased by at least 75%.            resampled to 250 Hz and scaled to a 16-bit range. The
+This entry did not attempt to detect VT.                              specific names of the various alarm annotations were also
+   An example entry (#2) written in Matlab used wabp to               normalized to anonymize the data.
+detect the beats and used jSQI [10] and a template match-
+ing SQI [11] to estimate the signal quality from ABP and              3.1.     Expert labeling
+PPG channels. jSQI flags a signal as bad quality if derived
+parameters from a blood pressure wave are not in reason-                 To build the “gold standard” list of true and false alarms,
+able physiological ranges. The PPG signal quality [11]                a team of experts visually inspected the waveform record
+matches a running PPG template with the pulsatile beat by             at the time of each alarm. Each annotator worked indepen-
+
+
+                                                                274
+                 Training (N=750)      Test (N=500)                    monitor-computed beat locations or heart rate.
+                   False True          False True
+       ASY           100     20          90      12                    4.       Scoring
+       EBR            45     45          38      26
+       ETC             8    131            5     68                       Participants were asked to submit their entries in the
+       VTA           253     90         176      45                    form of a ‘zip’ or ‘tar’ archive that included everything
+       VFB            52      6          34       6                    needed to compile and run their program on a GNU/Linux
+       PPG           227    178         158      83                    system, together with the results that they expected their
+       ABP            59     63          58      39                    program to produce for the records in the public train-
+       Both          172     51         127      35                    ing set. When an entry was uploaded, the scoring system
+       Total         458    292         343     157                    would first attempt to compile the program and run it over
+                                                                       a randomly selected subset of the training set; if this did
+Table 1. Types of alarms and signals used in the Chal-
+                                                                       not produce the expected results, evaluation stopped and
+lenge. Each of the N records included two ECG channels.
+                                                                       the error messages were sent back to the submitter.
+                                                                          Once the program was successfully compiled and vali-
+dently and was assigned a randomized list of patients to               dated, it was then invoked for each record in the test set.
+review. For each alarm, the annotator was initially shown              (For the 250 “long” records, the program was invoked
+15 seconds of waveforms prior to the alarm and 5 seconds               twice: once with the full record as input, and once with
+after it, but could resize and scroll the window in order to           a truncated version.) If the program failed to produce out-
+examine earlier and later portions of the record. If possi-            put for a given record, it was treated as if it had classified
+ble, the monitor-computed beat labels were also displayed.             that alarm as true.
+   After examining the alarm label and surrounding wave-                  For each category, the entry’s score was computed based
+forms, the annotator was asked to press one of four but-               on the number of true positives (true alarms classified
+tons: True, False, Reject, or Uncertain. The Reject label              as true), false positives (false alarms classified as true),
+was used for records that were clearly fallacious (usually             true negatives, and false negatives. The scoring func-
+due to bugs in the monitor’s data-exporting interface.) In             tion was designed to treat false negatives – genuinely life-
+order for an alarm to be included in the Challenge data set,           threatening events that the program considered unimpor-
+it had to be independently reviewed by at least two anno-              tant – especially harshly, and was defined as:
+tators of whom a two-thirds majority had to agree that the                                     100 · (TP + TN )
+alarm was either True or False.                                                   score =
+                                                                                            TP + TN + FP + 5 · FN
+3.2.     Training and test data                                        5.       Results, Discussions & Conclusions
+   From the set of 1,564 alarms meeting all of the above                  A totla of 29 closed-source entries and 215 open-source
+criteria, we randomly picked 1,250 to serve as training and            entries were submitted in the Challenge. Table 2 provides
+test data for the Challenge (see table 1). The distribution            a breakdown of the top scoring entries. A different con-
+of alarms was chosen to reflect the distribution of alarm              testant ranked highest in each separate alarm category, in-
+types in the original data set (17% ASY, 11% EBR, 17%                  dicating that there was no best general algorithm. Inter-
+ETC, 47% VTA, 7% VFB) as well as to maintain the ap-                   estingly, a simple majority vote of all the 38 competitors’
+proximate true-to-false ratio for each alarm type. No single           final entries gave scores of 60.15 in the real-time event and
+patient appeared in both the training and test sets, and no            62.41 in the retrospective event. These moderate perfor-
+single manufacturer or hospital made up more than half of              mances, well below the top 10 algorithms, indicating that
+the records in either set.                                             simple voting schemes do no yield an improved perfor-
+   Up to four signals were selected from each record: two              mance in this context, since the performance tail is long.
+ECG leads (preferably one limb lead and one precordial                 A voting algorithm using the N=13 best performing fi-
+lead), and up to two other signals, including ABP, PPG,                nal entries ranked by their score on the training data, pro-
+or respiration. The public training set consisted of 375               vided the highest scores in both event 1 (84.26) and event
+“short” records, containing only the five minutes leading              2 (87.04), although N=11 was sufficient to beat the best
+up to the alarm, and 375 “long” records, containing a fur-             performance in either event. A weighted voting scheme
+ther 30 seconds after the alarm. The hidden test set con-              may well improve these scores. We note, however, that N
+sisted of 250 “short” records (used only for Event 1) and              was selected on the test data, so these results should not be
+250 “long” records (used for both events.) Each record was             considered truly out of sample.
+labeled with the alarm type, and in the case of the training              For the top performing entrants, it was the VTA alarm
+set, veracity (true or false). The records did not include the         that proved the hardest to classify accurately. We note that
+
+
+                                                                 275
+                                                      Event 1 (Real-time)            Event 2 (Retrospective)
+                      Entrant                        TPR TNR Score                   TPR TNR Score
+                      Plešinger et al.              92% 88% 81.39                   95% 88% 84.96
+                      Kalidas & Tamil                94% 82% 79.44                   94% 86% 81.85
+                      Krasteva et al. *              93% 83% 79.41 *                 93% 84% 79.56
+                      Couto et al.                   89% 91% 79.02                   88% 92% 78.28
+                      Fallet et al.                  94% 77% 76.11                   99% 80% 85.04
+                      Hoog Antink & Leonhardt        93% 77% 75.55                   90% 82% 75.18
+                      Eerikäinen et al.             90% 82% 75.54                   89% 85% 75.52
+                      Ansari et al.                  89% 84% 74.48                   89% 87% 76.57
+                      Liu et al.                     89% 79% 71.68                   93% 78% 75.91
+                      Example Algorithm 1            76% 44% 41.41                   73% 46% 40.83
+                      Example Algorithm 2            86% 38% 45.07                   84% 38% 44.37
+                      Example Algorithm 3            64% 76% 45.59                   61% 77% 47.35
+                      Voting Algorithm (N=13)        94% 90% 84.26                   94% 94 % 87.04
+Table 2. Final scores for the top 9 entrants in both events (real-time and retrospective) ranked by overall real-time score,
+the three example algorithms provided and a voting approach. Best performances of competition entrants are in bold.
+TPR = fraction of true alarms correctly classified; TNR = fraction of false alarms correctly classified. * denotes an unofficial
+(“closed-source”) entry. Underlined scores are the highest unnoficial scores in the competition.
+
+
+retrospective scores were generally higher than ‘real-time’           [4]  Zong W, Moody GB, Jiang D. A robust open-source al-
+scores, with the highest performing retrospective approach                 gorithm to detect onset and duration of QRS complexes.
+only suppressing 1% of the true alarms, while 80% of the                   Comput in Cardiol 2003;30:737–740.
+false alarms were suppressed. Although debatable, this                [5] Clifford GD. Signal Processing Methods for Heart Rate
+may be acceptable as a clinical algorithm if a 30 second                   Variability. Ph.D. thesis, University of Oxford, 2002.
+window were acceptable. We suggest that this may spur                 [6] Nygårds ME, Sörnmo L. Delineation of the QRS Complex
+                                                                           using the Envelope of the ECG. Med and Biol Engin and
+a re-consideration of the AAMI guidelines for maximum
+                                                                           Comput 1983;21(5):538–547.
+alarm latency. A special issue in the journal Physiologi-             [7] Oster J, Behar J, Colloca R, Li Q, Li Q, Clifford GD.
+cal Measurement will follow this competition and provide                   Open source Java-based ECG Analysis Software and An-
+a forum for an extended editorial which will discuss the                   droid App for Atrial Fibrillation Screening. In Comput in
+methods and results in more detail, and provide the oppor-                 Cardiol. 2013; 731–734.
+tunity for entrants to revise their algorithms.                       [8] Behar J, Oster J, Clifford GD. Combining and Benchmark-
+                                                                           ing Methods of Foetal ECG Extraction without Maternal or
+Acknowledgments                                                            Scalp Electrode Data. Phys Measur 2014;35(8):1569.
+                                                                      [9] Zong W, Heldt T, Moody G, Mark R. An open-source al-
+   This work was funded in part by the National Insti-                     gorithm to detect onset of arterial blood pressure pulses. In
+tutes of Health, grant R01-GM104987. We also would                         Comput in Cardiol. 2003; 259–262.
+like to thank Arvind Ananthan, Jaka Cikac̆, Barbara Drew,             [10] Sun J, Reisner A, Mark R. A Signal Abnormality Index for
+Quan Ding, Scott Eaton, Xiao Hu, Franc Jager, Cadathur                     Arterial Blood Pressure Waveforms. In Comput in Cardiol.
+‘Raj’ Rajagopalan and Anz̆e Rezelj, GE Healthcare, Math-                   2006; 13–16.
+Works, Mindray North America and Philips Healthcare.                  [11] Li Q, Clifford GD. Dynamic time warping and machine
+                                                                           learning for signal quality assessment of pulsatile signals.
+References                                                                 Phys Meas 2012;33(9):1491–1501.
+                                                                      [12] Silva I, Moody G. An open-source toolbox for analysing
+[1]   Hamilton PS, Tompkins WJ. A real-time QRS detection al-              and processing physionet databases in matlab and octave.
+      gorithm. IEEE Trans Biomed Eng 1986;33(12):1157–1165.                Journal of Open Research Software 2014;2(1):e27.
+[2]   Goldberger AL, Amaral LA, Glass L, Hausdorff JM, Ivanov         [13] Behar J, Oster J, Li Q, Clifford GD. ECG Signal Qual-
+      PC, Mark RG, Mietus JE, Moody GB, Peng CK, Stanley                   ity during Arrhythmia and its Application to False Alarm
+      HE. Physiobank, Physiotoolkit, and Physionet Components              Reduction. IEEE Trans on Biomed Engin 2013;60:1660–
+      of a New Research Resource for Complex Physiologic Sig-              1666.
+      nals. Circ 2000;101(23):e215–e220.                              [14] Li Q, Rajagopalan C, Clifford G. Ventricular fibrillation
+[3]   Engelse WAH, Zeelenberg C. A single scan algorithm for               and tachycardia classification using a machine learning ap-
+      QRS-detection and feature extraction. Comput in Cardiol              proach. IEEE Transactions on Biomedical Engineering
+      1979;6:37–42.                                                        2014;61(6):1607–1613.
+
+
+
+
+                                                                276
+

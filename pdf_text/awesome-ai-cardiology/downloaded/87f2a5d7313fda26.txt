@@ -1,0 +1,266 @@
+                      SUPER-RESOLUTION RECONSTRUCTION OF CARDIAC MRI
+                             USING COUPLED DICTIONARY LEARNING
+
+             Kanwal K. Bhatia1 , Anthony N. Price2 , Wenzhe Shi1 , Jo V. Hajnal2 , Daniel Rueckert1
+                  1
+                   Biomedical Image Analysis Group, Imperial College London, London, UK
+    2
+        Division of Imaging Sciences and Biomedical Engineering, King’s College London, London, UK
+
+
+                         ABSTRACT                                        setting a limit on the possible enhancement obtainable. Like-
+                                                                         wise, reconstruction techniques used for brain imaging [3],
+High resolution 3D cardiac MRI is difficult to achieve due               which compensate only for rigid or affine motion between ac-
+to the relative speed of motion occurring during acquisition.            quisitions, are insufficient for cardiac image super-resolution.
+Instead, anisotropic 2D stack volumes are typical, and im-               For this reason, upsampling of cardiac images via intensity-
+proving the resolution of these is strongly motivated by both            based interpolation schemes, such as b-spline or bicubic, are
+visualisation and analysis. The lack of suitable reconstruction          still commonly used in cardiac imaging.
+techniques that handle non-rigid motion means that cardiac
+                                                                              We explore instead the idea of upsampling acquired data
+image enhancement is still often attained by simple interpo-
+                                                                         through example-based super-resolution using image patches.
+lation. In this paper, we explore the use of example-based
+                                                                         This enables the integration of information from multiple
+super-resolution, to enable high fidelity patch-based recon-
+                                                                         views but without the need for any non-rigid alignment or
+struction, using training data that does not need to be accu-
+                                                                         modelling of the underlying motion. Instead, we aim to ex-
+rately aligned with the target data. By moving to a patch scale,
+                                                                         ploit the data redundancy - at a patch level - across a cardiac
+we are able to exploit the data redundancy present in cardiac
+                                                                         sequence. Recent work using patch-based approaches for
+image sequences, without the need for registration. To do this,
+                                                                         reconstruction has focused on brain MRI, for example to
+dictionaries of high-resolution and low-resolution patches are
+                                                                         reconstruct low-resolution T2-weighted images from corre-
+co-trained on high-resolution sequences, in order to enforce a
+                                                                         sponding high-resolution T1-weighted images [4][5]. The
+common relationship between high- and low-resolution patch
+                                                                         motivation for patch-based super-resolution in cardiac imag-
+representations. These dictionaries are then used to recon-
+                                                                         ing is even stronger than in brain imaging, due to the lack of
+struct from a low-resolution view of the same anatomy. We
+                                                                         existing acquisition techniques or post-processing algorithms
+demonstrate marked improvements of the reconstruction al-
+                                                                         that deal robustly with non-rigid motion.
+gorithm over standard interpolation.
+                                                                              The basic idea behind these approaches is that of pat-
+                                                                         tern matching. Given a low-resolution (LR) image, find sim-
+                      1. INTRODUCTION                                    ilar LR images in a database of LR and high-resolution (HR)
+                                                                         image pairs. The corresponding HR pairs are then used to
+The speed of cardiac and respiratory motion present during               upsample the test image using the observed relationship be-
+Magnetic Resonance Imaging (MRI) of the heart makes the                  tween images. Since this is not possible on whole images, the
+acquisition of high-resolution 3D cardiac image volumes a                methods use image patches of, for example, size 5 × 5 × 5
+difficult task. Instead, stacks of high resolution 2D planar             voxels, instead. In previous works, the database of training
+slices are typically acquired, resulting in anisotropic volumes          patches consists of either other patches within the image itself
+of, for example, 1.25 × 1.25 × 10 mm voxels as standard.                 or those from a HR view of the same anatomy [4][5]. Most re-
+Improving the resolution of such images is an important chal-            cently, patch-based reconstruction using HR external atlases
+lenge in cardiac image visualisation and analysis.                       has been proposed [6]. These cases however, work on the as-
+    Attempts to improve resolution of images of moving                   sumption that the same relationship between the construction
+structures are typically carried out either in the acquisi-              of HR and LR patches actually exists.
+tion stage, by aiming to improve speed [1], or in the post-                   Recent developments in sparse representations and dic-
+processing stage, based on the fusion of data from multiple              tionary learning have begun to filter through from computer
+acquisitions to achieve super-resolution [2]. Previous work in           vision to the medical imaging community. In this paper, we
+the latter approach depends on the quality of alignment of the           adopt the algorithm of [7], which was developed for single
+images. Unfortunately, the highly non-rigid motion present               image scale-up and recently applied to brain image upsam-
+in cardiac imaging, together with the low resolution of the ac-          pling in [8]. The key is that no relationship between the con-
+quired images makes accurate registration difficult to achieve,          struction of HR and LR patches needs to be assumed. Instead,
+
+
+978-1-4673-1961-4/14/$31.00 ©2014 IEEE                             947
+such correspondence is enforced to exist by co-training LR
+                                                                        Fig. 2. Reconstruction using co-trained dictionaries. HR
+and HR dictionaries, such that a LR patch has the same sparse
+                                                                        and LR dictionaries are co-trained to encode corresponding
+representation with respect to the LR dictionary as its corre-
+                                                                        patches with the same sparse representation. LR patches from
+sponding HR patch has to the HR dictionary. Using these, we
+                                                                        a test image are then sparse coded using the LR dictionary,
+are able to reconstruct HR images with up to 8 times upsam-
+                                                                        and the resulting sparse code applied to the HR dictionary to
+pling in the slice-select direction, without any registration.
+                                                                        reconstruct a corresponding upsampled patch.
+
+                    2. BACKGROUND
+
+Standard cardiac imaging techniques typically involve the ac-
+quisition of multiple 2D slice stacks creating an anisotropic
+3D volume which is HR in-plane, but LR in the through-plane
+direction. Given an underlying unknown HR image yH , the
+acquired LR image yL can be modelled as:
+
+                   yL = (yH ∗ B) ↓ s + η                   (1)
+
+where B represents a blur operator, ↓ s is a downsampling
+operator that decreases the resolution by a factor of s and η
+represents an additive noise term. Recovering the high res-
+olution image yH from yL is under-determined and requires
+some regularisation on the nature of yH . In this work, we              examples to reconstruct the LR orientation of a stack of SA
+adopt the prior that small image patches of yH can be sparsely          slices.
+reconstructed with respect to an appropriate dictionary, in the             Recent advances in computer vision have shown that sig-
+same way as yL , under particular circumstances.                        nals such as image patches may be represented by a sparse
+    Typically, orthogonal HR short-axis (SA), four-chamber              combination of atoms from a dictionary. Such a dictionary
+and two-chamber long-axis (LA) views are acquired. Given a              can be pre-defined for general images e.g.: DCT, or learnt by
+HR sequence covering the same anatomy as the LR sequence,               training examples of similar images. A standard method of
+we hypothesise that (if working with small enough image                 training a dictionary D to sparsely represent a set of signals
+patches), there should be enough redundant information in the           x is the K-SVD method [10]. Using dictionary learning for
+sequence to reconstruct a HR patch from the available data,             image SRR has recently been proposed in, for example, [7].
+even without information about spatial correspondences.                 These work on the idea that dictionaries trained from HR and
+                                                                        corresponding LR examples can be used to reconstruct from
+                                                                        new LR input. In the following, we describe the method of
+Fig. 1. Typical cardiac image acquisitions. L-R: HR SA slice,
+                                                                        [7] and show its application to cardiac images.
+LA stack of short-axis slices, frame of HR LA slice sequence.
+
+                                                                                              3. METHODS
+
+                                                                        We aim to reconstruct a LR orientation (the through-plane
+                                                                        view of a 2D slice stack) sequence, from frames of a HR
+                                                                        sequence of the corresponding anatomy. To ease explana-
+    Super-resolution reconstruction (SSR) uses multiple                 tion, we assume in the following a LR SA stack sequence and
+views of an object to improve image resolution. Its appli-              single slice HR LA sequences. However, the same methods
+cation to cardiac image enhancement is attractive due to the            equally apply to any pair of orthogonal views that yield HR
+potential to combine data acquired over time and in multiple            in-plane. By using orthogonal views of the same anatomy,
+orientations. A review of SRR in general medical imaging                we eliminate the need for affine registration. The method is
+can be found in [9]. Techniques fall into two main cate-                summarised in Fig. 2.
+gories: those based on reconstruction through the fusion of
+multiple views of an object [3][2], and example-based super-            3.1. Training
+resolution, which aims to upsample LR images via knowledge
+of the relationship between HR and LR image features from               Our training data consists of frames from a HR LA sequence
+example data [4][5]. Due to difficulties in aligning cardiac            YH = {yH }, and corresponding LR sequences obtained
+images to sufficient sub-pixel accuracy, we here adopt the lat-         through blurring and downsampling according to Eq. 1. By
+ter approach. We use HR LA slices through time as training              using training data that covers the whole cardiac cycle, we
+
+
+                                                                  948
+can account for the variation of motion likely in the test im-            3.2. Reconstruction
+age. A Gaussian kernel, with full width half max (FWHM)
+                                                                          Patches from a LR test image are extracted in the same way as
+equal to the slice thickness, is used to blur in the slice-select
+                                                                          for the LR training images (3.1.1). The sparse code for each
+direction only, in order to simulate the acquisition process [9].
+                                                                          patch with respect to the LR dictionary, DL , is found by:
+The resulting LR images are then upsampled using bicubic
+interpolation back to the original size, giving YL = {yL }.                               X
+                                                                                                      L
+                                                                           αk = arg min       kpL           2
+                                                                                                 k −D αk k2 subject to kαk k0 < λ (5)
+Corresponding patches P = {pH           L
+                                   k , pk }k are extracted from                       αk
+                                                                                           k
+these images: pk = Rk y, where Rk is an operator to extract
+a patch of size of size n × m from location k. These patches              again as in [10]. Crucially, this is the same sparse coding
+are used to co-train the HR and LR dictionaries.                          equation as in the training phase. The reconstruction weights
+                                                                          vector αk for each test patch are used to approximate HR
+3.1.1. Patch pairs construction                                           patches by {p̃H           H
+                                                                                        k }k = {D αk }k . To create a smooth overall
+                                                                          reconstruction, overlapping patches are used, and the upsam-
+To focus the training on the relationship between LR patches              pled image given by their average reconstruction. The final
+and high-frequency information (edges and textures), patches              HR image is given by adding the LR interpolated approxima-
+are extracted from a LR image, yL , and a difference image                                  P         T
+                                                                                                          −1 P        T H
+                                                                          tion ỹH = yL +       k∈Ω Rk Rk        k∈Ω Rk p̃k .
+given by yE = yH −yL . For the LR patches, features contain-
+ing high frequency information are extracted from yL by con-
+volving with 2D Gaussian / Laplacian filters: p̂L
+                                                k = fk ∗ yL .                                  4. EXPERIMENTS
+Finally, Principal Component Analysis is used to reduce the
+                                    L                                     We demonstrate our algorithm on synthetically-generated
+feature vector extracted: pL
+                           k = Cp̂k , where C is a projection
+                           L
+operator that transforms p̂k to a low-dimensional subspace                data and use it to upsample real adult and neonatal datasets.
+preserving 99.9% of its average energy. Image intensities are             Adult data were acquired on a 1.5T Philips Achieva scanner,
+used for the HR patches pH                                                using a 32 channel cardiac coil (TE/TR=1.6/3.2ms, FA=60),
+                            k = Rk yE . This gives pairs of
+co-occurring patches at each location k, P = {pH      L                   giving a reconstructed resolution of 1.25x1.25mm slices, 10
+                                                 k , pk }k .
+                                                                          mm thick. SSFP acquisition with retrospective cardiac gating
+                                                                          provides 30 frames. For the neonatal data, SSFP acquisition
+3.1.2. Correlated dictionary learning
+                                                                          with retrospective ECG gating over 20 cardiac phases was
+Correlated dictionaries ensure that a HR patch and its LR                 used, with resulting resolution 0.5×0.5×4mm.
+counterpart have the same sparse representations in their re-
+spective dictionaries. We also need to ensure that the LR                 4.1. Results
+patches can be encoded sparsely and in the same way for both
+train and test data. When reconstructing a LR test patch, we              In the simulation, we take a HR LA sequence of 30 frames,
+find the sparse representation of that patch in terms of the LR           withholding one frame as a test image. This is downsampled
+dictionary only. The LR dictionary DL is therefore also con-              by a factor of 8 in the theoretical slice-select direction using
+structed using LR patches only:                                           a Gaussian blur with FWHM=8. The remaining 29 frames
+                  X                                                       are used for training using the same downsampling opera-
+  DL , α = min       kpL      L     2
+                        k − D αk k2 subject to kαk0 < λ (2)
+                                                                          tions. We apply our algorithm using overlapping patches of
+           DL ,αk                                                         size 16×16 pixels and dictionary size of 400 atoms. The high
+                    k
+                                                                          degree of patch redundancy allows successful reconstruction
+where λ denotes the desired sparsity of the reconstruction                as shown in Figure 3, with substantial improvement over bicu-
+weights vector α. This standard dictionary learning equation              bic interpolation. Training and reconstruction took approxi-
+is solved sequentially for DL and α using the method of [10].             mately 2 seconds on a 2.4GHz Intel Core i5 machine. Re-
+The resulting sparse code αk for each patch k, is then used to            peating the experiment for similar LA sequences of 15 differ-
+solve for the HR dictionary by minimising:                                ent subjects, gave a mean mean squared error (MSE) of 2066
+              X                                                           for bicubic interpolation compared with 856 for our patch-
+  DH = min       kpH       H    2           H      H
+                    k − D αk k2 = min kP − D AkF (3)
+                                                        2
+                                                                          based method. For real MRI, we acquire a SA stack plus a
+         DH                            DH
+               k                                                          HR LA sequence of an orthogonal view for a given subject.
+where columns of P are formed by the HR training patches,                 The LA sequence is downsampled and used as training data
+pH                                                                        to reconstruct the corresponding non-planar LR view of the
+ k and columns of A are formed by the atoms α. Denoting
+A+ as the Pseudo-Inverse of A, the solution is given by:                  SA stack to isotropic, using an upsampling factor of 8. We
+                                                                          present visual results for two markedly different cases: adult
+              DH = PH A+ = PH AT (AAT )−1                    (4)          and neonatal. In these cases, patches of sizes of 12×24 pixels
+                                                                          were used in both training and reconstruction. The results of
+resulting in correlated dictionaries, DH and DL .                         two example frames from each dataset are shown in Fig. 4.
+
+
+                                                                    949
+Fig. 3.   Synthetically-generated example.            Bicubic           Fig. 4. Example reconstruction of real MRI frames. First two
+MSE=2683, proposed MSE=1293.                                            rows: adult dataset. Bottom two rows: neonatal dataset.
+
+
+
+
+                (a) Original      (b) Downsampled
+
+
+
+
+                (c) Bicubic        (d) Proposed
+
+
+
+It can be clearly seen that in both cases the patch-based re-                (j) Original        (k) Bicubic        (l) Proposed
+construction algorithm produces sharper images than bicubic
+interpolation.
+                      5. DISCUSSION                                      [5] F. Rousseau, “A non-local approach for image super-
+                                                                             resolution using intermodality priors,” Medical Image
+We have demonstrated how we can already achieve marked                       Analysis, vol. 14, pp. 594–605, 2010.
+improvement over bicubic interpolation on real MRI data.                 [6] W. Shi, J. Caballero, C. Ledig, X. Zhuang, W. Bai,
+Extensive validation of real cardiac datasets is difficult due               K. Bhatia, A. Marvao, T. Dawes, D. O’Regan, and
+to the lack of ground truth and is the subject of ongoing work.              D. Rueckert, “Cardiac image super-resolution with
+                                                                             global correspondence using multi-atlas patchmatch,” in
+                     6. REFERENCES                                           MICCAI, 2013.
+
+ [1] J. Caballero, D. Rueckert, and J. V. Hajnal, “Dictionary            [7] R. Zeyde, M. Elad, and M. Protter, “On single image
+     learning and time sparsity in dynamic mri,” in MICCAI                   scale-up using sparse-representations,” in 7th Interna-
+     (1), 2012, pp. 256–263.                                                 tional Conference on Curves and Survaces, 2012.
+
+ [2] S. U. Rahman and S. Wesarg, “Combining short-axis                   [8] A. Rueda, N. Malpica, and E. Romero, “Single-image
+     and long-axis cardiac mr images by applying a super-                    super-resolution of brain mr images using overcomplete
+     resolution reconstruction algorithm,” in SPIE Med. Im.,                 dictionaries,” Medical Image Analysis, vol. 17(1), pp.
+     2010, p. 7623.                                                          113–132, 2013.
+ [3] A. Gholipour, J. A. Estroff, and S. K. Warfield, “Ro-               [9] H. Greenspan, “Super-resolution in medical imaging,”
+     bust super-resolution volume reconstruction from slice-                 The Computer Journal, vol. 52(1), 2009.
+     acquisitions: application to fetal brain mri,” IEEE Trans.
+     Med. Imag., vol. 29(10), pp. 1739–1758, 2010.                      [10] M. Aharon, M. Elad, and A. Bruckstein, “Ksvd: an
+                                                                             aglorithm for designing overcomplete dictionaries for
+ [4] J. V. Manjon, P. Coupe, A. Buades, D. L. Collins, and                   sparse representation,” IEEE Trans. Sig. Proc., vol.
+     M. Robles, “Mri superresolution using self-similarity                   54(11), 2006.
+     and image priors,” Int J. Biomed. Imaging, 2010.
+
+
+                                                                  950
+

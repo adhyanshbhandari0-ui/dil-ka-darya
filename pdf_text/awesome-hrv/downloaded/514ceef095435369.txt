@@ -1,0 +1,997 @@
+    DeepLog: Anomaly Detection and Diagnosis from System Logs
+                     through Deep Learning
+                                                Min Du, Feifei Li, Guineng Zheng, Vivek Srikumar
+                                                              School of Computing, University of Utah
+                                                            {mind, lifeifei, guineng, svivek}@cs.utah.edu
+
+ABSTRACT                                                                                      challenging and many traditional anomaly detection methods based
+Anomaly detection is a critical step towards building a secure and                            on standard mining methodologies are no longer effective.
+trustworthy system. The primary purpose of a system log is to                                     System logs record system states and significant events at various
+record system states and significant events at various critical points                        critical points to help debug performance issues and failures, and
+to help debug system failures and perform root cause analysis. Such                           perform root cause analysis. Such log data is universally available
+log data is universally available in nearly all computer systems.                             in nearly all computer systems and is a valuable resource for un-
+Log data is an important and valuable resource for understanding                              derstanding system status. Furthermore, since system logs record
+system status and performance issues; therefore, the various sys-                             noteworthy events as they occur from actively running processes,
+tem logs are naturally excellent source of information for online                             they are an excellent source of information for online monitoring
+monitoring and anomaly detection. We propose DeepLog, a deep                                  and anomaly detection.
+neural network model utilizing Long Short-Term Memory (LSTM),                                     Existing approaches that leverage system log data for anomaly
+to model a system log as a natural language sequence. This allows                             detection can be broadly classified into three groups: PCA based
+DeepLog to automatically learn log patterns from normal execution,                            approaches over log message counters [39], invariant mining based
+and detect anomalies when log patterns deviate from the model                                 methods to capture co-occurrence patterns between different log
+trained from log data under normal execution. In addition, we                                 keys [21], and workflow based methods to identify execution anom-
+demonstrate how to incrementally update the DeepLog model in                                  alies in program logic flows [42]. Even though they are successful in
+an online fashion so that it can adapt to new log patterns over time.                         certain scenarios, none of them is effective as a universal anomaly
+Furthermore, DeepLog constructs workflows from the underlying                                 detection method that is able to guard against different attacks in
+system log so that once an anomaly is detected, users can diagnose                            an online fashion.
+the detected anomaly and perform root cause analysis effectively.                                 This work proposes DeepLog, a data-driven approach for anom-
+Extensive experimental evaluations over large log data have shown                             aly detection that leverages the large volumes of system logs. The
+that DeepLog has outperformed other existing log-based anomaly                                key intuition behind the design of DeepLog is from natural lan-
+detection methods based on traditional data mining methodologies.                             guage processing: we view log entries as elements of a sequence
+                                                                                              that follows certain patterns and grammar rules. Indeed, a sys-
+CCS CONCEPTS                                                                                  tem log is produced by a program that follows a rigorous set of
+                                                                                              logic and control flows, and is very much like a natural language
+•Information systems → Online analytical processing; •Security
+                                                                                              (though more structured and restricted in vocabulary). To that end,
+and privacy → Intrusion/anomaly detection and malware mitiga-
+                                                                                              DeepLog is a deep neural network that models this sequence of log
+tion;
+                                                                                              entries using a Long Short-Term Memory (LSTM) [18]. This allows
+                                                                                              DeepLog to automatically learn a model of log patterns from nor-
+KEYWORDS
+                                                                                              mal execution and flag deviations from normal system execution
+Anomaly detection; deep learning; log data analysis.                                          as anomalies. Furthermore, since it is a learning-driven approach,
+                                                                                              it is possible to incrementally update the DeepLog model so that it
+1     INTRODUCTION                                                                            can adapt to new log patterns that emerge over time.
+Anomaly detection is an essential task towards building a secure                              Challenges. Log data are unstructured, and their format and se-
+and trustworthy computer system. As systems and applications                                  mantics can vary significantly from system to system. It is already
+get increasingly more complex than ever before, they are subject                              challenging to diagnose a problem using unstructured logs even
+to more bugs and vulnerabilities that an adversary may exploit to                             after knowing an error has occurred [43]; online anomaly detection
+launch attacks. Such attacks are also getting increasingly more                               from massive log data is even more challenging. Some existing
+sophisticated. As a result, anomaly detection has become more                                 methods use rule-based approaches to address this issue, which
+                                                                                              requires specific domain knowledge [41], e.g., using features like
+Permission to make digital or hard copies of all or part of this work for personal or         “IP address” to parse a log. However, this does not work for general
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation     purpose anomaly detection where it is almost impossible to know
+on the first page. Copyrights for components of this work owned by others than ACM            a priori what are interesting features in different types of logs (and
+must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,
+to post on servers or to redistribute to lists, requires prior specific permission and/or a
+                                                                                              to guard against different types of attacks).
+fee. Request permissions from permissions@acm.org.                                                Anomaly detection has to be timely in order to be useful so that
+CCS’17, Oct. 30–Nov. 3, 2017, Dallas, TX, USA.                                                users can intervene in an ongoing attack or a system performance
+© 2017 ACM. ISBN 978-1-4503-4946-8/17/10. . . $15.00                                          issue [10]. Decisions are to be made in streaming fashion. As
+DOI: http://dx.doi.org/10.1145/3133956.3134015
+a result, offline methods that need to make several passes over         the ability to incrementally update its weights during the detec-
+the entire log data are not applicable in our setting [22, 39]. We      tion phase by incorporating live user feedback. More specifically,
+would also like to be able to detect unknown types of anomalies,        DeepLog provides a mechanism for user feedback if a normal log
+rather than gearing towards specific types of anomalies. Therefore,     entry is incorrectly classified as an anomaly. DeepLog can then use
+previous work [44] that use both normal and abnormal (for specific      such feedback to adjust its weights dynamically online over time
+types of anomalies) log data entries to train a binary classifier for   to adapt itself to new system execution (hence, new log) patterns.
+anomaly detection is not useful in this context.
+   Another challenge comes from concurrency. Clearly, the or-           2 PRELIMINARIES
+der of log messages in a log provides important information for
+diagnosis and analysis (e.g., identify the execution path of a pro-     2.1 Log parser
+gram). However, in many system logs, log messages are produced          We first parse unstructured, free-text log entries into a structured
+by several different threads or concurrently running tasks. Such        representation, so that we can learn a sequential model over this
+concurrency makes it hard to apply workflow based anomaly de-           structured data. As shown by several prior work [9, 22, 39, 42, 45],
+tection methods [42] which use a workflow model for a single task       an effective methodology is to extract a “log key” (also known as
+as a generative model to match against a sequence of log messages.      “message type”) from each log entry. The log key of a log entry e
+   Lastly, each log message contains rich information such as a log     refers to the string constant k from the print statement in the source
+key and one or more metric values, as well as its timestamp. A          code which printed e during the execution of that code. For example,
+holistic approach that integrates and utilizes these different pieces   the log key k for log entry e =“Took 10 seconds to build instance.” is
+of information will be more effective. Most existing methods [22,       k =Took * seconds to build instance., which is the string constant from
+32, 39, 41, 42, 44] analyze only one specific part of a log message     the print statement printf(”Took %f seconds to build instance.”, t). Note
+(e.g., the log key) which limits the types of anomalies they can        that the parameter(s) are abstracted as asterisk(s) in a log key. These
+detect.                                                                 metric values reflect the underlying system state and performance
+Our contribution. A Recurrent Neural Network (RNN) is an arti-          status. Values of certain parameters may serve as identifiers for
+ficial neural network that uses a loop to forward the output of last    a particular execution sequence, such as block_id in a HDFS log
+state to current input, thus keeping track of history for making pre-   and instance_id in an OpenStack log. These identifiers can group
+dictions. Long Short-Term Memory (LSTM) networks [13, 18, 27]           log entries together or untangle log entries produced by concurrent
+are an instance of RNNs that have the ability to remember long-term     processes to separate, single-thread sequential sequences [22, 39,
+dependencies over sequences. LSTMs have demonstrated success            42, 45]. The state-of-the-art log parsing method is represented by
+in various tasks such as machine translation [35], sentiment analy-     Spell [9], an unsupervised streaming parser that parses incoming
+sis [8], and medical self-diagnosis [20].                               log entries in an online fashion based on the idea of LCS (longest
+   Inspired by the observation that entries in a system log are a       common subsequence).
+sequence of events produced by the execution of structured source          Past work on log analysis [22, 39, 42, 44] have discarded times-
+code (and hence can be viewed as a structured language), we design      tamp and/or parameter values in a log entry, and only used log keys
+the DeepLog framework using a LSTM neural network for online            to detect anomalies. DeepLog stores parameter values for each log
+anomaly detection over system logs. DeepLog uses not only log           entry e, as well as the time elapsed between e and its predecessor,
+keys but also metric values in a log entry for anomaly detection,       into a vector − →
+                                                                                        v e . This vector is used by DeepLog in addition to
+hence, it is able to capture different types of anomalies. DeepLog      the log key. An example is given in Table 1, which shows the pars-
+only depends on a small training data set that consists of a sequence   ing results for a sequence of log entries from multiple rounds of
+of “normal log entries”. After the training phase, DeepLog can          execution of virtual machine (VM) deletion task in OpenStack.
+recognize normal log sequences and can be used for online anomaly
+detection over incoming log entries in a streaming fashion.             2.2    DeepLog architecture and overview
+   Intuitively, DeepLog implicitly captures the potentially non-
+                                                                        The architecture of DeepLog is shown in Figure 1 with three main
+linear and high dimensional dependencies among log entries from
+                                                                        components: the log key anomaly detection model, the parame-
+the training data that correspond to normal system execution paths.
+                                                                        ter value anomaly detection model, and the workflow model to
+To help users diagnose a problem once an anomaly is identified,
+                                                                        diagnose detected anomalies.
+DeepLog also builds workflow models from log entries during its
+training phase. DeepLog separates log entries produced by concur-       Training stage. Training data for DeepLog are log entries from
+rent tasks or threads into different sequences so that a workflow       normal system execution path. Each log entry is parsed to a log key
+model can be constructed for each separate task.                        and a parameter value vector. The log key sequence parsed from a
+   Our evaluation shows that on a large HDFS log dataset explored       training log file is used by DeepLog to train a log key anomaly de-
+by previous work [22, 39], trained on only a very small fraction        tection model, and to construct system execution workflow models
+(less than 1%) of log entries corresponding to normal system exe-       for diagnosis purposes. For each distinct key k, DeepLog also trains
+cution, DeepLog can achieve almost 100% detection accuracy on           and maintains a model for detecting system performance anomalies
+the remaining 99% of log entries. Results from a large OpenStack        as reflected by these metric values, trained by the parameter value
+log convey a similar trend. Furthermore, DeepLog also provides          vector sequence of k.
+                                                                        Detection stage. A newly arrived log entry is parsed into a log
+                                                                        key and a parameter value vector. DeepLog first uses the log key
+                                          log message (log key underlined)                     log key   parameter value vector
+                                          t 1 Deletion of file1 complete                       k1        [t 1 − t 0 , file1Id]
+                                          t 2 Took 0.61 seconds to deallocate network …        k2        [t 2 − t 1 , 0.61]
+                                          t 3 VM Stopped (Lifecycle Event)                     k3        [t 3 − t 2 ]
+                                          …                                                    …         …
+                                                    Table 1: Log entries from OpenStack VM deletion task.
+
+                       each log entry = log key + parameter value vector                                                                 A new log entry
+                                                                                            Log Key                                                     Log
+                                                          Train model                                                                                  Parser
+                                                                                        Anomaly Detection
+                                                         Construct workflow                  model                             Anomaly?
+
+
+
+
+                                                                                                                                                                     D etection Stage
+                                                                                                                                                      log key
+
+
+
+
+Training Stage
+                  normal execution
+                                                                                                                                   Yes
+                  log file                                                            Workflows                                               No,          +
+                                                                                                                                             check
+                                      Log                                                                         Diagnosis                  vector   parameter
+                                                ......                                                            Update
+                                     Parser                                                                                                           value vector
+                                                                                                                  model if
+
+
+
+
+                                                                       Train models
+                                                ......                                                            false positive
+                                                                                                                                   Yes
+                                                                                              Parameter Value
+                                                                                             Anomaly Detection                 Anomaly?         No
+
+                                                ......                                             model
+                                                                                              for each log key
+                                                                                             ......
+                                                ......
+
+
+                                                                 Figure 1: DeepLog architecture.
+
+anomaly detection model to check whether the incoming log key is                            3 ANOMALY DETECTION
+normal. If yes, DeepLog further checks the parameter value vector
+                                                                                            3.1 Execution path anomaly
+using the parameter value anomaly detection model for that log key.
+The new entry will be labeled as an anomaly if either its log key or                        We first describe how to detect execution path anomalies using the
+its parameter value vector is predicted being abnormal. Lastly, if                          log key sequence. Since the total number of distinct print statements
+it is labeled being abnormal, DeepLog’s workflow model provides                             (that print log entries) in a source code is constant, so is the total
+semantic information for users to diagnose the anomaly. Execution                           number of distinct log keys. Let K = {k 1 , k 2 , . . . , kn } be the set of
+patterns may change over time or were not included in the original                          distinct log keys from a log-producing system source code.
+training data. DeepLog also provides the option for collecting user                            Once log entries are parsed into log keys, the log key sequence
+feedback. If the user reports a detected anomaly as false positive,                         reflects an execution path that leads to that particular execution
+DeepLog could use it as a labeled record to incrementally update                            order of the log print statements. Let mi denote the value of the
+its models to incorporate and adapt to the new pattern.                                     key at position i in a log key sequence. Clearly, mi may take one of
+                                                                                            the n possible keys from K, and is strongly dependent on the most
+2.3              Threat model                                                               recent keys that appeared prior to mi .
+DeepLog learns the comprehensive and intricate correlations and                                We can model anomaly detection in a log key sequence as a multi-
+patterns embedded in a sequence of log entries produced by normal                           class classification problem, where each distinct log key defines
+system execution paths. Henceforth, we assume that system logs                              a class. We train DeepLog as a multi-class classifier over recent
+themselves are secure and protected, and an adversary cannot attack                         context. The input is a history of recent log keys, and the output is a
+the integrity of a log itself. We also assume that an adversary cannot                      probability distribution over the n log keys from K, representing the
+modify the system source code to change its logging behavior and                            probability that the next log key in the sequence is a key ki ∈ K.
+patterns. That said, broadly speaking, there are two types of attacks                          Figure 2 summarizes the classification setup. Suppose t is the
+that we consider.                                                                           sequence id of the next log key to appear. The input for classi-
+   (1) Attacks that lead to system execution misbehavior and hence                          fication is a window w of the h most recent log keys. That is,
+anomalous patterns in system logs. For instance, Denial of Service                          w = {mt −h , . . . , mt −2 , mt −1 }, where each mi is in K and is the log
+(DoS) attacks which may cause slow execution and hence perfor-                              key from the log entry ei . Note that the same log key value may
+mance anomalies reflected in the log timestamp differences from                             appear several times in w. The output of the training phase is a
+the parameter value vector sequence; attacks causing repeated                               model of the conditional probability distribution Pr[mt = ki |w] for
+server restarts such as Blind Return Oriented Programming (BROP)                            each ki ∈ K(i = 1, . . . , n). The detection phase uses this model to
+attack [5] shown as too many server restart log keys; and any at-                           make a prediction and compare the predicted output against the
+tack that may cause task abortion such that the corresponding log                           observed log key value that actually appears.
+sequence ends early and/or exception log entries appear.                                    Training stage. The training stage relies on a small fraction of log
+   (2) Attacks that could leave a trace in system logs due to the                           entries produced by normal execution of the underlying system.
+logging activities of system monitoring services. An example is                             For each log sequence of length h in the training data, DeepLog
+suspicious activities logged by an Intrusion Detection System (IDS).
+    Input: h recent                                                                                                                  LSTM
+                                                                                                       Output of last state
+    log keys up to    DeepLog                                                                          is forwarded as
+                                                                                                                                     block
+                                           Output: conditional probability
+                                           of next log key given the input                             current input state
+                                           recent sequence
+                                                                                                                              Roll out
+Figure 2: An overview of log key anomaly detection model.                                    LSTM                   LSTM                 LSTM
+                                                                                             block                  block                block
+
+updates its model for the probability distribution of having ki ∈ K
+as the next log key value. For example, suppose a small log file
+resulted from normal execution is parsed into a sequence of log                                                           Stack up
+
+keys: {k 22 , k 5 , k 11 , k 9 , k 11 , k 26 }. Given a window size h = 3, the            DeepLog                                                        Output
+input sequence and the output label pairs to train DeepLog will be:                               LSTM                    LSTM               LSTM
+{k 22 , k 5 , k 11 → k 9 }, {k 5 , k 11 , k 9 → k 11 }, {k 11 , k 9 , k 11 → k 26 }.              block                   block              block
+
+Detection stage. DeepLog performs anomaly detection in an on-                                LSTM                   LSTM                 LSTM
+line, streaming setting. To test if an incoming log key mt (parsed                           block                  block                block
+from an incoming log entry et ) is to be considered normal or abnor-
+mal, we send w = {mt −h , ..., mt −1 } to DeepLog as its input. The                                                                              Input
+output is a probability distribution Pr[mt |w] = {k 1 : p1 , k 2 : p2 , ...,
+kn : pn } describing the probability for each log key from K to                        Figure 3: A detailed view of log key anomaly detection
+appear as the next log key value given the history.                                    model using stacked LSTM.
+     In practice, multiple log key values may appear as mt . For in-
+stance, if the system is attempting to connect to a host, then mt                      language model, a LSTM-based one can encode more intricate pat-
+could either be ‘Waiting for * to respond’ or ‘Connected to *’; both                   terns and maintain long-range state over a sequence [34]. Complex
+are normal system behavior. DeepLog must be able to learn such                         patterns and interleaving log entries from concurrent tasks in a sys-
+patterns during training. Our strategy is to sort the possible log                     tem log can render a traditional language model less effective. Thus,
+keys K based on their probabilities Pr[mt |w], and treat a key value                   DeepLog uses a LSTM neural network [18] for anomaly detection
+as normal if it’s among the top д candidates. A log key is flagged                     from a log key sequence.
+as being from an abnormal execution otherwise.                                            Given a sequence of log keys, a LSTM network is trained to
+     3.1.1 Traditional N-gram language model. The problem of as-                       maximize the probability of having ki ∈ K as the next log key value
+cribing probabilities to sequences of words drawn from a fixed                         as reflected by the training data sequence. In other words, it learns
+vocabulary is the classic problem of language modeling, widely                         a probability distribution Pr(mt = ki |mt −h , . . ., mt −2 , mt −1 ) that
+studied by the natural language processing (NLP) community [24].                       maximizes the probability of the training log key sequence.
+In our case, each log key can be viewed as a word taken from                              Figure 3 illustrates our design. The top of the figure shows a
+the vocabulary K. The typical language modeling approach for                           single LSTM block that reflects the recurrent nature of LSTM. Each
+assigning probabilities to arbitrarily long sequences is the N-gram                    LSTM block remembers a state for its input as a vector of a fixed
+model. The intuition is that a particular word in a sequence is                        dimension. The state of an LSTM block from the previous time
+only influenced by its recent predecessors rather than the entire                      step is also fed into its next input, together with its (external) data
+history. In our setting, this approximation is equivalent to setting                   input (mt −i in this particular example), to compute a new state
+Pr(mt = ki |m 1 , . . . , mt −1 ) = Pr(mt = ki |mt −N , . . . , mt −1 ) where          and output. This is how historical information is passed to and
+N denotes the length of the recent history to be considered.                           maintained in a single LSTM block.
+     For training, we can calculate this probability using relative fre-                  A series of LSTM blocks form an unrolled version of the recurrent
+quency counts from a large corpus to give us maximum likelihood                        model in one layer as shown in the center of Figure 3. Each cell
+estimates. Given a long sequence of keys {m 1 , m 2 , . . . , mt }, we                 maintains a hidden vector Ht −i and a cell state vector Ct −i . Both
+can estimate the probability of observing the i t h key ki using the                   are passed to the next block to initialize its state. In our case, we
+relative frequency counts of {mt −N , . . . , mt −1 , mt = ki } with re-               use one LSTM block for each log key from an input sequence w (a
+spect to the sequence {mt −N , . . . , mt −1 }. In other words, Pr(mt =                window of h log keys). Hence, a single layer consists of h unrolled
+ki |m 1 , . . . , mt −1 ) = count(mt −N , . . ., mt −1 , mt = ki )/count(mt −N ,       LSTM blocks.
+. . ., mt −1 ). Note that we will count these frequencies using a sliding                 Within a single LSTM block, the input (e.g. mt −i ) and the previ-
+window of size N over the entire key sequence.                                         ous output (Ht −i−1 ) are used to decide (1) how much of the previous
+     To apply the N-gram model in our setting, we simply use N as                      cell state Ct −i−1 to retain in state Ct −i , (2) how to use the current
+the history window size, i.e., we set h = N in our experiments when                    input and the previous output to influence the state, and (3) how
+the N-gram model is used where h is the history sliding window                         to construct the output Ht −i . This is accomplished using a set of
+size as depicted in Figure 2. We use this as a baseline method.                        gating functions to determine state dynamics by controlling the
+                                                                                       amount of information to keep from input and previous output, and
+   3.1.2 The LSTM approach. In recent years, neural language mod-                      the information flow going to the next step. Each gating function
+els that use recurrent neural networks have been shown to be highly                    is parameterized by a set of weights to be learned. The expressive
+effective across various NLP tasks [3, 25]. Compared to a N-gram                       capacity of an LSTM block is determined by the number of memory
+units (i.e. the dimensionality of the hidden state vector H ). Due to            (PCA) and self-organizing maps (SOM). They are useful towards
+space constraints, we refer the reader to NLP primers (e.g., [12])               capturing correlation among different feature dimensions. How-
+for a formal characterization of LSTMs.                                          ever, a major limitation of this method in the context of log data is
+   The training step entails finding proper assignments to the weights           that often times the appearance of multiple log keys at a particular
+so that the final output of the sequence of LSTMs produces the de-               time instance is equally likely. For instance, the order of k 1 and
+sired label (output) that comes with inputs in the training data set.            k 2 in Table 1 is arbitrary due to concurrently running tasks. This
+During the training process, each input/output pair incrementally                phenomena, and the fact that the matrix is sparse, render these tech-
+updates these weights, through loss minimization via gradient de-                niques ineffective in our setting. Lastly, they are not able to model
+scent. In DeepLog, an input consists of a window w of h log keys,                auto-correlation that exists in a parameter value vector sequence
+and an output is the log key value that comes right after w. We use              (regular patterns over time in a single vector sequence).
+the categorical cross-entropy loss for training.                                 Our approach. DeepLog trains a parameter value anomaly detec-
+   After training is done, we can predict the output for an input                tion model by viewing each parameter value vector sequence (for a
+(w = {mt −h , . . . , mt −1 }) using a layer of h LSTM blocks. Each log          log key) as a separate time series.
+key in w feeds into a corresponding LSTM block in this layer.                        Consider the example in Table 1. The time series for the parame-
+   If we stack up multiple layers and use the hidden state of the                ter value vector sequence of k 2 is: {[t 2 −t 1 , 0.61], [t 20 −t 10 , 1]}. Hence,
+previous layer as the input of each corresponding LSTM block in                  our problem is reduced to anomaly detection from a multi-variate
+the next layer, it becomes a deep LSTM neural network, as shown at               time series data. It is possible to apply an LSTM-based approach
+the bottom of Figure 3. For simplicity, it omits an input layer and an           again. We use a similar LSTM network as shown in Figure 3 to
+output layer constructed by standard encoding-decoding schemes.                  model a multi-variate time series data, with the following adjust-
+The input layer encodes the n possible log keys from K as one-hot                ments. Note that a separate LSTM network is built for the parameter
+vectors. That is, a sparse n-dimensional vector −      →u i is constructed       value vector sequence of each distinct log key value.
+for the log key ki ∈ K, such that −     →u i [i] = 1 and −
+                                                        →u i [j] = 0 for all         Input. The input at each time step is simply the parameter value
+other j , i. The output layer translates the final hidden state into             vector from that timestamp. We normalize the values in each vector
+a probability distribution function using a standard multinomial                 by the average and the standard deviation of all values from the
+logistic function to represent Pr[mt = ki |w] for each ki ∈ K.                   same parameter position from the training data.
+   The example at the bottom of Figure 3 shows only two hidden                       Output. The output is a real value vector as a prediction for the
+layers, but more layers can be used.                                             next parameter value vector, based on a sequence of parameter
+                                                                                 value vectors from recent history.
+                                                                                     Objective function for training. For the multi-variate time series
+3.2     Parameter value and performance anomaly
+                                                                                 data, the training process tries to adjust the weights of its LSTM
+The log key sequence is useful for detecting execution path anom-                model in order to minimize the error between a prediction and an
+alies. However, some anomalies are not shown as a deviation from                 observed parameter value vector. Thus, mean square loss is used to
+a normal execution path, but as an irregular parameter value. These              minimize the error during the training process.
+parameter value vectors (for the same log key) form a parame-                        Anomaly detection. The difference between a prediction and an
+ter value vector sequence, and these sequences from different log                observed parameter value vector is measured by the mean square
+keys form a multi-dimensional feature space that is important for                error (MSE). Instead of setting a magic error threshold for anomaly
+performance monitoring and anomaly detection.                                    detection purpose in an ad-hoc fashion, we partition the train-
+Baseline approach. A simple approach is to store all parameter                   ing data to two subsets: the model training set and the validation
+value vector sequences into a matrix, where each column is a pa-                 set. For each vector − →v in the validation set, we apply the model
+rameter value sequence from a log key k (note that it is possible to             produced by the training set to calculate the MSE between the pre-
+have multiple columns for k depending on the size of its parameter               diction (using the vector sequence from before −       →v in the validation
+value vector). Row i in this matrix represents a time instance ti .                        →
+                                                                                           −
+                                                                                 set) and v . At every time step, the errors between the predicted
+    Consider the log entries in Table 1 as an example. There are                 vectors and the actual ones in the validation group are modeled as
+3 distinct log key values in this example, and the sizes of their                a Gaussian distribution.
+parameter value vectors are 2, 2, and 1 respectively. Hence, row                     At deployment, if the error between a prediction and an ob-
+1 in this matrix represents time instance t 1 with values [t 1 − t 0 ,           served value vector is within a high-level of confidence interval
+file1Id, null, null, null]. Similarly, row 2 and row 3 are [null, null,          of the above Gaussian distribution, the parameter value vector of
+t 2 − t 1 , 0.61, null] and [null, null, null, null, t 3 − t 2 ] respectively.   the incoming log entry is considered normal, and is considered
+    We may also ask each row to represent a range of time instances              abnormal otherwise.
+so that each row corresponds to multiple log messages within that                    Since parameter values in a log message often record important
+time range and becomes less sparse. But the matrix will still be very            system state metrics, this method is able to detect various types of
+sparse when there are many log key values and/or exists some large               performance anomalies. For example, a performance anomaly may
+parameter value vectors. Furthermore, this approach introduces                   reflect as a “slow down”. Recall that DeepLog stores in each param-
+a delay to the anomaly detection process, and it is also difficult to            eter value vector the time elapsed between consecutive log entries.
+figure out a good value for the length of each range.                            The above LSTM model, by modeling parameter value vector as a
+    Given this matrix, many well-known data-driven anomaly detec-                multi-variate time series, is able to detect unusual patterns in one
+tion methods can be applied, such as principal component analysis
+or more dimensions in this time series; the elapsed time value is          the name of the program that created it. Another easy case is when
+just one such dimension.                                                   the process or task id is included in a log entry. Here, we focus on
+                                                                           the case where a user program is executed repeatedly to perform
+3.3    Online update of anomaly detection models
+                                                                           different, but logically related, tasks within that program. An impor-
+Clearly, the training data may not cover all possible normal execu-        tant observation is that tasks do not overlap in time. However, the
+tion patterns. System behavior may change over time, additionally          same log key may appear in more than one task, and concurrency
+depending on workload and data characteristics. Therefore, it is           is possible within each task (e.g., multiple threads in one task).
+necessary for DeepLog to incrementally update weights in its LSTM             Consider OpenStack administrative logs as an example. For
+models to incorporate and adapt to new log patterns. To do this,           each VM instance, its life cycle contains VM creation, VM stop,
+DeepLog provides a mechanism for the user to provide feedback.             VM deletion and others. These tasks do not overlap, i.e., VM stop
+This allows DeepLog to use a false positive to adjust its weights. For     can only start after VM creation has completed. However, the same
+example, suppose h = 3 and the recent history sequence is {k 1 , k 2 ,     log key may appear in different tasks. For example, a log message
+k 3 }, and DeepLog has predicted the next log key to be k 1 with prob-     “VM Resumed (Lifecycle Event)” may appear in VM creation, VM start,
+ability 1, while the next log key value is k 2 , which will be labeled     VM resume and VM unpause. There could be concurrently running
+as an anomaly. If user reports that this is a false positive, DeepLog      threads inside each task, leading to uncertainty in the ordering
+is able to use the following input-output pair {k 1 , k 2 , k 3 → k 2 }    of log messages corresponding to one task. For instance, during
+to update the weights of its model to learn this new pattern. So           VM creation, the order of two log messages “Took * seconds to build
+that next time given history sequence {k 1 , k 2 , k 3 }, DeepLog can      instance” and “VM Resumed (Lifecycle Event)” is uncertain.
+output both k 1 and k 2 with updated probabilities. The same update           Our goal is to separate log entries for different tasks in a log file,
+procedure works for the parameter value anomaly detection model.           and then build a workflow model for each task based on its log
+Note that DeepLog does not need to be re-trained from scratch.             key sequence. That said, the input of our problem is the entire log
+After the initial training process, models in DeepLog exist as sev-        key sequence parsed from a raw log file, and the output is a set of
+eral multi-dimensional weight vectors. The update process feeds in         workflow models, one for each task identified.
+new training data, and adjusts the weights to minimize the error
+between model output and actual observed values from the false
+positive cases.                                                            4.2    Using DeepLog’s anomaly detection model
+4     WORKFLOW CONSTRUCTION FROM                                              4.2.1 Log key separation. Recall that in DeepLog’s model for
+                                                                           anomaly detection from log keys, the input is a sequence of log
+      MULTI-TASKS EXECUTION                                                keys of length h from recent history, and the output is a probability
+Each log key is the execution of a log printing statement in the           distribution of all possible log key values. An interesting observa-
+source code, while a task like VM creation will produce a sequence         tion is that its output actually encodes the underlying workflow
+of log entries. Intuitively, the order of log entries produced by a task   execution path.
+represents an execution order of each function for accomplishing              Intuitively, given a log key sequence, our model predicts what
+this task. As a result, we can build a workflow model as a finite state    will happen next based on the execution patterns it has observed
+automaton (FSA) to capture the execution path of any task. This            during the training stage. If a sequence w is never followed by a
+workflow model can also be used to detect execution path anom-             particular key value k in the training stage, then Pr[mt = k |w] = 0.
+alies, but it is less effective compared to DeepLog’s LSTM model           Correspondingly, if a sequence w is always followed by k, then
+due to its inability to capture inter-task dependencies and non-           Pr[mt = k |w] = 1. For example, suppose on a sequence “25→54”,
+deterministic loop iterations. However, the workflow model is very         the output prediction is “{57:1.00}”, we know that “25→54→57” is
+useful towards enabling users to diagnose what had gone wrong in           from one task. A more complicated case is when a sequence w is
+the execution of a task when an anomaly has been detected.                 to be followed by a log key value from a group of different keys;
+   Given a log sequence generated by the repeated executions of a          the probabilities of these keys to appear after w sum to 1.
+task, there have been several works exploring the problem of work-            To handle this case, we use an idea that is inspired by small
+flow inference [4, 21, 42]. CloudSeer [42] represents the state of the     invariants mining [21].
+art in anomaly detection using a workflow model. CloudSeer has                Consider a log sequence “54→57”, and suppose the predicted
+several limitations. Firstly, the anomalies it can detect are limited      probability distribution is “{18: 0.8, 56: 0.2}”, which means that
+to log entries having ”ERROR” logging level and log entries not            the next step could be either “18” or “56”. This ambiguity could
+appearing. Furthermore, its workflow model construction requires           be caused by using an insufficient history sequence length. For
+a log file with repeated executions of only one single task. Other         example, if two tasks share the same workflow segment “54→57”,
+previous works [4, 21] on workflow construction from a log file            the first task has a pattern “18→54→57→18” that is executed 80%
+also suffer from this limitation. In practice, a log file often contains   of the time, and the second task has a pattern “31→54→57→56”
+interleaving log entries produced by multiple tasks and potentially        that is executed 20% of the time. This will lead to a model that
+concurrently running threads within a task.                                predicts “{18: 0.8, 56: 0.2}” given the sequence “54→57”.
+                                                                              We can address this issue by training models with different
+4.1    Log entry separation from multiple tasks                            history sequence lengths, e.g., using h = 3 instead of h = 2 in this
+An easy case is when multiple programs concurrently write to the           case. During workflow construction, we use a log sequence length
+same log (e.g., Ubuntu’s system log). Often each log entry contains        that leads to a more certain prediction, e.g. in the above example the
+                     2. [18, 54, 57] -> {18: 0.8, 56: 0.2}                                 2. [18, 54, 57] -> {24: 0.8, 26: 0.2}
+                                                                                                                                                                            3. H: [39, 40, 39] -> {40: 1.00}
+
+                                                    18         56                                                        24         60
+        25         18         54         57                              31   25         18         54        57                                                  2. H: [37, 39, 40] ->{39: 1.00}
+                                                    56         18                                                        26         37
+                                                                                                                                                     1. H: [26, 37, 39] -> {40: 1.00}
+        1. [25, 18, 54] -> {57: 1.00}                                         1. [25, 18, 54] -> {57: 1.00}                                               26         37         39            40        39        40
+                                         3. [54, 57, 18] -> {56: 1.00}                                        3. [54, 57, 24] -> {60: 1.00}
+                                            [54, 57, 56] -> {18: 1.00}
+                                                                                                                 [54, 57, 26] -> {37: 1.00}
+
+                                                       18
+                                                                                                                         24         60
+           25         18         54         57                    31
+                                                                              25         18         54        57
+                                                       56                                                                26         37                            26         37           39        40
+
+      (a) An example of concurrency detection                                 (b) An example of new task detection                                   (c) An example of loop identification
+
+                                        Figure 4: Examples of using LSTM for task separation and workflow construction.
+
+sequence “18→54→57” will lead to the prediction {18: 1.00} and                                                              Table 2: Co-occurrence matrix within distance d
+the sequence “31→54→57” will lead to the prediction {56: 1.00}.                                                                                  k1         …                 kj                    …        kn
+    If we have ruled out that a small sequence is a shared segment                                                                 k1         pd (1, 1)                    pd (1, j)
+from different tasks (i.e., increasing the sequence length for training                                                            …
+                                                                                                                                                                                  fd (k i , k j )
+and prediction doesn’t lead to more certain prediction), the chal-                                                                 ki         pd (i, 1)            pd (i, j) =     d ·f (ki )
+lenge now is to find out whether the multi-key prediction output                                                                   …
+                                                                                                                                   kn         pd (n, 1)                   pd (n, j)
+is caused by either concurrency in the same task or the start of a
+different task. We call this a divergence point.
+    We observe that, as shown in Figure 4a, if the divergence point is                                             same task always appear together, but log keys from different tasks
+caused by concurrency in the same task, a common pattern is that                                                   may not always appear together as the ordering of tasks is not
+keys with the highest probabilities in the prediction output will                                                  fixed during multiple executions of different tasks. This allows us
+appear one after another, and the certainty (measured by higher                                                    to cluster log keys based on co-occurrence patterns, and separate
+probabilities for less number of keys) for the following predictions                                               keys into different tasks when co-occurrence rate is low.
+will increase, as keys for some of the concurrent threads have                                                         In a log key sequence, the distance d between any two log keys is
+already appeared. The prediction will eventually become certain                                                    defined as the number of log keys between them plus 1. For example,
+after all keys from concurrent threads are included in the history                                                 given the sequence {k 1 , k 2 , k 2 }, d(k 1 , k 2 ) = [1, 2], d(k 2 , k 2 ) = 1
+sequence.                                                                                                          (note that there are two distance values between the pair (k 1 , k 2 )).
+    On the other hand, if the divergence point is caused by the start of                                               We build a co-occurrence matrix as shown in Table 2, where each
+a new task, as shown in Figure 4b, the predicted log key candidates                                                element pd (i, j) represents the probability of two log keys ki and k j
+(“24” and “26” in the example) will not appear one after another. If                                               appearing within distance d in the input sequence. Specifically, let
+we incorporate each such log key into the history sequence, the                                                    f (ki ) be the frequency of ki in the input sequence, and fd (ki , k j )
+next prediction is a deterministic prediction of a new log key (e.g.,                                              be the frequency of pair (ki , k j ) appearing together within distance
+                                                                                                                                                                          f (k ,k )
+“24→60”, “26→37”). If this is the case, we stop growing the workflow                                               d in the input sequence. We define pd (i, j) = dd ·f i(ki )j , which shows
+model of the current task (stop at key “57” in this example), and                                                  the importance of k j to ki .
+start constructing workflow models for new tasks. Note that the                                                                                                    f (k ,k )
+                                                                                                                       For example, when d = 1, p1 (i, j) = 1 f (ki i ) j = 1 means that for
+two “new tasks” in Figure 4b could also be an “if-else” branch, e.g.,                                              every occurrence of ki , there must be a k j next to it. Note that in this
+“57→if (24→60→…) else (26→37→…)”. To handle such situations,                                                       definition, f (ki ) in the denominator is scaled by d because while
+we apply a simple heuristic: if the “new task” has very few log keys                                               counting co-occurrence frequencies within d, a key ki is counted by
+(e.g., 3) and always appears after a particular task Tp , we treat it as                                           d times. Scaling f (ki ) by a factor of d ensures that nj=1 fd (i, j) = 1
+                                                                                                                                                                                 Í
+part of an “if-else” branch of Tp , otherwise as a new task.                                                       for any i. Note that we can build multiple co-occurrence matrices
+    4.2.2 Build a workflow model. Once we can distinguish diver-                                                   for different distance values of d.
+gence points caused by concurrency (multiple threads) in the same                                                      With a co-occurrence matrix for each distance value d that we
+task and new tasks, we can easily construct workflow models as                                                     have built, our goal is to output a set of tasks T ASK = (T1 ,T2 , ...).
+illustrated in Figure 4a and Figure 4b. Additional care is needed to                                               The clustering procedure works as follows. First, for d = 1, we
+identify loops. The detection of a loop is actually quite straightfor-                                             check if any p1 (i, j) is greater than a threshold τ (say τ = 0.9), when
+ward. A loop is always shown in the initial workflow model as an                                                   it does, we connect ki , k j together to form T1 = [ki , k j ]. Next, we
+unrolled chain; see Figure 4c for an example. While this workflow                                                  recursively check if T1 could be extended from either its head or
+chain is initially “26→37→39→40→39→40”, we could identify the                                                      tail. For example, if there exists k x ∈ K such that p1 (ki , k x ) > τ ,
+repeated fragments as a loop execution (39→40 in this example).                                                    we further check if p2 (k j , k x ) > τ , i.e., if k j and k x have a large
+                                                                                                                   co-occurrence probability within distance 2. If yes, T1 = [k x , ki , k j ],
+4.3    Using density-based clustering approach                                                                     otherwise we will add T2 = [ki , k x ] to T ASK.
+  4.3.1 Log key separation. Another approach is to use a density-                                                      This procedure continues until no task T in T ASK could be fur-
+based clustering technique. The intuition is that log keys in the                                                  ther extended. In the general case when a task T to be extended
+has more than 2 log keys, when checking if k x could be included                             Actual Execution
+                                                                                                                         67
+as the new head or tail, we need to check if k x has a co-occurrence
+probability greater than τ with each log key in T up to distance d 0 ,
+                                                                                          26        37         38        39        40        41
+where d 0 is the smaller of: i) length of T , and ii) the maximum value
+of d that we have built a co-occurrence matrix for. For example,
+                                                                                                                          Prediction (Correct Path)
+to check if T = [k 1 , k 2 , k 3 ] should connect k 4 at its tail, we need to           37: instance: * Terminating instance
+check if min(p1 (k 3 , k 4 ), p2 (k 2 , k 4 ), p3 (k 1 , k 4 )) > τ .                   38: instance: * Instance destroyed successfully
+    The above process connects sequential log keys for each task.                       39: instance: * Deleting instance files *
+                                                                                        40: instance: * Deletion of * complete
+When a task T1 = [ki , k j ] cannot be extended to include any sin-                     41: instance: * Took * seconds to destroy the instance on the hypervisor
+gle key, we check if T1 could be extended by two log keys, i.e., if                     67: instance: * Error from libvirt during unfilter. Code=* Error=*
+there exists k x , ky ∈ K, such that p1 (ki , k x ) + p1 (ki , ky ) > τ , or                 Figure 5: Anomaly diagnosis using workflow.
+p1 (k j , k x ) + p1 (k j , ky ) > τ . Suppose the latter case is true, the next
+thing to check is whether k x and ky are log keys produced by con-                  task, users could easily identify the current execution point in
+current threads in task T1 . If they are, pd (k j , k x ) always increases          the corresponding workflow, and further discover that this error
+with larger d values, i.e., p2 (k j , k x ) > p1 (k j , k x ), which is intuitive   happened right after “Instance destroyed successfully” and before
+because the appearance ordering of keys from concurrent threads                     “Deleting instance files *”, which means that this error occurred
+is not certain. Otherwise k x and ky do not belong to T1 , thus we                  during cleanup after destroying a VM.
+add T2 = [k j , k x ] and T3 = [k j , ky ] into T ASK instead.
+    Finally, for each task T in T ASK, we eliminate T if its sequence               4.5     Discussion
+is included as a sub-sequence in another task.
+                                                                                    Previous works [4, 21, 42] focused on constructing workflows from
+    4.3.2 Build workflow model. Once a log key sequence is sep-
+                                                                                    multiple executions of just one task. The basic idea in their approach
+arated out and identified for each task, the workflow model con-
+                                                                                    follows 3 steps: 1) mine temporal dependencies of each pair of log
+struction for a task follows the same discussion from Section 4.2.2.
+                                                                                    keys; 2) construct a basic workflow from the pairwise invariants
+4.4     Using the workflow model                                                    identified in step 1; 3) refine workflow model using the input log key
+                                                                                    sequence. A major limitation is that they are not able to work with
+    4.4.1 Set parameters for DeepLog model. In Section 3.1, we’ve
+                                                                                    a log sequence that contains multiple tasks or concurrent threads
+shown that DeepLog requires several input parameters, in particu-
+                                                                                    in one task, which is addressed by our study. Our task separation
+lar, it needs the length of history sequence window h (for training
+                                                                                    methodology also provides useful insights towards the workflow
+and detection), and the number of top д log keys in the predicted
+                                                                                    construction for each task.
+output probability distribution function to be considered normal.
+    Setting a proper value for h and д is problem dependent. Gen-
+                                                                                    5     EVALUATION
+erally speaking, larger h values will increase the prediction accu-
+racy because more history information is utilized in LSTM, until                    DeepLog is implemented using Keras [6] with TensorFlow [2] as the
+it reaches a point where keys that are far back in history do not                   backend. In this section, we show evaluations of each component
+contribute to the prediction of keys to appear. At this point contin-               and the overall performance of DeepLog, to show its effectiveness
+uing to increase h does not hurt the prediction accuracy of LSTM,                   in finding anomalies from large system log data.
+because LSTM is able to learn that only the recent history in a long
+sequence matters thus ignore the long tail. However, a large h value                5.1     Execution path anomaly detection
+does have a performance impact. More computations (and layers)                      This section focuses on evaluating the log key anomaly detection
+are required for both training and prediction, which slows down                     model in DeepLog. We first compare its effectiveness on large
+the performance of DeepLog. The value of д, on the other hand,                      system logs with previous methods, and then investigate the impact
+regulates the trade-off between true positives (anomaly detection                   of different parameters in DeepLog.
+rate) and false positives (false alarm rate).                                          5.1.1 Previous methods. Previous work on general-purpose log
+    The workflow model provides a guidance to set a proper value                    anomaly detection follows a similar procedure: they first extract a
+for both h and д. Intuitively, h needs to be just large enough to                   log key from each log message, and then perform anomaly detection
+incorporate necessary dependencies for making a good prediction,                    on the log key sequence.
+so we can set h as the length of the shortest workflow. The number                     The Principal Component Analysis (PCA) method [39] assumes
+of possible execution paths represents a good value for д, hence, we                that there are different “sessions” in a log file that can be easily
+set д as the maximum number of branches at all divergence points                    identified by a session id attached to each log entry. It first groups
+from the workflows of all tasks.                                                    log keys by session and then counts the number of appearances
+    4.4.2 Using workflow to diagnose detected anomalies. Whenever                   of each log key value inside each session. A session vector is of
+an anomaly is detected by DeepLog, the workflow model can be                        size n, representing the number of appearances for each log key
+used to help diagnose this anomaly and understand how and why                       in K in that session. A matrix is formed where each column is
+it has happened. Figure 5 shows an example. Using a history                         a log key, and each row is one session vector. PCA detects an
+sequence [26, 37, 38], the top prediction from DeepLog is log key                   abnormal vector (a session) by measuring the projection length
+39 (suppose д = 1), however the actual log key appeared is 67,                      on the residual subspace of transformed coordinate system. This
+which is an anomaly. With the help of a workflow model for this                     approach is shown to be more effective than its online counterpart
+online PCA [38] especially in reducing false positives, but this is       pairs such as “Stop-Start”, “Pause-Unpause” and “Suspend-Resume”
+clearly an offline method and cannot be used for online anomaly           may randomly appear from 0 to 3 times within a life cycle. INFO
+detection. The implementation is open-sourced by [17].                    level logs from nova-api, nova-scheduler and nova-compute were
+   Invariant Mining (IM) [22] constructs the same matrix as the PCA       collected and forwarded for analysis using Elastic Stack [33]. Three
+approach does. IM first mines small invariants that could be satisfied    types of anomalies were injected at different execution points: 1)
+by the majority of vectors, and then treats those vectors that do         neutron timeout during VM creation; 2) libvirt error while destroy-
+not satisfy these invariants as abnormal execution sessions. This         ing a VM; 3) libvirt error during cleanup after destroying a VM.
+approach is shown to be more effective than an earlier work [11]          Set up. To execute PCA-based and IM-based methods, we group
+which utilizes workflow automata. The implementation is open-             log entries into different sessions by an identifier field, which for
+sourced by [17].                                                          HDFS log is block_id and for OpenStack log is instance_id. Each
+   TFIDF is developed in [44]. Although its objective is for IT system    session group is a life cycle of one block or a VM instance respec-
+failure prediction, which is different from anomaly detection as          tively. We then parse each log entry into a log key. DeepLog can be
+shown in [39]. Nevertheless, we still included this method in our         applied directly on log keys to train its weights and subsequently
+evaluation as it also uses a LSTM-based approach. There are several       be used to detect anomalies, while other methods require one more
+key differences. TFIDF groups log keys by time windows (each time         step. They need to count the number of appearances for each dis-
+window is defined by a user parameter), and then models each time         tinct log key within each session, and build a matrix where each
+window (called “epoch”) using a TF-IDF (term-frequency, inverse           column is a distinct log key (so there will be n columns) and each
+document frequency) vector. The Laplace smoothing procedure it            row represents a session vector, and the value of a cell Vi j in the
+uses requires the knowledge of the total number of epochs (hence          matrix represents the count of log key k j in the i-th session.
+the entire log file). TFIDF constructs a LSTM model as a binary              DeepLog needs a small fraction of normal log entries to train its
+classifier, which needs both labeled normal and abnormal data for         model. In the case of HDFS log, only less than 1% of normal sessions
+training. Not only are anomaly log entries hard to obtain, but also,      (4,855 sessions parsed from the first 100,000 log entries compared
+new types of anomalies that are not included in training data may         to a total of 11,197,954) are used for training. Note that DeepLog
+not be detected. In contrast, DeepLog trains its LSTM model to be         can pinpoint which log entry (with its corresponding log key) is
+a multi-class classifier, and only requires normal data to train.         abnormal, but in order to use the same measures to compare with
+   CloudSeer is a method designed specifically for multi-user Open-       competing methods, we use “session” as the granularity of anomaly
+Stack log [42]. It builds a workflow model for each OpenStack VM-         detection, i.e., a session C is considered an abnormal session as long
+related task and uses the workflow for anomaly detection. Though it       as there exists at least one log key from C being detected abnormal.
+achieves acceptable performance on OpenStack logs (a precision of            Table 3 summarizes the two data sets. Note that PCA and IM
+83.08% and a recall of 90.00% as reported in the paper), this method      are unsupervised offline methods that do not require training data,
+does not work for other types of logs (e.g., HDFS log) where the          whereas DeepLog only needs a training data produced by normal
+patterns of log keys are much more irregular. For example, Cloud-         system execution, and TFIDF requires both normal and abnormal
+Seer only models log keys that “appear the same number of times”          data to train.
+in every session. In HDFS logs, only 3 out of 29 log keys satisfy
+this criterion. Furthermore, this method cannot separate log entries       Log                   Number of sessions                 n: Number
+for different tasks in one log into separate sequences. It relies on       data set  Training data (if needed) Test data            of log keys
+multiple identifiers to achieve this, which is not always possible for     HDFS      4,855 normal;             553,366 normal;      29
+general-purpose logs. Thus it is not compared against here.                          1,638 abnormal            15,200 abnormal
+                                                                           OpenStack 831 normal;               5,990 normal;        40
+   5.1.2 Log data sets and set up.                                                   50 abnormal               453 abnormal
+HDFS log data set. It is generated through running Hadoop-based                   Table 3: Set up of log data sets (unit: session).
+map-reduce jobs on more than 200 Amazon’s EC2 nodes, and la-
+beled by Hadoop domain experts. Among 11, 197, 954 log entries               In addition to the number of false positives (FP) and false nega-
+being collected, about 2.9% are abnormal, including events such           tives (FN), we also use standard metrics such as Precision, Recall
+as “write exception”. This was the main data set firstly used by an                                     TP (TP stands for true positive) shows
+                                                                          and F-measure. Precision= TP+FP
+offline PCA-based [39] method, and subsequently used by several           the percentage of true anomalies among all anomalies detected;
+other work including online PCA [38] and IM-based [22] methods.                     TP measures the percentage of anomalies in the data
+                                                                          Recall= TP+FN
+Details of this dataset could be found in [38, 39].                       set (assume that we know the ground-truth) being detected; and
+OpenStack log data set. We deployed an OpenStack experiment               F-measure= 2·Precision·Recall
+                                                                                       Precision+Recall is the harmonic mean of the two.
+(version Mitaka) on CloudLab [30] with one control node, one net-            By default, we use the following parameter values for DeepLog:
+work node and eight compute nodes. Among 1, 335, 318 log entries          д = 9, h = 10, L = 2, and α = 64 and investigate their impacts
+collected, about 7% are abnormal. A script was running to con-            in our experiments. Recall д decides the cutoff in the prediction
+stantly execute VM-related tasks, including VM creation/deletion,         output to be considered normal (i.e., the д log key values with top-д
+stop/start, pause/unpause and suspend/resume. VM tasks were               probabilities to appear next are considered normal), and h is the
+scheduled with the pattern of a regular expression (Create (Stop Start)   window size used for training and detection. L and α denote the
+{0,3} (Pause Unpause) {0,3} (Suspend Resume) {0,3} Delete)+. A VM life    number of layers in DeepLog and the number of memory units in
+cycle starts with “VM create” and ends with “VM delete”, while task       one LSTM block respectively. For all other methods, we explored
+                         PCA    IM     TFIDF    N-gram     DeepLog          1.1
+                                                                                                       PCA                      N-gram
+                                                                                                                                                                      1.00
+                                                                                                                                                                                     0.993
+                                                                                                                                                                                                               0.9994     0.9998
+   false positive (FP)   277    2122   95833    1360       833              1.0 0.98
+                                                                                                       IM                       DeepLog                               0.98
+                                                                                                                                                                                                 0.998
+
+                                                                                                     0.95                 0.96 0.96                        0.96
+                                                                                                                   0.95
+                                                                                                                                                                                     0.981
+   false negative (FN)   5400   1217   1256     739        619
+                                                                                                                                                    0.94
+                                                                                              0.92                                           0.91                     0.96
+                                                                            0.9        0.88
+                                                                                                                                                                      0.94     0.961
+        Table 4: Number of FPs and FNs on HDFS log.                         0.8                                                       0.79
+                                                                                                                                                                      0.92
+
+                                                                            0.7                             0.67                                                      0.90
+their parameter space and report their best results. When the N-                                                                                                      0.88
+                                                                                                                                                                             0.889
+                                                                            0.6
+gram method is used, we set N = 1 unless otherwise specified since                                                                                                    0.86
+                                                                            0.5
+this shows the best performance for the N-gram method.                             Precision                       Recall               F-measure                      g=1           g=3          g=5           g=7       g=9          g=11
+                                                                                                (a) Accuracy on HDFS.                                                 (b) Cumulative probability of top g predictions.
+   5.1.3 Comparison. Table 4 shows the number of false positives
+and false negatives for each method on HDFS data. PCA achieves                                                 Figure 6: Evaluation on HDFS log.
+the fewest false positives, but at the price of more false negatives.                                                       PCA                            IM                        N-gram                          DeepLog
+Figure 6a shows a more in-depth comparison using recall, precision                                          0.99 1.0 1.0 1.0                                   0.98            1.0                             1.0 1.0 0.99
+                                                                           1.0                       0.96                                                               1.0                                                                      0.97
+and F-measure. Note that TFIDF is omitted from this figure because
+                                                                                                                                                        0.95                                     0.94
+                                                                                              0.91                                                                                                                                   0.91 0.91
+                                                                                                                                        0.87
+                                                                                                                                                                                     0.83 0.83
+of limited space and its very poor relative performance.                   0.8 0.77                                                                                     0.8
+
+   Clearly, DeepLog has achieved the best overall performance, with        0.6                                                                                          0.6
+
+an F-measure of 96%. Our baseline solution N-gram also achieves
+                                                                           0.4                                                                                          0.4
+good performance when history length is 1. But, its performance
+drops dramatically as history window becomes longer. In contrast,          0.2                                                                                          0.2
+
+LSTM-based approach is more stable as shown in Section 5.1.4.                         0.02                                                       0.05                                                                         0.03
+                                                                                                                                                                                                        0.02
+                                                                           0.0                                                                                          0.0
+                                                                                   Precision                        Recall                   F-measure                          Precision                      Recall          F-measure
+   Figure 6b investigates the top-д approach used by DeepLog’s                        (a) Accuracy on OpenStack I.                                                                   (b) Accuracy on OpenStack II.
+prediction algorithm. Let D t be the set of top-д log key values
+predicted by DeepLog at t, and mt be the actual log key value                                           Figure 7: Evaluation on OpenStack log.
+appeared in the data at t. To see the impact of this strategy, we
+study the CDF of Pr[mt ∈ D t ] for different д values. Among over          In general, the performance of DeepLog is fairly stable with respect
+11,000,000 log keys (that are labeled as normal) to predict, 88.9%         to different values, i.e., it is not very sensitive to the adjustment of
+of DeepLog’s top prediction matches mt exactly; and 96.1% mt ’s            any one or combinations of these parameter values. This makes
+are within DeepLog’s top 2 predictions. When д = 5, 99.8% of               DeepLog easy to deploy and use in practice. The results are fairly
+normal mt ’s are within D t , meanwhile the anomaly detection rate         intuitive to understand as well. For example, Figure 8c shows that
+is 99.994% (only one anomalous session was undetected).                    a larger д value leads to higher precision but lower recall. Thus,
+   Figure 7a shows the performance over OpenStack data set. The            д could be adjusted to achieve higher true positive rate or lower
+PCA approach shows reasonable performance on this data set but             false positive rate. Lastly, DeepLog’s prediction cost per log entry
+with low precision (only 77%), whereas even though IM has achieved         is only around 1 millisecond on our standard workstation, which
+a perfect recall in this case, it has very poor precision of only 2%       could be further improved by better hardware such as using a GPU.
+(almost all VM instances are detected as abnormal executions).
+This is because that OpenStack logs were generated randomly as                                                            Precision                               Recall                         F-measure
+                                                                           1.0                                                                                          1.0
+described in Section 5.1.2. Note that how many times that log keys
+like (Stop Start) may appear in a life cycle of a VM (defined by a         0.9                                                                                          0.9
+
+pair of Create and Delete) is uncertain. This makes it really hard for     0.8                                                                                          0.8
+
+IM to find the “stable small invariants” for anomaly detection.
+                                                                           0.7                                                                                          0.7
+   To test this hypothesis, we generated a second data set with
+a deterministic pattern like (Create Delete)+, resulting in a total of     0.6                                                                                          0.6
+
+
+5,544 normal VM executions and 170 anomalous ones. We denote               0.5
+                                                                              1                  2                    3                      4                    5
+                                                                                                                                                                        0.5
+                                                                                                                                                                          32                 64                128            192                256
+this data set as OpenStack II and the result is shown in Figure 7b.        1.0
+                                                                                          (a) Number of layers: L.                                                      1.0
+                                                                                                                                                                               (b) Number of memory units: ®.
+IM performs very well on this data set with more regular patterns.
+                                                                           0.9                                                                                          0.9
+However the recall for the PCA method drops to only 2% in this
+case because the normal pattern in the data is too regular, rendering      0.8                                                                                          0.8
+
+PCA method which detects anomalies by variance not working.                0.7                                                                                          0.7
+
+   On the other hand, DeepLog demonstrates excellent performance
+                                                                           0.6                                                                                          0.6
+on both OpenStack logs with a F-measure of 98% and 97% respec-
+tively. Lastly, it is also important to note that PCA and IM are offline   0.5
+                                                                             g=7          g=8               g=9              g=10            g=11             g=12
+                                                                                                                                                                        0.5
+                                                                                                                                                                           5             6               7            8            9             10
+                                                                                   (c) Top g predictions as normal.                                                                          (d) Window size: h.
+methods, and they cannot be used to perform anomaly detection
+per log entry. They are only able to detect anomaly at session level,             Figure 8: DeepLog performance with different parameters.
+but the notion of session may not even exist in many system logs.
+   5.1.4 Analysis of DeepLog. We investigate the performance im-
+pact of various parameters in DeepLog including: д, h, L, and α. The       5.2           Parameter value and performance anomaly
+results are shown in Figure 8. In each experiment, we varied the           To evaluate the effectiveness of DeepLog at detecting parameter
+values of one parameter while using the default values for others.         value and performance (including elapsed time between log entries)
+anomalies, we used system logs from the OpenStack VM creation                 2.0
+                                                                                      CI=99.9%                                                                      CI=99.9%
+task. This data set includes both types of anomalies: performance                                                                                            1.5
+                                                                              1.5 CI=99%
+anomaly (late arrival of a log entry) and parameter value anomaly                                                                                                   CI=99%
+
+                                                                        MSE                                                                            MSE
+                                                                                      CI=98%                                                                 1.0 CI=98%
+(a log entry with a much longer VM creation time than others).                1.0
+
+Experiment setup. As before, we deployed an OpenStack exper-                                                                                                 0.5
+                                                                              0.5
+iment on CloudLab, and wrote a script to simulate that multiple
+users are constantly requesting VM creations and deletions. During            0.0
+                                                                                 0          50       100        150        200        250        300
+                                                                                                                                                             0.0
+                                                                                                                                                                0         50        100        150       200        250        300
+OpenStack VM creation, an important procedure is to copy the                                          VM id                                                                         VM id
+                                                                                          (a) Value vectors for log key 25                                              (b) Value vectors for log key 45
+required image from controller node to a compute node (where the                                                                                               6
+                                                                                 6
+VM will be created). To simulate a performance anomaly which                          CI=99.9%
+                                                                                                                                                               5
+                                                                                                                                                                    CI=99.9%
+                                                                                 5
+could be possibly caused by a DoS attack, we throttle the network                     CI=99%                                                                        CI=99%
+                                                                                 4                                                                             4
+speed from the controller to compute nodes at two different points,
+                                                                         MSE                                                                            MSE
+                                                                                      CI=98%                                                                        CI=98%
+                                                                                 3                                                                             3
+to see if these anomalies could be detected by DeepLog.
+                                                                                 2                                                                             2
+Anomaly detection. As described in Section 3.2, we separate log
+                                                                                 1                                                                             1
+entries into two sets, one set is for model training and the other
+                                                                                 0                                                                             0
+set (called the validation set) is to apply the model to generate the             0         50       100
+                                                                                                      VM id
+                                                                                                                150        200        250        300            0         50        100
+                                                                                                                                                                                    VM id
+                                                                                                                                                                                               150       200        250        300
+
+Gaussian distribution of MSEs (mean square error). In subsequent                          (c) Value vectors for log key 53                                              (d) Value vectors for log key 56
+online detection phase, for every incoming parameter value vector
+→
+−
+v , DeepLog checks if the MSE between −       →v and the predication    Figure 9: Anomaly detection for parameter value vectors with dif-
+                                                                        ferent confidence intervals (CIs).
+output (a vector as well) from its model is within an acceptable
+confidence interval of the Gaussian distribution of MSEs from the
+                                                                        entries, of which 348,460 entries are labeled as anomalies. We chose
+validation set.
+                                                                        this data set because of an important characteristic: many log keys
+    Figure 9 shows the detection results for the parameter value
+                                                                        only appeared during a specific time period. This means that the
+vectors of different log keys, where x-axis represents the id of the
+                                                                        training data set may not contain all possible normal log keys, let
+VM being created (i.e., different VM creation instances), and y-axis
+                                                                        alone all possible normal execution patterns.
+represents the MSE between the parameter value vector and the
+                                                                           5.3.2 Evaluation results. We conducted two experiments, one
+prediction output vector from DeepLog. The horizontal lines in each
+                                                                        uses the first 1% normal log entries as training data and the other
+figure are the confidence interval thresholds for the corresponding
+                                                                        uses the first 10% log entries for training. In both settings, the
+MSE Gaussian distributions. Figure 9a and 9b represent two log keys
+                                                                        remaining 99% or 90% entries are used for anomaly detection. We
+where their parameter value vectors are normal during the entire
+                                                                        set L = 1, α = 256, д = 6, h = 3.
+time. Figure 9c and 9d illustrate that the parameter value vectors
+for keys 53 and 56 are successfully detected as being abnormal at                                                 without online training                                      with online training
+exactly the two time instances where we throttled the network           1.0                               1.00 1.00                                    1.0                               1.00 1.00
+                                                                                                                                                                                                                           0.93
+                                                                                                                                             0.90                    0.88
+speed (i.e., injected anomalies).                                                      0.82
+                                                                        0.8                                                                            0.8
+    For each abnormal parameter value vector detected, we identi-
+fied the value that differs the most with the prediction, to identify   0.6                                                                            0.6
+the abnormal column (feature). We found out that the two abnor-         0.4                                                                            0.4
+                                                                                                                                      0.27                                                                          0.28
+mal parameter value vectors for key 53 are due to unusually large       0.2 0.16                                                                       0.2 0.16
+elapsed time values. On the other hand, key 56 is “Took * seconds to
+                                                                        0.0
+build instance.”, and not surprisingly, its two abnormal parameter             3 U H F L V L R Q             5 H F D O O            )  P H D V X U H0.0 3 U H F L V L R Q                 5 H F D O O            )  P H D V X U H
+value vectors were caused by unusually large values (for seconds).                D   ) L U V W     G D W D V H W  I R U  W U D L Q L Q J            E   ) L U V W      G D W D V H W  I R U  W U D L Q L Q J 
+                                                                                                   Figure 10: Evaluation on Blue Gene/L log.
+5.3     Online update and training of DeepLog
+                                                                           Figure 10 shows the results for without and with online training
+Section 5.1 has demonstrated that DeepLog requires a very small
+                                                                        for both experiments. In the case of “without online training”, we
+training set (less than 1% of the entire log) and does not require
+                                                                        run DeepLog to test incoming log entries without any incremental
+user feedback during its training phase. But it is possible that a
+                                                                        update. While for the case of “with online training”, we assume
+new system execution path may show up during detection stage,
+                                                                        there is an end user who reports if a detected anomaly is a false
+which is also normal, but is detected as anomalous since it was not
+                                                                        positive. If so, DeepLog uses that sample (now a labeled record)
+reflected by the training data. To address this issue, this section
+                                                                        to update its model to learn this new pattern. Figure 10 shows
+evaluates the effectiveness of DeepLog’s online update and training
+                                                                        that without online training, with only 1% offline training data,
+module as described in Section 3.3. We demonstrate this using
+                                                                        this results in many false positives (hence very low Precision rate).
+the difference in detection results with and without incremental
+                                                                        Though increasing its training data to 10% slightly increases the
+updates, in terms of both effectiveness and efficiency.
+                                                                        Precision, its performance is still unsatisfactory. On the other hand,
+   5.3.1 Log data set. The log data set used in this section is Blue
+                                                                        DeepLog with online training significantly improves its Precision,
+Gene/L supercomputer system logs 1 , which contains 4,747,963 log
+                                                                        and hence F-measure scores. With a true positive rate of 100%
+1 CFDR Data, https://www.usenix.org/cfdr-data                           (perfect recall) in both settings, online training reduces false positive
+rate from 40.1% to 1.7% for 1% training data, and from 38.2% to 1.1%           5.4.2 BROP attack detection. Blind Return Oriented Program-
+for 10% training data, respectively.                                        ming (BROP) attack [5] leverages a fact that many server applica-
+   Table 5 shows the amortized cost to check each log entry. For            tions restart after a crash to ensure service reliability. This kind
+the online training case, we reported time taken for both detection         of attack is powerful and practical because the attacker neither
+and online update (if an update is triggered). The results show that        relies on access to source code nor binary. A stack buffer overflow
+online update and training does increase the amortized cost per log         vulnerability, which leads server to crash, is sufficient to carry out
+entry, but only slightly. This is because many log entries will not         this attack. In a BROP exploit, the attacker uses server crash as a
+trigger an update. Note that online update and online detection can         signal to help complete a ROP attack which achieves executing a
+be executed in parallel; an update is carried out while the model is        shellcode. However, the repeated server restarting activities leave
+using the current weights to continue performing detection.                 many atypical log messages in kernel log as shown below, which is
+                                                                            easily detected by DeepLog.
+       Table 5: Amortized cost to check each log entry                      nginx[*]: segfault at * ip * sp * error * in nginx[*]
+       training data percentage               1%   10%                      nginx[*]: segfault at * ip * sp * error * in nginx[*]
+                                                                            nginx[*]: segfault at * ip * sp * error * in nginx[*]
+       without online training (milliseconds) 1.06 1.11                     ......
+       with online training (milliseconds)    3.48 2.46
+                                                                            5.5    Task separation and workflow construction
+                                                                            We implemented the proposed methods in Section 4 and evaluated
+5.4    Security log case studies                                            on a log with various OpenStack VM-related tasks. Both LSTM
+Anomalies having log keys that never showed up in normal logs               approach and density-based clustering approach could successfully
+used for training (e.g., “ERROR” or “exception” log messages) are           separate all tasks. The first method requires LSTM; it is a supervised
+easy to detect. DeepLog can effectively detect much more subtle             method which requires training data to be provided. The second
+cases. For example, in HDFS log, “Namenode not updated after                method uses clustering on co-occurrences of log keys within a cer-
+deleting block” anomaly is shown as a missing log key in a session;         tain distance threshold, which is an unsupervised method. Hence,
+and “Redundant addStoredBlock” anomaly is shown as an extra log             it doesn’t require training, but it does require parameter τ as the
+key. This means that for any attack that may cause any change of            distance threshold.
+system behavior (as reflected through logs), it can be detected. In            Specifically, for density-based clustering approach, with a suf-
+what follows, we investigate system logs containing real attacks to         ficiently large threshold value τ ∈ [0.85, 0.95], there is a clear
+demonstrate the effectiveness of DeepLog.                                   separation of all tasks. Note that the value of τ cannot be too large
+    5.4.1 Network security log. Network security is of vital impor-         (e.g., setting τ = 1), as a background process may produce log en-
+tance. Both firewall and intrusion detection system (IDS) produce           tries at random locations that will break log entries from the same
+logs that can be used for online anomaly detection.                         task apart.
+    To test the performance of DeepLog on network security logs, we            Next we use a part of the VM creation workflow, to show how it
+used the VAST Challenge 2011 data set, specifically, Mini Challenge         provides useful diagnosis of the performance anomaly in Section 5.2.
+2 — Computer Networking Operations [1]. This challenge is to                Recall in Section 5.2, parameter value vector anomaly is identified
+manually look for suspicious activities by visualization techniques.        on the time elapsed value of log key 53, and on the parameter
+It comes with ground truth for anomalous activities. For all anom-          position of log key 56 (which represents how many seconds to build
+alies in the ground truth, Table 6 shows the results of DeepLog. The        instance). As shown in Figure 11, once an anomaly is detected by
+only suspicious activity not being detected is the first appearance         DeepLog, we know the time taken to build that instance is abnormal,
+of an undocumented computer IP address.                                     but we don’t know why. Then, since the elapsed time between log
+                                                                            key 53 and its previous log key is too big, by investigating the
+                                                                            workflow model constructed by DeepLog, its previous key is 52:
+Table 6: VAST Challenge 2011 network security log detec-                    “Creating image”, so we know that VM creation took longer time
+tion                                                                        than usual because the time to create image was too long. Further
+ suspicious activity                 detected?                              investigation following this procedure may reveal that it was caused
+ Day 1: Denial of Service attack     Yes, log key anomaly in IDS log        by slow network speed from control node to compute node.
+ Day 1: port scan                    Yes, log key anomaly in IDS log
+ Day 2: port scan 1                  Yes, log key anomaly in IDS log
+                                                                            6     RELATED WORK
+ Day 2: port scan 2                  Yes, log key anomaly in IDS log
+ Day 2: socially engineered attack   Yes, log key anomaly in firewall log   Primarily designed for recording notable events to ease debugging,
+ Day 3: undocumented IP address      No                                     system event logs are abundantly informative and exist practically
+                                                                            on every computer system, making them a valuable resource to
+                                                                            track and investigate system status. However, since system logs are
+   The only false positive case happened when DeepLog reported a            largely composed of diverse, freeform text, analytics is challenging.
+log message that repeatedly appeared many times in a short period              Numerous log mining tools have been designed for different sys-
+as an anomaly. This is due to an event that suddenly became bursty          tems. Many use rule-based approaches [7, 15, 28, 29, 31, 32, 40, 41],
+and printed the same log message many times in a short time range.          which, though accurate, are limited to specific application scenar-
+This is not identified by the VAST Challenge as a suspicious activity.      ios and also require domain expertise. For example, Beehive [41]
+         44                  51        23        52        53             a normal one, LogCluster [19] which clusters and organizes histori-
+                                                                          cal logs to help future problem identification, and Stitch [45] that
+                   18                            18                       extracts different levels of identifiers from system logs and builds
+                             57        54                  32             a web interface for users to visually monitor the progress of each
+                   56                            25
+                                                                          session and locate performance problems. Note that they are for
+       44: instance: * Attempting claim: memory * disk * vcpus * CPU
+       51: instance: * Claim successful                                   diagnosis purposes once an anomaly has been detected, and cannot
+       23: instance: * GET * HTTP\/1.1" status: * len: * time: *          be used for anomaly detection itself.
+       52: instance: * Creating image
+       53: instance: * VM Started (Lifecycle Event)
+       32: instance: * VM Paused (Lifecycle Event)                        7   CONCLUSION
+       18: instance: * VM Resumed (Lifecycle Event)
+       .......                                                            This paper presents DeepLog, a general-purpose framework for
+       56: instance: * Took * seconds to build instance                   online log anomaly detection and diagnosis using a deep neural
+        Figure 11: OpenStack VM Creation workflow.                        network based approach. DeepLog learns and encodes entire log
+                                                                          message including timestamp, log key, and parameter values. It
+                                                                          performs anomaly detection at per log entry level, rather than at
+identifies potential security threats from logs by unsupervised clus-     per session level as many previous methods are limited to. DeepLog
+tering of data-specific features, and then manually labeling outliers.    can separate out different tasks from a log file and construct a work-
+Oprea [28] uses belief propagation to detect early-stage enterprise       flow model for each task using both deep learning (LSTM) and
+infection from DNS logs. PerfAugur [32] is designed specifically to       classic mining (density clustering) approaches. This enables effec-
+find performance problems by mining service logs using special-           tive anomaly diagnosis. By incorporating user feedback, DeepLog
+ized features such as predicate combinations. DeepLog is a general        supports online update/training to its LSTM models, hence is able
+approach that does not rely on any domain-specific knowledge.             to incorporate and adapt to new execution patterns. Extensive eval-
+    Other generic methods that use system logs for anomaly detec-         uation on large system logs have clearly demonstrated the superior
+tion typically apply a two-step procedure. First, a log parser [9, 14,    effectiveness of DeepLog compared with previous methods.
+16, 23, 36, 37] is used to parse log entries to structured forms, which      Future work include but are not limited to incorporating other
+typically only contain “log keys” (or “message types”). Parameter         types of RNNs (recurrent neural networks) into DeepLog to test
+values and timestamps are discarded except for identifiers which          their efficiency, and integrating log data from different applications
+are used to separate and group log entries. Then, anomaly detection       and systems to perform more comprehensive system diagnosis (e.g.,
+is performed on log key sequences. A typical way is to generate           failure of a MySQL database may be caused by a disk failure as
+a numeric vector for each session or time window, by counting             reflected in a separate system log).
+unique log keys or using more sophisticated approaches like TF-IDF.
+The matrix comprising of these vectors is then amenable to matrix-
+based unsupervised anomaly detection methods such as Principal
+                                                                          8   ACKNOWLEDGMENT
+Component Analysis (PCA) [38, 39] and invariant mining (IM) [22].         The authors appreciate the valuable comments provided by the
+Constructing such a matrix is often an offline process, and these         anonymous reviewers. Authors thank the support from NSF grants
+methods are not able to provide log-entry level anomaly detection         1314945 and 1514520. Feifei Li is also supported in part by NSFC
+(rather, they can only operate at session level). We refer the reader     grant 61729202. We wish to thank all members of the TCloud
+to [17] for an overview and comparison on these methods.                  project and the Flux group for helpful discussion and feedback,
+    Supervised methods [17, 44] use normal and abnormal vectors to        especially Cai (Richard) Li, for his valuable input on BROP attack.
+train a binary classifier that detects future anomalies. A downside of
+such methods is that unknown anomalies not in training data may           REFERENCES
+not be detected. Furthermore, anomalous data are hard to obtain           [1] VAST Challenge 2011. 2011. MC2 - Computer Networking Operations.
+for training. We have shown in our evaluation that using only a               (2011). http://hcil2.cs.umd.edu/newvarepository/VAST%20Challenge%202011/
+                                                                              challenges/MC2%20-%20Computer%20Networking%20Operations/ [Online; ac-
+small portion of normal data to train, DeepLog can achieve online             cessed 08-May-2017].
+anomaly detection with better performance. Moreover, DeepLog              [2] Martı́n Abadi, Paul Barham, Jianmin Chen, Zhifeng Chen, Andy Davis, Jeffrey
+                                                                              Dean, Matthieu Devin, Sanjay Ghemawat, Geoffrey Irving, Michael Isard, and
+also uses timestamps and parameter values for anomaly detection               others. 2016. TensorFlow: A system for large-scale machine learning. In Proc.
+which are missing in previous work.                                           USENIX Symposium on Operating Systems Design and Implementation (OSDI).
+    Workflow construction has been studied largely using log keys             264–285.
+                                                                          [3] Yoshua Bengio, Réjean Ducharme, Pascal Vincent, and Christian Jauvin. 2003. A
+extracted from offline log files [4, 11, 21, 42] . It has been shown          neural probabilistic language model. Journal of machine learning research 3, Feb
+that workflow offers limited advantage for anomaly detection [11,             (2003), 1137–1155.
+42]. Instead, a major utility of workflows is to aid system diagno-       [4] Ivan Beschastnikh, Yuriy Brun, Michael D Ernst, and Arvind Krishnamurthy.
+                                                                              2014. Inferring models of concurrent systems from logs of their behavior with
+sis [4, 21]. However, all past work assumes a log file to model only          CSight. In Proc. International Conference on Software Engineering (ICSE ). 468–479.
+contains repeated executions of one single task. In this paper, we        [5] Andrea Bittau, Adam Belay, Ali Mashtizadeh, David Mazières, and Dan Boneh.
+                                                                              2014. Hacking blind. In Security and Privacy (SP), 2014 IEEE Symposium on. IEEE,
+propose methods to automatically separate different tasks from log            227–242.
+files in order to build workflow models for different tasks.              [6] Franois Chollet. 2015. keras. https://github.com/fchollet/keras. (2015). [Online;
+    Besides workflows, other systems that perform anomaly diag-               accessed 08-May-2017].
+                                                                          [7] Marcello Cinque, Domenico Cotroneo, and Antonio Pecchia. 2013. Event logs
+nosis using system logs include DISTALYZER [26] that diagnoses                for the analysis of software failures: A rule-based approach. IEEE Transactions
+system performance issues by comparing a problematic log against              on Software Engineering (TSE) (2013), 806–821.
+ [8] Andrew M Dai and Quoc V Le. 2015. Semi-supervised sequence learning. In Proc.             Proc. International Conference on Dependable Systems and Networks (DSN). 45–56.
+     Neural Information Processing Systems Conference (NIPS). 3079–3087.                  [29] James E Prewett. 2003. Analyzing cluster log files using Logsurfer. In Proc. Annual
+ [9] Min Du and Feifei Li. 2016. Spell: Streaming Parsing of System Event Logs. In             Conference on Linux Clusters.
+     Proc. IEEE International Conference on Data Mining (ICDM). 859–864.                  [30] Robert Ricci, Eric Eide, and The CloudLab Team. 2014. Introducing CloudLab:
+[10] Min Du and Feifei Li. 2017. ATOM: Efficient Tracking, Monitoring, and Orches-             Scientific Infrastructure for Advancing Cloud Architectures and Applications.
+     tration of Cloud Resources. IEEE Transactions on Parallel and Distributed Systems         USENIX ;login: 39, 6 (Dec. 2014). https://www.usenix.org/publications/login/
+     (2017).                                                                                   dec14/ricci
+[11] Qiang Fu, Jian-Guang Lou, Yi Wang, and Jiang Li. 2009. Execution anomaly             [31] John P Rouillard. 2004. Real-time Log File Analysis Using the Simple Event
+     detection in distributed systems through unstructured log analysis. In Proc. IEEE         Correlator (SEC).. In Proc. Large Installation System Administration Conference
+     International Conference on Data Mining (ICDM). 149–158.                                  (LISA). 133–150.
+[12] Yoav Goldberg. 2016. A primer on neural network models for natural language          [32] Sudip Roy, Arnd Christian König, Igor Dvorkin, and Manish Kumar. 2015. Per-
+     processing. Journal of Artificial Intelligence Research 57 (2016), 345–420.               faugur: Robust diagnostics for performance anomalies in cloud services. In Proc.
+[13] Ian Goodfellow, Yoshua Bengio, and Aaron Courville. 2016. Deep Learning. MIT              IEEE International Conference on Data Engineering (ICDE). IEEE, 1167–1178.
+     Press. http://www.deeplearningbook.org.                                              [33] Elastic Stack. 2017. The Open Source Elastic Stack. (2017). https://www.elastic.
+[14] Hossein Hamooni, Biplob Debnath, Jianwu Xu, Hui Zhang, Guofei Jiang, and                  co/products [Online; accessed 16-May-2017].
+     Abdullah Mueen. 2016. LogMine: Fast Pattern Recognition for Log Analytics. In        [34] Martin Sundermeyer, Ralf Schlüter, and Hermann Ney. 2012. LSTM Neural
+     Proc. Conference on Information and Knowledge Management (CIKM). 1573–1582.               Networks for Language Modeling.. In Interspeech. 194–197.
+[15] Stephen E Hansen and E Todd Atkins. 1993. Automated System Monitoring                [35] Ilya Sutskever, Oriol Vinyals, and Quoc V Le. 2014. Sequence to sequence learning
+     and Notification with Swatch.. In Proc. Large Installation System Administration          with neural networks. In Proc. Neural Information Processing Systems Conference
+     Conference (LISA). 145–152.                                                               (NIPS). 3104–3112.
+[16] Pinjia He, Jieming Zhu, Shilin He, Jian Li, and Michael R Lyu. 2016. An evaluation   [36] Liang Tang and Tao Li. 2010. LogTree: A framework for generating system
+     study on log parsing and its use in log mining. In Proc. International Conference         events from raw textual logs. In Proc. IEEE International Conference on Data
+     on Dependable Systems and Networks (DSN). 654–661.                                        Mining (ICDM). 491–500.
+[17] Shilin He, Jieming Zhu, Pinjia He, and Michael R Lyu. 2016. Experience Report:       [37] Liang Tang, Tao Li, and Chang-Shing Perng. 2011. LogSig: Generating system
+     System Log Analysis for Anomaly Detection. In Proc. International Symposium               events from raw textual logs. In Proc. Conference on Information and Knowledge
+     on Software Reliability Engineering (ISSRE). 207–218.                                     Management (CIKM). 785–794.
+[18] Sepp Hochreiter and Jürgen Schmidhuber. 1997. Long short-term memory. Neural        [38] Wei Xu, Ling Huang, Armando Fox, David Patterson, and Michael Jordan. 2009.
+     computation (1997), 1735–1780.                                                            Online system problem detection by mining patterns of console logs. In Proc.
+[19] Qingwei Lin, Hongyu Zhang, Jian-Guang Lou, Yu Zhang, and Xuewei Chen.                     IEEE International Conference on Data Mining (ICDM). 588–597.
+     2016. Log clustering based problem identification for online service systems. In     [39] Wei Xu, Ling Huang, Armando Fox, David Patterson, and Michael I Jordan. 2009.
+     Proc. International Conference on Software Engineering (ICSE ). 102–111.                  Detecting large-scale system problems by mining console logs. In Proc. ACM
+[20] Chaochun Liu, Huan Sun, Nan Du, Shulong Tan, Hongliang Fei, Wei Fan, Tao                  Symposium on Operating Systems Principles (SOSP). 117–132.
+     Yang, Hao Wu, Yaliang Li, and Chenwei Zhang. 2016. Augmented LSTM Frame-             [40] Kenji Yamanishi and Yuko Maruyama. 2015. Dynamic syslog mining for network
+     work to Construct Medical Self-diagnosis Android. In Proc. IEEE International             failure monitoring. In Proc. ACM SIGKDD International Conference on Knowledge
+     Conference on Data Mining (ICDM). 251–260.                                                Discovery and Data Mining (SIGKDD). 499–508.
+[21] Jian-Guang Lou, Qiang Fu, Shengqi Yang, Jiang Li, and Bin Wu. 2010. Mining           [41] Ting-Fang Yen, Alina Oprea, Kaan Onarlioglu, Todd Leetham, William Robertson,
+     program workflow from interleaved traces. In Proc. ACM SIGKDD International               Ari Juels, and Engin Kirda. 2013. Beehive: Large-scale log analysis for detecting
+     Conference on Knowledge Discovery and Data Mining (SIGKDD).                               suspicious activity in enterprise networks. In Proc. International Conference on
+[22] Jian-Guang Lou, Qiang Fu, Shengqi Yang, Ye Xu, and Jiang Li. 2010. Mining                 Dependable Systems and Networks (ACSAC). 199–208.
+     Invariants from Console Logs for System Problem Detection.. In Proc. USENIX          [42] Xiao Yu, Pallavi Joshi, Jianwu Xu, Guoliang Jin, Hui Zhang, and Guofei Jiang. 2016.
+     Annual Technical Conference (ATC). 231–244.                                               CloudSeer: Workflow Monitoring of Cloud Infrastructures via Interleaved Logs.
+[23] Adetokunbo AO Makanju, A Nur Zincir-Heywood, and Evangelos E Milios.                      In Proc. ACM International Conference on Architectural Support for Programming
+     2009. Clustering event logs using iterative partitioning. In Proc. ACM SIGKDD             Languages and Operating Systems (ASPLOS). 489–502.
+     International Conference on Knowledge Discovery and Data Mining (SIGKDD).            [43] Ding Yuan, Haohui Mai, Weiwei Xiong, Lin Tan, Yuanyuan Zhou, and Shankar
+     1255–1264.                                                                                Pasupathy. 2010. SherLog: error diagnosis by connecting clues from run-time
+[24] Christopher D Manning and Hinrich Schütze. 1999. Foundations of statistical              logs. In ACM SIGARCH computer architecture news. ACM, 143–154.
+     natural language processing. MIT Press.                                              [44] Ke Zhang, Jianwu Xu, Martin Renqiang Min, Guofei Jiang, Konstantinos Pelechri-
+[25] Tomas Mikolov, Martin Karafiát, Lukas Burget, Jan Cernockỳ, and Sanjeev Khu-            nis, and Hui Zhang. 2016. Automated IT system failure prediction: A deep learn-
+     danpur. 2010. Recurrent neural network based language model.. In Interspeech,             ing approach. In Proc. IEEE International Conference on Big Data (IEEE BigData).
+     Vol. 2. 3.                                                                                1291–1300.
+[26] Karthik Nagaraj, Charles Killian, and Jennifer Neville. 2012. Structured compara-    [45] Xu Zhao, Kirk Rodrigues, Yu Luo, Ding Yuan, and Michael Stumm. 2016. Non-
+     tive analysis of systems logs to diagnose performance problems. In Proc. USENIX           intrusive performance profiling for entire software stacks based on the flow
+     Symposium on Networked Systems Design and Implementation (NSDI). 26–26.                   reconstruction principle. In Proc. USENIX Symposium on Operating Systems Design
+[27] Christopher Olah. 2015. Understanding LSTM Networks. (2015). http://colah.                and Implementation (OSDI). 603–618.
+     github.io/posts/2015-08-Understanding-LSTMs [Online; accessed 16-May-2017].
+[28] Alina Oprea, Zhou Li, Ting-Fang Yen, Sang H Chin, and Sumayah Alrwais. 2015.
+     Detection of early-stage enterprise infection by mining large-scale log data. In
+

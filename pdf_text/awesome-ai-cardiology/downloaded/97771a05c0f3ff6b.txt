@@ -1,0 +1,417 @@
+                                                                   ADADELTA: AN ADAPTIVE LEARNING RATE METHOD
+
+                                                                                                   Matthew D. Zeiler1,2∗
+                                                                           1                                      2
+                                                                               Google Inc., USA                       New York University, USA
+
+
+                                                                   ABSTRACT                                                Setting the learning rate typically involves a tuning pro-
+                                                                                                                       cedure in which the highest possible learning rate is chosen
+                                        We present a novel per-dimension learning rate method for
+
+
+
+
+arXiv:1212.5701v1 [cs.LG] 22 Dec 2012
+                                                                                                                       by hand. Choosing higher than this rate can cause the system
+                                        gradient descent called ADADELTA. The method dynami-
+                                                                                                                       to diverge in terms of the objective function, and choosing
+                                        cally adapts over time using only first order information and
+                                                                                                                       this rate too low results in slow learning. Determining a good
+                                        has minimal computational overhead beyond vanilla stochas-
+                                                                                                                       learning rate becomes more of an art than science for many
+                                        tic gradient descent. The method requires no manual tuning of
+                                                                                                                       problems.
+                                        a learning rate and appears robust to noisy gradient informa-
+                                                                                                                           This work attempts to alleviate the task of choosing a
+                                        tion, different model architecture choices, various data modal-
+                                                                                                                       learning rate by introducing a new dynamic learning rate that
+                                        ities and selection of hyperparameters. We show promising
+                                                                                                                       is computed on a per-dimension basis using only first order
+                                        results compared to other methods on the MNIST digit clas-
+                                                                                                                       information. This requires a trivial amount of extra compu-
+                                        sification task using a single machine and on a large scale
+                                                                                                                       tation per iteration over gradient descent. Additionally, while
+                                        voice dataset in a distributed cluster environment.
+                                                                                                                       there are some hyper parameters in this method, we has found
+                                            Index Terms— Adaptive Learning Rates, Machine Learn-                       their selection to not drastically alter the results. The benefits
+                                        ing, Neural Networks, Gradient Descent                                         of this approach are as follows:
+                                                                                                                           • no manual setting of a learning rate.
+                                                             1. INTRODUCTION
+                                                                                                                           • insensitive to hyperparameters.
+                                        The aim of many machine learning methods is to update a                            • separate dynamic learning rate per-dimension.
+                                        set of parameters x in order to optimize an objective function                     • minimal computation over gradient descent.
+                                        f (x). This often involves some iterative procedure which ap-                      • robust to large gradients, noise and architecture choice.
+                                        plies changes to the parameters, ∆x at each iteration of the                       • applicable in both local or distributed environments.
+                                        algorithm. Denoting the parameters at the t-th iteration as xt ,
+                                        this simple update rule becomes:                                                                   2. RELATED WORK
+                                                                xt+1 = xt + ∆xt                             (1)
+                                                                                                                       There are many modifications to the gradient descent algo-
+                                        In this paper we consider gradient descent algorithms which                    rithm. The most powerful such modification is Newton’s
+                                        attempt to optimize the objective function by following the                    method which requires second order derivatives of the cost
+                                        steepest descent direction given by the negative of the gradi-                 function:
+                                                                                                                                                ∆xt = Ht−1 gt                     (3)
+                                        ent gt . This general approach can be applied to update any                              −1
+                                        parameters for which a derivative can be obtained:                             where Ht is the inverse of the Hessian matrix of second
+                                                                                                                       derivatives computed at iteration t. This determines the op-
+                                                                   ∆xt = −ηgt                               (2)        timal step size to take for quadratic problems, but unfortu-
+                                        where gt is the gradient of the parameters at the t-th iteration               nately is prohibitive to compute in practice for large models.
+                                        ∂f (xt )
+                                                 and η is a learning rate which controls how large of                  Therefore, many additional approaches have been proposed
+                                          ∂xt
+                                        a step to take in the direction of the negative gradient. Fol-                 to either improve the use of first order information or to ap-
+                                        lowing this negative gradient for each new sample or batch                     proximate the second order information.
+                                        of samples chosen from the dataset gives a local estimate
+                                        of which direction minimizes the cost and is referred to as                    2.1. Learning Rate Annealing
+                                        stochastic gradient descent (SGD) [1]. While often simple to                   There have been several attempts to use heuristics for estimat-
+                                        derive the gradients for each parameter analytically, the gradi-               ing a good learning rate at each iteration of gradient descent.
+                                        ent descent algorithm requires the learning rate hyperparam-                   These either attempt to speed up learning when suitable or to
+                                        eter to be chosen.                                                             slow down learning near a local minima. Here we consider
+                                          ∗ This work was done while Matthew D. Zeiler was an intern at Google.        the latter.
+    When gradient descent nears a minima in the cost sur-         order information but has some properties of second order
+face, the parameter values can oscillate back and forth around    methods and annealing. The update rule for ADAGRAD is
+the minima. One method to prevent this is to slow down the        as follows:                         η
+                                                                                      ∆xt = − qP              gt                (5)
+parameter updates by decreasing the learning rate. This can                                           t     2
+be done manually when the validation accuracy appears to                                              τ =1 gτ
+
+plateau. Alternatively, learning rate schedules have been pro-    Here the denominator computes the `2 norm of all previous
+posed [1] to automatically anneal the learning rate based on      gradients on a per-dimension basis and η is a global learning
+how many epochs through the data have been done. These ap-        rate shared by all dimensions.
+proaches typically add additional hyperparameters to control           While there is the hand tuned global learning rate, each
+how quickly the learning rate decays.                             dimension has its own dynamic rate. Since this dynamic rate
+                                                                  grows with the inverse of the gradient magnitudes, large gra-
+                                                                  dients have smaller learning rates and small gradients have
+2.2. Per-Dimension First Order Methods
+                                                                  large learning rates. This has the nice property, as in second
+The heuristic annealing procedure discussed above modifies        order methods, that the progress along each dimension evens
+a single global learning rate that applies to all dimensions of   out over time. This is very beneficial for training deep neu-
+the parameters. Since each dimension of the parameter vector      ral networks since the scale of the gradients in each layer is
+can relate to the overall cost in completely different ways,      often different by several orders of magnitude, so the optimal
+a per-dimension learning rate that can compensate for these       learning rate should take that into account. Additionally, this
+differences is often advantageous.                                accumulation of gradient in the denominator has the same ef-
+                                                                  fects as annealing, reducing the learning rate over time.
+2.2.1. Momentum                                                        Since the magnitudes of gradients are factored out in
+                                                                  ADAGRAD, this method can be sensitive to initial conditions
+One method of speeding up training per-dimension is the mo-       of the parameters and the corresponding gradients. If the ini-
+mentum method [2]. This is perhaps the simplest extension to      tial gradients are large, the learning rates will be low for the
+SGD that has been successfully used for decades. The main         remainder of training. This can be combatted by increasing
+idea behind momentum is to accelerate progress along dimen-       the global learning rate, making the ADAGRAD method sen-
+sions in which gradient consistently point in the same direc-     sitive to the choice of learning rate. Also, due to the continual
+tion and to slow progress along dimensions where the sign         accumulation of squared gradients in the denominator, the
+of the gradient continues to change. This is done by keeping      learning rate will continue to decrease throughout training,
+track of past parameter updates with an exponential decay:        eventually decreasing to zero and stopping training com-
+                    ∆xt = ρ∆xt−1 − ηgt                     (4)    pletely. We created our ADADELTA method to overcome the
+where ρ is a constant controlling the decay of the previous       sensitivity to the hyperparameter selection as well as to avoid
+parameter updates. This gives a nice intuitive improvement        the continual decay of the learning rates.
+over SGD when optimizing difficult cost surfaces such as a
+long narrow valley. The gradients along the valley, despite       2.3. Methods Using Second Order Information
+being much smaller than the gradients across the valley, are
+typically in the same direction and thus the momentum term        Whereas the above methods only utilized gradient and func-
+accumulates to speed up progress. In SGD the progress along       tion evaluations in order to optimize the objective, second
+the valley would be slow since the gradient magnitude is small    order methods such as Newton’s method or quasi-Newtons
+and the fixed global learning rate shared by all dimensions       methods make use of the Hessian matrix or approximations
+cannot speed up progress. Choosing a higher learning rate         to it. While this provides additional curvature information
+for SGD may help but the dimension across the valley would        useful for optimization, computing accurate second order in-
+then also make larger parameter updates which could lead          formation is often expensive.
+to oscillations back as forth across the valley. These oscil-         Since computing the entire Hessian matrix of second
+lations are mitigated when using momentum because the sign        derivatives is too computationally expensive for large models,
+of the gradient changes and thus the momentum term damps          Becker and LecCun [5] proposed a diagonal approximation to
+down these updates to slow progress across the valley. Again,     the Hessian. This diagonal approximation can be computed
+this occurs per-dimension and therefore the progress along the    with one additional forward and back-propagation through
+valley is unaffected.                                             the model, effectively doubling the computation over SGD.
+                                                                  Once the diagonal of the Hessian is computed, diag(H), the
+                                                                  update rule becomes:
+2.2.2. ADAGRAD                                                                                      1
+                                                                                    ∆xt = −                   gt             (6)
+A recent first order method called ADAGRAD [3] has shown                                     |diag(Ht )| + µ
+remarkably good results on large scale learning tasks in a dis-   where the absolute value of this diagonal Hessian is used to
+tributed environment [4]. This method relies on only first        ensure the negative gradient direction is always followed and
+µ is a small constant to improve the conditioning of the Hes-      Algorithm 1 Computing ADADELTA update at time t
+sian for regions of small curvature.                               Require: Decay rate ρ, Constant 
+    A recent method by Schaul et al. [6] incorporating the         Require: Initial parameter x1
+diagonal Hessian with ADAGRAD-like terms has been intro-            1: Initialize accumulation variables E[g 2 ]0 = 0, E[∆x2 ]0 = 0
+duced to alleviate the need for hand specified learning rates.      2: for t = 1 : T do %% Loop over # of updates
+This method uses the following update rule:                         3:    Compute Gradient: gt
+                                                                    4:    Accumulate Gradient: E[g 2 ]t = ρE[g 2 ]t−1 + (1 − ρ)gt2
+                               1      E[gt−w:t ]2                                                      RMS[∆x]
+              ∆xt = −                     2       gt         (7)    5:    Compute Update: ∆xt = − RMS[g]t−1        gt
+                          |diag(Ht )| E[gt−w:t  ]                                                               t
+                                                                    6:    Accumulate Updates: E[∆x ]t = ρE[∆x2 ]t−1 +(1−ρ)∆x2t
+                                                                                                      2
+where E[gt−w:t ] is the expected value of the previous w gra-       7:    Apply Update: xt+1 = xt + ∆xt
+                 2
+dients and E[gt−w:t   ] is the expected value of squared gradi-     8: end for
+ents over the same window w. Schaul et al. also introduce a
+heuristic for this window size w (see [6] for more details).
+                                                                   3.2. Idea 2: Correct Units with Hessian Approximation
+                3. ADADELTA METHOD                                 When considering the parameter updates, ∆x, being applied
+                                                                   to x, the units should match. That is, if the parameter had
+The idea presented in this paper was derived from ADA-
+                                                                   some hypothetical units, the changes to the parameter should
+GRAD [3] in order to improve upon the two main draw-
+                                                                   be changes in those units as well. When considering SGD,
+backs of the method: 1) the continual decay of learning rates
+                                                                   Momentum, or ADAGRAD, we can see that this is not the
+throughout training, and 2) the need for a manually selected
+                                                                   case. The units in SGD and Momentum relate to the gradient,
+global learning rate. After deriving our method we noticed
+                                                                   not the parameter:
+several similarities to Schaul et al. [6], which will be com-
+pared to below.                                                                                       ∂f          1
+                                                                         units of ∆x ∝ units of g ∝       ∝                   (11)
+    In the ADAGRAD method the denominator accumulates                                                 ∂x     units of x
+the squared gradients from each iteration starting at the be-      assuming the cost function, f , is unitless. ADAGRAD also
+ginning of training. Since each term is positive, this accumu-     does not have correct units since the update involves ratios of
+lated sum continues to grow throughout training, effectively       gradient quantities, hence the update is unitless.
+shrinking the learning rate on each dimension. After many it-          In contrast, second order methods such as Newton’s
+erations, this learning rate will become infinitesimally small.    method that use Hessian information or an approximation
+                                                                   to the Hessian do have the correct units for the parameter
+3.1. Idea 1: Accumulate Over Window                                updates:
+                                                                                                 ∂f
+Instead of accumulating the sum of squared gradients over all                  ∆x ∝ H −1 g ∝ ∂∂x
+                                                                                               2 f ∝ units of x                 (12)
+time, we restricted the window of past gradients that are ac-                                    ∂x2
+cumulated to be some fixed size w (instead of size t where
+                                                                       Noticing this mismatch of units we considered terms to
+t is the current iteration as in ADAGRAD). With this win-
+                                                                   add to Eqn. 10 in order for the units of the update to match
+dowed accumulation the denominator of ADAGRAD cannot
+                                                                   the units of the parameters. Since second order methods are
+accumulate to infinity and instead becomes a local estimate
+                                                                   correct, we rearrange Newton’s method (assuming a diagonal
+using recent gradients. This ensures that learning continues
+                                                                   Hessian) for the inverse of the second derivative to determine
+to make progress even after many iterations of updates have
+                                                                   the quantities involved:
+been done.                                                                                 ∂f
+     Since storing w previous squared gradients is inefficient,                                 1      ∆x
+                                                                                  ∆x = ∂∂x
+                                                                                         2 f ⇒ ∂ 2 f = ∂f                       (13)
+our methods implements this accumulation as an exponen-                                   ∂x2      ∂x2      ∂x
+tially decaying average of the squared gradients. Assume at
+time t this running average is E[g 2 ]t then we compute:               Since the RMS of the previous gradients is already repre-
+               E[g 2 ]t = ρ E[g 2 ]t−1 + (1 − ρ) gt2        (8)    sented in the denominator in Eqn. 10 we considered a mea-
+                                                                   sure of the ∆x quantity in the numerator. ∆xt for the current
+where ρ is a decay constant similar to that used in the momen-
+                                                                   time step is not known, so we assume the curvature is locally
+tum method. Since we require the square root of this quantity
+                                                                   smooth and approximate ∆xt by compute the exponentially
+in the parameter updates, this effectively becomes the RMS
+                                                                   decaying RMS over a window of size w of previous ∆x to
+of previous squared gradients p  up to time t:
+                                                                   give the ADADELTA method:
+                    RMS[g]t = E[g 2 ]t +                   (9)
+                                                                                               RMS[∆x]t−1
+where a constant  is added to better condition the denomina-                        ∆xt = −                 gt             (14)
+                                                                                                 RMS[g]t
+tor as in [5]. The resulting parameter update is then:
+                                     η                             where the same constant  is added to the numerator RMS as
+                       ∆xt = −             gt             (10)
+                                 RMS[g]t                           well. This constant serves the purpose both to start off the first
+iteration where ∆x0 = 0 and to ensure progress continues to                               6
+                                                                                                                                   SGD
+be made even if previous updates become small.                                           5.5                                       MOMENTUM
+                                                                                                                                   ADAGRAD
+    This derivation made the assumption of diagonal curva-                                5                                        ADADELTA
+ture so that the second derivatives could easily be rearranged.                          4.5
+Furthermore, this is an approximation to the diagonal Hessian
+
+                                                                          Test Error %
+                                                                                          4
+using only RMS measures of g and ∆x. This approximation
+is always positive as in Becker and LeCun [5], ensuring the                              3.5
+
+update direction follows the negative gradient at each step.                              3
+
+    In Eqn. 14 the RMS[∆x]t−1 quantity lags behind the de-                               2.5
+nominator by 1 time step, due to the recurrence relationship                              2
+for ∆xt . An interesting side effect of this is that the system is
+                                                                                         1.5
+robust to large sudden gradients which act to increase the de-
+                                                                                          1
+nominator, reducing the effective learning rate at the current                             0          10        20           30     40       50
+                                                                                                                     Epoch
+time step, before the numerator can react.
+    The method in Eqn. 14 uses only first order information
+and has some properties from each of the discussed meth-             Fig. 1. Comparison of learning rate methods on MNIST digit
+ods. The negative gradient direction for the current iteration       classification for 50 epochs.
+−gt is always followed as in SGD. The numerator acts as
+an acceleration term, accumulating previous gradients over a             To further analyze various methods to convergence, we
+window of time as in momentum. The denominator is re-                train the same neural network with 500 hidden units in the first
+lated to ADAGRAD in that the squared gradient information            layer, 300 hidden units in the second layer and rectified linear
+per-dimension helps to even out the progress made in each di-        activation functions in both layers for 50 epochs. We notice
+mension, but is computed over a window to ensure progress            that rectified linear units work better in practice than tanh, and
+is made later in training. Finally, the method relates to Schaul     their non-saturating nature further tests each of the methods
+et al. ’s in that some approximation to the Hessian is made,         at coping with large variations of activations and gradients.
+but instead costs only one gradient computation per iteration            In Fig. 1 we compare SGD, Momentum, ADAGRAD,
+by leveraging information from past updates. For the com-            and ADADELTA in optimizing the test set errors. The unal-
+plete algorithm details see Algorithm 1.                             tered SGD method does the worst in this case, whereas adding
+                                                                     the momentum term to it significantly improves performance.
+                                                                     ADAGRAD performs well for the first 10 epochs of training,
+                     4. EXPERIMENTS                                  after which it slows down due to the accumulations in the de-
+                                                                     nominator which continually increase. ADADELTA matches
+We evaluate our method on two tasks using several different          the fast initial convergence of ADAGRAD while continuing
+neural network architectures. We train the neural networks           to reduce the test error, converging near the best performance
+using SGD, Momentum, ADAGRAD, and ADADELTA in a                      which occurs with momentum.
+supervised fashion to minimize the cross entropy objective
+between the network output and ground truth labels. Compar-
+                                                                                                       SGD       MOMENTUM          ADAGRAD
+isons are done both on a local computer and in a distributed
+                                                                               = 1e0                 2.26%        89.68%           43.76%
+compute cluster.
+                                                                               = 1e−1                2.51%        2.03%             2.82%
+                                                                               = 1e−2                7.02%         2.68%            1.79%
+4.1. Handwritten Digit Classification                                          = 1e−3                17.01%        6.98%            5.21%
+                                                                               = 1e−4                58.10%       16.98%           12.59%
+In our first set of experiments we train a neural network on the
+MNIST handwritten digit classification task. For comparison          Table 1. MNIST test error rates after 6 epochs of training for
+with Schaul et al. ’s method we trained with tanh nonlinear-         various hyperparameter settings using SGD, MOMENTUM,
+ities and 500 hidden units in the first layer followed by 300        and ADAGRAD.
+hidden units in the second layer, with the final softmax out-                                              ρ = 0.9    ρ = 0.95    ρ = 0.99
+put layer on top. Our method was trained on mini-batches of                                     = 1e−2     2.59%      2.58%       2.32%
+100 images per batch for 6 epochs through the training set.                                     = 1e−4     2.05%      1.99%       2.28%
+Setting the hyperparameters to  = 1e − 6 and ρ = 0.95 we                                       = 1e−6     1.90%      1.83%       2.05%
+achieve 2.00% test set error compared to the 2.10% of Schaul                                    = 1e−8     2.29%      2.13%       2.00%
+et al. While this is nowhere near convergence it gives a sense
+of how quickly the algorithms can optimize the classification        Table 2. MNIST test error rate after 6 epochs for various
+objective.                                                           hyperparameter settings using ADADELTA.
+4.2. Sensitivity to Hyperparameters                                    ent problem in neural networks and thus should have larger
+                                                                       learning rates.
+While momentum converged to a better final solution than                   Secondly, near the end of training these step sizes con-
+ADADELTA after many epochs of training, it was very sen-               verge to 1. This is typically a high learning rate that would
+sitive to the learning rate selection, as was SGD and ADA-             lead to divergence in most methods, however this conver-
+GRAD. In Table 1 we vary the learning rates for each method            gence towards 1 only occurs near the end of training when the
+and show the test set errors after 6 epochs of training using          gradients and parameter updates are small. In this scenario,
+rectified linear units as the activation function. The optimal         the  constants in the numerator and denominator dominate
+settings from each column were used to generate Fig. 1. With           the past gradients and parameter updates, converging to the
+SGD, Momentum, or ADAGRAD the learning rate needs to                   learning rate of 1.
+be set to the correct order of magnitude, above which the so-              This leads to the last interesting property of ADADELTA
+lutions typically diverge and below which the optimization             which is that when the step sizes become 1, the parameter
+proceeds slowly. We can see that these results are highly vari-        updates (shown on the right of Fig. 2) tend towards zero. This
+able for each method, compared to ADADELTA in Table 2                  occurs smoothly for each of the weight matrices effectively
+in which the two hyperparameters do not significantly alter            operating as if an annealing schedule was present.
+performance.                                                               However, having no explicit annealing schedule imposed
+                                                                       on the learning rate could be why momentum with the proper
+4.3. Effective Learning Rates                                          hyperparameters outperforms ADADELTA later in training as
+                                                                       seen in Fig. 1. With momentum, oscillations that can occur
+To investigate some of the properties of ADADELTA we plot              near a minima are smoothed out, whereas with ADADELTA
+in Fig. 2 the step sizes and parameter updates of 10 randomly          these can accumulate in the numerator. An annealing sched-
+selected dimensions in each of the 3 weight matrices through-          ule could possibly be added to the ADADELTA method to
+out training. There are several interesting things evident in          counteract this in future work.
+this figure. First, the step sizes, or effective learning rates (all
+terms except gt from Eqn. 14) shown in the left portion of the         4.4. Speech Data
+figure are larger for the lower layers of the network and much
+smaller for the top layer at the beginning of training. This           In the next set of experiments we trained a large-scale neu-
+property of ADADELTA helps to balance the fact that lower              ral network with 4 hidden layers on several hundred hours
+layers have smaller gradients due to the diminishing gradi-            of US English data collected using Voice Search, Voice IME,
+                                                                       and read data. The network was trained using the distributed
+               d x3                                6 x3
+                                                                       system of [4] in which a centralized parameter server accu-
+  1                                0.01                                mulates the gradient information reported back from several
+                                                                       replicas of the neural network. In our experiments we used ei-
+0.5                                   0
+                                                                       ther 100 or 200 such replica networks to test the performance
+  0                               −0.01                                of ADADELTA in a highly distributed environment.
+   0         100       200             0        100        200
+                                                                            The neural network is setup as in [7] where the inputs
+               d x2                                6 x2                are 26 frames of audio, each consisting of 40 log-energy fil-
+  1                                0.01                                ter bank outputs. The outputs of the network were 8,000
+0.5                                   0                                senone labels produced from a GMM-HMM system using
+  0                               −0.01                                forced alignment with the input frames. Each hidden layer
+   0         100       200             0        100        200         of the neural network had 2560 hidden units and was trained
+               d x1                                6 x1
+                                                                       with either logistic or rectified linear nonlinearities.
+  1                                0.01                                     Fig. 3 shows the performance of the ADADELTA method
+                                                                       when using 100 network replicas. Notice our method ini-
+0.5                                   0
+                                                                       tially converges faster and outperforms ADAGRAD through-
+  0                               −0.01                                out training in terms of frame classification accuracy on the
+   0         100       200             0        100        200
+                                                                       test set. The same settings of  = 1e−6 and ρ = 0.95 from
+Fig. 2. Step sizes and parameter updates shown every 60                the MNIST experiments were used for this setup.
+batches during training the MNIST network with tanh non-                    When training with rectified linear units and using 200
+linearities for 25 epochs. Left: Step sizes for 10 randomly            model replicas we also used the same settings of hyperpa-
+selected dimensions of each of the 3 weight matrices of the            rameters (see Fig. 4). Despite having 200 replicates which
+network. Right: Parameters changes for the same 10 dimen-              inherently introduces significants amount of noise to the gra-
+sions for each of the 3 weight matrices. Note the large step           dient accumulations, the ADADELTA method performs well,
+sizes in lower layers that help compensate for vanishing gra-          quickly converging to the same frame accuracy as the other
+dients that occur with backpropagation.                                methods.
+                        38                                                                                  6. REFERENCES
+                        36
+
+                        34
+                                                                                        [1] H. Robinds and S. Monro, “A stochastic approximation
+                                                                                            method,” Annals of Mathematical Statistics, vol. 22, pp.
+                        32
+                                                                                            400–407, 1951.
+
+
+     Fame Acc %uracy
+                        30
+
+                        28
+                                                                                        [2] D.E. Rumelhart, G.E. Hinton, and R.J. Williams, “Learn-
+                                                                                            ing representations by back-propagating errors,” Nature,
+                        26
+                                                                                            vol. 323, pp. 533–536, 1986.
+                        24
+
+                        22                                                              [3] J. Duchi, E. Hazan, and Y. Singer, “Adaptive subgradient
+                                                                                            methods for online leaning and stochastic optimization,”
+                        20                                           ADAGRAD log
+                                                                     ADADELTA log           in COLT, 2010.
+                        18
+                          0        20         40          60           80         100
+                                               Time (hours)                             [4] J. Dean, G. Corrado, R. Monga, K. Chen, M. Devin,
+                                                                                            Q. Le, M. Mao, M. Ranzato, A. Senior, P. Tucker,
+Fig. 3. Comparison of ADAGRAD and ADADELTA on the                                           K. Yang, and A. Ng, “Large scale distributed deep net-
+Speech Dataset with 100 replicas using logistic nonlinearities.                             works,” in NIPS, 2012.
+                                                                                        [5] S. Becker and Y. LeCun, “Improving the convergence of
+                                                                                            back-propagation learning with second order methods,”
+                                                                                            Tech. Rep., Department of Computer Science, University
+                        35
+                                                                                            of Toronto, Toronto, ON, Canada, 1988.
+
+                                                                                        [6] T. Schaul, S. Zhang, and Y. LeCun, “No more pesky
+
+
+
+     Frame Accuracy %
+                        30
+                                                                                            learning rates,” arXiv:1206.1106, 2012.
+
+                        25
+                                                                                        [7] N. Jaitly, P. Nguyen, A. Senior, and V. Vanhoucke, “Ap-
+                                                                                            plication of pretrained deep neural networks to large vo-
+                                                                                            cabulary speech recognition,” in Interspeech, 2012.
+                        20
+
+                                                                    ADAGRAD relu
+                                                                    ADADELTA relu
+                        15                                          MOMENTUM relu
+                         0    20        40   60       80      100    120    140   160
+                                                  Time (hours)
+
+
+Fig. 4.      Comparison of ADAGRAD, Momentum, and
+ADADELTA on the Speech Dataset with 200 replicas using
+rectified linear nonlinearities.
+
+                                        5. CONCLUSION
+
+In this tech report we introduced a new learning rate method
+based on only first order information which shows promis-
+ing result on MNIST and a large scale Speech recognition
+dataset. This method has trivial computational overhead com-
+pared to SGD while providing a per-dimension learning rate.
+Despite the wide variation of input data types, number of hid-
+den units, nonlinearities and number of distributed replicas,
+the hyperparameters did not need to be tuned, showing that
+ADADELTA is a robust learning rate method that can be ap-
+plied in a variety of situations.
+
+    Acknowledgements We thank Geoff Hinton, Yoram
+Singer, Ke Yang, Marc’Aurelio Ranzato and Jeff Dean for
+the helpful comments and discussions regarding this work.
+

@@ -1,0 +1,434 @@
+       DeepHeart: Semi-Supervised Sequence Learning for Cardiovascular Risk
+                                    Prediction
+           Brandon Ballinger, Johnson Hsieh, Avesh Singh,            Geoffrey H. Tison, Gregory M. Marcus,
+                    Nimit Sohoni, Jack Wang                             Jose M. Sanchez, Carol Maguire
+                            Cardiogram                                 Jeffrey E. Olgin, Mark J. Pletcher
+                         San Francisco, CA                                   Department of Medicine
+                                                                             University of California
+                                                                               San Francisco, CA
+
+
+                           Abstract                                Choi et al. 2016; Che et al. 2015). However, purely super-
+                                                                   vised deep learning requires many labeled examples. No
+  We train and validate a semi-supervised, multi-task LSTM         such database exists for wearable data, and in most hospi-
+  on 57,675 person-weeks of data from off-the-shelf wear-
+                                                                   tal systems, recruiting even a hundred patients into a new
+  able heart rate sensors, showing high accuracy at detect-
+  ing multiple medical conditions, including diabetes (0.8451),    medical study is labor-intensive and expensive.
+  high cholesterol (0.7441), high blood pressure (0.8086), and        To solve this, we take a two-pronged approach. First, we
+  sleep apnea (0.8298). We compare two semi-supervised train-      employ a mobile phone application to recruit 14,011 partic-
+  ing methods, semi-supervised sequence learning and heuris-       ipants from across the world, collecting 200 million unla-
+  tic pretraining, and show they outperform hand-engineered        beled sensor measurements. Data from these participants is
+  biomarkers from the medical literature. We believe our work      then used in one of two semi-supervised training procedures.
+  suggests a new approach to patient risk stratification based     In semi-supervised sequence learning (Dai and Le 2015), an
+  on cardiovascular risk scores derived from popular wearables     LSTM (Hochreiter and Schmidhuber 1997) is pretrained as a
+  such as Fitbit, Apple Watch, or Android Wear.
+                                                                   sequence autoencoder; weights from pretraining are used as
+                                                                   initialization for a second supervised phase, making use of
+                       Introduction                                a limited pool of labeled data from participants with known
+                                                                   diagnoses. In heuristic pretraining, the neural network is in-
+In medicine, each label represents a human life at risk —          stead pretrained to compute heart-rate-derived biomarkers
+for example, a person who recently suffered a heart attack         from the medical literature, partially bridging the gap be-
+or experienced an abnormal heart rhythm. As a result, even         tween feature engineering and deep learning.
+widely-used predictive models like CHA2DS2-VASc may
+                                                                      The rest of this paper is organized as follows. We first
+be derived from as few as 25 positive labels (Y H Lip et al.
+                                                                   describe a novel data set derived from 14,011 participants
+2009). However, popular wearables, such as Fitbit and Apple
+                                                                   with wearable heart rate monitors, recruited in partnership
+Watch, generate trillions of unlabeled sensor data points per
+                                                                   with the Health eHeart Study of the University of Califor-
+year, including rich signals like resting heart rate and heart
+                                                                   nia, San Francisco. We then describe DeepHeart, our model
+rate variability, which have been shown to correlate with
+                                                                   architecture, and the semi-supervised training methods used,
+health conditions as diverse as diabetes, sleep apnea, atrial
+                                                                   semi-supervised sequence learning and heuristic pretraining.
+fibrillation, heart failure, sudden cardiac death, and irritable
+                                                                   Then we present experimental results showing that semi-
+bowel syndrome (Kamath, Watanabe, and Upton 2012).
+                                                                   supervised deep neural networks achieve higher accuracy
+   Using consumer-grade heart rate sensors in a medical
+                                                                   in detecting diabetes, sleep apnea, high blood pressure, and
+context presents several challenges. First, the sensors them-
+                                                                   high cholesterol than several strong baselines derived from
+selves have significant error (Gillinov 2016). Second, they
+                                                                   biomarkers in the medical literature. We conclude by de-
+vary the rate of measurement to preserve battery life. Third,
+                                                                   scribing some of the historical barriers to wide-scale deploy-
+since wearables are used in an ambulatory setting, daily ac-
+                                                                   ment of artificial intelligence in medicine and how we plan
+tivities like walking, exercise, stress, consuming alcohol, or
+                                                                   to address them in future work.
+drinking coffee (Figure 1) may confuse simple heuristics.
+   Deep neural networks (LeCun, Bengio, and Hinton 2015)
+have shown high accuracy at pattern recognition from noisy,                       Data and Study Cohort
+complex inputs, including automated detection of diabetic
+retinopathy from images (Gulshan et al. 2016), skin cancer         Electronic medical records contain important discrete
+from mobile phone cameras (Esteva et al. 2017), and the            events, such as lab tests and diagnoses, while continuous
+onset of health conditions from electronic medical records         wearable data from mobile health platforms, such as Apple
+(Razavian, Marcus, and Sontag 2016; Lipton et al. 2015;            HealthKit or Google Fit, cover the majority of the patient’s
+                                                                   time outside of a medical setting. In order to train a deep
+Copyright c 2018, Association for the Advancement of Artificial    neural network to predict diagnoses given wearable data, we
+Intelligence (www.aaai.org). All rights reserved.                  sought to combine the two data sources.
+Figure 1: Examples of wearable heart rate data showing different physiological states: exercise, sleeping, stress, and medical
+conditions.
+
+
+Study Cohort                                                      Multi-Channel, Multi-Timescale Sensor Data
+                                                                  Consumer wearables produce multiple channels of data—
+We recruited 14,011 users of a popular Apple Watch app            most commonly, step count measured using a wrist-worn
+into an online, IRB-approved study run in partnership with        accelerometer and optical heart rate measured using photo-
+the cardiology department of the University of California,        plethysmography. For example, the Apple Watch measures
+San Francisco (Tison et al. 2017a). Participants completed        heart rate every five seconds when in workout mode and
+a medical history, including previous diagnoses, blood test       roughly every five minutes during other times of the day.
+results, and medications. A mobile app—Cardiogram—                Likewise, step counts are recorded every few minutes while
+integrated with HealthKit continuously stored, processed,         the user is walking.
+and displayed participant heart rate, step count, and other
+                                                                     We encoded sensor measurements into a tensor Xu,t,c
+activity data.
+                                                                  with indices for the user-week u, timestep t, and input chan-
+   We chose to focus on four highly prevalent but often undi-     nel c. Heart rate and step count were encoded as separate
+agnosed conditions associated with cardiovascular risk: high      input channels. To accommodate variable timescales, we en-
+cholesterol, hypertension (high blood pressure), sleep apnea,     coded intra-channel time-deltas as a special dt channel:
+and diabetes. 45.8% of diabetes cases are undiagnosed (Bea-
+gley et al. 2014). Sleep apnea is estimated to affect 22 mil-                                               dt
+lion people in the US alone, over 80% of whom are undi-                         dttransf ormed = 0.1log(        )           (1)
+agnosed (Young et al. 1997). Together, high blood pressure                                                 5000
+and high cholesterol account for 17.3% of global deaths (Al-        Without transforming dt, the model does not train due
+wan and others 2011), as they are both major risk factors for     to the wide spread of values (ranging from 5000 to
+heart attacks.                                                    28,800,000).
+                                                                    Sequences contained up to 4096 timesteps of sensor data,
+                                                                  and shorter sequences were zero-padded.
+                 Table 1: Cohort Statistics
+  Condition           Number of Person-          Person-          Pre-Processing
+                      People       Weeks of      Weeks of
+                                   Training      Testing          Each participant was randomly assigned to either the train-
+                                   Data          Data             ing, tuning, or testing set. Each participant’s data was then
+                                                                  split into week-long chunks, and any weeks with ≤ 672
+  Unlabeled           1,462         10,616       N/A              heart rate measurements (≤ 8 hours per day of background
+  High Cholesterol    2,331         9,220        3,243            measurements) or ≤ 30 minutes of continuous heart rate
+  Hypertension        2,230         7,651        2,762            recordings were omitted. After filtering, there were 57,675
+  Sleep Apnea         1,016         3,662        1,141            person-weeks of data in total, divided into 33,628 for train-
+  Diabetes            462           1,678        644              ing, 18,555 for tuning, and 12,790 for validation. The train-
+                                                                  ing, tuning, and testing sets contained completely disjoint
+                                                                  sets of participants.
+                                                                       length of 5. Each convolutional layer contains 128 convo-
+                                                                       lutional channels. After each convolutional layer, we apply
+                                                                       dropout with probability 0.2 to prevent overfitting, and apply
+                                                                       max pooling with pool length 2 to reduce dimensionality.
+
+                                                                       Bidirectional LSTM
+                                                                       The convolutional layers are followed by four bidirectional
+                                                                       LSTM layers that model longer temporal patterns in wear-
+                                                                       able sensor data and their corresponding multi-timescale di-
+                                                                       agnoses. Each bidirectional LSTM layer contains 128 units
+                                                                       (64 in each direction).
+                                                                          A dropout of 0.2 is applied to this final LSTM layer, and
+                                                                       the result is run through a simple output unit: a convolution
+                                                                       of filter length 1. The purpose of this convolution is to map
+                                                                       the outputs of the LSTM into a single prediction per task,
+                                                                       per timestep. For this final layer, we use a tanh activation so
+                                                                       outputs range from -1 to 1.
+
+                                                                                          Training Methods
+                                                                       In addition to ordinary supervised training, we experimented
+                                                                       with two pretraining architectures. Semi-supervised training
+                                                                       is advantageous here because unlabeled data from wearables
+              Figure 2: DeepHeart architecture.                        is abundant, but medical condition labels are more scarce.
+
+                                                                       Unsupervised Sequence Pretraining
+Multi-Task Labeled Output                                              Semi-supervised sequence learning has been shown to im-
+Similar to X, our output is a tensor Yu,t,c with indices for           prove performance when presented with large amounts of
+the user-week u, timestep t, and output channel c. There are           unlabeled training data (Dai and Le 2015). We experimented
+separate output channels for prevalent cases of each condi-            with this approach by first training a sequence-to-sequence
+tion: high cholesterol, hypertension, sleep apnea, and dia-            autoencoder, consisting of the 3 convolutional and 4 recur-
+betes. Diagnoses are derived from validated health surveys             rent layers. We then use the weights from the autoencoder
+collected in partnership with the Health eHeart Study of the           as initializing parameters for the corresponding layers in the
+University of California, San Francisco. In addition, we in-           supervised architecture. In order to force the autoencoder to
+cluded an output channel of ECG readings1 . ECG readings               not merely memorize the input, we added Gaussian noise to
+were aligned to the closest sensor measurement in X, and di-           the input sequence.
+agnoses were aligned to the last timestep in X. Each Yt [task]
+is a discrete label: either positive (user has condition, or ab-       Weakly-Supervised Heuristic Pretraining
+normal ECG reading) or negative (user is not diagnosed with            Previous work has applied statistical methods on beat-to-
+condition, or ECG reading is normal). We used output mask-             beat variability to detect heart arrhythmias (McManus et al.
+ing to score the models only when Yt [task] has a value.               2013). Inspired by this, we synthesized a dataset for pretrain-
+                                                                       ing using a time-windowed heart rate variability metric. We
+                   Model Architecture                                  defined four output tasks, with window sizes of 5 seconds,
+                                                                       30 seconds, 5 minutes, and 30 minutes, computed the aver-
+Figure 2 shows our model architecture. The inputs are multi-           age absolute difference between successive heart rate mea-
+channel, multi-timescale sensor measurements, and the out-             surements, and used these as output channels in a weakly-
+puts are multi-task, multi-timescale diagnoses. Table 3 sum-           supervised pretraining phase. The resulting weights were
+marizes hyperparameter tuning experiments.                             used for initialization in supervised training. In this way, we
+                                                                       use pretraining as a technique to bridge feature engineering
+Temporal Convolutions
+                                                                       and deep learning.
+The first three layers are temporal convolutions, which have
+been shown to efficiently extract features and model tem-                                    Experiments
+poral translation invariance (Amodei et al. 2016). The first
+layer has a wide filter length of 12, similar to AlexNet               To evaluate our architecture, we ran a series of experiments
+(Krizhevsky, Sutskever, and Hinton 2012), and the next two             summarized in Table 2. For each condition on our data set,
+layers use the residual units (He et al. 2016) with a filter           we report the c-statistic—the area under the ROC curve—
+                                                                       on the test set. Each experiment used the Adam optimizer
+   1
+     Our research builds on previous work to detect atrial fibrilla-   (Kingma and Ba 2014) and a squared error loss, since we
+tion using ECGs. We chose to keep this output task so our model        found squared error to be more numerically stable than
+could benefit from ECG readings.                                       cross-entropy.
+                                            Table 2: Experiment Results (c-statistics)
+            Name                                Diabetes High Cholesterol Sleep Apnea               High Blood Pressure
+            Logistic Regression                 0.7906       0.5941                0.6583           0.6389
+            Support Vector Machine              0.5722       0.5996                0.5490           0.6106
+            Decision Tree                       0.4142       0.5152                0.6415           0.6625
+            Random Forest                       0.5515       0.5647                0.5907           0.6310
+            Multi-layer Perceptron              0.7846       0.4327                0.6172           0.7195
+            LSTM, No Pretraining                0.8451       0.6736                0.8041           0.7991
+            LSTM, Heuristic Pretraining         0.8366       0.7148                0.7951           0.7427
+            LSTM, Unsupervised Pretraining      0.7998       0.7441                0.8298           0.8086
+
+
+Baselines                                                             perform well. One explanation is that the neural network is
+We compared our architecture with multiple machine learn-             able to find non-linear relationships for the underlying pat-
+ing algorithms using hand-engineered biomarkers derived               terns that generate these heuristic features, and the insights
+from the medical literature, including resting heart rate (Fox        discovered by the heuristic pretraining were useful for pre-
+et al. 2007), time-windowed average heart rate (Kamath,               dicting high cholesterol.
+Watanabe, and Upton 2012), time-windowed standard de-                    On high blood pressure, the heuristic-pretrained LSTM
+viation of heart rates (Kamath, Watanabe, and Upton 2012),            performs significantly worse than the LSTM without pre-
+time-windowed spectrum entropy (Kamath, Watanabe, and                 training. One explanation is that the heuristic of average
+Upton 2012), time-windowed root mean squared of succes-               BPM differences is a poor predictor of high blood pres-
+sive beats per minute differences (McManus et al. 2013),              sure, and gradient descent cannot escape from this space of
+and time-windowed entropy of BPM differences (McManus                 poorly-performing predictors.
+et al. 2013). We used 5-minute and 30-minute time windows,
+and included global versions of standard deviation and RMS            Semi-supervised Sequence Learning
+of successive BPM differences, for 13 features in total. We
+                                                                      The last experiment applied semi-supervised sequence
+trained several standard machine learning algorithms on all
+                                                                      learning: we first pretrained DeepHeart as a sequence au-
+of these features, including scikit-learn’s (Pedregosa et al.
+                                                                      toencoder, using the encoder weights as initialization for a
+2011) implementation of logistic regression, support vec-
+                                                                      second, supervised phase, as described in (Dai and Le 2015).
+tor machines, decision trees, random forests, and multi-layer
+                                                                      This approach resulted in a significant improvement on high
+perceptrons.
+                                                                      cholesterol, high blood pressure, and sleep apnea.
+LSTM without Pretraining                                                 The 0.83 c-statistic at detecting sleep apnea is surprising
+                                                                      given that few participants sleep with their watch. This sug-
+We first trained a purely-supervised LSTM without pretrain-           gests that wearable-derived biomarkers measured during the
+ing, which performed significantly better than the baselines          day capture a distinct signature of sleep apnea.
+on sleep apnea (0.80 vs 0.55-0.66), hypertension (0.80 vs                Among all four health conditions, high cholesterol has the
+0.61-0.72), high cholesterol (0.67 vs 0.43-0.60), and dia-            least direct physiological relationship with heart rate vari-
+betes (0.85 vs 0.41-0.79). The gap is smallest for diabetes,          ability in the medical literature. While we are able to detect
+with the least amount of labeled data, suggesting poten-              high cholesterol with c-statistic of 0.74, it is the lowest per-
+tial benefit from combining hand-engineered features with             forming prediction out of the four disease states, suggest-
+deep learning. Previous work from the medical community               ing that much of the correlation may be a reflection of con-
+has suggested that diabetes may impact heart rate variability         founding variables such as age, sex, or usage of medications
+through effects on the autonomic nervous system (Kudat et             like beta blockers. Nevertheless, a c-statistic of 0.74 from
+al. 2006). Our work builds on top of these previous findings,         consumer-grade wearables alone is a surprising and novel
+and suggests that heart rate variability changes driven by di-        finding.
+abetes can be detected via consumer, off-the-self wearable
+heart rate sensors.
+                                                                      Effect of Varying Amounts of Labeled Data
+Heuristic Pretrained LSTM                                             To quantify the impact of each pretraining technique, we
+When the supervised LSTM is initialized with weights from             evaluated DeepHeart’s performance when trained on vary-
+heuristic pretraining, we saw noticeable improvements for             ing fractions of the labeled data (5%, 10%, 20%, 50%, 70%,
+high cholesterol (0.71 vs 0.67), neutral results for sleep ap-        and 100%), using no pretraining, heuristic pretraining, and
+nea and diabetes, and a significant loss for high blood pres-         semi-supervised sequence learning (Figure 4).
+sure (0.74 vs 0.80). The gain on high cholesterol is partic-            For hypertension and sleep apnea, unsupervised pretrain-
+ularly surprising, given that the baseline results, which are         ing yields a 10x improvement in data-efficiency: the DNN
+based on similar hand-engineered heuristic features, did not          achieves nearly the same accuracy with 10% of labeled data
+using unsupervised pretraining as it does with 100% of la-
+beled data using no pretraining. For diabetes and cholesterol,
+the effect is muted. For diabetes, this is due to a scarcity of
+labels (1,678, vs 3,662-9,220 for the other conditions). For
+high cholesterol, the lack of correlation between the number
+of labels and accuracy of the algorithm likely confirms that
+high cholesterol is primarily detected through the effect of
+confounding variables such as age, sex, and medications.
+
+
+
+
+                                                                  Figure 4: Accuracy as a function of percentage of training la-
+                                                                  bels used for each condition. Sleep apnea and hypertension,
+                                                                  which show the greatest effect, have both a direct physiolog-
+                                                                  ical connection to heart rate variability and a large amount of
+                                                                  labeled data in our training set. For diabetes and high choles-
+                                                                  terol, the effect of adding more labeled data is muted due
+                                                                  to the low absolute number of labels and less direct physi-
+                                                                  ological connection, respectively. Error bars show the 95th
+                                                                  percentile confidence interval.
+
+
+                                                                     A model trained only on heart rate timeseries performed
+Figure 3: ROC curves (sensitivity-specificity curves) com-        significantly worse on diabetes and high blood pressure (de-
+paring the accuracy of heuristic pretraining and semi-            crease of 0.0653 and 0.0721 in AUC, respectively), and the
+supervised pretraining to the strongest overall baseline in       same on sleep apnea and high blood pressure (within the
+detecting diabetes, sleep apnea, high cholesterol, and high       95% confidence interval), suggesting that heart rate is be-
+blood pressure.                                                   ing interpreted as a response to activity. Within the med-
+                                                                  ical literature, heart rate recovery after exercise is associ-
+   The shape of the ROC curves (Figure 3) are also inter-         ated with lower risks of cardiovascular disease (Morshedi-
+esting to note. It is clear that the semi-supervised sequence     Meibodi et al. 2002). A model using only aggregate step
+LSTM performs very well for detecting diabetes, sleep ap-         counts achieved an AUC of 0.7011 (diabetes), 0.5811 (sleep
+nea, and hypertension, three of the most highly prevalent         apnea), 0.5714 (hbp), and 0.5601 (high cholesterol), sug-
+conditions with undiagnosis rates of 45.8%, 80%, and 20%          gesting that although overall physical activity plays an im-
+respectively. For high cholesterol, although the c-statistic is   portant role in predicting the onset of disease, the heart’s
+lower, there are high-precision operating points which rule       response to physical activity is a more salient biomarker that
+out more than half of the study population. This suggests         can be captured using deep learning.
+wearables could be used to focus diagnostic testing on a
+high-risk subset of the population, leading to cost-effective                             Discussion
+screening for metabolic syndrome and getting at-risk pa-          We’ve shown that two methods, semi-supervised sequence
+tients care sooner.                                               learning and heuristic pretraining, address a key technical
+                                                                  challenge in applying deep learning to medicine: achiev-
+Ablative Analysis of Input Channels                               ing high accuracy with limited labeled data. Furthermore,
+To determine the impact of each input channel, we tested          we’ve shown high accuracy at detecting four common health
+models using heart rate and step count in isolation.              conditions—diabetes, sleep apnea, hypertension, and high
+cholesterol–using readily available, off-the-shelf heart rate      Many participants in our study have more than a year of
+monitors. Since these four conditions are highly prevalent,        heart rate and step count data, corresponding to nearly
+commonly undiagnosed, and reduced HRV is associated                one million time steps. We intend to test neural architec-
+with the earliest stages of disease progression (Schroeder         tures that can better model long-range dependencies, such
+et al. 2005; Schroeder et al. 2003), this suggests a new ap-       as Clockwork RNNs (Koutnik et al. 2014), Phased LSTMs
+proach to public health screening using deep learning.             (Neil, Pfeiffer, and Liu 2016), and Gaussian Process RNNs
+   While these results are promising, artificial intelligence-     (Joseph Futoma and O’Brien 2017) in order to better model
+based systems have shown high accuracy at medical tasks—           changes to a participant’s physiological state over a long pe-
+even outperforming human physicians—since the days of              riod of time.
+MYCIN (Yu et al. 1979), CADUCEUS (Banks 1985), and                    While these challenges may seem daunting, the con-
+INTERNIST-I (Wolfram 1995). For AI-based systems to                straints of medicine—scarce labeled data, confounding
+broadly improve human health, several key challenges be-           factors, difficulty of deployment, and the necessity of
+yond prediction accuracy must be addressed.                        interpretability—also represent opportunities to develop
+   A first challenge is confounding factors. Statistical mod-      new techniques. This work is a first step in showing how
+els in medicine are typically used for etiology, not just pre-     health conditions can be detected using techniques first de-
+diction, and cause (disease) and effect (treatment) may be in-     veloped in natural language processing and computer vision.
+tertwined in subtle ways within medical data sets (Shmueli         Over time, we plan to extend this work to address the chal-
+and others 2010). For example, a person with previously-           lenges above and deploy neural networks that can improve
+diagnosed hypertension may be prescribed beta blockers,            health in the real world.
+which affect heart rate variability, and therefore an algorithm
+with high prediction accuracy at identifying hypertension                                 References
+may be picking up signals of both the underlying disease
+and the treatment. While there are well-known algorithms to       [Alwan and others 2011] Alwan, A., et al. 2011. Global
+adjust for confounders in linear models, confounder-aware          status report on noncommunicable diseases 2010. World
+neural network architectures are a critical future area of re-     Health Organization.
+search.                                                           [Amodei et al. 2016] Amodei, D.; Anubhai, R.; Batten-
+   A second challenge is deployment. While hospital depart-        berg, E.; Case, C.; Casper, J.; Catanzaro, B.; Chen, J.;
+ments such as the intensive care unit or radiology depart-         Chrzanowski, M.; Coates, A.; Diamos, G.; et al. 2016. End
+ment often have ample training data available, deploying a         to end speech recognition in english and mandarin.
+new algorithm in a hospital is typically slow or impossible       [Banks 1985] Banks, G. 1985. Artificial intelligence in med-
+because errors are costly (a severe error may cost a human         ical diagnosis: the internist/caduceus approach. Critical re-
+life), the technical implementation is cumbersome (an inte-        views in medical informatics 1(1):23–54.
+gration with an electronic medical record system), the orga-
+nizational complexity is high (high regulatory burden, ne-        [Beagley et al. 2014] Beagley, J.; Guariguata, L.; Weil, C.;
+cessity to train physicians on new systems), and the finan-        and Motala, A. A. 2014. Global estimates of undiagnosed
+cial incentives are often misaligned (for example, preventing      diabetes in adults. Diabetes research and clinical practice
+readmissions may reduce the hospital’s revenue). An alter-         103(2):150–160.
+native is to take an outside-in approach: design care path-       [Chan et al. 2016] Chan, W.; Jaitly, N.; Le, Q.; and Vinyals,
+ways for ambulatory, mobile-based screening that operate           O. 2016. Listen, attend and spell: A neural network for large
+outside of the hospital but guide participants in to the ap-       vocabulary conversational speech recognition. In Acoustics,
+propriate point of care when a neural network detects high         Speech and Signal Processing (ICASSP), 2016 IEEE Inter-
+risk. Here, false negatives represent the status quo (no diag-     national Conference on, 4960–4964. IEEE.
+nosis), and with sufficiently high precision the cost of false    [Che et al. 2015] Che, Z.; Kale, D.; Li, W.; Bahadori, M. T.;
+positives (e.g., blood tests, mobile ECGs) is exceeded by the      and Liu, Y. 2015. Deep computational phenotyping. In Pro-
+cost savings to the healthcare system of each true positive.       ceedings of the 21th ACM SIGKDD International Confer-
+Since an algorithm can be packaged in a mobile app, it can         ence on Knowledge Discovery and Data Mining, 507–516.
+be updated and quickly deployed to participants. We are cur-       ACM.
+rently deploying our algorithm in ambulatory, mobile trials
+                                                                  [Choi et al. 2016] Choi, E.; Bahadori, M. T.; Schuetz, A.;
+in partnership with major medical centers to show real-world
+                                                                   Stewart, W. F.; and Sun, J. 2016. Doctor ai: Predicting
+efficacy and build a rigorous clinical evidence base (Tison et
+                                                                   clinical events via recurrent neural networks. In Machine
+al. 2017b).
+                                                                   Learning for Healthcare Conference, 301–318.
+   A third challenge is interpretability. Deep learning sys-
+tems perform well but are “black boxes,” whereas medical          [Dai and Le 2015] Dai, A. M., and Le, Q. V. 2015. Semi-
+systems prefer to provide an explanation of the chain of rea-      supervised sequence learning. In Advances in Neural Infor-
+soning. We intend to incorporate mechanisms such as differ-        mation Processing Systems, 3079–3087.
+entiable attention (Xu et al. 2015; Chan et al. 2016) to help     [Esteva et al. 2017] Esteva, A.; Kuprel, B.; Novoa, R. A.;
+both physicians and regulators understand the internal work-       Ko, J.; Swetter, S. M.; Blau, H. M.; and Thrun, S. 2017.
+ings of the neural network and its potential failure modes.        Dermatologist-level classification of skin cancer with deep
+   A last challenge is the time-scale and volume of data.          neural networks. Nature 542(7639):115–118.
+[Fox et al. 2007] Fox, K.; Borer, J. S.; Camm, A. J.; Danchin,       risk of cardiovascular disease events (the framingham heart
+ N.; Ferrari, R.; Sendon, J. L. L.; Steg, P. G.; Tardif, J.-C.;      study). The American journal of cardiology 90(8):848–852.
+ Tavazzi, L.; Tendera, M.; et al. 2007. Resting heart rate in       [Neil, Pfeiffer, and Liu 2016] Neil, D.; Pfeiffer, M.; and Liu,
+ cardiovascular disease. Journal of the American College of          S.-C. 2016. Phased lstm: Accelerating recurrent network
+ Cardiology 50(9):823–830.                                           training for long or event-based sequences. In Advances in
+[Gillinov 2016] Gillinov, M. 2016. Accuracy of com-                  Neural Information Processing Systems, 3882–3890.
+ mercially available heart rate monitors.           https://        [Pedregosa et al. 2011] Pedregosa, F.; Varoquaux, G.; Gram-
+ clinicaltrials.gov/ct2/show/NCT02818244.                            fort, A.; Michel, V.; Thirion, B.; Grisel, O.; Blondel, M.;
+[Gulshan et al. 2016] Gulshan, V.; Peng, L.; Coram, M.;              Prettenhofer, P.; Weiss, R.; Dubourg, V.; et al. 2011. Scikit-
+ Stumpe, M. C.; Wu, D.; Narayanaswamy, A.; Venugopalan,              learn: Machine learning in python. Journal of Machine
+ S.; Widner, K.; Madams, T.; Cuadros, J.; et al. 2016. Devel-        Learning Research 12(Oct):2825–2830.
+ opment and validation of a deep learning algorithm for de-         [Razavian, Marcus, and Sontag 2016] Razavian, N.; Marcus,
+ tection of diabetic retinopathy in retinal fundus photographs.      J.; and Sontag, D. 2016. Multi-task prediction of disease on-
+ Jama 316(22):2402–2410.                                             sets from longitudinal laboratory tests. In Machine Learning
+[He et al. 2016] He, K.; Zhang, X.; Ren, S.; and Sun, J. 2016.       for Healthcare Conference, 73–100.
+ Identity mappings in deep residual networks. In European           [Schroeder et al. 2003] Schroeder, E. B.; Liao, D.; Chamb-
+ Conference on Computer Vision, 630–645. Springer.                   less, L. E.; Prineas, R. J.; Evans, G. W.; and Heiss, G. 2003.
+[Hochreiter and Schmidhuber 1997] Hochreiter, S., and                Hypertension, blood pressure, and heart rate variability. Hy-
+ Schmidhuber, J. 1997. Long short-term memory. Neural                pertension 42(6):1106–1111.
+ computation 9(8):1735–1780.                                        [Schroeder et al. 2005] Schroeder, E. B.; Chambless, L. E.;
+[Joseph Futoma and O’Brien 2017] Joseph Futoma, San-                 Liao, D.; Prineas, R. J.; Evans, G. W.; Rosamond, W. D.;
+ jay Hariharan, K. H. M. S. N. B. M. C. A. B., and O’Brien,          and Heiss, G. 2005. Diabetes, glucose, insulin, and heart
+ C. 2017. An improved multi-output gaussian process rnn              rate variability. Diabetes care 28(3):668–674.
+ with real-time validation for early sepsis detection.              [Shmueli and others 2010] Shmueli, G., et al. 2010. To ex-
+[Kamath, Watanabe, and Upton 2012] Kamath,            M.      V.;    plain or to predict? Statistical science 25(3):289–310.
+ Watanabe, M.; and Upton, A. 2012. Heart rate variability           [Tison et al. 2017a] Tison, G. H.; Hsu, K.; Hsieh, J. T.;
+ (HRV) signal analysis: clinical applications. CRC Press.            Ballinger, B. M.; Pletcher, M. J.; Marcus, G. M.; and Ol-
+[Kingma and Ba 2014] Kingma, D., and Ba, J. 2014. Adam:              gin, J. E. 2017a. Abstract 21029: Achieving high retention
+ A method for stochastic optimization. arXiv preprint                in mobile health research using design principles adopted
+ arXiv:1412.6980.                                                    from widely popular consumer mobile apps. Circulation
+[Koutnik et al. 2014] Koutnik, J.; Greff, K.; Gomez, F.; and         136(Suppl 1):A21029–A21029.
+ Schmidhuber, J. 2014. A clockwork rnn. In International            [Tison et al. 2017b] Tison, G. H.; Singh, A. C.; Ohashi,
+ Conference on Machine Learning, 1863–1871.                          D. A.; Hsieh, J. T.; Ballinger, B. M.; Olgin, J. E.; Marcus,
+[Krizhevsky, Sutskever, and Hinton 2012] Krizhevsky, A.;             G. M.; and Pletcher, M. J. 2017b. Abstract 21042: Cardio-
+ Sutskever, I.; and Hinton, G. E. 2012. Imagenet classifica-         vascular risk stratification using off-the-shelf wearables and
+ tion with deep convolutional neural networks. In Advances           a multi-task deep learning algorithm. Circulation 136(Suppl
+ in neural information processing systems, 1097–1105.                1):A21042–A21042.
+[Kudat et al. 2006] Kudat, H.; Akkaya, V.; Sozen, A.;               [Wolfram 1995] Wolfram, D. A. 1995. An appraisal of
+ Salman, S.; Demirel, S.; Ozcan, M.; Atilgan, D.; Yilmaz, M.;        internist-i. Artificial intelligence in medicine 7(2):93–116.
+ and Guven, O. 2006. Heart rate variability in diabetes pa-         [Xu et al. 2015] Xu, K.; Ba, J.; Kiros, R.; Cho, K.; Courville,
+ tients. Journal of international medical research 34(3):291–        A.; Salakhudinov, R.; Zemel, R.; and Bengio, Y. 2015.
+ 296.                                                                Show, attend and tell: Neural image caption generation with
+[LeCun, Bengio, and Hinton 2015] LeCun, Y.; Bengio, Y.;              visual attention. In International Conference on Machine
+ and Hinton, G.          2015.     Deep learning.        Nature      Learning, 2048–2057.
+ 521(7553):436–444.                                                 [Y H Lip et al. 2009] Y H Lip, G.; Nieuwlaat, R.; Pisters, R.;
+[Lipton et al. 2015] Lipton, Z. C.; Kale, D. C.; Elkan, C.; and      Lane, D.; and Crijns, H. 2009. Refining clinical risk strati-
+ Wetzell, R. 2015. Learning to diagnose with lstm recurrent          fication for predicting stroke and thromboembolism in atrial
+ neural networks. arXiv preprint arXiv:1511.03677.                   fibrillation using a novel risk factor-based approach the euro
+[McManus et al. 2013] McManus, D. D.; Lee, J.; Maitas, O.;           heart survey on atrial fibrillation. 137:263–72.
+ Esa, N.; Pidikiti, R.; Carlucci, A.; Harrington, J.; Mick, E.;     [Young et al. 1997] Young, T.; Evans, L.; Finn, L.; and Palta,
+ and Chon, K. H. 2013. A novel application for the detection         M. 1997. Estimation of the clinically diagnosed proportion
+ of an irregular pulse using an iphone 4s in patients with atrial    of sleep apnea syndrome in middle-aged men and women.
+ fibrillation. Heart Rhythm 10(3):315–319.                           Sleep 20(9):705–706.
+[Morshedi-Meibodi et al. 2002] Morshedi-Meibodi, A.; Lar-           [Yu et al. 1979] Yu, V. L.; Fagan, L. M.; Wraith, S. M.;
+ son, M. G.; Levy, D.; ODonnell, C. J.; and Vasan, R. S.             Clancey, W. J.; Scott, A. C.; Hannigan, J.; Blum, R. L.;
+ 2002. Heart rate recovery after treadmill exercise testing and      Buchanan, B. G.; and Cohen, S. N. 1979. Antimicrobial
+selection by a computer. a blinded evaluation by infectious
+diseases experts. Jama 242(12):1279–1282.
+ Width    Conv Depth     LSTM Depth      Initial Filter   AF       Diabetes   High BP     Apnea    Chol      Avg
+ 32       2              2               12               0.7548   0.8709     0.8494      0.8610   0.8549    0.8382
+ 32       2              2               5                0.7340   0.8724     0.8375      0.8594   0.8541    0.8315
+ 32       2              4               12               0.7621   0.8748     0.8455      0.8664   0.8511    0.8400
+ 32       2              4               5                0.7633   0.8659     0.7995      0.8567   0.8257    0.8222
+ 32       4              2               12               0.7480   0.8540     0.8502      0.8583   0.8352    0.8291
+ 32       4              2               5                0.7652   0.8622     0.8258      0.8592   0.8211    0.8267
+ 32       4              4               12               0.7440   0.8711     0.8233      0.8605   0.8442    0.8286
+ 32       4              4               5                0.7336   0.8628     0.8403      0.8626   0.8444    0.8287
+ 64       2              2               12               0.7317   0.8696     0.8494      0.8599   0.8594    0.8340
+ 64       2              2               5                0.7514   0.8719     0.8544      0.8585   0.8525    0.8377
+ 64       2              4               12               0.7891   0.8647     0.8444      0.8597   0.8467    0.8409
+ 64       4              2               12               0.7903   0.8517     0.8550      0.8622   0.8513    0.8421
+ 64       4              2               5                0.7855   0.8655     0.8483      0.8559   0.8442    0.8399
+ 64       4              4               12               0.8079   0.8805     0.8453      0.8584   0.8647    0.8514
+ 64       4              4               5                0.7958   0.8756     0.8434      0.8632   0.8618    0.8480
+ 128      2              2               5                0.7770   0.8653     0.8529      0.8607   0.8549    0.8422
+ 128      2              4               12               0.8212   0.8718     0.8262      0.8604   0.8361    0.8431
+ 128      2              4               5                0.7695   0.8727     0.8427      0.8630   0.8273    0.8350
+ 128      4              2               12               0.8076   0.8668     0.8616      0.8613   0.8409    0.8476
+ 128      4              2               5                0.7646   0.8658     0.8030      0.8516   0.8286    0.8227
+ 128      4              4               12               0.8143   0.8723     0.8414      0.8600   0.8639    0.8504
+ 128      4              4               5                0.7702   0.8640     0.8555      0.8575   0.8407    0.8376
+
+Table 3: Hyperparameter tuning results, showing AUC ROC for each health condition, as well as the average across all health
+conditions. Here, Width is the number of output channels in each convolutional and LSTM layer, Conv Depth is the number
+of convolutional layers, LSTM Depth is the number of LSTM layers, and Initial Filter is the initial filter length of the first
+convolutional layer.
+

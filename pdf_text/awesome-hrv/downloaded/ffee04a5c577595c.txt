@@ -1,0 +1,879 @@
+                                        THE MANUSCRIPT HAS BEEN PUBLISHED BY IEEE (IEEE TNNLS, 2021, DOI: 10.1109/TNNLS.2021.3086137). PLEASE DO NOT CITE THE PREPRINT               1
+
+
+
+
+                                                        Feature Encoding with AutoEncoders for
+                                                         Weakly-supervised Anomaly Detection
+                                                        Yingjie Zhou, Member, IEEE, Xucheng Song, Yanru Zhang, Member, IEEE, Fanxing Liu,
+                                                                      Ce Zhu, Fellow, IEEE, and Lingqiao Liu, Member, IEEE
+
+
+
+                                           Abstract—Weakly-supervised anomaly detection aims at learn-                challenging to detect anomalies when there is no or only
+                                        ing an anomaly detector from a limited amount of labeled data                 a few annotated anomaly samples, in spite of that abundant
+                                        and abundant unlabeled data. Recent works build deep neural                   normal data can be easily accessible. This is commonly seen
+                                        networks for anomaly detection by discriminatively mapping the
+
+
+
+
+arXiv:2105.10500v3 [cs.LG] 2 Jul 2021
+                                        normal samples and abnormal samples to different regions in the               in practice, e.g., network anomaly detection [2], finance fraud
+                                        feature space or fitting different distributions. However, due to the         detection [12] and video surveillance [9].
+                                        limited number of annotated anomaly samples, directly training                   Depending on whether the anomaly samples are available at
+                                        networks with the discriminative loss may not be sufficient. To               the training stage, the existing anomaly detection approaches
+                                        overcome this issue, this paper proposes a novel strategy to                  can be categorized into three groups, i.e., supervised learning
+                                        transform the input data into a more meaningful representation
+                                        that could be used for anomaly detection. Specifically, we leverage           methods [1], [13], [14], unsupervised learning methods [2],
+                                        an autoencoder to encode the input data and utilize three                     [7], [15], [16], [17], [18] and weakly-supervised learning
+                                        factors, hidden representation, reconstruction residual vector,               methods [19], [20], [21]. The supervised methods leverage
+                                        and reconstruction error, as the new representation for the                   both normal and abnormal data to train a detector. In order
+                                        input data. This representation amounts to encode a test sample               to achieve satisfactory performance, both data categories are
+                                        with its projection on the training data manifold, its direction
+                                        to its projection and its distance to its projection. In addition             usually required to be relatively balanced. The unsupervised
+                                        to this encoding, we also propose a novel network architec-                   methods attempt to build a generative model for modeling nor-
+                                        ture to seamlessly incorporate those three factors. From our                  mal data, which could detect abnormal samples as outliers to
+                                        extensive experiments, the benefits of the proposed strategy                  the generative model. The weakly-supervised methods address
+                                        are clearly demonstrated by its superior performance over the                 the scenario in which a few annotated anomaly samples are
+                                        competitive methods. Code is available at: https://github.com/yj-
+                                        zhou/Feature Encoding with AutoEncoders for Weakly-superv                     provided at the training stage and learn an anomaly detector
+                                        ised Anomaly Detection.                                                       from the imbalance training data. These approaches make use
+                                                                                                                      of the limited number of anomalies by fitting the normal sam-
+                                          Index Terms—Anomaly Detection, Deep Learning, Feature
+                                        Encoding, Autoencoder, Semi-supervised Learning.                              ples and abnormal samples to different distributions. However,
+                                                                                                                      learning such an anomaly detector can be challenging since
+                                                                                                                      the model tends to over-fit the limited amount of abnormal
+                                                                 I. I NTRODUCTION                                     data. Recently, deep learning based anomaly detection [19],
+                                              NOMALY detection is an important and fundamental                        [20], [22], [23], [24] has become increasingly popular due to
+                                        A     task for broad domains, including networking [1], [2],
+                                        [3], [4], machine learning [5], [6], [7], [8], and computer
+                                                                                                                      its capability of learning feature representations. For the deep
+                                                                                                                      learning based anomaly detector, the over-fitting issue could
+                                        vision [9], [10], [11]. It has been well investigated in a number             be in particular severe due to its relatively larger number of
+                                        of application scenarios, and many algorithms have excellent                  parameters.
+                                        performance on related public datasets. However, it is still                     To overcome this issue, this paper proposes a deep weakly-
+                                                                                                                      supervised anomaly detection method that marries the method-
+                                           Submitted to IEEE Transactions on Neural Networks and Learning Systems     ologies from unsupervised anomaly detection with semi-
+                                        Special Issue on “Deep Learning for Anomaly Detection”. This work is partly
+                                        supported by National Natural Science Foundation of China (NSFC) with         supervised anomaly detection. The key idea is to leverage
+                                        grant number 61801315. (Corresponding author: Lingqiao Liu)                   the autoencoder, a commonly used unsupervised anomaly
+                                           Yingjie Zhou is with the College of Computer Science, Sichuan University   detector, to fit the normal data and then extract a feature
+                                        (SCU), China (email: yjzhou@scu.edu.cn; yjzhou09@gmail.com).
+                                           Xucheng Song is with the School of Information and Communication           representation from that for weakly-supervised anomaly de-
+                                        Engineering, University of Electronic Science and Technology of China         tection. The rationale is that the outlier could become more
+                                        (UESTC), China. He is also with the College of Computer Science, Sichuan      distinguishable by using the representation derived from the
+                                        University (SCU), China (email: xucheng song@foxmail.com).
+                                           Yanru Zhang is with the School of Computer Science and Engineering,        autoencoder which somehow uncovers some prior knowledge
+                                        University of Electronic Science and Technology of China (UESTC), China       for the normal samples. Specifically, the proposed feature
+                                        (email: yanruzhang@uestc.edu.cn).                                             representation is the concatenation of three factors derived
+                                           Fanxing Liu is with the College of Software Engineering, Sichuan Univer-
+                                        sity (SCU), China (email: finwarrah@gmail.com).                               from an autoencoder, i.e., hidden representation, reconstruction
+                                           Ce Zhu is with the School of Information and Communication Engineering,    residual vector, and reconstruction error, which are extracted
+                                        University of Electronic Science and Technology of China (UESTC), China       as the feature presentation for each input sample. The design
+                                        (email: eczhu@uestc.edu.cn).
+                                           Lingqiao Liu is with the School of Computer Science, University of         of such a representation also has a geometric implication.
+                                        Adelaide (email: lingqiao.liu@adelaide.edu.au).                               As shown in Figure 1, the autoencoder essentially transforms
+THE MANUSCRIPT HAS BEEN PUBLISHED BY IEEE (IEEE TNNLS, 2021, DOI: 10.1109/TNNLS.2021.3086137). PLEASE DO NOT CITE THE PREPRINT                   2
+
+
+
+the (normal) data manifold into a lower-dimensional space, in                      •  We conducted an extensive experimental analysis of the
+which the hidden representation, i.e., the first factor, can be                       proposed method on various datasets and demonstrated
+viewed as the intrinsic space coordinates for the original high                       the effectiveness of our approach. Ablation studies are
+dimensional data. The second factor, i.e., the reconstruction                         also performed to investigate the impact of various com-
+residual vector, can be seen as the offset from an input                              ponents in our method.
+sample to its projection on the normal data manifold. The                           The rest part of the paper is organized as follows. Section II
+last factor encodes the distance between the input sample                        introduces the related works. Section III presents the proposed
+and its projection on the manifold. A typical anomaly will                       model, including the strategy to encode the input data on
+                                                                                 the manifold and the proposed anomaly detection method.
+                                                                                 Extensive experiments and results are provided in Section IV.
+                                                                                 We conclude the paper in Section V.
+
+                                                                                                     II. R ELATED W ORKS
+                                                                                 A. Deep Supervised Anomaly Detection
+                                                                                    Deep supervised anomaly detection algorithms have been
+                                                                                 well studied over the last few years. These algorithms out-
+                                                                                 perform the traditional strategies and have made remark-
+                                                                                 able progress in various application scenarios such as cy-
+                                                                                 ber intrusion detection, wireless anomaly detection and etc.
+                                                                                 In [1], Jiang et al. proposed a long short-term memory
+                                                                                 method to detect network attacks. They constructed a multi-
+                                                                                 channel intelligent attack detection model, which employs
+                                                                                 multi-channel processing to generate classifiers based on the
+                                                                                 extracted features of different types and decides the detection
+                                                                                 results by a voting algorithm to synthesize the outputs of the
+Fig. 1. An illustration of the proposed encoding strategy. An input sample
+xi is transformed into a feature representation with three factors hi , ri and
+                                                                                 classifiers. The adoption of deep neural networks demonstrates
+ei , which can be approximately seen as the sample’s intrinsic coordinate of     a significant improvement on the attack detection performance.
+its projection on the training data manifold hi , the direction between the      In [13], Yang et al. introduced the human-in-the-loop active
+projection and the original data point ri and the distance ei , respectively.
+                                                                                 learning approach to deal with the intrusion detection problem
+                                                                                 in wireless Internet of Things. Human experience is considered
+significantly deviate from the normal samples in the view of                     in the machine learning loop via active learning, which could
+the feature representation. The deviation could be manifested                    train the detection model with the most crucial data in an incre-
+in one of the following cases: unusual intrinsic coordinates,                    mental manner. This approach could improve the performance
+abnormal offset, large distance to the normal data manifold,                     of existing models based on classical machine learning, while
+or any possible combinations of the former three. Once the                       reducing the effort of labeling training data. Liu et al. [14]
+feature representation is extracted, it will be fed into a specially             designed a specially designed neural network that includes
+designed subnetwork for anomaly detection. The subnetwork                        long short-term memory, convolutional neural networks and
+is modified from a standard multi-layer perceptron (MLP) and                     multi-head self attention mechanism to detect packet payload
+the key difference is that it takes the reconstruction error, i.e.,              anomalies. It could learn the potential dependency relation-
+the last factor of our representation, as an additional input                    ships among the packet payload in both perspectives, i.e., a
+for each layer. In this way, we avoid the problem of losing                      global perspective as well as a perspective from local features
+the valuable information of reconstruction error through the                     to aggregative representation.
+learning procedure of MLP. The whole system, including the                          Deep supervised based anomaly detection methods can usu-
+autoencoder and the anomaly detector, is jointly trained by                      ally make satisfactory performance when a sufficient number
+using both the normal data and the few labeled abnormal data.                    of abnormal data is available and annotated samples are rela-
+More details about this system are presented in Section III.                     tively balanced for both data categories. However, supervised
+By conducting experiments on various datasets, we clearly                        approaches often have limited applicability due to the difficulty
+demonstrate the advantage of our anomaly detection model                         in collecting anomaly data which is usually much more rare
+comparing with other state-of-art methods.                                       than normal data.
+   The main contributions of this paper are summarized as
+follows.                                                                         B. Deep Unsupervised Anomaly Detection
+   •   We introduce a novel strategy to encode the input data,                      In recent years, deep unsupervised anomaly detection meth-
+       which builds a more effective feature representation that                 ods have been well studied due to their abilities to capture
+       could be used for anomaly detection.                                      complex inner relations through feature learning from un-
+   •   Based on our encoding strategy, we propose an anomaly                     labeled data. In [9], Luo et al. proposed an unsupervised
+       detection system, which seamlessly incorporates the in-                   anomaly detection method that learns both spatial and tem-
+       formation from the proposed encoding.                                     poral features through sparse coding inspired deep neural
+THE MANUSCRIPT HAS BEEN PUBLISHED BY IEEE (IEEE TNNLS, 2021, DOI: 10.1109/TNNLS.2021.3086137). PLEASE DO NOT CITE THE PREPRINT        3
+
+
+
+networks to detect the abnormal events in video data. Their           approaches may suffer from wrong label assignment. This may
+proposed model effectively captures the time coherence for            only be corrected with labeled anomalous samples.
+normal events while a real-time detection could be achieved.
+In [25], Peng et al. proposed a deep learning based subspace          C. Anomaly Detection With Limited Labels
+clustering method named PARTY to provide the insight for the
+                                                                         To take advantage of the limited but valuable anoma-
+structure of unlabeled samples, which is vital for unsupervised
+                                                                      lous samples, a few works have made exploration to detect
+anomaly detection. PARTY firstly transforms the input data
+                                                                      anomalies with extremely unbalanced data in the more recent
+into a nonlinear subspace and leverages both the local and
+                                                                      years. In [28], Siddiqui et al. proposed a feedback-guided
+global subspace structure to cluster the data. In [6], Pei et
+                                                                      anomaly detection framework. The framework could optimize
+al. proposed a variational autoencoder (VAE) based method
+                                                                      the unsupervised anomaly detection model by incorporating
+named Donut to detect anomalies in KPI data (a kind of
+                                                                      with the analyst’s prior knowledge to generate higher anomaly
+time series data). Benefit from the effective representation
+                                                                      scores for instances with higher anomalous probabilities. In
+of the deep generative model, the performance of Donut
+                                                                      [29], Hu et al. developed an electricity fraud detection model
+is significantly better than those of existing supervised and
+                                                                      based on user’s consumption patterns. The model effectively
+VAE-based methods. Inspired by robust principal component
+                                                                      extracts consumption patterns from load profiles based on
+analysis, Zhou et al. [26] proposed a novel deep generative
+                                                                      deep neural networks and is trained in a semi-supervised
+model that could not only effectively discover non-linear
+                                                                      manner through alternate multitask learning. The deep network
+features from the original data but also be robust with respect
+                                                                      structure and the training strategy enable the model to have the
+to the outliers and noise in the training data. Based on
+                                                                      ability to deal with the challenge of high dimensionality and
+this model, they also derived a new family of unsupervised
+                                                                      insufficient labeled anomalies in electricity fraud detection. In
+anomaly detection methods, which has a superior performance
+                                                                      [20], Ruff et al. proposed a deep weakly-supervised anomaly
+over the baselines. In [27], Zenati et al. explored the direction
+                                                                      detection method named Deep SAD, which is the extension of
+that employs generative adversarial networks (GANs) to deal
+                                                                      a recent released unsupervised anomaly detection, i.e., Deep
+with the unsupervised anomaly detection task. They make
+                                                                      SVDD [22], to make use of labeled anomalies. Inspired by the
+use of bi-directional GANs to obtain adversarially learned
+                                                                      information-theoretic analysis, Deep SAD derives a novel loss
+features and determine anomalies based on reconstruction
+                                                                      to force the normal data to be closed to a fixed center and map
+errors. In [7], Zong et al. proposed an unsupervised anomaly
+                                                                      the anomalies further away. In [21], Pang et al. proposed an
+detection method called DAGMM, which employs the deep
+                                                                      anomaly detection formulation for the scenario with limited
+autoencoder and the gaussian mixture model to deal with high-
+                                                                      labeled abnormal data and abundant unlabeled data. They
+dimensional data. DAGMM leverages a deep autoencoder to
+                                                                      convert the anomaly detection task into an ordinal regression
+extract effective representations in both the original feature
+                                                                      problem of pairwise relation, which fully utilizes the limited
+space and the low-dimensional latent feature space for each
+                                                                      number of labeled anomaly instances to form instance pairs
+sample, and uses the gaussian mixture model to estimate data
+                                                                      for the follow-up anomaly detection.
+density based on the extract feature representations. The two
+                                                                         The most related work to our paper is [19], which proposed
+components of DAGMM are jointly optimized in an end-to-
+                                                                      a novel anomaly detection framework called DevNet to detect
+end fashion, which leads a significant improvement of detec-
+                                                                      anomalous instances by empoying only a limited number of
+tion performance over existing techniques. In [17], Pang et
+                                                                      labeled anomalies. DevNet achieves an end-to-end learning for
+al. proposed an unsupervised anomaly detection framework to
+                                                                      anomaly scores that could indicate the anomalous probabili-
+learn efficient low-dimensional representations from ultrahigh-
+                                                                      ties. It employs a deviation neural network and enforces sig-
+dimensional data. Through unifying the representation learning
+                                                                      nificant distribution deviations of the anomaly scores between
+process and the anomaly detection task, optimal and stable
+                                                                      the anomalies and normal data. Different from DevNet, our
+representations for the target detector could be extracted. In
+                                                                      framework focuses on creating a better feature representation
+[2], Cao et al. leveraged effectively latent representations
+                                                                      for anomaly detection. This representation, plus the network
+to further improve the detection performance for network
+                                                                      modules to leverage the representation can be seamlessly
+anomalies. They proposed two models based on different types
+                                                                      incorporated into our framework. In our implementation, we
+of autoencoders. The normal data is forced into a tight area in
+                                                                      also generate the anomaly score as in [19] but with a different
+the latent feature space of their models, which could directly
+                                                                      loss function.
+help unsupervised anomaly detection methods to deal with the
+challenges of high dimensionality and sparsity in network data.
+                                                                                          III. P ROPOSED M ODEL
+   Different from the supervised approaches, unsupervised
+algorithms learn feature representations and prior knowledge          A. System Overview
+from unlabeled samples based on the hypothesis of data dis-              We propose an anomaly detection model with a novel
+tribution. In many applications, those hypotheses hold and can        feature encoding strategy, which is designed to cope with the
+lead to reasonable anomaly detection performance. However,            limitation of data insufficiency for annotated anomaly samples.
+the unsupervised approaches may face performance degrada-             As shown in Figure 2, there are two modules, i.e., a feature
+tion problems when the boundary of different data categories          encoder and an anomaly score generator, which cooperate with
+is vague or complicated. One of the most important reasons            each other in the model. The feature encoder leverages an
+could be that the data distribution modeled by unsupervised           autoencoder to transform the input data into a more meaningful
+THE MANUSCRIPT HAS BEEN PUBLISHED BY IEEE (IEEE TNNLS, 2021, DOI: 10.1109/TNNLS.2021.3086137). PLEASE DO NOT CITE THE PREPRINT                                  4
+
+
+
+
+Fig. 2. An illustration of the proposed model. The model consists of two modules, i.e., a feature encoder and an anomaly score generator. The feature encoder
+transforms the input data into a new representation formed by the three factors, i.e., hi , ri and ei , which are colored in pale green in the figure. The anomaly
+score generator calculates a score from the encoded feature representation to indicate the possibility that the input sample is an anomaly.
+
+
+
+representation, that is, three factors that characterize how                         Let the reconstruction vector of the autoencoder for xi be
+anomaly deviates from the normal pattern. The anomaly score                       x̂i ∈ Rm . x̂i can be obtained through the decoder:
+generator calculates a score for each input sample from the
+                                                                                                               x̂i = fd (h; Wd ).                             (2)
+encoded feature representation. The feature encoder and the
+anomaly score generator are jointly optimized through a two-                      Based on x̂i , two additional factors can be extracted. The first
+stage training procedure, which will be introduced in Section                     is the reconstruction error, which is defined as
+III-E. Details of the proposed model are presented as in the
+following subsections.                                                                                         e = kx̂i − xi k2 ,                             (3)
+                                                                                  which is also commonly used as an indicator for anomaly
+B. Feature Encoder                                                                samples.
+   The feature encoder aims to transform the input data into                         Then, the second factor of the feature encoding, i.e., the
+a new representation that could benefit the anomaly detection                     reconstruction residual vector can be represented as
+task. An autoencoder is leveraged to generate the represen-                                                            x̂i − xi
+                                                                                                               r=                 .                           (4)
+tation. In particular, three factors, i.e., hidden representation,                                                   kx̂i − xi k2
+reconstruction residual vector, and reconstruction error, from
+                                                                                  Please note that we normalize the residual vector by the
+the autoencoder are extracted to form the representation. Those
+                                                                                  reconstruction error. Thus r essentially indicates the direction
+three factors characterize how an anomaly sample deviates
+                                                                                  of original residual vector.
+from the normal pattern. It is expected that anomaly detectors
+                                                                                     To sum up, the three factors, h, e and r are used to
+learned on top of those three factors can have better general-
+                                                                                  characterize the input sample. We also call them the fea-
+ization performance on unseen data.
+                                                                                  ture representations of an input sample. Note that the three
+   The autoencoder consists of an encoder and a decoder. The
+                                                                                  factors uniquely characterize an input sample. Benefit from
+encoder first encodes the input data from the original space
+                                                                                  this encoding, a typical anomaly could significantly deviate
+Rm to the latent feature space L ⊂ Rd (d < m) and then
+                                                                                  from the normal samples in one of the following cases: large
+the decoder converts the latent representation from L back
+                                                                                  coordinate errors, abnormal reconstruction errors, abnormal
+to the original space. Let fe (·; We ) : Rm 7→ L denote the
+                                                                                  residual directions, or any possible combinations of the former
+encoder with parameters We and fd (·; Wd ) : L 7→ Rm be
+                                                                                  three.
+the decoder with parameters Wd . Given an input sample xi ∈
+                                                                                     The above three factors also have a geometric implication.
+Rm , its latent representation through an autoencoder can be
+                                                                                  In high-dimensional space, data usually resides in a manifold
+represented as
+                                                                                  with low intrinsic dimensionality. The encoder builds a nonlin-
+                        h = fe (xi ; We ),                     (1)
+                                                                                  ear transform to convert an original high-dimensional data into
+where h ∈ L is a hidden representation based on the                               a more compact low-dimensional feature, which essentially
+autoencoder, which is also the first factor of our feature                        provides the intrinsic coordinate of that data on the manifold.
+representation.                                                                   The decoder will transform all points in L into a manifold
+THE MANUSCRIPT HAS BEEN PUBLISHED BY IEEE (IEEE TNNLS, 2021, DOI: 10.1109/TNNLS.2021.3086137). PLEASE DO NOT CITE THE PREPRINT                      5
+
+
+
+M ⊂ Rm . If reconstruction error is minimized as an objective                    network consists of two parts, a feature encoding network
+to train the autoencoder, M should be close to the original data                 ψ(·; Θe ) and an anomaly score generator ϕ(·; Θg ), where Θe
+manifold. For a new test point xt , the trained autoencoder will                 and Θg are the model parameters for the feature encoder and
+map it to a hidden vector ht ∈ L and obtain a reconstructed                      anomaly score generator, respectively. Note that the feature
+vector x̂t ∈ Rm . This process can be seen as projecting xt to                   encoder is essentially an autoencoder. As described in Section
+M . The projection, i.e., the closest point on M is actually x̂t                 III-B, three factors hi , ri and ei are extracted from the
+1
+  . This is because if the autoencoder is well trained, it should                autoencoder as the representation for the input data xi . Those
+approximately minimize kxt − x̂t k, which is equivalent to                       three factors will be fed into ϕ(·; Θg ) to produce an anomaly
+finding the closest point to xt on M. Therefore, ht can be seen                  score. The entire system is denoted as φ (xi ; Θe , Θg ), or
+as the intrinsic coordinate of the projection, the corresponding                 φ (xi ) in short.
+reconstruction error and the residual vector can be seen as                         The first part of the objective function is to minimize the
+the distance and the direction between the projection and the                    reconstruction error, which is equivalent to minimizing the
+original data point.                                                             expectation of e. In addition to that, we further encourage that
+                                                                                 the reconstruction error becomes discriminative for anomaly
+C. Anomaly Score Generator                                                       samples and usual samples. In other words, we expect that the
+                                                                                 reconstruction error for the anomaly samples should be larger
+   The anomaly score generator generates an anomaly score to                     than a threshold. This gives us the following max-marge style
+indicate the likelihood of anomaly for an input sample based                     loss term:
+on the feature representation from the autoencoder. At the                                         X
+training stage, the anomaly score generator is trained to ensure                            Le =     (1 − yi )ei + yi max (0, a0 − ei ) ,     (6)
+that the score of normal samples follows a prior distribution                                      i
+
+while the anomaly sample deviates from that. The training                        where yi ∈ {0, 1} indicates if the current sample is an anomaly
+process and objective functions will be elaborated in Section                    sample (yi = 1). a0 is a predefined constant (set to 5 in our
+III-D. This subsection focuses on how to map the three-factor-                   implementation).
+representation described above into the anomaly score.                             Inspired by [19], we expect that the anomaly score of the
+   The most straightforward way is to use a multi-layer per-                     normal sample fits a prior distribution while the score for
+ceptron (MLP) to map the concatenation of three factors into                     the anomaly deviates from that. We achieve this by using a
+a scalar. However, the second factor, i.e., reconstruction error,                more simplified loss term than that in [19]. Specifically, we
+only has one dimension and is likely to be overpowered by                        expect the anomaly scores of normal samples to be close to
+the high-dimensional vectors from the other two factors in the                   0 while the anomaly scores for outliers deviating from 0 by a
+prorogation through multiple layers. To overcome this issue,                     predefined margin, which gives the following loss function:
+we propose a solution to add the reconstruction error as an
+extra dimension to all the layers of MLP. In this way, we                                  X
+could emphasize the importance of the reconstruction error                          Ld =       (1 − yi ) |φ (xi )| + yi max (0, a0 − φ (xi )) .   (7)
+                                                                                           i
+for anomaly detection. The architecture of the anomaly score
+generator is shown in Figure 2.                                                    Based on Equation (6) and Equation (7), our joint loss can
+   Formally, for each layer of the MLP, we have                                  be formally represented as
+                           k
+                  zk = f (Wm zk−1 + bk + wek e),                          (5)               L(Θe , Θg ) = Ld (Θe , Θg ) + λLe (Θe ),              (8)
+where zk and zk−1 are the activations at the k-th layer and                      where λ is a hyper-parameter to balance the contributions
+                                 k
+k − 1-th layer, respectively. Wm   and bk are the weight and                     of two parts to the entire loss. Note that Le only involves
+bias for the k-th layer. e is used as an extra dimension and                     parameters in the feature encoding network.
+wek is its corresponding weight. For the first layer of MLP                         Note that the actual annotation of labeled normal samples is
+zk−1 = [r, h]. For the last layer zk becomes the anomaly                         not available in the weakly-supervised anomaly detection task.
+score s0 .                                                                       However, most of the unlabeled training samples are normal
+                                                                                 samples since anomalies are rare in the real world data. To
+D. Objective Function                                                            obtain a sufficient number of annotated normal samples for the
+                                                                                 proposed end-to-end jointly optimization, we employ the same
+   The proposed model involves two parts, the feature encoder,
+                                                                                 strategy introduced in [19], i.e., simply treating all unlabeled
+and the anomaly score generator, which will be jointly opti-
+                                                                                 training samples as normal samples. Through our experiments,
+mized through the training process. The objective of training
+                                                                                 we show that this strategy achieves satisfactory performance.
+consists of two sub-goals: (1) minimize the reconstruction
+error of the autoencoder for normal data; (2) ensure that the
+                                                                                 E. Training procedure
+anomaly score is discriminative for distinguishing anomalies
+from the normal ones.                                                              We use stochastic gradient descent to train the network.
+   Before elaborating our objective function, let’s define the                   To balance the abnormal samples and normal samples, we
+notations that will be used in the following part. The designed                  construct a mini-batch by sampling the same amount of
+                                                                                 abnormal samples and normal samples. In other words, the
+  1 Strictly speaking, this can only be seen as an approximated closest point.   abnormal samples are over-sampled.
+THE MANUSCRIPT HAS BEEN PUBLISHED BY IEEE (IEEE TNNLS, 2021, DOI: 10.1109/TNNLS.2021.3086137). PLEASE DO NOT CITE THE PREPRINT         6
+
+
+
+   Empirically, we find beneficial effects to utilize a two-stage     A. Datasets Description
+training strategy to learn the model. The training procedure is          In the experiments, we evaluate the proposed method on
+detailedly presented in Algorithm 1. We first employ a pre-           eight datasets, which were collected from different application
+training stage which trains the feature encoding network by           scenarios such as network security, finance fraud detection,
+only using the reconstruction loss:                                   medical diagnosis and etc. Anomalies from these datasets
+                                                                      are defined according to either the domain-specific criteria
+                                   X
+                       Lae (Θe ) =     ei .                    (9)
+                                      i
+                                                                      or the dramatic difference from the majority of the data.
+                                                                      Specifically, NSL-KDD [30] is a dataset from the network
+In this stage, the feature encoding network ψ(·; Θe ) is pre-         security field, which was extracted from the KDDCUP99
+trained with all unlabelled training samples, which aims to           dataset. The network attacks are regarded as anomalies in
+obtain a basic encoding strategy for the following end-to-            this dataset. Spambase and Arrhythmia are two datasets from
+end training of the entire network. Note that a root mean             the UCI machine learning repository [31]. The spam samples
+square error loss is adopted in this training process. The            are treated as anomalies in the Spambase dataset, and the
+corresponding procedures in Algorithm 1 are Step 2-6.                 classes with the fewest number of samples, i.e., 3, 4, 5, 7,
+   Then we train the whole network φ(·; Θe , Θg ) with the            8, 9, 14, and 15, are combined to form the anomalies in the
+parameters in the feature encoding network being initialized          Arrhythmia dataset. Fraud [32] is a dataset from Kaggle, in
+by the parameters learned from the pre-training stage. In             which the task is to detect credit card fraud. The fraudulent
+the second training stage, all unlabelled data and a few              transactions are treated as anomalies. The other four datasets,
+annotated anomalies are used to perform the end-to-end jointly        i.e., Cardio, Shuttle, Satellite and Mammography, are from the
+optimization for the entire network based on the pre-training of      ODDS library [33]. The Cardio is a cardio disease detection
+the feature encoding network. The corresponding procedures            dataset, in which the anomalies are the patients diagnosed with
+in Algorithm 1 are Step 7-12.                                         the disease. The Shuttle, Satellite and Mammography are three
+                                                                      anomaly detection datasets which are originally for multi-class
+Algorithm 1 Network Training Procedure                                classification problems in different domains, i.e., space shuttle,
+Stage 1: Pre-training                                                 satellite image and medical image. The combination of the
+Input: X unlabeled ∈ Rm                                               smallest classes in the corresponding classification task forms
+Output: ψ(·; Θe ) : Rm 7→ Rm                                          the “anomaly” class in those three datasets.
+ 1: Randomly initialize Θe                                               Before employing these datasets to evaluate the anomaly
+ 2: repeat                                                            detectors, a standard preprocessing procedure has been per-
+ 3:   Randomly sample one batch of unlabeled data.                    formed on each dataset. Firstly, the missing values are filled
+ 4:   Compute the loss Lu and update weight matrices of               with the mean value of the corresponding attribute. Then, one-
+      ψ(·; Θe )                                                       hot encoding is performed on all categorical attributes. Finally,
+ 5: until converge                                                    each attribute is normalized into [0, 1]. Details of the datasets
+ 6: return ψ(·; Θe )                                                  are shown in Table I. D is the dimension of the pre-processed
+Stage 2: End-to-end Optimization                                      data. N is the number of instances in the dataset. f1 denotes
+Input: X ∈ Rm                                                         the percentage of labeled anomalies in the training datasets.
+Output: φ(·; Θe ; Θg ) : Rm 7→ R
+ 7: Randomly initialize Θg and load Θe from the pre-trained                                       TABLE I
+    network ψ(·; Θe )                                                                 DATASETS FOR E VALUATING M ODELS .
+ 8: repeat                                                                       Dataset           D             N           f1
+ 9:   Randomly sample half of samples from unlabeled data                       NSL-KDD           122        148,517       0.05%
+      and half of samples from labeled anomalies to form a                      Spambase           57          4,601       1.30%
+                                                                                Arrhythmia        279           452        4.56%
+      batch
+                                                                                  Cardio           21          1,831       2.17%
+10:   Compute the joint loss L and update the network                             Shuttle          9          49,097       0.08%
+      parameters {Θe ; Θg }                                                      Satellite         36          6,435       0.83%
+11: until converge                                                             Mammography         6          11,183       0.34%
+                                                                                  Fraud            29        284,807       0.01%
+12: return φ(·; Θe ; Θg )
+
+
+                                                                      B. Performance Metrics
+                      IV. E XPERIMENTS                                   We evaluate the anomaly detectors in the experiments with
+                                                                      two performance metrics, i.e., the Area Under Receiver Oper-
+   In this section, we evaluate the performance of the proposed       ating Characteristic Curve (AUC-ROC) and the Area Under
+method with extensive experiments. Firstly, we introduce the          Precision-Recall Curve (AUC-PR). AUC-ROC is the area
+datasets and performance metrics that are used in the exper-          under ROC curve which describes the relationship between
+iments. Then, we present the main results of the proposed             true positive rates and false-positive rates, and the AUC-PR
+algorithm. Finally, we conduct the ablative analysis to inves-        is the area under PR curve which represents the relationship
+tigate the impact of various components in our method.                between precision and recall. While AUC-ROC evaluates the
+THE MANUSCRIPT HAS BEEN PUBLISHED BY IEEE (IEEE TNNLS, 2021, DOI: 10.1109/TNNLS.2021.3086137). PLEASE DO NOT CITE THE PREPRINT                       7
+
+
+
+                                                            TABLE II
+      E XPERIMENTAL RESULTS (M EAN ± STANDARD DEVIATION ) FOR THE P ROPOSED M ETHOD AND C OMPETITIVE M ETHODS . T HE AVERAGE
+              PERFORMANCE FOR EACH METHOD IS SUMMARIZED IN THE LAST ROW. T HE BEST RESULT FOR EACH ROW IS IN BOLD .
+
+                                       AUC-ROC Performance                                               AUC-PR Performance
+        Dataset
+                   Proposed       DevNet    Deep SAD     DAGMM           FCN         Proposed       DevNet    Deep SAD     DAGMM           FCN
+      NSL-KDD    0.955±0.007   0.952±0.018 0.969±0.002 0.745±0.068   0.885±0.132   0.970±0.003   0.946±0.012 0.965±0.002 0.694±0.064   0.879±0.149
+      Spambase   0.921±0.016   0.890±0.001 0.898±0.004 0.530±0.047   0.903±0.097   0.910±0.036   0.828±0.002 0.890±0.005 0.423±0.037   0.875±0.123
+      Arrhythmia 0.797±0.048   0.772±0.041 0.845±0.019 0.728±0.008   0.658±0.141   0.681±0.038   0.659±0.031 0.568±0.069 0.399±0.102   0.488±0.184
+        Cardio   0.999±0.001   0.985±0.001 0.994±0.002 0.885±0.033   0.857±0.181   0.990±0.003   0.934±0.003 0.968±0.008 0.623±0.086   0.758±0.254
+        Shuttle  0.983±0.004   0.976±0.001 0.996±0.001 0.990±0.002   0.876±0.001   0.975±0.001   0.968±0.001 0.952±0.003 0.959±0.013   0.869±0.001
+       Satellite 0.918±0.007   0.882±0.005 0.863±0.010 0.739±0.031   0.862±0.018   0.895±0.006   0.856±0.005 0.833±0.007 0.684±0.021   0.819±0.021
+     Mammography 0.972±0.002   0.969±0.001 0.930±0.005 0.759±0.079   0.793±0.317   0.645±0.021   0.642±0.008 0.591±0.046 0.125±0.070   0.459±0.273
+        Fraud    0.982±0.003   0.977±0.001 0.946±0.009 0.916±0.026   0.841±0.251   0.692±0.006   0.688±0.004 0.563±0.046 0.442±0.160   0.492±0.265
+       Average   0.941±0.011   0.925±0.009 0.930±0.007 0.787±0.037   0.834±0.142   0.845±0.014   0.815±0.008 0.791±0.023 0.544±0.069   0.704±0.102
+
+
+
+prediction performance for both the normal class and the                      Result Analysis. The comparison of the proposed method
+abnormal class, AUC-PR is a performance metric that pays                   against the other four competing methods is shown in Table II.
+more attention to the anomalies. Note that both AUC-ROC                    As seen, comparing with the unsupervised method DAGMM
+and AUC-PR lie in [0, 1], and a higher value indicates a                   and the fully supervised method FCN, the proposed method
+better performance. We follow the literature [34] to compute               greatly outperforms them on all the datasets in both AUC-
+AUC-ROC and calculate AUC-PR according to the literature                   ROC and AUC-PR. Comparing with the other two state-of-art
+[35]. All AUC-ROC and AUC-PR results with ± standard                       weakly-supervised anomaly detectors, i.e., DevNet and Deep
+deviations are calculated over ten independent runs.                       SAD, the proposed method obtains the best results on five
+                                                                           and eight datasets in AUC-ROC and AUC-PR respectively.
+C. Experiment Results with Competitive Methods                             Though the proposed method ranks second on Arrhythmia and
+   Experiment Design.In this subsection, we conduct experi-                Shuttle in AUC-ROC, it achieves much better performance
+ments to compare the proposed method against other compet-                 than the competitors on these two datasets in AUC-PR. The
+itive methods. Specifically, four methods, including DevNet                average performance of the proposed method surpasses the
+[19], Deep SAD [20], DAGMM [7] and a baseline approach                     competing methods by 1.6% (DevNet), 1.1% (Deep SAD),
+which directly uses the binary classification loss to train the            15.4% (DAGMM), 10.7% (FCN) in AUC-ROC, respectively,
+same network as DevNet, denoted as FCN. Among those                        while the respective average improvements on AUC-PR are
+methods, DevNet is the weakly-supervised anomaly detection                 3.0% (DevNet), 5.4% (Deep SAD), 30.1% (DAGMM), 14.1%
+approach mentioned in Section II-C. It is most related to                  (FCN), which are more significant than those in AUC-ROC.
+our method. Deep SAD is also a weakly-supervised anomaly                   Overall, the proposed method attains the best average per-
+detection approach which extends an unsupervised anomaly                   formance among all competing methods. The above results
+detector, i.e., Deep SVDD [22], to the weakly-supervised                   clearly demonstrated the advantage of the proposed encoding
+setting. DAGMM is a state-of-art unsupervised anomaly de-                  method since it is the major difference from the competing
+tection method. We include FCN as a supervised anomaly                     methods, e.g., the architecture and loss function of our method
+detection baseline. It directly treats the weakly-supervised               are very similar to DevNet if the encoding submodule and the
+anomaly detection as a supervised learning problem, that is,               corresponding loss term are removed.
+using labeled anomaly data as positive class samples and
+unlabeled data as negative class samples.
+                                                                           D. Sample Efficiency
+   We evaluate the proposed method as well as the competitive
+methods on eight real-world datasets that have been introduced                Experiment Design. To investigate the sample efficiency
+in Section IV-A. We follow the same experimental settings                  of the proposed method, i.e., the impact of using a different
+used in the literature [19] to construct the labeled set and               number of labeled anomalies in training data, we evaluate
+unlabeled set. The anomalies and normal samples in each                    the performance of the models trained by varying the amount
+dataset are firstly split into two parts, i.e., 80% samples as             of labeled abnormal data. In the experiments, the number of
+the training data and 20% samples as the testing data. We                  available labeled anomalies is set to one of the following
+randomly select 30 anomalies from the abnormal class in each               values: 30, 60, 90, 120. Experiments are not conducted on
+training dataset such that the labeled anomalies only account              Arrhythmia due to the limited number of abnormal samples
+for 0.01%-2.17% of the training data. For the Arrhythmia                   available. The other experimental settings remain the same as
+dataset, only 15 labeled anomalies(4.56% of the training data)             those described in Section IV-C.
+are randomly selected due to its small data size. As there are                Result Analysis. As shown in Figure 3 and Figure 4, the
+usually a few anomalies among the unlabeled data in realistic              proposed method demonstrates significantly better sample
+scenarios, we also randomly add the 2% anomaly samples,                    efficiency than all the competing methods on AUC-PR. The
+i.e., 2% anomaly contamination, to the normal class in each                respective performance of the proposed method on AUC-ROC
+training dataset. The hyper-parameter a0 and λ are set to 5                is comparably well to those of the compared methods.
+and 1, respectively.
+THE MANUSCRIPT HAS BEEN PUBLISHED BY IEEE (IEEE TNNLS, 2021, DOI: 10.1109/TNNLS.2021.3086137). PLEASE DO NOT CITE THE PREPRINT                    8
+
+
+
+
+Fig. 3. AUC-PR with different number of labeled anomalies for training. The results on Arrhythmia are omitted due to the limited number of abnormal
+samples available.
+
+
+
+
+Fig. 4. AUC-ROC with different number of labeled anomalies for training. The results on Arrhythmia are omitted due to the limited number of abnormal
+samples available.
+
+
+
+   (1) The performance of all the three weakly-supervised                  (for both AUC-ROC and AUC-PR) by employing the same
+anomaly detection methods, i.e., DevNet, Deep SAD, and                     number of labeled anomalies for training. This observation
+the proposed method, achieves better performance with the                  indicates that the proposed method can consistently achieve
+increase of labeled anomalies in general. When there are very              improvement by employing the unlabeled data and a few
+few labeled anomaly samples, i.e., 30 or 60, the performance               labeled anomalies.
+of the proposed method is always the best on AUC-PR for                       (3) Compared with the unsupervised method, i.e., DAGMM,
+all datasets, while its respective performance on AUC-ROC                  the proposed method achieves significantly better performance
+is comparable to the best performance of the competitors.                  even when a very limited number of labeled anomalies are
+Also, we can observe that some anomaly detectors can be very               used to provide the prior knowledge. For example, the average
+sensitive to the quantity change of labeled samples. We could              performance of the proposed method employing 30 labels
+even observe that the performance of some models drops when                surpasses that of DAGMM by more than 30.39% (AUC-
+the number of labeled anomalies increases. In comparison, the              PR) and 16.66% (AUC-ROC). This also shows that weakly-
+curves of our method are more stable and do not exhibit an                 supervised anomaly detection is a more effective anomaly
+obvious drop with the increase of labeled data.                            detection strategy and one can obtain significant improvement
+   (2) Compared with the fully supervised method, i.e., FCN,               by even using a small amount of labeled data.
+the proposed method can always achieve superior performance
+THE MANUSCRIPT HAS BEEN PUBLISHED BY IEEE (IEEE TNNLS, 2021, DOI: 10.1109/TNNLS.2021.3086137). PLEASE DO NOT CITE THE PREPRINT              9
+
+
+
+                                                            TABLE III
+  E XPERIMENTAL RESULTS (M EAN ± STANDARD DEVIATION ) TO INVESTIGATE ON THE EFFECT OF THE ENCODING STRATEGY ( THE FIRST GROUP OF
+                                EXPERIMENTS TO EVALUATE THE EFFECTIVENESS OF THE THREE FACTORS ).
+
+                                                                     AUC-ROC Performance
+                    Dataset
+                                     h             r             e          h, r         h, e         r, e         h, r, e
+                   NSL-KDD      0.926±0.003   0.936±0.008   0.943±0.005 0.943±0.006 0.954±0.006   0.931±0.012   0.955±0.007
+                   Spambase     0.893±0.008   0.852±0.016   0.898±0.013 0.895±0.013 0.906±0.012   0.869±0.016   0.921±0.016
+                   Arrhythmia   0.771±0.035   0.752±0.048   0.756±0.055 0.769±0.055 0.764±0.053   0.725±0.064   0.797±0.048
+                     Cardio     0.996±0.000   0.997±0.001   0.997±0.000 0.998±0.000 0.999±0.000   0.998±0.000   0.999±0.001
+                     Shuttle    0.981±0.006   0.982±0.004   0.981±0.004 0.982±0.003 0.979±0.010   0.982±0.008   0.983±0.004
+                    Satellite   0.879±0.004   0.885±0.006   0.869±0.008 0.887±0.005 0.874±0.004   0.874±0.007   0.918±0.007
+                  Mammography   0.968±0.003   0.966±0.007   0.890±0.011 0.970±0.002 0.915±0.006   0.958±0.017   0.972±0.002
+                     Fraud      0.967±0.004   0.966±0.010   0.949±0.011 0.963±0.003 0.960±0.007   0.960±0.006   0.982±0.003
+                    Average     0.916±0.008   0.917±0.013   0.910±0.013 0.926±0.011 0.919±0.012   0.912±0.016   0.941±0.011
+                                                                      AUC-PR Performance
+                    Dataset
+                                     h             r             e          h, r         h, e         r, e         h, r, e
+                   NSL-KDD      0.969±0.002   0.960±0.003   0.964±0.003 0.965±0.003 0.970±0.004   0.958±0.006   0.970±0.003
+                   Spambase     0.901±0.004   0.875±0.009   0.901±0.007 0.902±0.008 0.892±0.009   0.884±0.011   0.910±0.036
+                   Arrhythmia   0.663±0.032   0.650±0.033   0.623±0.043 0.650±0.029 0.676±0.036   0.613±0.056   0.681±0.038
+                     Cardio     0.989±0.003   0.989±0.004   0.989±0.003 0.987±0.003 0.987±0.002   0.989±0.002   0.990±0.003
+                     Shuttle    0.973±0.005   0.971±0.004   0.966±0.005 0.973±0.001 0.966±0.006   0.971±0.006   0.975±0.001
+                    Satellite   0.851±0.003   0.853±0.005   0.829±0.011 0.860±0.004 0.842±0.008   0.853±0.006   0.895±0.006
+                  Mammography   0.616±0.011   0.601±0.037   0.273±0.007 0.615±0.018 0.361±0.039   0.602±0.086   0.645±0.021
+                     Fraud      0.689±0.005   0.691±0.007   0.671±0.026 0.686±0.006 0.686±0.007   0.687±0.005   0.692±0.006
+                    Average     0.831±0.008   0.824±0.013   0.777±0.013 0.830±0.009 0.798±0.014   0.820±0.009   0.845±0.014
+
+
+
+E. Ablative Analysis                                                    vector, i.e., x̂i as defined in Equation (2), to the downstream
+   In this subsection, we perform ablative analysis to explore          anomaly score generator. Note that the network structure of
+the effects of different components on the performance of our           the anomaly score generator degenerates into an MLP in this
+proposed method. Specially, we create variants of our method            case. The other experimental settings of the compared model
+to investigate the effects of the encoding strategy, the objective      remain the same as that of the proposed method.
+function, the hyper-parameters, the pre-training procedure and
+the strength of the reconstruction error, respectively.                                            TABLE IV
+                                                                            E XPERIMENTAL R ESULTS (M EAN ± STANDARD DEVIATION ) TO
+   1) Effect of Encoding Strategy: To investigate the impact            INVESTIGATE ON THE EFFECT OF THE ENCODING STRATEGY ( THE SECOND
+of the encoding strategy, we conduct two groups of experi-                GROUP OF EXPERIMENTS TO EXAMINE WHETHER THE PERFORMANCE
+                                                                         IMPROVEMENT FOR THE PROPOSED MODEL COMES FROM ADDITIONAL
+ments. The first group of experiments aims to evaluate the
+                                                                                PARAMETERS INCLUDED IN THE FEATURE ENCODER ).
+effectiveness of the three factors, i.e., h, r and e, in the
+feature encoder. There are six variants of models that include                            AUC-ROC Performance        AUC-PR Performance
+                                                                             Dataset
+different combinations of the three factors (as shown in Table                            Proposed     Variant      Proposed     Variant
+                                                                           NSL-KDD      0.955±0.007 0.943±0.012   0.970±0.003 0.965±0.006
+III). The resultant encodings are fed into the anomaly score               Spambase     0.921±0.016 0.834±0.028   0.910±0.036 0.854±0.018
+generator. Note that if a model generates the factor e, i.e., the          Arrhythmia   0.797±0.048 0.784±0.049   0.681±0.038 0.638±0.054
+reconstruction error, this scalar value is added to each layer               Cardio     0.999±0.001 0.990±0.011   0.990±0.003 0.961±0.028
+                                                                             Shuttle    0.983±0.004 0.975±0.007   0.975±0.001 0.961±0.007
+of the anomaly score generator as an additional dimension of
+                                                                            Satellite   0.918±0.007 0.875±0.013   0.895±0.006 0.847±0.013
+input (as described in Section III-C). The other experimental             Mammography   0.972±0.002 0.928±0.039   0.645±0.021 0.489±0.124
+settings of the six models remain the same as that of the                    Fraud      0.982±0.003 0.954±0.014   0.692±0.006 0.678±0.023
+proposed method described in Section IV-C.                                  Average     0.941±0.011 0.910±0.022   0.845±0.014 0.799±0.034
+
+   The experiment results show that the three factors are all
+indispensable in the proposed model. From Table III, we can                As shown in Table IV, the proposed method achieve sub-
+see that the proposed method achieves the best performance              stantial performance improvement on all the datasets, i.e., av-
+among those variants that only use a single factor or two               erage improvement of 3.2% and 3.0% in AUC-ROC and AUC-
+combined factors. The average performance of the model                  PR, respectively. This experimental result clearly demonstrates
+employing all the three factors is 1.5%-3.1% and 1.4%-6.8%              that the performance improvement of the proposed method is
+higher than those of the compared models in AUC-ROC and                 not a result of the increase in network parameters.
+AUC-PR, respectively.                                                      2) Effect of Having Reconstruction Error Regularization
+   The second group of experiments is designed to examine               Term on Anomaly Score Generator: We also investigate the
+whether the performance improvement of our proposed model               impact of using reconstruction error as the regularization term
+comes from additional parameters included in the feature                in our objective function. We compare the performance of
+encoder. We compare a model that adopts the same network                the proposed method with a variant version which does not
+structure as the original one in the feature encoder. However,          enforce the reconstruction error e minimization in Equation
+instead of outputting the three factors in the original feature         (8). Again, we fix the other experimental settings to make a
+encoder, the alternative encoder just outputs the reconstructed         fair comparison.
+THE MANUSCRIPT HAS BEEN PUBLISHED BY IEEE (IEEE TNNLS, 2021, DOI: 10.1109/TNNLS.2021.3086137). PLEASE DO NOT CITE THE PREPRINT                   10
+
+
+
+                             TABLE V                                         too large, the performance of the proposed model may drop
+     E XPERIMENTAL RESULTS (M EAN ± STANDARD DEVIATION ) TO                  due to the difficulties of training such an objective function.
+    INVESTIGATE THE E FFECT OF H AVING R ECONSTRUCTION E RROR
+      R EGULARIZATION T ERM ON A NOMALY S CORE G ENERATOR .                  The experiment results also indicate that the hyper-parameter
+                                                                             a0 could be set to a fixed value (5 in our experiments) in
+                     AUC-ROC Performance           AUC-PR Performance
+    Dataset                                                                  the proposed model. Moreover, We observe that the optimal
+                  Proposed Loss Variant Loss   Proposed Loss Variant Loss
+  NSL-KDD          0.955±0.007  0.954±0.007     0.970±0.003  0.969±0.003     choice of a0 is consistent in all datasets. In Table VII, the
+  Spambase         0.921±0.016  0.893±0.013     0.910±0.036  0.901±0.007     experiment results illustrate that the proposed method achieves
+  Arrhythmia       0.797±0.048  0.771±0.050     0.681±0.038  0.663±0.042     the best performance consistently when the contributions of
+    Cardio         0.999±0.001  0.998±0.001     0.990±0.003  0.989±0.004
+    Shuttle        0.983±0.004  0.981±0.004     0.975±0.001  0.972±0.002
+                                                                             two parts to the entire loss are balanced by setting λ to 1.
+   Satellite       0.918±0.007  0.879±0.006     0.895±0.006  0.851±0.006     This indicates the optimal hyper-parameter choice is stable
+ Mammography       0.972±0.002  0.968±0.005     0.645±0.021  0.616±0.018     across datasets. Also, we can seen that the performance
+    Fraud          0.982±0.003  0.967±0.003     0.692±0.006  0.689±0.009
+                                                                             corresponding to different λ does not vary significantly (within
+   Average         0.941±0.011  0.926±0.011     0.845±0.014  0.831±0.011
+                                                                             2.6% on average). The above experimental results demonstrate
+                                                                             that the setting of hyper-parameters in the proposed model is
+   As shown in Table V, comparing with the model using the                   appropriate.
+original objective function, the model employing this variant                   4) Effect of Pre-training: We then evaluate the effectiveness
+objective function has led to an average performance drop of                 of the pre-training procedure adopted in our proposed model.
+2.3% and 2.3% in AUC-ROC and AUC-PR, respectively. This                      We compare our method with a model that does not include
+experimental result demonstrates that the reconstruction error               the pre-training procedure (the first procedure described in
+regularization term on anomaly score generator plays a crucial               Algorithm 1) in the training process. Note that the network
+role.                                                                        structure and other experimental settings for the end-to-end
+   3) Effect of Hyper-parameters on Objective Function:                      training model are exactly the same as those of the proposed
+Next, we evaluate the effectiveness of the hyper-parameters in               model. In contrast to the proposed method that loads the pre-
+the objective function. We conduct two groups of experiments                 trained weight parameters into the network before the end-
+to investigate the impact of the hyper-parameter a0 and λ,                   to-end training of the whole network, the alternative model
+respectively. In the first group of experiments, we set a0 to                directly trains the whole network in an end-to-end manner.
+different values, i.e., 0.1, 1, 3, 4, 5, 6, 7, 10 and 20. In the                As shown in Table VIII, compared to the model without
+second group of experiments, we set λ to 0.1, 0.5, 1, 5 and 10,              a pre-training procedure, our proposed model achieves a
+respectively. The other experimental settings are exactly the                significant improvement by 3.1% (average) and 4.6% (average)
+same as those of the proposed method described in Section                    in AUC-ROC and AUC-PR, respectively. These results indi-
+IV-C.                                                                        cate that the pre-training procedure is an essential component
+   As shown in Table VI, the performance of our proposed                     of our proposed method. We postulate that pre-training will
+model tends to be better when a0 is close to a specific                      help the network avoid some bad local-minima and lead to a
+value. On the one hand, if a0 is too small, it is difficult                  better local solution.
+to ensure that the model is discriminative for distinguishing                   5) Effect of Feeding Reconstruction Error to Each Layer
+anomalies from the normal ones. On the other hand , if a0 is                 of Anomaly Score Generator: In the proposed method, we
+
+
+                                                              TABLE VI
+              E XPERIMENTAL RESULTS (M EAN ± STANDARD DEVIATION ) TO INVESTIGATE ON THE EFFECTS OF THE HYPER - PARAMETER a0 .
+
+                                                                          AUC-ROC Performance
+        Dataset
+                       a0 = 0.1        a0 = 1         a0 = 3        a0 = 4      a0 = 5       a0 = 6       a0 = 7       a0 = 10       a0 = 20
+      NSL-KDD         0.942±0.000   0.955±0.006    0.954±0.007   0.954±0.007 0.955±0.007 0.954±0.007   0.953±0.006   0.966±0.000   0.966±0.000
+      Spambase        0.820±0.015   0.858±0.018    0.867±0.012   0.911±0.016 0.921±0.016 0.907±0.013   0.867±0.012   0.862±0.013   0.859±0.011
+      Arrhythmia      0.669±0.130   0.756±0.046    0.781±0.054   0.789±0.053 0.797±0.048 0.785±0.042   0.780±0.044   0.780±0.036   0.784±0.044
+        Cardio        0.976±0.010   0.999±0.000    0.999±0.000   0.999±0.001 0.999±0.001 0.999±0.000   0.999±0.001   0.999±0.001   0.998±0.000
+        Shuttle       0.981±0.007   0.983±0.006    0.986±0.004   0.986±0.005 0.983±0.004 0.982±0.004   0.982±0.005   0.980±0.005   0.974±0.002
+       Satellite      0.878±0.009   0.890±0.007    0.885±0.006   0.902±0.005 0.918±0.007 0.917±0.005   0.905±0.005   0.911±0.004   0.895±0.008
+     Mammography      0.863±0.057   0.897±0.036    0.922±0.035   0.958±0.048 0.972±0.002 0.966±0.060   0.941±0.042   0.941±0.046   0.906±0.041
+        Fraud         0.967±0.004   0.970±0.005    0.972±0.035   0.977±0.006 0.982±0.003 0.976±0.003   0.965±0.003   0.962±0.007   0.956±0.010
+       Average        0.887±0.029   0.914±0.016    0.921±0.019   0.935±0.018 0.941±0.011 0.936±0.017   0.924±0.015   0.925±0.014   0.917±0.015
+                                                                           AUC-PR Performance
+        Dataset
+                       a0 = 0.1        a0 = 1         a0 = 3        a0 = 4      a0 = 5        a0 = 6      a0 = 7       a0 = 10       a0 = 20
+      NSL-KDD         0.966±0.000   0.971±0.003    0.970±0.004   0.969±0.004 0.970±0.003 0.968±0.003   0.968±0.003   0.978±0.000   0.978±0.000
+      Spambase        0.835±0.014   0.872±0.012    0.883±0.006   0.897±0.009 0.910±0.036 0.901±0.008   0.885±0.008   0.882±0.009   0.880±0.007
+      Arrhythmia      0.483±0.136   0.644±0.049    0.673±0.046   0.679±0.042 0.681±0.038 0.680±0.038   0.678±0.040   0.689±0.045   0.680±0.041
+        Cardio        0.959±0.011   0.991±0.002    0.990±0.003   0.990±0.004 0.990±0.003 0.989±0.003   0.988±0.004   0.989±0.004   0.987±0.003
+        Shuttle       0.970±0.007   0.976±0.003    0.975±0.002   0.975±0.002 0.975±0.001 0.974±0.001   0.974±0.001   0.973±0.002   0.970±0.002
+       Satellite      0.847±0.009   0.856±0.008    0.853±0.007   0.882±0.006 0.895±0.006 0.887±0.004   0.889±0.004   0.888±0.003   0.886±0.005
+     Mammography      0.498±0.027   0.485±0.051    0.505±0.052   0.631±0.068 0.645±0.021 0.610±0.064   0.577±0.135   0.598±0.134   0.573±0.139
+        Fraud         0.652±0.034   0.689±0.021    0.692±0.009   0.693±0.009 0.692±0.006 0.685±0.008   0.684±0.008   0.683±0.009   0.682±0.008
+       Average        0.776±0.029   0.811±0.019    0.818±0.016   0.840±0.018 0.845±0.014 0.837±0.016   0.830±0.025   0.835±0.026   0.830±0.026
+THE MANUSCRIPT HAS BEEN PUBLISHED BY IEEE (IEEE TNNLS, 2021, DOI: 10.1109/TNNLS.2021.3086137). PLEASE DO NOT CITE THE PREPRINT                       11
+
+
+
+                                                              TABLE VII
+               E XPERIMENTAL RESULTS (M EAN ± STANDARD DEVIATION ) TO INVESTIGATE ON THE EFFECT OF THE HYPER - PARAMETER λ.
+
+                                                                        AUC-ROC Performance
+                                    Dataset
+                                                   λ = 0.1       λ = 0.5      λ=1           λ=5            λ = 10
+                                  NSL-KDD        0.941±0.014   0.937±0.013 0.955±0.007 0.944±0.013      0.940±0.014
+                                  Spambase       0.817±0.025   0.832±0.014 0.921±0.016 0.901±0.012      0.814±0.026
+                                  Arrhythmia     0.783±0.051   0.796±0.051 0.797±0.048 0.785±0.055      0.792±0.062
+                                    Cardio       0.999±0.000   0.999±0.000 0.999±0.001 0.999±0.000      0.999±0.000
+                                    Shuttle      0.977±0.009   0.974±0.008 0.983±0.004 0.979±0.009      0.976±0.010
+                                   Satellite     0.877±0.011   0.880±0.012 0.918±0.007 0.897±0.011      0.878±0.010
+                                 Mammography     0.968±0.005   0.967±0.002 0.972±0.002 0.968±0.005      0.969±0.004
+                                    Fraud        0.968±0.006   0.967±0.008 0.982±0.003 0.971±0.004      0.968±0.005
+                                   Average       0.916±0.015   0.919±0.014 0.941±0.011 0.931±0.014      0.917±0.016
+                                                                         AUC-PR Performance
+                                    Dataset
+                                                   λ = 0.1       λ = 0.5       λ=1          λ=5            λ = 10
+                                  NSL-KDD        0.964±0.007   0.963±0.007 0.970±0.003 0.964±0.006      0.964±0.007
+                                  Spambase       0.840±0.016   0.853±0.011 0.910±0.036 0.900±0.006      0.838±0.017
+                                  Arrhythmia     0.648±0.037   0.670±0.038 0.681±0.038 0.650±0.032      0.648±0.046
+                                    Cardio       0.990±0.001   0.990±0.002 0.990±0.003 0.990±0.001      0.990±0.001
+                                    Shuttle      0.963±0.006   0.960±0.004 0.975±0.001 0.973±0.006      0.963±0.006
+                                   Satellite     0.853±0.008   0.857±0.011 0.895±0.006 0.863±0.009      0.854±0.008
+                                 Mammography     0.616±0.017   0.606±0.018 0.645±0.021 0.610±0.018      0.618±0.019
+                                    Fraud        0.680±0.014   0.679±0.014 0.692±0.006 0.681±0.014      0.680±0.014
+                                   Average       0.819±0.013   0.822±0.013 0.845±0.014 0.829±0.012      0.819±0.015
+
+
+
+feed the reconstruction error e to each layer of the MLP in                                             TABLE IX
+the anomaly score generator. To investigate the effect of using                 E XPERIMENTAL RESULTS (M EAN ± STANDARD DEVIATION ) TO
+                                                                             INVESTIGATE THE E FFECT OF F EEDING R ECONSTRUCTION E RROR TO
+this design, we construct a variant which does not feed error e                       E ACH L AYER OF A NOMALY S CORE G ENERATOR .
+to each layer but just concatenate it with the other two factors
+                                                                                                AUC-ROC Performance          AUC-PR Performance
+at the first layer.                                                              Dataset
+                                                                                                Proposed     Variant        Proposed     Variant
+   The result is shown in Table IX. Comparing with the                         NSL-KDD        0.955±0.007 0.949±0.005     0.970±0.003 0.967±0.003
+model using the original design, the model employing this                      Spambase       0.921±0.016 0.872±0.012     0.910±0.036 0.887±0.007
+variant strategy has led to an average performance drop of                     Arrhythmia     0.797±0.048 0.792±0.034     0.681±0.038 0.679±0.025
+                                                                                 Cardio       0.999±0.001 0.999±0.000     0.990±0.003 0.990±0.003
+1.5% and 1.4% on AUC-ROC and AUC-PR, respectively.                               Shuttle      0.983±0.004 0.982±0.004     0.975±0.001 0.975±0.001
+This experimental result demonstrates that it is necessary to                   Satellite     0.918±0.007 0.883±0.006     0.895±0.006 0.856±0.007
+use the proposed design to avoid losing information of the                    Mammography     0.972±0.002 0.896±0.041     0.645±0.021 0.540±0.064
+                                                                                 Fraud        0.982±0.003 0.968±0.004     0.692±0.006 0.681±0.014
+reconstruction error.
+                                                                                Average       0.941±0.011 0.918±0.013     0.845±0.014 0.822±0.016
+
+                          TABLE VIII
+    E XPERIMENTAL RESULTS (M EAN ± STANDARD DEVIATION ) TO
+    INVESTIGATE THE E FFECT OF THE PRE - TRAINING PROCEDURE .              encoding. To cope with the limitation of data insufficiency
+                                                                           for annotated anomalies, the proposed model consists of two
+                     AUC-ROC Performance         AUC-PR Performance
+     Dataset
+                   Pre-trained End-to-End     Pre-trained  End-to-End      parts, i.e., the feature encoder and the anomaly score generator,
+    NSL-KDD        0.955±0.007 0.953±0.000    0.970±0.003 0.966±0.000      which are jointly optimized through the training process with
+    Spambase       0.921±0.016 0.771±0.016    0.910±0.036 0.805±0.013      a specially designed deviation loss. Extensive experiments
+    Arrhythmia     0.797±0.048 0.783±0.056    0.681±0.038 0.648±0.039
+      Cardio       0.999±0.001 0.991±0.010    0.990±0.003 0.964±0.018
+                                                                           demonstrate that the proposed method could effectively lever-
+      Shuttle      0.983±0.004 0.976±0.008    0.975±0.001 0.963±0.005      age the limited-but-useful information from the few labeled
+     Satellite     0.918±0.007 0.877±0.011    0.895±0.006 0.854±0.009      abnormal data and achieve superior performance over the
+   Mammography     0.972±0.002 0.953±0.001    0.645±0.021 0.634±0.011
+                                                                           competitive methods. In the future work, we plan to explore
+      Fraud        0.982±0.003 0.968±0.005    0.692±0.006 0.682±0.013
+     Average       0.941±0.011 0.909±0.013    0.845±0.014 0.815±0.014      multi-task learning [36] and nonlinear correlation analysis
+                                                                           [37], [38], [39] to further utilize the implicit knowledge from
+                                                                           available data.
+                          V. C ONCLUSION
+                                                                                                    ACKNOWLEDGMENT
+  In this paper, we address the weakly-supervised anomaly                     We would like to thank Yiran Deng at Sichuan University
+detection problem that there are only a few labeled abnormal               for proofreading this paper.
+data and sufficient normal data available for training. We
+propose a novel encoding strategy that transforms the input
+                                                                                                        R EFERENCES
+data into a more meaningful representation, in which typical
+anomalies could be significantly deviated from the normal                   [1] F. Jiang, Y. Fu, B. B. Gupta, F. Lou, S. Rho, F. Meng, and Z. Tian,
+                                                                                “Deep learning based multi-channel intelligent attack detection for data
+ones. We then propose an anomaly detection model that                           security,” IEEE Transactions on Sustainable Computing, vol. 5, no. 2,
+seamlessly incorporates the information from the proposed                       pp. 204–212, Jan. 2018.
+THE MANUSCRIPT HAS BEEN PUBLISHED BY IEEE (IEEE TNNLS, 2021, DOI: 10.1109/TNNLS.2021.3086137). PLEASE DO NOT CITE THE PREPRINT                             12
+
+
+
+ [2] V. L. Cao, M. Nicolau, and J. McDermott, “Learning neural representa-       [23] G. Pang, C. Shen, L. Cao, and A. Hengel, “Deep learning for anomaly
+     tions for network anomaly detection,” IEEE Transactions on cybernetics,          detection: A review,” ACM Computing Surveys, In Press, 2020.
+     vol. 49, no. 8, pp. 3074–3087, Jun. 2018.                                   [24] W. Yu, W. Cheng, C. C. Aggarwal, K. Zhang, H. Chen, and W. Wang,
+ [3] X. Miao, Y. Liu, H. Zhao, and C. Li, “Distributed online one-class               “Netwalk: A flexible deep embedding approach for anomaly detection
+     support vector machine for anomaly detection over networks,” IEEE                in dynamic networks,” in Proceedings of the 24th ACM SIGKDD
+     Transactions on Cybernetics, vol. 49, no. 4, pp. 1475–1488, 2018.                International Conference on Knowledge Discovery and Data Mining
+ [4] K. Xie, X. Li, X. Wang, J. Cao, G. Xie, J. Wen, D. Zhang, and                    (KDD), 2018, pp. 2672–2681.
+     Z. Qin, “On-line anomaly detection with high accuracy,” IEEE/ACM            [25] X. Peng, S. Xiao, J. Feng, W. Yau, and Z. Yi, “Deep subspace clustering
+     Transactions on Networking, vol. 26, no. 3, pp. 1222–1235, 2018.                 with sparsity prior.” in Proceedings of the 26th International Joint
+ [5] W. Chen, H. Xu, Z. Li, D. Peiy, J. Chen, H. Qiao, Y. Feng, and Z. Wang,          Conference on Artificial Intelligence (IJCAI), Jul. 2016, pp. 1925–1931.
+     “Unsupervised anomaly detection for intricate kpis via adversarial          [26] C. Zhou and R. C. Paffenroth, “Anomaly detection with robust deep
+     training of vae,” in Proceedings of the IEEE International Conference            autoencoders,” in Proceedings of the 23rd ACM SIGKDD International
+     on Computer Communications (INFOCOM), Apr. 2019, pp. 1891–1899.                  Conference on Knowledge Discovery and Data Mining (KDD), Aug.
+ [6] H. Xu, W. Chen, N. Zhao, Z. Li, J. Bu, Z. Li, Y. Liu, Y. Zhao,                   2017, pp. 665–674.
+     D. Pei, Y. Feng, C. Jie, W. Zhaogang, and Q. Honglin, “Unsupervised         [27] H. Zenati, M. Romain, C.-S. Foo, B. Lecouat, and V. Chandrasekhar,
+     anomaly detection via variational auto-encoder for seasonal kpis in web          “Adversarially learned anomaly detection,” in Proceedings of the 2018
+     applications,” in Proceedings of the 2018 World Wide Web Conference              IEEE International Conference on Data Mining (ICDM), Nov. 2018, pp.
+     (WWW), Apr. 2018, pp. 187–196.                                                   727–736.
+ [7] B. Zong, Q. Song, M. R. Min, W. Cheng, C. Lumezanu, D. Cho, and             [28] M. A. Siddiqui, A. Fern, T. G. Dietterich, R. Wright, A. Theriault,
+     H. Chen, “Deep autoencoding gaussian mixture model for unsupervised              and D. W. Archer, “Feedback-guided anomaly discovery via online
+     anomaly detection,” in Proceedings of the International Conference on            optimization,” in Proceedings of the 24th ACM SIGKDD International
+     Learning Representations (ICLR), Feb. 2018.                                      Conference on Knowledge Discovery and Data Mining (KDD), Jul.
+ [8] Y.-L. Zhang, L. Li, J. Zhou, X. Li, and Z.-H. Zhou, “Anomaly detection           2018, pp. 2200–2209.
+     with partially observed anomalies,” in Companion Proceedings of the         [29] T. Hu, Q. Guo, X. Shen, H. Sun, R. Wu, and H. Xi, “Utilizing
+     The Web Conference 2018, Apr. 2018, pp. 639–646.                                 unlabeled data to detect electricity fraud in ami: A semisupervised
+ [9] W. Luo, W. Liu, D. Lian, J. Tang, L. Duan, X. Peng, and S. Gao, “Video           deep learning approach,” IEEE Transactions on Neural Networks and
+     anomaly detection with sparse coding inspired deep neural networks,”             Learning Systems, vol. 30, no. 11, pp. 3287–3299, Nov. 2019.
+     IEEE Transactions on Pattern Analysis and Machine Intelligence, In          [30] M. Tavallaee, E. Bagheri, W. Lu, and A. A. Ghorbani, “A detailed
+     Press, Online Available, 2019.                                                   analysis of the kdd cup 99 data set,” in Proceedings of the 2009 IEEE
+[10] R. Leyva, V. Sanchez, and C.-T. Li, “Video anomaly detection with                Symposium on Computational Intelligence for Security and Defense
+     compact feature sets for online performance,” IEEE Transactions on               Applications, Jul. 2009, pp. 1–6.
+     Image Processing, vol. 26, no. 7, pp. 3463–3478, 2017.                      [31] M. Lichman. (2013). UCI Machine Learning Repository. [Online].
+                                                                                      Available: http://archive.ics.uci.edu/ml.
+[11] G. Pang, C. Yan, C. Shen, A. Hengel, and X. Bai, “Self-trained
+                                                                                 [32] A. Dal Pozzolo, G. Boracchi, O. Caelen, C. Alippi, and G. Bontempi,
+     deep ordinal regression for end-to-end video anomaly detection,” in
+                                                                                      “Credit card fraud detection: a realistic modeling and a novel learning
+     Proceedings of the IEEE/CVF Conference on Computer Vision and
+                                                                                      strategy,” IEEE Transactions on Neural Networks and Learning Systems,
+     Pattern Recognition (CVPR), Jun. 2020, pp. 12 173–12 182.
+                                                                                      vol. 29, no. 8, pp. 3784–3797, 2017.
+[12] X. Zhou, Z. Zhang, L. Wang, and P. Wang, “A model based on siamese
+                                                                                 [33] Shebuti Rayana. (2016) ODDS Library. [Online]. Available:
+     neural network for online transaction fraud detection,” in Proceedings of
+                                                                                      http://odds.cs.stonybrook.edu.
+     the 2019 International Joint Conference on Neural Networks (IJCNN),
+                                                                                 [34] G. O. Campos, A. Zimek, J. Sander, R. J. Campello, B. Micenková,
+     Jul. 2019, pp. 1–7.
+                                                                                      E. Schubert, I. Assent, and M. E. Houle, “On the evaluation of unsu-
+[13] K. Yang, J. Ren, Y. Zhu, and W. Zhang, “Active learning for wireless
+                                                                                      pervised outlier detection: measures, datasets, and an empirical study,”
+     iot intrusion detection,” IEEE Wireless Communications, vol. 25, no. 6,
+                                                                                      Data Mining and Knowledge Discovery, vol. 30, no. 4, pp. 891–927,
+     pp. 19–25, 2018.
+                                                                                      2016.
+[14] J. Liu, X. Song, Y. Zhou, X. Peng, Y. Zhang, P. Liu, D. Wu, and C. Zhu,     [35] C. D. Manning, H. Schütze, and P. Raghavan, Introduction to informa-
+     “Deep anomaly detection in packet payload,” Neurocomputing, In Press,            tion retrieval. Cambridge university press, 2008.
+     2021.                                                                       [36] Z. Zeng, N. Liang, X. Yang, and S. Hoi, “Multi-target deep neural
+[15] S. Dou, K. Yang, and H. V. Poor, “Pc2a: Predicting collective contextual         networks: Theoretical analysis and implementation,” Neurocomputing,
+     anomalies via lstm with deep generative model,” IEEE Internet of Things          vol. 273, pp. 634–642, 2018.
+     Journal, vol. 6, no. 6, pp. 9645–9655, 2019.                                [37] Z. Qin, Y. Wang, H. Cheng, Y. Zhou, Z. Sheng, and V. C. Leung, “De-
+[16] T. Ergen and S. S. Kozat, “Unsupervised anomaly detection with lstm              mographic information prediction: A portrait of smartphone application
+     neural networks,” IEEE Transactions on Neural Networks and Learning              users,” IEEE Transactions on Emerging Topics in Computing, vol. 6,
+     Systems, vol. 31, no. 8, pp. 3127–3141, 2019.                                    no. 3, pp. 432–444, 2016.
+[17] G. Pang, L. Cao, L. Chen, and H. Liu, “Learning representations of          [38] J. Liu, W. Zhao, Y. Hong, S. Gao, X. Huang, and Y. Zhou, “Learning
+     ultrahigh-dimensional data for random distance-based outlier detection,”         features of brain network for anomaly detection,” in Proceedings of the
+     in Proceedings of the 24th ACM SIGKDD International Conference on                IEEE INFOCOM 2020-IEEE Conference on Computer Communications
+     Knowledge Discovery and Data Mining (KDD), Jul. 2018, pp. 2041–                  Workshops (INFOCOM WKSHPS), Jul. 2020, pp. 900–905.
+     2050.                                                                       [39] C. Chen, K. Li, S. G. Teo, X. Zou, K. Li, and Z. Zeng, “Citywide traffic
+[18] D. Gong, L. Liu, V. Le, B. Saha, M. R. Mansour, S. Venkatesh, and                flow prediction based on multiple gated spatio-temporal convolutional
+     A. v. d. Hengel, “Memorizing normality to detect anomaly: Memory-                neural networks,” ACM Transactions on Knowledge Discovery from
+     augmented deep autoencoder for unsupervised anomaly detection,” in               Data (TKDD), vol. 14, no. 4, pp. 1–23, 2020.
+     Proceedings of the IEEE/CVF International Conference on Computer
+     Vision (ICCV), Oct. 2019, pp. 1705–1714.
+[19] G. Pang, C. Shen, and A. van den Hengel, “Deep anomaly detection
+     with deviation networks,” in Proceedings of the 25th ACM SIGKDD
+     International Conference on Knowledge Discovery and Data Mining
+     (KDD), Aug. 2019, pp. 353–362.
+[20] L. Ruff, R. A. Vandermeulen, N. Görnitz, A. Binder, E. Müller, K.-R.
+     Müller, and M. Kloft, “Deep semi-supervised anomaly detection,” in
+     Proceedings of the International Conference on Learning Representa-
+     tions (ICLR), Apr. 2020.
+[21] G. Pang, C. Shen, H. Jin, and A. v. d. Hengel, “Deep weakly-supervised
+     anomaly detection,” arXiv preprint arXiv:1910.13601, 2019.
+[22] L. Ruff, R. Vandermeulen, N. Goernitz, L. Deecke, S. A. Siddiqui,
+     A. Binder, E. Müller, and M. Kloft, “Deep one-class classification,”
+     in Proceedings of the International Conference on Machine Learning
+     (ICML), Jul. 2018, pp. 4393–4402.
+

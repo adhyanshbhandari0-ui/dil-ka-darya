@@ -1,0 +1,660 @@
+                                            DeScoD-ECG: Deep Score-Based Diffusion Model
+                                             for ECG Baseline Wander and Noise Removal
+                                                                                    Huayu Li, Gregory Ditzler, Janet Roveda and Ao Li
+
+
+
+                                              Abstract—Objective: Electrocardiogram (ECG) signals com-                   conducive to both manual and automatic signal analysis, which
+                                           monly suffer noise interference, such as baseline wander. High-               significantly reduces the usability of the collected signals and
+                                           quality and high-fidelity reconstruction of the ECG signals is of             increases the cost of clinical experiments and diagnosis.
+                                           great significance to diagnosing cardiovascular diseases. There-
+                                           fore, this paper proposes a novel ECG baseline wander and noise                   High-quality and high-fidelity noise removal in the ECG
+
+
+
+
+arXiv:2208.00542v2 [eess.SP] 17 Jan 2023
+                                           removal technology. Methods: We extended the diffusion model in               signals is of great significance to the auxiliary diagnosis of
+                                           a conditional manner that was specific to the ECG signals, namely             heart diseases via ECG. Several solutions have been pro-
+                                           the Deep Score-Based Diffusion model for Electrocardiogram                    posed to restore the ECG signals through a signal processing
+                                           baseline wander and noise removal (DeScoD-ECG). Moreover,                     perspective. Classical digital filter-based methods use finite
+                                           we deployed a multi-shots averaging strategy that improved
+                                           signal reconstructions. We conducted the experiments on the                   impulse response (FIR) and infinite impulse response (IIR)
+                                           QT Database and the MIT-BIH Noise Stress Test Database to                     filters to remove the noise presented in certain frequencies [2].
+                                           verify the feasibility of the proposed method. Baseline methods               Wavelet transforms decompose the ECG signals into different
+                                           are adopted for comparison, including traditional digital filter-             frequency sub-bands and take advantage of the energy of the
+                                           based and deep learning-based methods. Results: The quantities                signals in different scales to isolate baseline wander from
+                                           evaluation results show that the proposed method obtained out-
+                                           standing performance on four distance-based similarity metrics                ECG signals. In [3], independent component analysis (ICA)
+                                           with at least 20% overall improvement compared with the best                  is used for removing baseline wander from ECG under the
+                                           baseline method. Conclusion: This paper demonstrates the state-               assumptions of different statics between the noise and original
+                                           of-the-art performance of the DeScoD-ECG for ECG baseline                     ECG signals. Unfortunately, the traditional methods typically
+                                           wander and noise removal, which has better approximations of                  can only succeed in situations where the ECG is not corrupted
+                                           the true data distribution and higher stability under extreme
+                                           noise corruptions. Significance: This study is one of the first               severely and fail when the noise has high amplitude.
+                                           to extend the conditional diffusion-based generative model for                    Recently, data-driven methods which take advantage of
+                                           ECG noise removal, and the DeScoD-ECG has the potential to                    deep neural networks have been used to remove the baseline
+                                           be widely used in biomedical applications.                                    wander. Work has shown that the neural networks trained
+                                              Index Terms—ECG signal processing, Baseline wander, diffu-                 on clean and noisy ECG records surpass the performance of
+                                           sion models
+                                                                                                                         the traditional methods by a significant difference. In [4], a
+                                                                    I. I NTRODUCTION                                     novel approach to denoise ECG signals with deep recurrent
+                                                                                                                         denoising neural networks (DRNN) is proposed. By modeling
+                                                 ARDIOVASCULAR diseases are the leading cause of
+                                           C     sudden cardiac death in the world [1]. Thus, special-
+                                           ized medical services such as diagnostic tools for the study
+                                                                                                                         the ECG time series with an LSTM module [5], DRNN
+                                                                                                                         achieved outstanding results compared to the traditional digital
+                                                                                                                         filters. Further, the fully convolutional denoising autoencoder
+                                           and treatment are in great demand. The electrocardiogram                      (FCN-DAE) [6] was proposed to denoise the ECG signals
+                                           (ECG) is the most straightforward, non-invasive technique                     via denoising autoencoder with hourglass architecture. The
+                                           and monitoring approach for diagnosing heart diseases. An                     denoising autoencoders [7] first learn architectures to extract
+                                           ECG records the electrical signal from the heart to check for                 the most relevant features automatically and then produce the
+                                           different heart conditions. ECG signals are typically collected               reconstructions in the presence of noise at the input. Recently,
+                                           during exercise stress tests or in an ambulatory way to increase              a new deep neural network architecture named DeepFilter [8]
+                                           diagnostic sensitivity. However, the ECG signals acquired in                  was presented and achieved state-of-the-art performance that
+                                           these conditions are strongly influenced by different types of                beat the traditional digital filters and other deep learning-based
+                                           noise, such as baseline wander. The noisy ECG signals are not                 methods. It is inspired by the designation of the Inception
+                                              H. Li is with the Department of Electrical & Computer Engineering at the   architecture [9] and further proposed a Multi-Kernel Linear
+                                           University of Arizona, Tucson, AZ 85719 USA. E-mail: hl459@arizona.edu        And Non-Linear (MKLANL) filter module for denoising the
+                                              G. Ditzler is with the Department of Electrical & Computer Engineering     ECG signals with multi-scale features. Also, the generative
+                                           at Rowan University, Glassboro, NJ 08028 USA. E-mail: ditzler@rowan.edu
+                                              J. Roveda is with the Department of Electrical & Computer Engineering,     model has been applied to ECG denoising. An ECG signal
+                                           Department of Biomedical Engineering, and Bio5 Institute at the University    denoising method Using Conditional Generative Adversarial
+                                           of Arizona, Tucson, AZ 85719 USA. E-mail: meilingw@arizona.edu                Net (CGAN) is proposed in [10]. It trained a neural network
+                                              A. Li is with the Department of Electrical & Computer Engineering and
+                                           Bio5 Institute at the University of Arizona, Tucson, AZ 85719 USA. E-mail:    with skip connection (well known as UNet [11] architecture)
+                                           aoli1@arizona.edu                                                             under an adversarial framework for better approximation of
+the true data distribution.                                         heart activity [15], [16]. Baseline wander usually appears in
+   Unfortunately, the existing deep learning-based methods          the ECG signals during exercise stress tests which could be
+perform poorly with extremely high noise corruption, which          caused by factors such as respiration, variations in electrode
+limits the applicability of these methods for physical exercise     impedance, and excessive body movements. Baseline wander
+stress tests. Thus, there is a significant need in the research     significantly affects the accuracy of analysis and diagnosis
+community to develop more accurate ECG reconstruction               from the ECG. Thus, high-quality and high-fidelity removal
+techniques and find more precise approximations of the con-         of baseline wander can improve the efficiency of clinical
+ditional distribution of the clean ECG records, given the noisy     diagnosis and enable more flexible exercise stress tests so
+observations. In this work, we propose DeScoD-ECG, a novel          patients can move more freely.
+probabilistic baseline wander removal method that learns the
+conditional distribution with conditional score-based diffusion     B. Score-based Diffusion model
+models [12], [13]. We extend the score-based diffusion models          Score-based diffusion models are a class of deep gener-
+into a novel conditional generative model specific for pro-         ative models that generate samples by gradually converting
+cessing ECG signals. Instead of directly denoising/filtering        noise into a plausible data sample through denoising. Score-
+the noisy observations, the DeScoD-ECG iteratively generates        based diffusion models have recently been used for different
+signal reconstructions from random Gaussian distributions           tasks such as image generation [12], [17] and text-to-audio
+conditioned on the noisy observations. The experimental re-         synthesis [18], [19] with state-of-the-art sample quality that
+sults show that the DeScoD-ECG achieves state-of-the-art            outperform counterparts including generative adversarial nets
+performance and beats the baseline methods with a large gap.        (GANs) [20] and variational autoencoders (VAEs) [21]. Score-
+Also, compared with the baseline methods, the DeScoD-ECG            based diffusion models address the drawbacks of GANs and
+is more stable and consistent with different noise levels. As       VAEs. More specifically, GANs are known for potentially
+one of the first evaluations of the conditional score-based         unstable training and less diversity in generation due to their
+diffusion model for ECG denoising, our main contributions           adversarial training nature. VAEs rely on a surrogate loss
+are: (1) a conditional score-based diffusion model for high-        and have relatively poor generation quality. Unfortunately,
+quality and high-fidelity baseline wander removal is proposed.      tractability and flexibility are two conflicting objectives in
+To the best of our knowledge, this is the first study to deploy     generative modeling. Tractable models can be analytically
+the score-based diffusion model for ECG signal restoration; (2)     evaluated and cheaply fit data but are unable to describe the
+state-of-the-art performance was achieved in baseline wander        structure in rich datasets aptly. In contrast, flexible models
+removal on ECG records from the QT Database with baseline           can fit arbitrary structures in data, but evaluating and training
+wander noise from MIT-BIH Noise Stress Test Database;               these models is more computationally expensive. Diffusion
+(3) a self-ensemble strategy was adopted to further improve         models mitigate the existing drawbacks, which are analytically
+the reconstruction quality and the algorithm stability under        tractable and flexible. Furthermore, the diffusion models do not
+extreme noise conditions.                                           need the adversarial training of GAN while having comparable
+                                                                    or even better generation qualities than GAN. Therefore, in
+                    II. R ELATED W ORKS                             this work, we introduce the score-based diffusion model to the
+   In this section, we introduce the basic concept of electro-      ECG baseline wander and noise removal tasks and demonstrate
+cardiogram and the cause of baseline wander. We discussed           the efficiency of this type of generative model.
+the significance of baseline wander removal from a clinical
+point of view. Further, we introduce the Score-based generative                             III. M ETHODS
+models and their advantages compared with other generative             In this section, we first introduce the background of diffu-
+models.                                                             sion models and then introduce the proposed DeScoD-ECG for
+                                                                    ECG baseline wander and noise removal. We also present the
+A. Electrocardiogram and Baseline wander                            implementation details of the neural network and optimization
+   An ECG signal records the electrical signals in the heart. It    procedure used in this work.
+is a common and painless test used to detect heart problems
+and quickly monitor heart health [14]. Electrodes placed at cer-    A. Score-based Diffusion Model
+tain spots on the chest and legs are used to detect the potential      Diffusion models are generative models, meaning they are
+difference in the human body. An ECG sensor records these           used to generate data similar to the data on which they are
+impulses to show how fast the heart is beating, the rhythm          trained. Fundamentally, diffusion models work by corrupting
+of the heartbeats (steady or irregular), and the strength and       training data through the successive addition of Gaussian
+timing of the electrical impulses as they move through the          noise and then learning to recover the data by reversing this
+different parts of the heart. Changes in an ECG can be a sign of    diffusion process. Thus, a well-trained diffusion model is able
+cardiovascular diseases. An exercise stress test helps determine    to generate data from randomly sampled noise through the
+how well the cardiac responds when working its hardest. It          learned denoising process.
+typically involves walking on a treadmill or pedaling on a             More specifically, given samples from a data distribution
+stationary bike while hooked up to an ECG to monitor the            q(x0 ), we are interested in learning a model distribution
+Fig. 1. The diffusion (q) and reverse (pθ ) procedure of DeScoD-ECG. Intuitively, the diffusion process gradually corrupts the ground truth ECGs by adding
+noise, while the reverse process aims to learn a denoising function to remove this noise. It is noticeable that reverse process is conditioned by the corresponding
+observed ECGs. By training the denoising function (or the model θ) in this way, we can generate the clean ECGs from random Gaussian noise conditioned
+on the noisy observations.
+
+
+
+
+Fig. 2. The architecture of the neural network and each block used in it. We demonstrate the network architecture (A) used in DeScoD-ECG. The whole
+network is made up by two streams equipped with the HNF block (B) and communicated via the Bridge block (C).
+
+
+
+pθ (x0 ) that approximates q(x0 ). Denoising diffusion proba-                      each step:
+bilistic models (DDPMs) [12], [22] are latent variable models                                                      T
+that consist of a forward process or diffusion process, in
+                                                                                                                   Y
+                                                                                             q (x1:T | x0 ) :=           q (xt | xt−1 ) ,                      (1)
+which the data are diffused to a well-behaved distribution by                                                      t=1
+progressively adding noise, and a reverse process, in which                                                      p                     
+                                                                                             q (xt | xt−1 ) := N xt ; 1 − βt xt−1 , βt I ,                     (2)
+noise is transformed back into a sample from the target
+distribution.                                                                      where β1 , . . . , βT is a variance schedule (either learned or
+                                                                                   fixed) which, if well-behaved, ensures that xT is nearly an
+                                                                                   isotropic Gaussian for sufficiently large T , and N (x; µ, Σ) is
+   The diffusion process gradually adds noise to the data to                       a Gaussian pdf with parameters µ and Σ. The sampling of xt
+approximate the posterior q (x1:T | x0 ), where x1 , . . . , xT are                at an arbitrary
+                                                                                              √           timestep t has the closed-form of q (xt | x0 ) =
+the latent variables with the same dimensionality as x0 . In [12],                 N   (x t ;   ᾱt x 0 , (1 − ᾱt ) I), where αt := 1 − βt and ᾱt :=
+                                                                                   Qt                                                           √
+the diffusion process is set to a simple parameterization of a                        s=1 αs . Thus, xt can be expressed directly as: xt =         αt x0 +
+fixed Markov Chain with conditional Gaussian translation as                        (1 − αt ) , where  ∼ N (0, I).
+Algorithm 1 Training.                                                  parameterization of pθ (xt−1 | xt ) is proposed:
+Input: distribution of clean and noisy ECG pairs q(xo , x̃), the                                                       
+                                                                                          1           βt
+number of training iterations N , maximal
+                                      √     diffusion
+                                                √        steps T , a       µθ (xt , t) =      xt − √         θ (xt , t) ,                  (5)
+predefined noise schedule S = {1, ᾱ0 , . . . , ᾱT },
+                                                                                         αt          1 − αt
+                                                                                                            (
+                                                                                                              1−αt−1
+                                                                                                               1−αt βt t > 1
+                                                                                         q
+Output: Trained denoising function θ
+                                                                           σθ (xt , t) = β̃t , where β̃t =                                  (6)
+ 1: Initiate: i = 0                                                                                           β1           t=1
+ 2: while i ≤ N do
+                                                                       where θ (·, ·) is a learnable denoising function which estimates
+ 3:     t ∼ Uniform ({1, . . . , T })
+                                                                       the noise vector  that was added to a noisy input xt .
+ 4:     xo , x̃ ∼ q(xo , x̃)
+                                                                       This parameterization leads to the following alternative loss
+ 5:     ᾱ ∼ Uniform (St−1 , St )
+                                                                       function:
+ 6:      ∼ N (0, I)                                                                             h          √         √             2i
+ 7:     Take gradient descent step on                                    Lsimple (θ) := Et,x0 ,  − θ       ᾱt x0 + 1 − ᾱt , t
+                             √       √                 2
+                                                                                                                                      (7)
+               ∇ θ  − θ       ᾱx0 + 1 − ᾱ, x̃, ᾱ
+                                                                       This objective can be viewed as a weighted combination of
+ 8:    i=i+1                                                           denoising score matching which enables more stable training
+ 9: end while                                                          and better results than the original score matching losses [23],
+                                                                       [24].
+Algorithm 2 Inference.                                                 B. Conditional Diffusion Model for ECG Baseline Wander and
+Input: Trained denoising function θ , a noisy observation x̃,         Noise Removal
+maximal diffusion steps T , M -shots reconstruction                       In the task of removing the baseline wander and noise in
+Output: Reconstructed ECG x0                                           ECG signals, we consider recovery of the clean signal x0 given
+ 1: Initiate: xm
+               0 = 0, m = M ,                                          a noisy ECG signal x̃. The noisy ECG signal contains baseline
+ 2: while m > 0 do                                                     wander and noise of unknown type. Thus, we estimate the
+ 3:     t = T , xt ∼ N (0, I)                                          true conditional data distribution q(x0 | x̃) via modeling the
+ 4:     while t > 0 do                                                 conditional distribution pθ (x0 | x̃) with a diffusion model.
+ 5:         Let                                                        Then, we extend the Eq. (3) to a conditional fashion:
+                                                  √ 
+                                                      
+                    1         1 − αt                                                               T
+           xt−1 =       xt − √         θ xt , x̃, ᾱt                                             Y
+                   αt          1 − ᾱt                                 pθ (x0:T | x̃) := p (xT )         pθ (xt−1 | xt , x̃) , xT ∼ N (0, I),
+                                                                                                   t=1
+ 6:         if t > 1 then                                                                                                                   (8)
+ 7:              xt−1 = xt−1 + σt
+                                                                       pθ (xt−1 | xt , x̃) := N (xt−1 ; µθ (xt , t | x̃) , σθ (xt , t | x̃) I) .
+ 8:         end if
+                                                                                                                                             (9)
+ 9:         t=t−1
+10:    end while                                                       The conditional reverse process pθ (xt−1 | xt , x̃) iteratively
+                 m+1
+11:    xm0 = x0       + x0                                             reconstructs the clean ECG x0 from a Gaussian distribution
+12:    m=m−1                                                           with the noisy observations as conditions. We visualized the
+13: end while                                                          diffusion and reverse mechanism of DeScoD-ECG in Figure
+return x00 /M                                                          1. The conditional reverse process pθ (xt−1 | xt , x̃) gradually
+                                                                       denoises the Gaussian noise by a small step conditioned on
+                                                                       the noisy observations and then produce the clean signals.
+                                                                       Algorithm 1 details the training process of DeScoD-ECG. We
+   The reverse process learns to reverse this diffusion process        first initiate the noise schedule βs for T steps diffusion in a
+to recover x0 from xt . Starting with the pure Gaussian noise          quadratic form, that the {β1 , . . . , βn } are defined as:
+sampled from p(xT ) := N (xT , 0, I), the reverse process is
+defined by the following Markov chain:                                              β1 = 0.0001, βT = 0.5,                                 (10)
+                                                                                                                2
+                                                                                           T −tp         t−1 p
+                                                                                    βt =           β1 +        βt .                        (11)
+                         T
+                                                                                           T −1         T −1
+                         Y
+ pθ (x0:T ) := p (xT )         pθ (xt−1 | xt ) ,   xT ∼ N (0, I) (3)   This noise schedule can improve the synthetic quality with
+                         t=1                                           fewer diffusion/reverse steps as prior works
+                                                                                                                  Qthave shown [13],
+ pθ (xt−1 | xt ) := N (xt−1 ; µθ (xt , t) , σθ (xt , t) I)       (4)   [25]. Recall that αt := 1 − βt and ᾱt := s=1 αs , we define
+                                                                       a new noise schedule specific for training process that can
+                                                                       avoid the denoising function θ by directly conditioning on
+where the time-dependent parameters of the Gaussian transi-            the discrete diffusion step index t and will improve the model
+tions are learned. In the DDPMs setting, the following specific        performance. More specifically, we use the predefined noise
+                   √          √
+schedule S = {1, ᾱ0 , . . . , ᾱT } in the training process then                                TABLE I
+let the denoising function condition on the continuous noise             ECG RECORDS USED AS TEST SET. W E USE THE EXACT SAME
+                                                                          SELECTIONS AS D EEP F ILTER [8] FOR FAIR COMPARISON .
+level ᾱ ∼ Uniform (St−1 , St ). The denoising function θ now
+takes three inputs with conditioned on the noisy observations         Database Name                                  Select ID
+x̃, and the loss function is formally given by:                       MIT-BIH Arrhythmia Database                    sel123, sel233
+                       √         √                2
+      Ex0 ,ᾱ,  − θ     ᾱx0 + 1 − ᾱ, x̃, ᾱ            (12)     MIT-BIH ST Change Database                     sel302, sel307
+
+                                                                      MIT-BIH Supraventricular Arrhythmia Database   sel820, sel853
+The pseudo code for the inference phase is shown in Al-
+gorithm 2. The inference phase in our proposed approach               MIT-BIH Normal Sinus Rhythm Database           sel16420, sel16795
+is straightforward to implement, which is simply applying
+                                                                      European ST-T Database                         sel0106, sel0121
+the Eq. (8) to sample the latent variables xt . To further
+improve the reconstruction accuracy, we take advantage of the         Sudden death patients from BIH                 sel32, sel49
+stochasticity of the diffusion models by averaging multiple
+                                                                      MIT-BIH LongTerm ECG Database                  sel14046, sel15815
+runs. This averaging process produces more precise results
+on the reconstructed signals (we test the 1, 3, 5, and 10-
+shots averages and report the results in Section IV-D). Recall
+that the DeScoD-ECG produces reconstruction of the ECG              into the multi-scale filters to extract the features under different
+signals from a random Gaussian distribution, therefore, we          receptive fields. Then the multi-scale features are aggregated
+could assume each reconstruction of multiple individual runs        by a convolutional layer after channel-wise concatenation. The
+are independent to each others. Let y be the clean signal and       half-instance-norm is used to normalize half of the features,
+ym be the reconstruction at mth run, we have:                       which has been shown to improve the training stability and not
+                                   M
+                                                                    degrade the natural statistical characters of the features [26].
+                                1 X                                 After the half-instance-norm, the normalized and unnormal-
+                      ycomb =         ym ,                  (13)
+                                M m=1                               ized features are fed into another convolutional layer. Then the
+                                                                    processed features are connected with the input features with
+where ycomb is the ensemble of multiple runs. And the output        residual shortcut [27] for producing the outputs. The Bridge
+of each reconstruction can be written as the true value plus an     block is modified based on the feature-wise linear modulation
+error in the form:                                                  (FiLM) [28].√ The bridge√block directly conditions on the
+                        ym = y + εm ,                      (14)     noise level ᾱ that the ᾱ is first encoded by sinusoidal
+and the average error made by the models acting individually        positional embeddings [29] then further encoded by a 1 × 1
+(which is the 1-shot reconstruction) is therefore:                  convolutional layer that create the learnable scaling and shift
+                                                                    vectors. Further, the scaling and shift vectors interact with the
+                        M               M
+                     1 X               X   1 2                      input features via multiplications and additions. Notably, there
+           εavg =         (y − ym )2 =      ε .             (15)
+                     M m=1             m=1
+                                           M m                      is no downsampling and upsampling in the whole network.
+                                                                    Thus, the network is compatible with input signals of any
+Similarly, the expected error from the multi-shot reconstruc-       length.
+tion is given by:
+                        M           M
+                                                                                           IV. E XPERIMENTS
+                     1 X       2
+                                    X  1
+        εcomb = (y −       ym ) = (      εm )2 .            (16)       In this section, we give the details of the experiments. We
+                     M m=1             M
+                                   m=1                              first introduce the definitions and formulations of the four
+We can see obviously the multi-shots reconstruction will            similarity metrics that quantify the quality of the reconstructed
+achieve lower error than single shot reconstruction since:          ECG signals. Then we summarize the datasets and introduce
+                                                                    our experimental procedure. Finally, we introduce the baseline
+                   M             M
+                  X   1         X   1 2                             comparison methods and discuss the quantitative evaluations
+                 (      εm )2 ≤      ε .                    (17)
+                  m=1
+                      M         m=1
+                                    M m                             of the DeScoD-ECGs and the baselines. We also visualize
+                                                                    reconstruction results and how the signals change during the
+C. Network Architecture                                             reverse process.
+   The architecture of the neural network used in the DeScoD-
+ECG is shown in Figure 2. The network is comprised of two           A. Evaluation Metrics
+stream backbones that extract features of the noisy observation        This work evaluates the distortion of the ECG signals in a
+x̃ and the latent variable xt , then the Bridges to combine         quantitative way with four distance-based metrics as suggested
+information of the features. The main computational module          by multiple previous studies [30]–[32]. According to those
+is named Half Normalized Filters (HNF) block, which is              studies, distance-based metrics are considered more suitable
+motivated by the Multi-Kernel filter design in DeepFilter [8]       than statistics-based metrics (such as Root Mean square er-
+and the Half-instance-norm in HINet [26]. The input is first fed    ror (RMSE), Cross-correlation (CC), and Signal noise ratio
+                                                           TABLE II
+E VALUATION METRICS RESULTS FOR DIFFERENT METHODS FOR RANDOM NOISE AMPLITUDE BETWEEN 0.2 TO 2. C OMPARISON RESULTS ARE OBTAINED
+                                                           FROM [8].
+
+
+                         Method/Model           SSD (au)          MAD (au)           PRD (%)           Cosine Sim
+                           FIR filter       47.464 ± 88.496     0.676 ± 0.572    66.158 ± 22.104     0.692 ± 0.216
+                           IIR filter       35.645 ± 70.189     0.594 ± 0.532    61.125 ± 23.220     0.736 ± 0.208
+                          FCN-DAE           10.633 ± 14.417     0.598 ± 0.381    94.504 ± 70.717     0.770 ± 0.171
+                            CGAN             7.834 ± 13.224     0.442 ± 0.323    57.133 ± 41.816     0.852 ± 0.141
+                            DRNN             6.702 ± 11.316     0.480 ± 0.340    50.035 ± 24.802     0.878 ± 0.126
+                          DeepFilter         5.203 ± 7.915      0.386 ± 0.283    50.445 ± 29.598     0.897 ± 0.097
+                         Ours (1-shot)       4.912 ± 7.822      0.369 ± 0.289    44.218 ± 27.980     0.904± 0.113
+                         Ours (3-shot)        4.057± 6.202      0.340 ± 0.266    41.523 ± 26.169     0.920 ± 0.095
+                         Ours (5-shot)       3.887 ± 5.911      0.334 ± 0.261    40.987± 26.562      0.923 ± 0.091
+                         Ours (10-shot)      3.771 ± 5.713      0.329 ± 0.258    40.527 ± 26.258     0.926± 0.087
+
+
+
+
+                                                                TABLE III
+                                                    SSD IN DIFFERENT NOISE SEGMENTS .
+
+                        Method/Model         0.2 to 0.6        0.6 to 1.0           1.0 to 1.5         1.5 to 2.0
+                          FIR filter       7.162 ± 9.485    22.542 ± 30.795     51.381 ± 72.620    95.983 ± 134.621
+                          IIR filter       5.615 ± 7.508    17.262 ± 25.049     38.334 ± 58.050    71.980 ± 107.880
+                         FCN-DAE           7.396 ± 8.032     8.638 ± 8.247      10.929 ± 12.883    14.586 ± 21.429
+                           DRNN            4.000 ± 7.437     4.932 ± 6.652       7.016 ± 10.971    10.031 ± 15.665
+                           CGAN            3.461 ± 6.054     5.518 ± 7.994       8.579 ± 12.565    12.382 ± 18.598
+                         DeepFilter        2.401 ± 3.419     3.816 ± 4.771        5.717 ± 7.781     8.078 ± 11.104
+                        Ours (1-shot)      2.324 ± 3.798     3.762 ± 5.869        5.328 ± 7.195     7.466 ± 10.724
+                        Ours (3-shot)      2.036 ± 3.225     3.252 ± 5.261        4.421 ± 5.739      5.935 ± 8.164
+                        Ours (5-shot)      1.977 ± 3.201     3.147 ± 4.963        4.193 ± 5.474      5.686 ± 7.772
+                        Ours (10-shot)     1.953 ± 3.138     3.046 ± 4.902       4.081 ± 5.315      5.483 ± 7.433
+
+
+
+
+                                                               TABLE IV
+                                                    MAD IN DIFFERENT NOISE SEGMENTS .
+
+                           Method/Model         0.2 to 0.6        0.6 to 1.0       1.0 to 1.5        1.5 to 2.0
+                             FIR filter       0.280 ± 0.183     0.510 ± 0.337    0.759 ± 0.513     1.045 ± 0.713
+                             IIR filter       0.248 ± 0.171     0.449 ± 0.322    0.666 ± 0.487     0.918 ± 0.676
+                            FCN-DAE           0.480 ± 0.278     0.532 ± 0.301    0.617 ± 0.369     0.727 ± 0.474
+                              DRNN            0.390 ± 0.286     0.432 ± 0.273    0.496 ± 0.330     0.576 ± 0.409
+                              CGAN            0.297 ± 0.175     0.370 ± 0.215    0.468 ± 0.306     0.587 ± 0.419
+                            DeepFilter        0.293 ± 0.214     0.341 ± 0.222    0.401 ± 0.270     0.483 ± 0.351
+                           Ours (1-shot)      0.230 ± 0.188     0.321 ± 0.225    0.403 ± 0.275     0.484 ± 0.351
+                           Ours (3-shot)      0.216 ± 0.180     0.299 ± 0.213    0.369 ± 0.251     0.442 ± 0.323
+                           Ours (5-shot)      0.213 ± 0.178     0.295 ± 0.211    0.362 ± 0.247     0.432 ± 0.314
+                           Ours (10-shot)     0.211 ± 0.178     0.291 ± 0.210    0.356 ± 0.243     0.426 ± 0.313
+
+
+
+
+                                                                TABLE V
+                                                    PRD IN DIFFERENT NOISE SEGMENTS .
+
+                      Method/Model           0.2 to 0.6          0.6 to 1.0         1.0 to 1.5          1.5 to 2.0
+                        FIR filter        42.673 ± 15.504     61.370 ± 18.213    73.491 ± 17.577     81.627 ± 15.250
+                        IIR filter        38.653 ± 15.668     55.867 ± 19.482    67.972 ± 19.714     76.644 ± 18.290
+                       FCN-DAE            76.445 ± 41.696     86.350 ± 56.163    98.331 ± 68.010    112.012 ± 94.656
+                         DRNN             40.298 ± 19.983     45.582 ± 21.936    52.317 ± 24.336    59.312 ± 27.389
+                         CGAN             39.090 ± 19.669     48.972 ± 24.694    60.514 ± 36.254    74.830 ± 59.722
+                       DeepFilter         34.026 ± 14.234     43.346 ± 19.925    53.777 ± 27.189    66.167 ± 38.040
+                      Ours (1-shot)       29.762 ± 15.583     38.945 ± 20.183    47.678 ± 25.366     56.559 ± 35.969
+                      Ours (3-shot)       28.066 ± 14.923     36.681 ± 19.165    44.506 ± 23.090     53.225 ± 33.843
+                      Ours (5-shot)       27.697 ± 14.706     36.187 ± 18.974    43.774 ± 22.834     52.715 ± 35.341
+                      Ours (10-shot)      27.475 ± 14.631     35.710 ± 18.718    43.321 ± 22.959    52.081 ± 34.681
+                  (a) Time domain of a segment from sel123                            (b) Power spectral density of the segment from sel123
+
+
+
+
+                  (c) Time domain of a segment from sel302                            (d) Power spectral density of the segment from sel302
+
+ Fig. 3. Visualization of the clean (red lines) and noisy (blue lines) ECG records in the time domain and the corresponding power spectral density plot.
+
+                                                                     TABLE VI
+                                                 C OSINE SIMILARITIES IN DIFFERENT NOISE SEGMENTS .
+
+                                Method/Model          0.2 to 0.6      0.6 to 1.0         1.0 to 1.5        1.5 to 2.0
+                                  FIR filter        0.891 ± 0.082   0.760 ± 0.149      0.637 ± 0.192     0.532 ± 0.209
+                                  IIR filter        0.910 ± 0.074   0.800 ± 0.143      0.690 ± 0.191     0.589 ± 0.217
+                                 FCN-DAE            0.844 ± 0.110   0.807 ± 0.136      0.757 ± 0.167     0.692 ± 0.205
+                                   DRNN             0.926 ± 0.070   0.906 ± 0.084      0.871 ± 0.122     0.824 ± 0.167
+                                   CGAN             0.928 ± 0.060   0.891 ± 0.085      0.838 ± 0.131     0.773 ± 0.184
+                                 DeepFilter         0.948 ± 0.042   0.921 ± 0.064      0.888 ± 0.093     0.844 ± 0.124
+                                Ours (1-shot)       0.955 ± 0.049   0.929 ± 0.068      0.895 ± 0.104     0.853 ± 0.156
+                                Ours (3-shot)       0.961 ± 0.042   0.939 ± 0.058      0.913 ± 0.083     0.879 ± 0.132
+                                Ours (5-shot)       0.961 ± 0.041   0.941 ± 0.056      0.918 ± 0.078     0.883 ± 0.129
+                                Ours (10-shot)      0.962 ± 0.040   0.943 ± 0.055      0.920 ± 0.077     0.889 ± 0.124
+
+
+
+(SNR)) for calculating the dissimilarity/similarity between                          signal. The calculation of PRD is given by:
+the clean and restored signals. For convenience, we use the                                    v
+                                                                                                       PN −1
+                                                                                               u                            2
+notations x, x̃, and x̂ to refer to the clean, the noisy, and                                             n=0 [x(n) − x̂(n)]
+                                                                                               u
+denoised ECGs, respectively. The definitions and formulations
+                                                                                       PRD = u t PN −1 h            PN −1      i2 × 100%.
+                                                                                                                  1
+of the four metrics are as follows:                                                                 n=0 x(n) − N      n=0 x(n)
+
+   • Sum of the square of the distances (SSD) [30]: SSD is
+                                                                                                                                        (20)
+     a variant of RMSE which is defined as:                                      •   Cosine similarity (Cosine Sim) [30]: The cosine sim-
+                                                                                     ilarity is a measure of similarity between two vectors
+                               N −1
+                               X                       2                             through the normalized dot product by the Euclidean L2
+                      SSD =           [x(n) − x̂(n)] .               (18)
+                                                                                     normalization. The cosine similarity is given by:
+                                n=0
+                                                                                                                            hx, x̂i
+    Unlike RMSE, the SSD of a reconstructed signal provides                                             Cosine Sim =                .                (21)
+    an idea of how similar the signals are along their entire                                                              kxk kx̂k
+    duration instead of average difference.                                   B. Dataset
+  • Absolute maximum distance (MAD) [30]: MAD is a
+                                                                                 We benchmark the DeScoD-ECG on the QT Database [33]
+    well-known similarity metric to quantify the ECG qual-                    and the Massachusetts Institute of Technology – Beth Israel
+    ity. Specifically, MAD measures the maximum absolute                      Hospital Noise Stress Test Database (MIT-BIH NST) [34].
+    distance between the original and filtered signals. MAD                   The QT Database and MIT-BIH Noise Stress Test Database
+    is given by:                                                              are archived and available at www.physionet.org [35]. We
+       MAD = max |x(n) − x̂(n)| ,             for     0 ≤ n ≤ N. (19)         use the ECG records in the QT database, and corrupt the
+                                                                              ECG records with the noise profiles taken from the MIT-
+  •   Percentage root-mean-square difference (PRD) [30]:                      BIH NST. QT Database is formed of 105 15-min two-lead
+      PRD computes the total distortion present in the denoised               ECG recordings containing a wide range of QRS and ST-T
+                                            (a) 0.2 < noise < 0.6
+
+
+
+
+                                            (b) 0.6 < noise < 1.0
+
+
+
+
+                                            (c) 1.0 < noise < 1.5
+
+
+
+
+                                            (d) 1.5 < noise < 2.0
+
+Fig. 4. The reconstructions of a segment intercepted from the sele123 records under different noise amplitudes.
+morphologies in all the possible variability. The MIT-BIH NST                                  TABLE VII
+contains three noise recordings of typical noise that appears in               N UMBERS OF PARAMETERS OF DIFFERENT MODELS .
+stress tests which are caused by motion-related interference.           Method       FCN-DAE    DRNN     CGAN      DeepFilter    Ours
+The electrodes are placed on the patients’ limbs to collect the        Parameters     0.08 M    0.03 M   4.89 M     0.17 M      1.22 M
+noises without the presence of ECG signals.
+   When adding the noise to the ECG records, we first normal-
+ized the noise records to the range of min and max value of the       the metrics. We can observe that the DeScoD-ECG achieves
+corresponding ECG signals and rescaled the noise amplitudes           better performance than the baselines even with 1-shot re-
+by multiplying a random factor between 0.2 to 2.0. By doing           construction. With 1-shot reconstruction, the DeScoD-ECG
+that, we have a better chance to observe the performance of the       outperforms the comparative methods in all the metrics. That
+denoising methods under different noisy conditions. Figure. 3         indicates the score-based diffusion model achieved better
+visualized some examples of the ECG signals with noise in             results than naı̈vely end-to-end training neural networks with
+both the time and frequency domains. We can observe that              better distribution approximation capability. When we use
+the baseline wander noises used in this work are more than            multi-shot reconstruction, the performance is further improved.
+just low-frequency noise that warps the signals. The noises           For example, the 10-shot reconstruction obtained the best
+contain both low and high-frequency components that can be            results on all four similarity metrics with 3.771 ± 5.713 au,
+used to prove the generalization capability of the denoising          0.329 ± 0.258 au, 40.527 ± 26.258 %, and 0.926 ± 0.087
+algorithms.                                                           compared to the existing state-of-the-art method, DeepFilter,
+                                                                      which achieved 5.203 ± 7.915 au, 0.386 ± 0.283 au, 50.455
+C. Training and implementation details                                ± 29.598 %, and, 0.897 ± 0.097. The quantitative evaluations
+   We use the 14 signals listed in Table I as a test set, which       on multi-shot reconstruction support our hypothesis that the
+are the same as the experiments in DeepFilter [8] for a fair          DeScoD-ECG can produce more accurate results with a self-
+comparison. Also, selecting test signals from different sources       ensemble strategy, which averages the multiple predictions.
+than the training set can ensure the generalization of the               Further, we evaluate the model performance on the test
+algorithms. The remaining ECG records are used for training           set under different noise amplitudes. Table III to VI present
+and validation. We randomly shuffle the remaining records and         the four metrics of different noise segments. The results on
+split them by 70% for training and 30% for validation. For the        each noise segment and different shots are consistent with the
+convenience of training and testing, we split the signals into        overall performance in Table II. We notice several observa-
+small patches with 512 points. Therefore, we obtained 50723           tions that could further prove the efficiency of the DeScoD-
+samples as training data, 21738 samples as the validation set,        ECGs. First, the DeScoD-ECG with 1-shot reconstruction still
+and 13337 as the test set. The random seed was set to the one         outperforms the baselines and achieves better results than the
+used in the DeepFilter experiments to add noise to the original       existing methods in 16 out of 16 evaluations under different
+ECG signal. We ran an experiment to verify this was the case          noise segments. Second, the gain brought by multi-shots
+by re-running the FIR and IIR experiments and obtaining the           reconstruction still holds under different noise strengths. Third,
+same results.                                                         the DeScoD-ECG boosted by the multi-shots reconstruction is
+   We implemented the proposed using the PyTorch frame-               more stable under extreme noisy scenarios than the baselines.
+work [36], and the source code will be freely available if this       For example, the results of 10-shot reconstruction under noise
+work is accepted1 . During training, a batch size of 96 is used.      amplitude between 1.5 and 2.0 outperforms the results of
+We trained the model for 400 epochs by Adam optimizer [37]            DeepFilter under noise amplitude between 1.0 and 1.5. Figure
+with an initial learning rate of 0.001, and the learning rate         4 shows the reconstruction results of an ECG beat extracted
+decays by multiplying 0.1 every 150 epochs. We save the               from the signal sel123 under different noise amplitude. We
+model weights with the lowest loss on the validation set during       observed that the DeScoD-ECG could produce precise and
+training and evaluate the performance only on the validation          consistent reconstruction under different noise levels and keep
+set for model selection. That means, before we determine the          the morphology of the signal with a significant baseline
+final model for testing, the test set is invisible to the model.      wander.
+We do that because we do not want to adjust the network                  Another interesting observation is how the DeScoD-ECG
+architecture and the hyper-parameters to overfit the test set.        reconstructs the signal starting with random Gaussian noise.
+                                                                      A sequence of results sampled from the reverse process is
+D. Results                                                            visualized in Figure 5. We can see that the diffusion model
+                                                                      denoises the Gaussian noise iteratively by a small step. After
+    We compare the performance of the DeScoD-ECG with
+                                                                      50 iterations, the Gaussian noise is denoised and transformed
+several representative baseline methods, namely: FIR and IIR
+                                                                      into a clean ECG signal.
+filters, DRNN [4], FCN-DAE [6], CGAN [10], and Deep-
+Filter [8]. We present the comparisons in Table II which                            V. D ISCUSSION AND F UTURE WORKS
+are shown as the mean values and standard deviations of
+                                                                         This work proposed DeScoD-ECG, a deep score-based
+  1 https://github.com/HuayuLiArizona/Score-based-ECG-Denoising.git   diffusion model for ECG baseline wander and noise removal.
+                 (a) Iteration 0.                                    (b) Iteration 10.                                  (c) Iteration 20.
+
+
+
+
+                 (d) Iteration 30.                                   (e) Iteration 40.                                   (f) Iteration 50.
+
+    Fig. 5. Visualization of the inference process which the diffusion model denoise the Gaussian noise iteratively to the approximation of true data.
+
+
+
+Experiments conducted on the QT database and MIT-BIH NST                       tating symptoms that stop them from resuming competitive
+demonstrate the facts in two aspects. First, we show that the                  sports. ECG monitoring in the exercise stress test is critical for
+DeScoD-ECG achieved the best performance compared to the                       the cardiovascular evaluation of athletes. In particular, these
+state-of-the-art denoising solutions. Taking advantage of the                  stress tests are vital to evaluate whether an athlete’s health
+excellence of score-based diffusion models in approximating                    condition allows them to return to competition. However, their
+the true data distribution, DeScoD-ECG is proven able to beat                  hidden cardiovascular dangers may only be exposed when
+the baseline methods with high accuracy and the preservation                   they go through their own routine training [41]. Therefore,
+of fine details. The results reported in Table II show that                    we need ECG denoising techniques that can perform well in
+DeScoD-ECG has the best overall denoising performance in                       extreme noise conditions to fulfill the flexible exercise stress
+four distance-based metrics. The results reported in Table III                 test requirements.
+to VI show the denoising performance under different noise                        In addition to the performance achieved by DeScoD-ECG,
+levels is consistent with overall performance and also sur-                    we find some interesting future work directions. One direction
+passes the baseline methods. Second, we demonstrate that the                   is to improve the computation efficiency. We evaluated the
+self-ensembles strategies can further boost the precision of the               running speed of DeScoD-ECG on a regular configuration
+reconstructions. The DeScoD-ECG also shows upward trends                       laptop with i7-10750H 2.60GHz CPU and GTX 1660 Ti
+in the general performance and the performance by noise level                  GPU. We chose this configuration due to the consideration of
+segments for the four metrics when increasing ensemble size.                   verifying DeScoD-ECG could be run by affordable personal
+In summary, the first fact proves the outstanding performance                  computers for researchers who want to use DeScoD-ECG for
+of the score-based diffusion model, and the second shows the                   ECG denoising. Also, we provided the numbers of parameter
+existence of strategies for further improving the score-based                  of DeScoD-ECG and the baseline methods in Tabel VII. We
+diffusion model.                                                               test the running time of the DeScoD-ECG on a 20-second
+   The DeScoD-ECG is of great significance for healthcare re-                  ECG record (7200 points with a sample rate of 360 Hz) that
+search. The motion-related noises, including electrode motion                  the 1, 3, 5, and 10-shot reconstructions take 0.682, 1.970,
+artifacts and baseline wander, exist widely in wearable ECG                    3.284, and 7.136 second. Although the running time is shorter
+monitoring devices [38], [39]. Therefore, the noises used in                   than the record duration, and the running speed can be further
+this work are rational to prove the feasibility of applying the                improved by batch computation, we should think about a
+DeScoD-ECG in filtering the ECG collected in exercise stress                   fast version of DeScoD-ECG in our future works. The major
+tests. The excellent performance of the DeScoD-ECG under                       computational overhead of diffusion models is brought by the
+extreme noisy environments enables the exercise stress tests                   sampling/inference process. Thus, speeding up the sampling
+to take place in more flexible scenarios. This work can be                     efficiency of the diffusion model is of great significance in
+regarded as a preliminary study and a critical data processing                 improving DeScoD-ECG. Several recent studies [17], [18]
+tool for our future analysis of exercise stress tests beyond                   were conducted to accelerate the reversing process of diffusion
+the traditional test items, such as walking on a treadmill or                  models by leveraging ODE solvers. Thus, our next step will
+riding a stationary bike. The routine examination items limit                  focus on combining the DeScoD-ECG with ODE solvers to
+the patients’ body movement, activity space, and exercise                      mitigate the computational overhead. Another direction is to
+intensity to prevent the influence of the noises. However, the                 enhance the self-ensemble strategy. The DeScoD-ECG used
+applications of stable and accurate reconstruction of the noisy                a simple averaging over the multi-shots reconstruction, while
+ECG allow us conducted stress tests in more flexible ways.                     we believe that developing a weighted ensemble strategy will
+For instance, the impacts of COVID-19 on elite athletes are                    further improve the quality of the restored signals. Therefore,
+studied in [40]. Athletes risk persistent cardiac or incapaci-                 in our future works, we will explore the possibility of using
+quality assignment techniques [42] to give each reconstruction                 [8] F. P. Romero, D. C. Piñol, and C. R. Vázquez-Seisdedos, “Deepfilter:
+a weight factor to achieve the weighted self-ensemble strategy.                    an ecg baseline wander removal filter using deep learning techniques,”
+                                                                                   Biomedical Signal Processing and Control, vol. 70, p. 102992, 2021.
+Also, we will evaluate the DeScoD-ECG on more types of                         [9] C. Szegedy, W. Liu, Y. Jia, P. Sermanet, S. Reed, D. Anguelov, D. Erhan,
+noise and deploy the denoised results to more downstream                           V. Vanhoucke, and A. Rabinovich, “Going deeper with convolutions,”
+tasks.                                                                             in Proceedings of the IEEE conference on computer vision and pattern
+                                                                                   recognition, 2015, pp. 1–9.
+                                                                              [10] X. Wang, B. Chen, M. Zeng, Y. Wang, H. Liu, R. Liu, L. Tian, and
+                         VI. C ONCLUSION                                           X. Lu, “An ecg signal denoising method using conditional generative
+   In this paper, we presented DeScoD-ECG, a novel ECG                             adversarial net,” IEEE Journal of Biomedical and Health Informatics,
+                                                                                   2022.
+baseline wander and noise removal approach based on a                         [11] O. Ronneberger, P. Fischer, and T. Brox, “U-net: Convolutional networks
+conditional score-based diffusion model, which has achieved                        for biomedical image segmentation,” in International Conference on
+state-of-the-art performance compared with existing baseline                       Medical image computing and computer-assisted intervention. Springer,
+                                                                                   2015, pp. 234–241.
+methods. Unlike the traditional end-to-end training frame-                    [12] J. Ho, A. Jain, and P. Abbeel, “Denoising diffusion probabilistic models,”
+works of deep neural networks, which directly learn the                            Advances in Neural Information Processing Systems, vol. 33, pp. 6840–
+mapping from noisy observations to noise-free reconstructions,                     6851, 2020.
+                                                                              [13] J. Song, C. Meng, and S. Ermon, “Denoising diffusion implicit models,”
+the proposed DeScoD-ECG learns the conditional distribution                        arXiv preprint arXiv:2010.02502, 2020.
+with stochasticity. The DeScoD-ECG starts from Gaussian                       [14] P. J. Zimetbaum and M. E. Josephson, “Use of the electrocardiogram
+white noise and iteratively reconstructs the signal through a                      in acute myocardial infarction,” New England Journal of Medicine, vol.
+                                                                                   348, no. 10, pp. 933–940, 2003.
+fixed Markov Chain with Gaussian translation conditioned on                   [15] T. Y. Goraya, S. J. Jacobsen, P. A. Pellikka, T. D. Miller, A. Khan, S. A.
+the previous step reconstructions and the noisy ECG observa-                       Weston, B. J. Gersh, and V. L. Roger, “Prognostic value of treadmill
+tions. The experimental results demonstrate the potential of the                   exercise testing in elderly persons,” Annals of internal medicine, vol.
+                                                                                   132, no. 11, pp. 862–870, 2000.
+DeScoD-ECG for biomedical signal processing. Compared to                      [16] R. Gosselink, T. Troosters, and M. Decramer, “Exercise testing: why,
+the naı̈vely training deep neural networks, the diffusion models                   which and how to interpret,” Breathe, vol. 1, no. 2, pp. 120–129, 2004.
+have better approximations of the true data distribution and                  [17] Y. Song, J. Sohl-Dickstein, D. P. Kingma, A. Kumar, S. Ermon, and
+                                                                                   B. Poole, “Score-based generative modeling through stochastic differ-
+higher stability under extreme noise corruptions. The high-                        ential equations,” arXiv preprint arXiv:2011.13456, 2020.
+quality and high-fidelity ECG reconstruction methodologies                    [18] Z. Kong, W. Ping, J. Huang, K. Zhao, and B. Catanzaro, “Dif-
+could serve the cardiac activity monitoring in various clinical                    fwave: A versatile diffusion model for audio synthesis,” arXiv preprint
+                                                                                   arXiv:2009.09761, 2020.
+settings, thereby increasing the flexibility of Cardiovascular                [19] N. Chen, Y. Zhang, H. Zen, R. J. Weiss, M. Norouzi, and W. Chan,
+disease diagnosis.                                                                 “Wavegrad: Estimating gradients for waveform generation,” arXiv
+                                                                                   preprint arXiv:2009.00713, 2020.
+                       ACKNOWLEDGEMENT                                        [20] I. Goodfellow, J. Pouget-Abadie, M. Mirza, B. Xu, D. Warde-Farley,
+                                                                                   S. Ozair, A. Courville, and Y. Bengio, “Generative adversarial nets,”
+   This work was supported by grants from the National Heart,                      Advances in neural information processing systems, vol. 27, 2014.
+Lung, and Blood Institute (#R21HL159661), the National                        [21] D. P. Kingma and M. Welling, “Auto-encoding variational bayes,” arXiv
+                                                                                   preprint arXiv:1312.6114, 2013.
+Science Foundation (#2052528 and CAREER #1943552), and                        [22] J. Sohl-Dickstein, E. Weiss, N. Maheswaranathan, and S. Ganguli,
+the Department of Energy (#DE-NA0003946). Any opinions,                            “Deep unsupervised learning using nonequilibrium thermodynamics,”
+findings, and conclusions or recommendations expressed in                          in International Conference on Machine Learning. PMLR, 2015, pp.
+                                                                                   2256–2265.
+this material are those of the authors and do not necessarily                 [23] Y. Song and S. Ermon, “Generative modeling by estimating gradients
+reflect the views of the sponsors.                                                 of the data distribution,” Advances in Neural Information Processing
+                                                                                   Systems, vol. 32, 2019.
+                             R EFERENCES                                      [24] P. Vincent, “A connection between score matching and denoising au-
+                                                                                   toencoders,” Neural computation, vol. 23, no. 7, pp. 1661–1674, 2011.
+ [1] W. H. Organization et al., Global status report on noncommu-             [25] A. Q. Nichol and P. Dhariwal, “Improved denoising diffusion probabilis-
+     nicable diseases 2014.        World Health Organization, 2014, no.            tic models,” in International Conference on Machine Learning. PMLR,
+     WHO/NMH/NVI/15.1.                                                             2021, pp. 8162–8171.
+ [2] K. S. Kumar, B. Yazdanpanah, and P. R. Kumar, “Removal of noise          [26] L. Chen, X. Lu, J. Zhang, X. Chu, and C. Chen, “Hinet: Half instance
+     from electrocardiogram using digital fir and iir filters with various         normalization network for image restoration,” in Proceedings of the
+     methods,” in 2015 International conference on communications and              IEEE/CVF Conference on Computer Vision and Pattern Recognition,
+     signal processing (ICCSP). IEEE, 2015, pp. 0157–0162.                         2021, pp. 182–192.
+ [3] Z. Barati and A. Ayatollahi, “Baseline wandering removal by using        [27] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image
+     independent component analysis to single-channel ecg data,” in 2006           recognition,” in Proceedings of the IEEE conference on computer vision
+     International Conference on Biomedical and Pharmaceutical Engineer-           and pattern recognition, 2016, pp. 770–778.
+     ing. IEEE, 2006, pp. 152–156.                                            [28] V. Dumoulin, E. Perez, N. Schucher, F. Strub, H. d. Vries, A. Courville,
+ [4] K. Antczak, “Deep recurrent neural networks for ecg signal denoising,”        and Y. Bengio, “Feature-wise transformations,” Distill, vol. 3, no. 7, p.
+     arXiv preprint arXiv:1807.11551, 2018.                                        e11, 2018.
+ [5] S. Hochreiter and J. Schmidhuber, “Long short-term memory,” Neural       [29] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez,
+     computation, vol. 9, no. 8, pp. 1735–1780, 1997.                              Ł. Kaiser, and I. Polosukhin, “Attention is all you need,” Advances in
+ [6] H.-T. Chiang, Y.-Y. Hsieh, S.-W. Fu, K.-H. Hung, Y. Tsao, and S.-             neural information processing systems, vol. 30, 2017.
+     Y. Chien, “Noise reduction in ecg signals using fully convolutional      [30] R. Nygaard, G. Melnikov, and A. K. Katsaggelos, “A rate distortion
+     denoising autoencoders,” Ieee Access, vol. 7, pp. 60 806–60 813, 2019.        optimal ecg coding algorithm,” IEEE Transactions on biomedical engi-
+ [7] P. Vincent, H. Larochelle, Y. Bengio, and P.-A. Manzagol, “Extract-           neering, vol. 48, no. 1, pp. 28–40, 2001.
+     ing and composing robust features with denoising autoencoders,” in       [31] M. S. Manikandan and S. Dandapat, “Ecg distortion measures and
+     Proceedings of the 25th international conference on Machine learning,         their effectiveness,” in 2008 First International Conference on Emerging
+     2008, pp. 1096–1103.                                                          Trends in Engineering and Technology. IEEE, 2008, pp. 705–710.
+[32] F. P. Romero, L. V. Romaguera, C. R. Vázquez-Seisdedos, M. G. F.             arXiv preprint arXiv:1412.6980, 2014.
+     Costa, J. E. Neto et al., “Baseline wander removal methods for ecg       [38] J. G. Webster, Medical instrumentation: application and design. John
+     signals: A comparative study,” arXiv preprint arXiv:1807.11359, 2018.         Wiley & Sons, 2009.
+[33] P. Laguna, R. G. Mark, A. Goldberg, and G. B. Moody, “A database         [39] X. An and G. K. Stylios, “Comparison of motion artefact reduction
+     for evaluation of algorithms for measurement of qt and other waveform         methods and the implementation of adaptive motion artefact reduction
+     intervals in the ecg,” in Computers in cardiology 1997. IEEE, 1997,           in wearable electrocardiogram monitoring,” Sensors, vol. 20, no. 5, p.
+     pp. 673–676.                                                                  1468, 2020.
+[34] G. Moody, W. Muldrow, and R. Mark, “A noise stress test for arrhythmia   [40] T. J. Yeo, “Sport and exercise during and beyond the covid-19 pan-
+     detectors,” in Computers in Cardiology, 1984, pp. 381–384.                    demic,” pp. 1239–1241, 2020.
+[35] P. PhysioBank, “Physionet: components of a new research resource for     [41] S. Sridi-Cheniti, S. Benhenda, S. Doutreleau, S. Cade, S. Guerard10, J.-
+     complex physiologic signals,” Circulation, vol. 101, no. 23, pp. e215–        M. Guy11, P. Trimoulet12, S. Picard13, B. Dusfour, A. Pouzet14 et al.,
+     e220, 2000.                                                                   “Resuming training in high-level athletes after mild covid-19 infection:
+[36] A. Paszke, S. Gross, F. Massa, A. Lerer, J. Bradbury, G. Chanan,              A multicenter prospective study (asccovid-19),” 2022.
+     T. Killeen, Z. Lin, N. Gimelshein, L. Antiga et al., “Pytorch: An        [42] U. Satija, B. Ramkumar, and M. S. Manikandan, “A review of signal
+     imperative style, high-performance deep learning library,” Advances in        processing techniques for electrocardiogram signal quality assessment,”
+     neural information processing systems, vol. 32, 2019.                         IEEE reviews in biomedical engineering, vol. 11, pp. 36–52, 2018.
+[37] D. P. Kingma and J. Ba, “Adam: A method for stochastic optimization,”
+

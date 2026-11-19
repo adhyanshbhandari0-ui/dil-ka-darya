@@ -1,0 +1,664 @@
+                                                              Computer Physics Communications 273 (2022) 108254
+
+
+
+                                                                  Contents lists available at ScienceDirect
+
+
+                                                   Computer Physics Communications
+                                                                         www.elsevier.com/locate/cpc
+
+
+
+
+MFDFA: Eﬃcient multifractal detrended ﬂuctuation analysis in
+python ✩
+Leonardo Rydin Gorjão a,b,∗ , Galib Hassan a,b , Jürgen Kurths c,d,e , Dirk Witthaut a,b
+a
+  Forschungszentrum Jülich, Institute for Energy and Climate Research - Systems Analysis and Technology Evaluation (IEK-STE), 52428 Jülich, Germany
+b
+  Institute for Theoretical Physics, University of Cologne, 50937 Köln, Germany
+c
+  Potsdam Institute for Climate Impact Research, 14473 Potsdam, Germany
+d
+  Institute of Physics, Humboldt University Berlin, 12489 Berlin, Germany
+e
+  Centre for Analysis of Complex Systems, World-Class Research Center “Digital biodesign and personalised healthcare”, Sechenov First Moscow State Medical
+University, 119991 Moscow, Russia
+
+
+
+a r t i c l e            i n f o                          a b s t r a c t
+
+Article history:                                          Multifractal detrended ﬂuctuation analysis (MFDFA) has become a central method to characterise the
+Received 31 May 2021                                      variability and uncertainty in empiric time series. Extracting the ﬂuctuations on different temporal scales
+Received in revised form 29 November 2021                 allows quantifying the strength and correlations in the underlying stochastic properties, their scaling
+Accepted 3 December 2021
+                                                          behaviour, as well as the level of fractality. Several extensions to the fundamental method have been
+Available online 8 December 2021
+                                                          developed over the years, vastly enhancing the applicability of MFDFA, e.g. empirical mode decomposition
+Keywords:                                                 for the study of long-range correlations and persistence. In this article we introduce an eﬃcient, easy-to-
+Multifractal detrended ﬂuctuation analysis                use python library for MFDFA, incorporating the most common extensions and harnessing the most of
+Time series analysis                                      multi-threaded processing for very fast calculations.
+Hurst coeﬃcient                                                                                                              © 2021 Elsevier B.V. All rights reserved.
+Multifractal spectrum
+Singularity strength
+
+
+
+
+1. Introduction                                                                                correlated noise can be found in Ref. [18]. Multifractal time se-
+                                                                                               ries analysis has found application in various ﬁelds, such as the
+    A common tool to unveil the nature of the scaling and frac-                                analysis of heartbeat rate [19], arterial pressure [10], EEG sleep
+tionality of a process, natural or computer-generated, is Multi-                               data [11,13], physiology [20], keystroke time series from Parkin-
+fractal Detrended Fluctuation Analysis (MFDFA). It was initially                               son’s disease patients [21], cosmic microwave radiation [22,23],
+developed by Peng et al. [1,2] as basic Detrended Fluctutation                                 seismic activity [24,25], sunspot activity [26], atmospheric scintil-
+Analysis (DFA) and later extended to study multifractal processes                              lation [27], temperature variability [28], meteorology [29], precip-
+by Kandelhardt et al., giving rise to MFDFA [3]. It addresses the                              itation levels [30], streamﬂow and sediment movement [7,31–36],
+question of the presence of correlations in time series and can                                protein folding [37], ﬁnance and econophysics [38–42], electric-
+be employed to analyse both discrete as well as continuous-time                                ity prices [43,44], power-grid frequency [45,46], epidemiology [47],
+stochastic processes. Since its initial development in the late 90’s,                          music [48–50], ethology [51,52], multifractal harmonic signals [53],
+it has been revisited to incorporate several other elements, e.g.                              and microrheology [54].
+empirical mode decomposition as a method for detrending [4–7],                                     MFDFA is a numerical algorithm designed to determine the self-
+overlapping moving windows [8,9], and a new metric denoted                                     similarity of a stochastic process. Putting it simply, the algorithm
+extended detrended ﬂuctuation analysis [10–13]. There are sev-                                 examines the relation between the diffusion of the process and its
+eral additional features exist, designed to study correlations of                              propagation in time or space. Auto-regressive and stochastic pro-
+two or more time series [14,15], lag correlations in time se-                                  cesses with different power-law scaling will diffuse with different
+ries [16], and Fourier-DFA [17], amongst others. A comprehen-                                  rates. Fluctuation Analysis (FA), which precedes the development
+sive study of DFA and the interplay between trends in data and                                 of MFDFA, provides a method to uncover these correlations, but
+                                                                                               fails in the presence of trends in the data, which, for example,
+                                                                                               are particularly present in weather and climate data. Detrending
+    ✩
+        The review of this paper was arranged by Prof. Hazel Andrew.
+                                                                                               the data via polynomial ﬁttings (DFA) allows one to uncover solely
+    * Corresponding author at: Forschungszentrum Jülich, Institute for Energy and              the relation between the inherent ﬂuctuations and the time scaling
+Climate Research - Systems Analysis and Technology Evaluation (IEK-STE), 52428
+Jülich, Germany.                                                                               of a process, thus circumventing the impact of non-stationarity in
+     E-mail address: leonardo.rydin@gmail.com (L. Rydin Gorjão).                               the data. Likewise, other methods—as empirical mode decompo-
+
+https://doi.org/10.1016/j.cpc.2021.108254
+0010-4655/© 2021 Elsevier B.V. All rights reserved.
+L. Rydin Gorjão, G. Hassan, J. Kurths et al.                                                                                Computer Physics Communications 273 (2022) 108254
+
+
+sition or moving average windows—are viable options to detrend                       iii) Consider the same data, apply the same procedure, but dis-
+the data. Another problem is that a process might be driven by                    card now instead the ﬁrst points of the data. One has now 2N s
+more than one time scale, i.e., have more than one internal pe-                   segments of the time series.
+riod, which can be removed either with local polynomial ﬁttings                      iv) To each of these segments ﬁt a polynomial y v of order m
+or EMD. Moreover, a stochastic process might be of a monofractal                  and calculate the variance of the difference of the data to the poly-
+or multifractal nature. By studying a continuum of power varia-                   nomial ﬁt
+tions of DFA one extends into MFDFA, which permits the study
+                                                                                                  1
+                                                                                                       s
+of the fractality of the data by comparing power variations, i.e., a
+                                                                                  F ( v , s) =               [Y ( v −1)s+i − y ( v −1)s+i ]2 ,                           (2)
+multifractal spectrum.                                                                            s
+                                                                                                      i =1
+    In this software we sought to design a computationally eﬃ-
+cient code focused on computational speed and usability. There                    for v = 1, 2, . . . , N s , where y ( v −1)s+i is the polynomial ﬁtting for
+are currently no ﬂexible and available implementations of MFDFA                   the segment Y ( v −1)s+i of length s, ﬁtted via least-squares. The or-
+in python. Available are some MATLAB [55] as well as R pack-                      der of the polynomial y v can be freely chosen, giving rise to the
+ages [56,57]. There is a particularly thorough introductory guide to              denotes (MF)DFA1, (MF)DFA2, . . . , (MF)DFAm, dependent on the
+MFDFA in MATLAB with a source-code by Espen A. F. Ihlen [55],                     chosen degree m of the polynomial.
+which is easy to implement but numerically ineﬃcient. With                           v) Notice now F ( v , s) is a function of each variance of each
+this implementation eﬃciency was sought. This was achieved by                     v-segment of data and of the different s-length segments chosen.
+making the most out of python, reshaping the code to allow                        Deﬁne the q-th order ﬂuctuation function by averaging over the N s
+for multi-threading, especially relying on numpy’s polynomial,                    variances of the segments of size s
+which scales easily with modern computers having more processor
+                                                                                                                                 1/q
+                                                                                                  1 
+cores [58]. Moreover, this library contains the most commonly ap-                                          Ns
+                                                                                                                            q/2
+plied methods alongside with DFA and MFDFA: the added feature                     F q (s) =                     [ F ( v , s)]            .                               (3)
+                                                                                                  Ns
+of empirical mode decomposition is implemented to substitute the                                       v =1
+polynomial ﬁttings; A moving window is included, especially valu-
+                                                                                  The ﬂuctuation function F q (s) depends on two parameters: the
+able for shorter time series; The extended DFA (eDFA) method is
+                                                                                  segment size s and the q-th power. The ﬂuctuation function F q (s)
+also included, adding a second metric of fractal scaling, especially
+                                                                                  is the function we will focus on which the MFDFA algorithm de-
+valuable for multifractal or aperiodic time series.                               veloped extracts from the data.
+    In the following sections we will introduce MFDFA alongside                        Two closely related algorithms are discussed and introduced
+some of the aforementioned methods incorporated into the MFDFA                    here, DFA [1] and MFDFA [3]. DFA is a particular case of MFDFA
+library. We will present two classical applications, one with a                   for the choice of q = 2. What is presented above is the MFDFA
+monofractal process and one with a multifractal noise, and show                   algorithm as according to Kantelhardt et al. [3], for which a partic-
+how to use MFDFA to extract their characteristics from a single                   ular choice of q = 2 leads to the ﬂuctuation function F 2 (s). The
+one-dimensional time series. Python code is presented to expli-                   DFA ﬂuctuation function F 2 (s) can unveil solely the monofrac-
+cate the use of the MFDFA library. Subsequently we study two                      tal spectrum of a time series. If the examined time series X i is
+real-world time series: the sunspot time series from 1818 to 2020                 monofractal, DFA is suﬃcient to describe and uncover the scaling
+which accounts for the daily recorded sunspots and the quarter-                   relations in the data. If not, one must rely on MFDFA and the study
+hourly electricity trading market, which accounts for a small vol-                of the spectrum unveiled by varying the q-th power.
+ume of electricity sell and purchase at 15 minute windows in                           We will later detail two changes: i) The ﬁrst involving empir-
+Continental Europe. Lastly we address a few details of the library                ical mode decomposition (EMD) for detrending, where the local
+and contribute a few closing remarks.                                             polynomial ﬁttings are replaced and the trends of the data are
+                                                                                  subtracted by removing select Intrinsic Mode Functions (IMFs) ob-
+2. Theoretical basis                                                              tained via empirical mode decomposition. ii) The second change
+                                                                                  involves substituting the non-overlapping segments with overlap-
+   In the following we brieﬂy summarise the theoretical basis of                  ping ones.
+Multifractal Detrended Fluctuation Analysis. Later we detail the dif-                  The inherent scaling properties of the data, if the data displays
+ferent included extensions and which modiﬁcations these add to                    power-law correlations, can now be studied in a log-log plot of
+the original MFDFA algorithm.                                                     F q (s) versus s, where the scaling of the data obeys a power-law
+                                                                                  with exponent h(q) as
+2.1. Multifractal detrended ﬂuctuation analysis
+                                                                                  F q (s) ∼ sh(q)                                                                        (4)
+   Multifractal Detrended Fluctuation Analysis studies the vari-
+ances of the ﬂuctuations of a given process by considering increas-               where h(q) is the generalised Hurst exponent or self-similarity ex-
+ing segments of a time series.                                                    ponent, which will dependent on q if the data is multifractal, and
+                                                                                  relates directly to the Hurst index [59]. The generalised Hurst ex-
+   i) Take a time series X (t ) (in time or space t) with N data
+                                                                                  ponent h(q) is obtained by ﬁnding the slope of F q (s) curve in the
+points, discretised as X i , i = 1, 2, . . . , N. Find the “detrended” pro-
+                                                                                  log-log plots.
+ﬁle of the process by deﬁning
+                                                                                      If the data is monofractal, the generalised Hurst exponent
+       
+       i                                                                          h(q) = H is independent of q and the generalised Hurst exponent
+Yi =          ( Xk − μ X ) , for i = 1, 2, . . . , N ,                 (1)        is simply the Hurst index H . On the other hand, if the data is mul-
+       k =1                                                                       tifractal, the dependence on q can be understood by studying the
+                                                                                  multifractal scaling exponent τ (q), given by
+i.e., the cumulative sum of X i subtracting the mean μ X of the data.
+     ii) Section the data into smaller non-overlapping segments of                τ (q) = qh(q) − 1,                                                                     (5)
+length s, obtaining therefore N s = int( N /s) segments. Given the
+total length of the data is not always a multiple of the segment’s                which depends on the generalised Hurst exponent h(q). Similarly,
+length s, discard the last points of the data.                                    one can construct the singularity spectrum D (α ) as the Legendre
+
+                                                                              2
+L. Rydin Gorjão, G. Hassan, J. Kurths et al.                                                                  Computer Physics Communications 273 (2022) 108254
+
+
+transform [60–63]. If τ (q) is suﬃciently smooth, the singularity
+strength α is given by
+
+α = τ  (q) = h(q) + qh (q),                                      (6)
+
+from which the singularity spectrum D (α ) can be constructed as
+
+D (α ) = qα − τ (q).                                               (7)
+    The singularity spectrum D (α ) describes the dimension of the
+subset of the time series which is characterised by the singular-
+ity strength α [64]. The breadth of singularity strength α indi-
+cates the strength of the multifractality of the time series, centred
+around the most prominent scale of the time series, i.e., h. The
+singularity spectrum D (α ) takes the shape of an inverted parabola
+with a maximum at D (α = 0) = D 0 , known as the box-counting
+or Minkowski–Bouligand dimension, or sometimes simply fractal
+dimension [60]. D (α = 1) = D 1 is known as the information di-
+mension and D (α = 2) = D 2 the correlation dimension [65]. For a
+clearer discussion of these properties, see Refs. [3,66]. An exten-
+sive and very illustrative representation of this can be found in
+Ref. [55]. For a careful analysis of the meaning and interpretation
+of the generalised Hurst coeﬃcients extracted from (MF)DFA, see
+Ref. [67], where a description and clariﬁcation is given on what
+are persistent and anti-persistent motions, stationary and non-
+stationarity time series, among other relevant details.
+                                                                              Fig. 1. Multifractal Detrended Fluctuation Analysis (MFDFA) of an exemplary 288
+                                                                              data points time series X t . Panel a) shows, from top to bottom: the time series; a
+2.1.1. Empirical mode decomposition                                           ﬁrst-order polynomial ﬁt (m = 1); a third-order polynomial ﬁt (m = 3); the EMD
+    Empirical mode decomposition (EMD) is a method with a vari-               detrending with the slowest Intrinsic Mode Function (EMD); a ﬁrst-order polynomial
+ety of applications in time series analysis [68]. It seeks to extract         ﬁt with moving windows with a step of 36 data points (m = 1, window = 36).
+                                                                              The last example with a moving window results in overlapping segments, given by
+the modes of oscillation of a time series strictly from the data. One         the window size. For all examples, the segments have a size of s = 72 data points
+can harness the ability of the EMD, i.e., the Hilbert–Huang decom-            and the lines indicate the ﬁts, either via polynomials or EMD. Panel b) displays
+position of a time series, to obtain the trend or trends of the time          the changing segment size s for a ﬁrst-order polynomial ﬁt (m = 1); From top to
+series and utilise those to transform non-stationary into stationary          bottom: the time series; segmentation with s = 48; s = 72; s = 96; s = 144. Shaded
+                                                                              areas on both panels indicated the standard deviation of each segment.
+data. The central concept, developed by Qian, Gu, and Zhou [6], is
+to substitute the detrending method employed in the traditional
+MFDFA, i.e., polynomial ﬁttings, by removing instead particular In-
+                                                                              2.1.3. Extended detrended ﬂuctuation analysis
+trinsic Mode functions extracted via EMD. A sketch of the method
+                                                                                  A new metric of similar nature as the ﬂuctuation function F q (s),
+can be seen in Fig. 1.
+    EMD can be summarised in a few steps: a set of intrinsic mode             given in Eq. (3), has been proposed in Ref. [10] This measure su-
+functions (IMFs) are extracted from the time series, obeying: 1) the          persedes the q-order powers and takes in solely the case of DFA
+number of extrema and the number of zero crossings must maxi-                 where q = 2. Instead of ﬁnding the average of the variances over
+mally differ by one. 2) for any point, the mean value of the enve-            each choice of segments of size s, it considers the difference be-
+lope deﬁned by the local extrema is zero. Numerical methods—as                tween the extrema of the ﬂuctuation function at each segment s.
+cubic splines—are used to ﬁnd the curve that best ﬁts “between”               Take F ( v , s) as given in Eq. (2) and extract the maximum and min-
+the local extrema of the time series. The method is applied iter-             imum of the variances over all windows v for a certain window
+atively: i) Obtain an IMF by ﬁnding the “best” curve between the              size s
+local extrema of the time series; ii) Subtract this IMF to the time
+series; iii) Repeat. Apply the process recursively to the time series          F (s) = max[ F ( v , s)] − min[ F ( v , s)].                                  (8)
+                                                                                            v                   v
+until the ﬁnal IMF contains solely a residual trend of the data.
+                                                                              This new metric  F (s) is denoted Extended Fluctuation Analysis.
+2.1.2. Moving windows                                                         In general,  F (s) can scale as a power law with a different expo-
+    The overlapping moving windows included in this library is                nent
+not aimed at detrending, but instead for the analyses of rather
+short time series or very large scales in longer time series [8].              F (s) ∼ sβ .                                                                  (9)
+In the literature several applications of moving average windows
+have been proposed as methods to remove trends and ensure sta-                This metric takes into account aperiodicities in the data which, in
+tionarity, by simply removing a windowed average to the time                  some sense, would be accounted for as a multifractal behaviour.
+series [8,9,42]. This is not what we do here. Here, we substitute             It can unravel a second scaling phenomenon due to local changes
+the non-overlapping segmentation, as explain after Eq. (1), by a              of a time series’ period. A purely monofractal time series would
+moving window, replacing the two separate segmentations by a                  result in β = H .
+moving window of each segment size s over the time series, as
+proposed by Zhou and Leung [8]. This is particularly relevant when            3. Examples
+examining short time series, where quickly the choice of larger lags
+s separates the data into a small number of segments, resulting in               To exemplify the usage of MFDFA, we ﬁrst take two common
+a poor statistics for the scaling at larger lags. A sketch of the meth-       examples of stochastic processes, a fractional Ornstein–Uhlenbeck
+ods can be seen in Fig. 1.                                                    process and general process that has a symmetric Lévy α -stable
+
+                                                                          3
+L. Rydin Gorjão, G. Hassan, J. Kurths et al.                                                                                Computer Physics Communications 273 (2022) 108254
+
+
+
+
+Fig. 2. Multifractal Detrended Fluctuation Analysis (MFDFA) of three exemplary sample paths of fractional Ornstein–Uhlenbeck processes, given by Eq (10), with Hurst indices
+of H = 0.3, 0.5, and 0.7. Panel a) displays the log-log plot of the segment size s versus the ﬂuctuation function F 2 (s), given by Eq. (3), for q = 2. Each line has a slope of
+H + 1, as expected. The inset shows F q (s) for the case of H = 0.3 and the power variations q = −10, −2, 2, 10. These lines are all parallel indicating that the process is
+monofractal, as expected. The dashed lines indicate the theoretical expected scaling, i.e., a slope of H + 1 = 0.3 + 1, where the +1 account for the increase in regularity
+due to the integration. The generalised Hurst coeﬃcients h(q), which are simply H + 1, are obtained by extracting the slopes of the curves (in a log-log scale). Panel b)
+shows the multifractal scaling exponent τ (q), given by Eq. (4), which exhibits a linear dependency, i.e., h(q) = H , indicating again the process is monofractal. The processes
+were numerically integrated with an integration step t = 0.001 over N = 104 time units (N = 107 data points). The MFDFA algorithm ran in 1 min 29 s ± 1.85 s, for 100
+segments s and 40 q-variation powers, with ﬁrst-order polynomial ﬁts.
+
+
+
+
+distribution, with single parameter α . We will show how to ex-                            t = 0.001 for a total time of t = 104 (thus we have 107 data
+tract the ﬂuctuation function F q (s) and how to interpret the plots                       points). Here exempliﬁed is the fractional Ornstein–Uhlenbeck pro-
+conventionally extracted to perform the analysis. Subsequently we                          cess with H = 0.3.
+test the algorithm with real-world data on sunspot time series, fol-
+lowing Ref. [26], and later apply the algorithm to electricity price                                  Listing 2: Integrate Ornstein–Uhlenbeck process.
+time series from the European Power Exchange.                                               3   # integration time and time sampling
+                                                                                            4   t_final = 10000
+                                                                                            5   dt = 0.001
+3.1. Numerically generated data                                                             6   N = int( t_final/ delta_t)
+                                                                                            7
+3.1.1. Fractional Ornstein–Uhlenbeck process                                                8   # The parameters theta and sigma
+    To study the scaling effects in continuous stochastic pro-                              9   the = 1
+                                                                                           10   sig = 0.5
+cesses, three exemplary fractional Ornstein–Uhlenbeck processes                            11
+are taken, deﬁned as [69]                                                                  12   # Initialise the array X
+                                                                                           13   X = np. zeros(N)
+d X t = −θ X t dt + σ      dB tH ,                                             (10)        14
+                                                                                           15   # Generate the fractional Brownian noise
+with a fractional Brownian motion B tH with the covariance func-                           16   # with a Hurst coefficient of H = 0.3
+tion
+                                                                                           17   dB = ( t_final ∗ ∗ H) ∗ fgn(N, H = 0.3)
+                                                                                           18
+            1                                                                          19   # Integrate the process
+E B tH B tH =   |t |2H + |t  |2H − |t − t  |2H .                            (11)        20   for i in range (1,N):
+                    2                                                                      21       X[i] = X[i-1] - the ∗ X[i- 1] ∗ dt + sig ∗ dB[i]
+Eq. (10) ﬁxed mean reverting strength θ = 1.0 and volatility σ =
+0.5, with three distinct Hurst indices of H = 0.3, 0.5, and 0.7. Note
+here that the classic uncorrelated Brownian motion is given by                             To retrieve the MFDFA spectrum of the generated time series, de-
+H = 0.5. A fractional Brownian motion has a self-similarity ex-                            ﬁne the set of q power variations and the lags s to examine, and
+ponent given by the Hurst index H , thus the three choices of                              call the MFDFA function.
+fractional Ornstein–Uhlenbeck should result in a scaling of h(q) =
+H + 1. The +1 is due to the integration, which smooths the ﬂuc-                                                     Listing 3: Applying MFDFA.
+tuations and thus increases the regularity of the process. We will                         22   # 100 lag s points from 3 to 1000
+now numerically integrate these processes and utilise the MFDFA                            23   lag = np. logspace (0.6 ,3 ,118). astype(int)
+library to identify the Hurst coeﬃcients and the presence of a                             24   lag = np. unique(lag)
+                                                                                           25
+monofractal vs multifractal spectrum in the time series.
+                                                                                           26   # q power variations , removing 0 power
+    Let us exemplify how to numerically generate data and utilise                          27   q = np. linspace(-10 ,10 ,41)
+the MFDFA library Load the MFDFA library alongside with the frac-                          28   q = q[q !=0.0]
+tional Brownian noise generator fgn included in your python                                29
+console or editor.                                                                         30   lag , fluct = MFDFA(X, lag = lag , q = q)
+
+                        Listing 1: Load the MFDFA library.
+1   from MFDFA import MFDFA                                                                When not declaring the values of the q powers, q = 2 is assumed,
+2   from MFDFA import fgn                                                                  thus resulting in the conventional DFA. Likewise, not declaring
+                                                                                           the order of the polynomial ﬁtting, a ﬁrst-order polynomial is as-
+                                                                                           sumed, i.e., order = 1.
+To numerically integrate an Ornstein–Uhlenbeck process, given by                               In Fig. 2 the MFDFA of the three processes can be seen. In panel
+Eq. (10), we utilise an Euler–Maruyama scheme with a stepsize                              a) the ﬂuctuation function F 2 (s), with q = 2, is shown for a poly-
+
+                                                                                       4
+L. Rydin Gorjão, G. Hassan, J. Kurths et al.                                                                                Computer Physics Communications 273 (2022) 108254
+
+
+
+
+Fig. 3. Multifractal Detrended Fluctuation Analysis (MFDFA) of three exemplary symmetric Lévy α -stable distributed processes, with α = 1.75, 1.25, and 0.75. In panel a) the
+ﬂuctuation function F q (s) is shown as a function of the segment size s on double logarithmic scales for α = 1.25 and different values of the power, q = −10, −5, −2, 2, 5, 10.
+For q > α the curves are not parallel, indicating the multifractal nature of the process. Panel b) displays the generalised Hurst exponent h(q), where a clear non-linear
+dependency on q is observable. The inset displays the multifractal scaling exponent τ (q) displaying two clear distinct behaviours for q < 0 and q > α . The solid lines indicate
+the theoretical expected scaling for q < 0. The three processes were drawn from Lévy α -stable distributions, each with N = 107 data points. The MFDFA algorithm ran in
+1 min 24 s ± 2.17 s for 100 segments s, 40 q powers, and third-order polynomial ﬁts.
+
+
+nomial detrending of ﬁrst order. This is the conventional DFA. The                         q = 2, i.e., h(q = 2) = 1/2 for all Lévy motions, including (non-
+slopes of each curve in the log-log plot reveal the Hurst indices                          fractional) Brownian motions (where α = 2).
+of each process, i.e., the fractional Ornstein–Uhlenbeck with Hurst
+H = 0.3 scales with a slope of 1.3 = 0.3 + 1, the other two with                           3.2. Real-world data, empirical mode decomposition, and extended DFA
+H = 0.5 and H = 0.7 have a slope of 1.5 and 1.7, respectively.
+The inset in panel a) shows the ﬂuctuation function F q (s), with                             In order to evaluate the eﬃciency of the algorithm, we test here
+q = −10, −2, 2, and 10, for the fractional Ornstein–Uhlenbeck pro-                         two real-world data sets. Firstly, using MFDFA we will evaluate the
+cess with H = 0.3. Note that the slope of all power variations is the                      multifractality of sunspots time series, a recurring phenomenon
+same, i.e., the process is monofractal, as expected. The monofrac-                         on the Sun’s photosphere which can be observed with a tele-
+tality of the process is also evident in panel b). The multifractal                        scope [26]. Secondly, we will analyse the German and Autrian spot
+scaling exponent τ (q) is shown and is purely a linear function.                           market intraday quarter-hourly electricity price extracted from the
+Likewise, in the inset, the generalised Hurst indices h(q) for the                         European Power Electricity Exchange (EPEX SPOT) [71,72]. We il-
+three processes for a set of power variations q ∈ [−10, 10] are                            lustrate the application of two advanced features of the developed
+displayed. The linear shape of τ (q) and constant value of h(q)                            python package, moving windows and the masking of missing
+in the inset indicates, as expected, that these three processes are                        data points.
+monofractal. Small deviations are seen for very negative q powers
+(q  7), which arise due to the numeric (negative) powering op-                            3.2.1. Sunspots
+eration, which highly depends on the numerical precision of the                                The sunspot numbers, also called Wolf numbers, are a rather
+data.                                                                                      simple measure of solar activity by counting in a weighted man-
+                                                                                           ner the number of groups of sunspots and single sunspots visible
+3.1.2. Lévy-driven process                                                                 from the Earth in the solar photosphere, i.e. it is an integrated
+    As a second example, take a collection of Lévy distributed ran-                        measure over space [74,75]. Hence, the sunspot numbers form a
+dom variables [70]. That is, each X t is drawn independently from a                        time series which has a mean period of about 11 years, but is far
+symmetric α -stable distribution, such that the probability density                        from being simply periodic [62]. Solar activity is the result of com-
+function of X (t ) vanishes as a power-law P (x) ∼ |x|−(α −1) for large                    plex magneto-hydrodynamic processes in the Sun characterised by
+|x| [70]. These processes exhibit heavy tails, ill-deﬁned variances,                       a highly complex spatio-temporal dynamics. It is of special inter-
+and multifractal scaling. In Fig. 3 three symmetric Lévy α -stable                         est to analyse the rather long series of sunspot numbers in order
+distributed processes with α = 1.75, 1.25, and 0.75 are studied                            to explore some relations to the underlying spatio-temporal sys-
+with MFDFA.                                                                                tem.
+    The multifractal behaviour can be identiﬁed directly in panel                              The emergence of sunspots has a distinct statistics and a multi-
+a), where the ﬂuctuation function F q (s) for α = 1.25 is shown.                           fractal spectrum which has been examined in Ref. [26]. This publi-
+The lines of F q (s) are not parallel for different positive q powers,                     cation has become a reference for multifractal studies as the data
+showing that the process is not mono-fractal. In fact, the process                         from the ILSO World Data Center, Royal Observatory of Belgium,
+is bi-fractal, having a separate behaviour for q < 0 and q > α . For                       Brussels is freely available [73]. Here, we will focus on numeri-
+positive power variations q > α , the generalised Hurst exponent                           cal eﬃciency and how to deal with missing or corrupt data. We
+h(q) decays like 1/q. For values of q < 0, the generalised Hurst ex-                       utilised another feature integrated in MFDFA that enables an ef-
+ponent h(q) = 1/α . This can be seen clearly in Fig. 3 b), where                           ﬁcient management of missing data points. In python’s numpy
+the generalised Hurst exponent h(q) is displayed. In the inset, one                        arrays, missing or corrupt values in a time series can be handled
+notices that the multifractal scaling exponent τ (q) = 0, for q > α                        with masked data, which logs the missing data points and takes
+(always zero for q > 2), once again showing that none of these                             these into account while performing averages, sums, and power
+processes are distinguishable for positive power variations.                               operations. When calculating averages or the variance of a seg-
+    In general, without the aid of the multifractal spectra, which                         ment, or when taking powers, the masked entries are not taken
+we uncovered by studying MFDFA for a range of q values, it is                              into account. For the particular application with sunspot time se-
+not possible to distinguish between Lévy distributed processes. The                        ries, which are recorded daily since 1818, there are 3247 missing
+particular choice of q = 2, i.e., conventional DFA, obscures the frac-                     values, over a total of 74145 entries, i.e., roughly 4.4% of the data
+tality of these processes, as they all show a similar scaling for                          is missing. To go around this, simply use
+
+                                                                                       5
+L. Rydin Gorjão, G. Hassan, J. Kurths et al.                                                                                   Computer Physics Communications 273 (2022) 108254
+
+
+
+
+Fig. 4. Multifractal Detrended Fluctuation Analysis (MFDFA) of sunspot time series from 1818 to 2020, by the ILSO World Data Center, Royal Observatory of Belgium,
+Brussels [73]. Panel a) shows the number of sunspots registered from 1818 to 2020. Panel b) displays the ﬂuctuation function F q (s) as a function of the segment size s on a
+double-logarithmic scale for q = −10, −5, −2, 2, 5, 10, with positive q values in orange and negative q values in green. Panel c) displays the generalised Hurst coeﬃcient h(q)
+over q, and the inset displays the multifractal scaling exponent τ (q), given by Eq. (4), both highlighting the multifractal spectrum of the data (h(q) is not constant over q, τ (q)
+is not linear over q). Panel d) displays the singularity spectrum D (α ) over the singularity strength α which shows a large breadth of α spanning over [1.25, 2.25], indicating
+the strong multifractality of the data. The MFDFA algorithm ran in 426 ms ± 11.8 ms, for 70 segments s, 40 q powers, and ﬁrst-order polynomial ﬁts. The missing values
+were neatly removed by utilising numpy’s masked arrays, which is integrated in MFDFA and allows the user to simply “mask” empty or corrupted data. (For interpretation
+of the colours in the ﬁgure(s), the reader is referred to the web version of this article.)
+
+             Listing 4: MFDFA and missing data.
+                                                                                             as well that h(q) and α are always larger than 1, indicating that
+ 1   # Read data whichever way preferred                                                     this is a non-stationary process.
+ 2   data = read_data(’sunspot.csv ’)
+ 3
+ 4   # Mask missing values. For this case -1                                                 3.2.2. German and Austrian spot market intraday quarter-hourly
+ 5   # is a missing entry in the record                                                      electricity price time series
+ 6   data[data ==-1.] = np.nan                                                                   We will examine now a 4-year long time series sampled at 15
+ 7   data = np.ma. masked_invalid(data)                                                      minutes of the spot market intraday quarter-hourly German and
+ 8                                                                                           Austrian electricity price [71,72], from the 1st of January 2015 to
+ 9   # Run MFDFA ( choose lag and q)
+10   lag , fluct = MFDFA(data , lag , q)                                                     end of December 2019, traded at the European Power Exchange
+                                                                                             (EPEX SPOT). To the extent of our knowledge no multifractal anal-
+                                                                                             ysis of this particular data has been performed before, but other
+                                                                                             multifractal studies of price time series exist [44]. In Wang et
+                                                                                             al. [44], the authors examine different scaling properties for se-
+The MFDFA will extract the variances as it is possible, taking into
+                                                                                             lected periods of low, regular, and high electricity price for some
+account the missing values in the time series. Here we highlight
+                                                                                             United States of America’s electricity markets in the year 2000 and
+that MFDFA calculated 40 q-powers over 70 segments s in 426 ms
+                                                                                             2001. Here we propose a different analysis, studying the data and
+± 11.8 ms.                                                                                   examining a short and long time scale of the data without sepa-
+    In Fig. 4 we display the ﬂuctuation function F q (s) for q =                             rating different activity periods.
+−10, −5, −2, 2, 5, 10, in panel b), for s ∈ [70, 1000] These curves                              We know that the 15 minute trading electricity market amounts
+are not parallel, suggesting the time series is not monofractal. In                          to a small volume of the overall exchange electricity sold, thus
+panel c) the generalised Hurst exponent h(q) is shown as func-                               this market serves only electricity producers which can either ex-
+tion of q, and similarly the multifractal scaling exponent τ (q) in                          tract or inject power from the power-grid system in a very fast
+inset. The generalised Hurst exponent h(q) is not constant over                              manner (< 15 minutes) [76,77]. This will lead us to explore to sep-
+q and consequently the multifractal scaling exponent τ (q) is not                            arate scaling phenomena in the data: A short and a long timescale
+linear, indicating clearly the time series in multifractal. In panel                         of market activities. The expectation is that the very short-time
+d) we display the singularity spectrum D (α ) over the singularity                           trading is highly volatile, given the necessity of the power grid in
+strength α , as given by Eq. (7). The singularity strength α spans                           injecting or extracting power is a fairly speedy manner. In the long
+a wide range of values, over [1.25, 2.25], indicating how strongly                           run, the quarter-hourly market is intrinsically linked to the larger
+multifractal the time series is. Here recall that a monofractal time                         hourly and daily electricity market, which has far less variability,
+series, as the fractional Ornstein–Uhlenbeck previously shown in                             as most of the power is sold in lengthier contracts, stabilising the
+Fig. 2, has a very narrow range of the singularity strength α , cen-                         value of the electricity price. Thus one expects a narrower mul-
+tred around H . For the case of sunspot time series we see a wide                            tifractality at large temporal scales. Multifractality is nevertheless
+range of α , indicating the various scales of the phenomenon. Note                           expected, as the system exhibits very large yet seldom negative
+
+                                                                                         6
+L. Rydin Gorjão, G. Hassan, J. Kurths et al.                                                                                 Computer Physics Communications 273 (2022) 108254
+
+
+
+
+Fig. 5. Multifractal Detrended Fluctuation Analysis (MFDFA) of the spot market intraday quarter-hourly German and Austrian electricity price time series from 2015 to 2019,
+traded at the European Power Exchange (EPEX SPOT) [71,72]. Panel a) displays the price in EUR/kWh from 2015 to 2019. Panel b) displays the log-log plot of the segment size
+s versus the ﬂuctuation function F q (s) for q = −10, −5, −2, 2, 5, 10. Orange and green markers indicate the segments larger than two days, where purple indicate segments
+between 1 and 48 hours. There two scales are studied separately. Panel c) displays the generalised Hurst coeﬃcient h(q) over q, and the inset displays the multifractal scaling
+exponent τ (q), given by Eq. (4). Panel d) displays the singularity spectrum D (α ) over the singularity strength α . The short-time scale (1–48 hours) displays large generalised
+Hurst coeﬃcient h(q) and a very large breadth of the singularity strength α , indicating precisely the high volatility of the market at short time scales. In comparison, the
+longer time scales (> 48 hours) are much “milder”, and the variations of α ∈ [0.67, 0.92], which indicates the process is both stationary, int the long run, and only moderately
+volatile. The MFDFA algorithm ran in 2 min 11 s ± 4.43 s for 50 segments s, 40 q powers, ﬁrst-order polynomial ﬁts, and the moving window.
+
+
+prices, as well as an occasional four of ﬁve-fold increase of the                           10 days. These are indicated in purple (short timescale) and or-
+(positive) prices, again occurring seldom and lasting very short pe-                        ange and green (long time scale). We ﬁrst observe that negative q
+riods.                                                                                      powers do not exist for the short time scale. This is not unusual,
+   In order to obtain a better statistics of the shorter time scales,                       many processes do not show a multifractal spectrum with negative
+we will employ MFDFA’s moving windows method previously dis-                                q values. Note that this involves taking negative powers of the av-
+cussed. The moving window method requires the input of the                                  erage of the variances, which is not always well deﬁned for short
+number of steps used to “move” the windows. For the following                               s segments. This also served as a threshold to assess the change in
+example, the window parameter is set to 1, thus each overlap-                               the fractal behaviour of the time series. For the large time scales
+ping window is displaced by solely 1 data point. This substantially                         (> 48 hours) the negative powers are well deﬁned, and we can
+increases the computational time as each averaging operation is                             identify the full singularity spectrum D (α ), as seen in panel d).
+repeated by the number of segments s − 1. For Fig. 5, the total                             We note that the short time scale (< 48 hours) has a very strong
+calculation lasted 2 min 11 s ± 4.43 s for the windowed mode,                               multifractality (in purple). The singularity strength α , which we
+compared with 764 ms ± 9.32 ms with the conventional non-                                   can only extract for positive q values, has a very large breadth,
+overlapping windows, for 50 s segments.                                                     especially with its equivalent for the large time scale (in orange).
+                                                                                            This is well grounded on the previous arguments of having a very
+            Listing 5: MFDFA and moving window.                                             volatile market at these short time scales, thus these results are
+                                                                                            in line with what is known about this market: The high volatility
+1   # Read data whichever way preferred
+2   data = read_data(’price.csv ’)                                                          and occasional burst—into very large electricity prices or into neg-
+3                                                                                           ative prices—generate a wide range of the singularity strength. The
+4   # Run MFDFA ( choose lag and q)                                                         long-term stability, connected with the larger intraday and day-
+5   lag , fluct = MFDFA(data , lag , q,                                                     ahead electricity markets, makes the process far less multifractal
+6            extension = {’window ’ : 1})
+                                                                                            at large temporal scales.
+
+                                                                                            4. The MFDFA library
+    In Fig. 5 we display the MFDFA analysis of the price time series,
+as previously done for the sunpots in Fig. 4. We perform a simi-                               The Multifractal Detrended Fluctuation Analysis library MFDFA
+lar analysis as above, thus we will condense the technical details                          in python presented is a standalone package based integrally
+and focus on the interpretation. Previous studies point to a clear                          on python’s numpy [58]. It can be found in https://github.com/
+separation of the scaling behaviour of price time series [43,78,79].                        LRydin/MFDFA. It harnesses numpy’s vectorised polynomial ﬁt-
+They separate two time scales for periods shorter and longer than                           tings, making it possible to utilise all computational cores in a
+24 hours. These studies used pricing data from before 2004 for                              computer’s processor(s). Additionally, EMD is included as an ex-
+the Nordic grid (Nordpool). In our analysis, we similarly separate                          tra feature, which is integrated into MFDFA by simply installing
+two scales, between 1 and 48 hours and between 48 hours and                                 the python library PyEMD [80]. The conventional plots associated
+
+                                                                                        7
+L. Rydin Gorjão, G. Hassan, J. Kurths et al.                                                                                 Computer Physics Communications 273 (2022) 108254
+
+
+                                                                                            Lévy-distributed motions, and uncovered their monofractal and
+                                                                                            multifractal with MFDFA. Subsequently we have studied two real-
+                                                                                            world time series, the sunspot count from 1818 to 2020 and the
+                                                                                            quarter-hourly electricity price time series from 2015 to 2019. For
+                                                                                            both we performed a multifractal analysis, unveiling their scaling
+                                                                                            properties and the strength of their multifractality. We focused on
+                                                                                            MFDFA’s speed, the ability to handled missing data, and the in-
+                                                                                            tegrated overlapping moving window. The analysis displayed here
+                                                                                            covered only part of MFDFA’s integrated options, thus we leave the
+                                                                                            user to explore the other implemented methods, as the extended
+                                                                                            DFA and EMD detrending, as these are more specialised to partic-
+                                                                                            ular research ﬁelds.
+                                                                                               We hope with this contribution we open a door to fast MFDFA
+                                                                                            calculations that can be performed on a local machine without an
+                                                                                            extensive numerical effort and very long time runs, thus permit-
+                                                                                            ting in the future to analyse larger time series.
+Fig. 6. Speed performance of MFDFA for time series with sizes varying between
+[103 , 106 ] data points of a fractional Ornstein–Uhlenbeck as given by Eq. (10). In-       Declaration of competing interest
+cluded are ﬁrst-order and third-order polynomial ﬁts, ﬁrst-order ﬁts with extended
+DFA, and ﬁrst-order ﬁts with a moving window with a step size of 5. A comparison
+with the distributed MATLAB code is included [55]. Tests ran on python 3.8.2 and                The authors declare that they have no known competing ﬁnan-
+MATLAB R2020b. MFDFA has a average speed-up compared with the MATLAB code,                  cial interests or personal relationships that could have appeared to
+with a ﬁve-fold speed increase for ﬁrst-order polynomial ﬁts (m=1) and a ×27-fold           inﬂuence the work reported in this paper.
+increase for third-order polynomials ﬁts (m=3). Both codes were tested for 100 seg-
+ments s and 40 q powers. All tasks were performed on a laptop on two computer
+cores at 2.9 GHz each.
+                                                                                            Acknowledgements
+
+                                                                                                L.R.G. kindly thanks Francisco Meirinhos for all the help
+with multifractal analysis, i.e., F q (s) vs. s, h(q) and τ (q) vs. q, and
+                                                                                            with python, and Fabian Harang, Marc Lagunas Merino, Anton
+D (α ) vs. α , are available as well and require the plotting library
+                                                                                            Yurchenko-Tytarenko, Dennis Schroeder, Michele Giordano, Giu-
+matplotlib [81].
+                                                                                            lia di Nunno, and Fred Espen Benth for their support. L.R.G and
+   The MFDFA library accepts numpy’s masked arrays, which is
+                                                                                            D.W gratefully acknowledge support by the Helmholtz Associa-
+particularly convenient when dealing with time series with miss-
+                                                                                            tion, via the joint initiative Energy System 2050 - A Contribution of
+ing data, as exempliﬁed in Sec. 3.2 and Fig. 4.
+                                                                                            the Research Field Energy and the grant Uncertainty Quantiﬁcation –
+   The MFDFA library offers a considerable speed-up in compari-
+                                                                                            From Data to Reliable Knowledge (UQ), with grant no. ZT-I-0029, the
+son with the available MATLAB version. The library is fully devel-
+                                                                                            scholarship funding from E.ON Stipendienfonds, and the STORM -
+oped to work with multi-threading, which shows an increase in
+                                                                                            Stochastics for Time-Space Risk Models project of the Research Coun-
+the performance, while handling time series larger than 105 data
+                                                                                            cil of Norway (RCN) no. 274410. This work was performed as part
+points. In Fig. 6 we display the performance of the MFDFA library
+                                                                                            of the Helmholtz School for Data Science in Life, Earth and En-
+for time series of fractional Ornstein–Uhlenbeck processes given
+                                                                                            ergy (HDS-LEE). J.K. was ﬁnanced by the Ministry of Science and
+in Eq. (10) of increasing length. The MFDFA operation scales lin-
+                                                                                            Higher Education of the Russian Federation within the framework
+early with the number of points of the generated time series. The
+                                                                                            of state support for the creation and development of World-Class
+MFDFA algorithm runs in under 1 s for time series having up to 105
+                                                                                            Research Center “Digital biodesign and personalised healthcare”,
+datapoints, with a ﬁrst-order polynomial ﬁttings, 100 segments
+                                                                                            no. 075-15-2020-926.
+s and 40 q powers, and outperforms the conventional library in
+MATLAB by up to a factor of ×103 in computational speed.
+                                                                                            References
+   Estimation error and signiﬁcance calculation have not been in-
+cluded in the library, as the focus lied on computational speed and
+                                                                                             [1] C.-K. Peng, S.V. Buldyrev, S. Havlin, M. Simons, H.E. Stanley, A.L. Goldberger,
+the inclusion of several extra features, as discussed.                                           Phys. Rev. E 49 (1994) 1685–1689, https://doi.org/10.1103/PhysRevE.49.1685.
+                                                                                             [2] C. Peng, S. Havlin, H.E. Stanley, A.L. Goldberger, Chaos 5 (1) (1995) 82–87,
+5. Conclusion                                                                                    https://doi.org/10.1063/1.166141.
+                                                                                             [3] J.W. Kantelhardt, S.A. Zschiegner, E. Koscielny-Bunde, S. Havlin, A. Bunde,
+                                                                                                 H. Stanley, Physica A 316 (1) (2002) 87–114, https://doi.org/10.1016/S0378-
+    We have presented a numerically eﬃcient python implemen-                                     4371(02)01383-3.
+tation of Multifractal Detrended Fluctuation Analysis called MFDFA.                          [4] Z. Wu, N.E. Huang, Proc. R. Soc. A, Math. Phys. Eng. Sci. 460 (2046) (2004)
+MFDFA has found extensive application in the past two decades,                                   1597–1611, https://doi.org/10.1098/rspa.2003.1221.
+                                                                                             [5] Z. Wu, N.E. Huang, Adv. Adapt. Data Anal. 01 (01) (2009) 1–41, https://doi.org/
+yet a reliable, all-encompassing open-source software in python
+                                                                                                 10.1142/S1793536909000047.
+does not exist to this date. In this library we have harnessed the                           [6] X.-Y. Qian, G.-F. Gu, W.-X. Zhou, Physica A 390 (23) (2011) 4388–4395, https://
+most of python’s ﬂexibility with handling matricial operations                                   doi.org/10.1016/j.physa.2011.07.008.
+and multi-threaded polynomial ﬁttings. In this implementation we                             [7] X. Zhang, G. Zhang, L. Qiu, B. Zhang, Y. Sun, Z. Gui, Q. Zhang, Water 11 (5)
+have included some of the more common extensions of MFDFA, in-                                   (2019) 891, https://doi.org/10.3390/w11050891.
+                                                                                             [8] Y. Zhou, Y. Leung, J. Stat. Mech. Theory Exp. 2010 (06) (2010) P06021, https://
+cluding a simple empirical mode decomposition as a mechanism to
+                                                                                                 doi.org/10.1088/1742-5468/2010/06/p06021.
+detrend the data, a moving window to handle very short time se-                              [9] S. Lai, L. Wan, X. Zeng, J. Phys. Conf. Ser. 1345 (2019) 042086, https://doi.org/
+ries, and the extended Detrended Fluctuation Analysis, which can                                 10.1088/1742-6596/1345/4/042086.
+track a different scaling mechanism for non-stationary time series.                         [10] A.N. Pavlov, A.S. Abdurashitov, A.A. Koronovskii, O.N. Pavlova, O.V.
+The MFDFA library can also handle missing values in the data with                                Semyachkina-Glushkovskaya, J. Kurths, Commun. Nonlinear Sci. Numer.
+                                                                                                 Simul. 85 (2020) 105232, https://doi.org/10.1016/j.cnsns.2020.105232.
+the aid of numpy’s masked time series.                                                      [11] A.N. Pavlov, A.I. Dubrovsky, A.A. Koronovskii, O.N. Pavlova, O.V. Semyachkina-
+    We have initially turned to two classic numerically generated                                Glushkovskaya, J. Kurths, Chaos 30 (7) (2020) 073138, https://doi.org/10.1063/
+stochastic processes, fractional Ornstein–Uhlenbeck processes and                                5.0011823.
+
+
+                                                                                        8
+L. Rydin Gorjão, G. Hassan, J. Kurths et al.                                                                                     Computer Physics Communications 273 (2022) 108254
+
+
+[12] A. Pavlov, A. Dubrovsky, A. Koronovskii Jr., O. Pavlova, O. Semyachkina-                  [47] Y. Leung, E. Ge, Z. Yu, Ann. Assoc. Am. Geogr. 101 (6) (2011) 1221–1240,
+     Glushkovskaya, J. Kurths, Chaos Solitons Fractals 139 (2020) 109989, https://                  https://doi.org/10.1080/00045608.2011.592733.
+     doi.org/10.1016/j.chaos.2020.109989.                                                      [48] G.R. Jafari, P. Pedram, L. Hedayatifar, J. Stat. Mech. Theory Exp. 2007 (04) (2007)
+[13] A.N. Pavlov, O.N. Pavlova, O.V. Semyachkina-Glushkovskaya, J. Kurths, Eur. Phys.               P04012, https://doi.org/10.1088/1742-5468/2007/04/p04012.
+     J. Plus 136 (1) (2021) 10, https://doi.org/10.1140/epjp/s13360-020-00980-x.               [49] L. Telesca, M. Lovallo, Proc. R. Soc. A, Math. Phys. Eng. Sci. 467 (2134) (2011)
+[14] B. Podobnik, H.E. Stanley, Phys. Rev. Lett. 100 (2008) 084102, https://doi.org/                3022–3032, https://doi.org/10.1098/rspa.2011.0118.
+     10.1103/PhysRevLett.100.084102.                                                           [50] H.V. Ribeiro, L. Zunino, R.S. Mendes, E.K. Lenzi, Physica A 391 (7) (2012)
+[15] W.-X. Zhou, Phys. Rev. E 77 (2008) 066211, https://doi.org/10.1103/PhysRevE.                   2421–2428, https://doi.org/10.1016/j.physa.2011.12.009.
+     77.066211.                                                                                [51] C.L. Alados, M.A. Huffman, Ethology 106 (2) (2000) 105–116, https://doi.org/10.
+[16] J. Alvarez-Ramirez, E. Rodriguez, J.C. Echeverria, Phys. Rev. E 79 (2009) 057202,              1046/j.1439-0310.2000.00497.x.
+     https://doi.org/10.1103/PhysRevE.79.057202.                                               [52] K.M. Rutherford, M.J. Haskell, C. Glasbey, R. Jones, A.B. Lawrence, Appl. Anim.
+[17] C. Chianca, A. Ticona, T. Penna, Physica A 357 (3) (2005) 447–454, https://doi.                Behav. Sci. 83 (2) (2003) 125–139, https://doi.org/10.1016/S0168-1591(03)
+     org/10.1016/j.physa.2005.03.047.                                                               00115-1.
+[18] K. Hu, P.C. Ivanov, Z. Chen, P. Carpena, H. Eugene Stanley, Phys. Rev. E 64 (2001)        [53] J. Li, X. Ma, M. Zhao, X. Cheng, Electronics 8 (2) (2019) 209, https://doi.org/10.
+     011114, https://doi.org/10.1103/PhysRevE.64.011114.                                            3390/electronics8020209.
+[19] P.C. Ivanov, L.A.N. Amaral, A.L. Goldberger, S. Havlin, M.G. Rosenblum, Z.R.              [54] A. Madanchi, J.W. Yu, M.R.R. Tabar, W.B. Lee, S.E.E. Rahbari, Soft Matter (2021),
+     Struzik, H.E. Stanley, Nature 399 (6735) (1999) 461, https://doi.org/10.1038/                  https://doi.org/10.1039/D0SM02039G. Accepted Publication.
+     20924.                                                                                    [55] E. Ihlen, Front. Physiol. 3 (2012) 141, https://doi.org/10.3389/fphys.2012.00141.
+[20] S. Dutta, D. Ghosh, S. Chatterjee, Front. Physiol. 4 (2013) 274, https://doi.org/         [56] M. Laib, L. Telesca, M. Kanevski, Chaos 28 (3) (2018) 033108, https://doi.org/
+     10.3389/fphys.2013.00274.                                                                      10.1063/1.5022737.
+[21] A. Madanchi, F. Taghavi-Shahri, S.M. Taghavi-Shahri, M.R. Rahimi Tabar, Eur.              [57] M. Laib, J. Golay, L. Telesca, M. Kanevski, Chaos Solitons Fractals 109 (2018)
+     Phys. J. B 93 (7) (2020) 126, https://doi.org/10.1140/epjb/e2020-100561-4.                     118–127, https://doi.org/10.1016/j.chaos.2018.02.024.
+[22] M.S. Movahed, F. Ghasemi, S. Rahvar, M.R.R. Tabar, Phys. Rev. E 84 (2011)                 [58] C.R. Harris, K.J. Millman, S.J. van der Walt, R. Gommers, P. Virtanen, D. Cour-
+     021103, https://doi.org/10.1103/PhysRevE.84.021103.                                            napeau, E. Wieser, J. Taylor, S. Berg, N.J. Smith, R. Kern, M. Picus, S. Hoyer,
+[23] M.S. Movahed, B. Javanmardi, R.K. Sheth, Mon. Not. R. Astron. Soc. 434 (4)                     M.H. van Kerkwijk, M. Brett, A. Haldane, J.F. del R’ıo, M. Wiebe, P. Peter-
+     (2013) 3597–3605, https://doi.org/10.1093/mnras/stt1284.                                       son, P. G’erard-Marchant, K. Sheppard, T. Reddy, W. Weckesser, H. Abbasi, C.
+[24] L. Telesca, V. Lapenna, M. Macchiato, Physica A 354 (2005) 629–640, https://                   Gohlke, T.E. Oliphant, Nature 585 (7825) (2020) 357–362, https://doi.org/10.
+     doi.org/10.1016/j.physa.2005.02.053.                                                           1038/s41586-020-2649-2.
+[25] S. Shadkhoo, F. Ghanbarnejad, G. Jafari, M.R.R. Tabar, Open Phys. 7 (3) (2009)            [59] H.E. Hurst, Trans. Am. Soc. Civ. Eng. 116 (1951) 770–799, https://doi.org/10.
+     620–623, https://doi.org/10.2478/s11534-009-0058-0.                                            1061/TACEAT.0006518.
+[26] M. Sadegh Movahed, G.R. Jafari, F. Ghasemi, S. Rahvar, M.R.R. Tabar, J. Stat.             [60] H. Hentschel, I. Procaccia, Physica D 8 (3) (1983) 435–444, https://doi.org/10.
+     Mech. Theory Exp. 2006 (2) (2006) P02003, https://doi.org/10.1088/1742-5468/                   1016/0167-2789(83)90235-X.
+     2006/02/p02003.                                                                           [61] T.C. Halsey, M.H. Jensen, L.P. Kadanoff, I. Procaccia, B.I. Shraiman, Phys. Rev. A
+[27] H.J. Tanna, K.N. Pathak, Astrophys. Space Sci. 350 (1) (2014) 47–56, https://                  33 (1986) 1141–1151, https://doi.org/10.1103/PhysRevA.33.1141.
+     doi.org/10.1007/s10509-013-1742-5.                                                        [62] J. Kurths, H. Herzel, Physica D 25 (1) (1987) 165–172, https://doi.org/10.1016/
+[28] P.G. Meyer, H. Kantz, Clim. Dyn. 53 (11) (2019) 6909–6917, https://doi.org/10.                 0167-2789(87)90099-6.
+     1007/s00382-019-04965-0.                                                                  [63] C. Meneveau, K. Sreenivasan, Nucl. Phys. B, Proc. Suppl. 2 (1987) 49–76, https://
+[29] I.T. Pedron, J. Phys. Conf. Ser. 246 (2010) 012034, https://doi.org/10.1088/1742-              doi.org/10.1016/0920-5632(87)90008-9.
+     6596/246/1/012034.                                                                        [64] H. Salat, R. Murcio, E. Arcaute, Physica A 473 (2017) 467–487, https://doi.org/
+[30] Y. Tessier, S. Lovejoy, P. Hubert, D. Schertzer, S. Pecknold, J. Geophys. Res., At-            10.1016/j.physa.2017.01.041.
+     mos. 101 (D21) (1996) 26427–26440, https://doi.org/10.1029/96JD01799.                     [65] K. Falconer, Fractal Geometry: Mathematical Foundations and Applications, 3rd
+[31] C. Matsoukas, S. Islam, I. Rodriguez-Iturbe, J. Geophys. Res., Atmos. 105 (D23)                edition, John Wiley & Sons, Chichester, 2014.
+     (2000) 29165–29172, https://doi.org/10.1029/2000JD900419.                                 [66] A.-L. Barabási, T. Vicsek, Phys. Rev. A 44 (1991) 2730–2733, https://doi.org/10.
+[32] D. Koutsoyiannis, Hydrol. Sci. J. 48 (1) (2003) 3–24, https://doi.org/10.1623/                 1103/PhysRevA.44.2730.
+     hysj.48.1.3.43481.                                                                        [67] F. Serinaldi, Physica A 389 (14) (2010) 2770–2781, https://doi.org/10.1016/j.
+[33] J.W. Kantelhardt, E. Koscielny-Bunde, D. Rybski, P. Braun, A. Bunde, S. Havlin,                physa.2010.02.044.
+     J. Geophys. Res., Atmos. 111 (D1) (2006) D01106, https://doi.org/10.1029/                 [68] N.E. Huang, Z. Shen, S.R. Long, M.C. Wu, H.H. Shih, Q. Zheng, N.-C. Yen, C.C.
+     2005JD005881.                                                                                  Tung, H.H. Liu, Proc. R. Soc. A, Math. Phys. Eng. Sci. 454 (1971) (1998) 903–995,
+[34] Q. Zhang, C.-Y. Xu, Y.D. Chen, Z. Yu, Hydrol. Process. 22 (26) (2008) 4997–5003,               https://doi.org/10.1098/rspa.1998.0193.
+     https://doi.org/10.1002/hyp.7119.                                                         [69] M.R.R. Tabar, Analysis and Data-Based Reconstruction of Complex Nonlinear
+[35] R. Rodríguez, M.C. Casas, A. Redaño, Meteorol. Atmos. Phys. 121 (3) (2013)                     Dynamical Systems, Springer International Publishing, 2019.
+     181–187, https://doi.org/10.1007/s00703-013-0256-6.                                       [70] D. Applebaum, Lévy Processes and Stochastic Calculus, 2nd edition, Cambridge
+[36] Y. Wu, Y. He, M. Wu, C. Lu, S. Gao, Y. Xu, Sci. Rep. 8 (1) (2018) 16553, https://              University Press, 2011.
+     doi.org/10.1038/s41598-018-35032-z.                                                       [71] European Power Exchange (EPEX SPOT), Market data, https://www.epexspot.
+[37] P. Figueirêdo, E. Nogueira, M. Moret, S. Coutinho, Physica A 389 (10) (2010)                   com/en/market-data, 2021.
+     2090–2095, https://doi.org/10.1016/j.physa.2009.11.045.                                   [72] Fraunhofer Institute for Solar Energy System ISE, Energy-Charts, Energy-
+[38] L. Zunino, B. Tabak, A. Figliola, D. Pérez, M. Garavaglia, O. Rosso, Physica A                 Charts. 2015–2019, https://energy-charts.info/charts/price_spot_market/chart.
+     387 (26) (2008) 6558–6566, https://doi.org/10.1016/j.physa.2008.08.028.                        htm, 2020.
+[39] L. Zunino, A. Figliola, B.M. Tabak, D.G. Pérez, M. Garavaglia, O.A. Rosso, Chaos          [73] SILSO World Data Center, Royal Observatory of Belgium, Brussels, the Interna-
+     Solitons Fractals 41 (5) (2009) 2331–2340, https://doi.org/10.1016/j.chaos.2008.               tional Sunspot Number, international Sunspot Number Monthly Bulletin and
+     09.013.                                                                                        online catalogue: 1818–2020 http://www.sidc.be/silso/, 2020.
+[40] D. Grech, G. Pamuła, Acta Phys. Pol. A 123 (2013) 529–537, https://doi.org/10.            [74] M. Stix, The Sun, 2nd edition, Springer-Verlag Berlin Heidelberg, 2002.
+     12693/aphyspola.123.529.                                                                  [75] A. Balogh, H. Hudson, K. Petrovay, R. von Steiger (Eds.), The Solar Activity Cycle,
+[41] S. Drożdż, R. Kowalski, P. Oświȩcimka, R. Rak, R. Gȩbarowski, Complexity 2018             1st edition, Springer-Verlag, New York, 2015.
+     (2018) 7015721, https://doi.org/10.1155/2018/7015721.                                     [76] S.M. Braun, C. Brunner, Z. Energiewirtsch. 42 (3) (2018) 257–270, https://doi.
+[42] M. Lee, J.W. Song, S. Kim, W. Chang, Physica A 512 (2018) 1278–1294, https://                  org/10.1007/s12398-018-0228-0.
+     doi.org/10.1016/j.physa.2018.08.030.                                                      [77] M. Narajewski, F. Ziel, J. Commodity Mark. 19 (2020) 100107, https://doi.org/
+[43] R. Weron, I. Simonsen, P. Wilman, in: H. Takayasu (Ed.), The Application of                    10.1016/j.jcomm.2019.100107.
+     Econophysics, Springer Japan, Tokyo, 2004, pp. 182–191.                                   [78] I. Simonsen, Physica A 322 (2003) 597–606, https://doi.org/10.1016/S0378-
+[44] F. Wang, G. Liao, J. Li, X. Li, T. Zhou, Physica A 392 (22) (2013) 5723–5734,                  4371(02)01938-6.
+     https://doi.org/10.1016/j.physa.2013.07.039.                                              [79] R. Weron, M. Bierbrauer, S. Trück, in: Proceedings of the XVIII Max Born Sym-
+[45] L. Shalalfeh, P. Bogdan, E. Jonckheere, in: 2016 IEEE International Conference                 posium “Statistical Physics Outside Physics”, Physica A 336 (1) (2004) 39–48.
+     on Smart Grid Communications (SmartGridComm), 2016, pp. 466–471.                          [80] D. Laszuk, Python implementation of empirical mode decomposition algorithm,
+[46] L. Rydin Gorjão, R. Jumar, H. Maass, V. Hagenmeyer, G.C. Yalcin, J. Kruse, M.                  https://github.com/laszukdawid/PyEMD, 2017.
+     Timme, C. Beck, D. Witthaut, B. Schäfer, Nat. Commun. 11 (1) (2020) 6362,                 [81] J.D. Hunter, Comput. Sci. Eng. 9 (3) (2007) 90–95, https://doi.org/10.1109/
+     https://doi.org/10.1038/s41467-020-19732-7.                                                    MCSE.2007.55.
+
+
+
+
+                                                                                           9
+

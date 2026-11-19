@@ -1,0 +1,526 @@
+                                             Learning to Identify Patients at Risk of Uncontrolled Hypertension Using
+                                                                  Electronic Health Records Data
+                                                Ramin Mohammadi1,2 , Sarthak Jain1 , Stephen Agboola2,3 , Ramya Palacholla2,3 ,
+                                                                     Sagar Kamarthi1,2 , Byron C. Wallace1
+                                             1
+                                               Northeastern University, Boston, MA, USA; 2 Partners Connected Health Innovation,
+                                                        Boston, MA, USA 3 Harvard Medical School, Boston, MA, USA
+
+                                         Abstract
+                                         Hypertension is a major risk factor for stroke, cardiovascular disease, and end-stage renal disease, and its prevalence
+                                         is expected to rise dramatically. Effective hypertension management is thus critical. A particular priority is decreasing
+
+
+
+
+arXiv:1907.00089v1 [cs.CY] 28 Jun 2019
+                                         the incidence of uncontrolled hypertension. Early identification of patients at risk for uncontrolled hypertension would
+                                         allow targeted use of personalized, proactive treatments. We develop machine learning models (logistic regression and
+                                         recurrent neural networks) to stratify patients with respect to the risk of exhibiting uncontrolled hypertension within
+                                         the coming three-month period. We trained and tested models using EHR data from 14,407 and 3,009 patients,
+                                         respectively. The best model achieved an AUROC of 0.719, outperforming the simple, competitive baseline of relying
+                                         prediction based on the last BP measure alone (0.634). Perhaps surprisingly, recurrent neural networks did not
+                                         outperform a simple logistic regression for this task, suggesting that linear models should be included as strong
+                                         baselines for predictive tasks using EHR.
+
+                                         Introduction
+                                         Hypertension is a major risk factor for stroke, cardiovascular disease, and end-stage renal disease. In the United States,
+                                         hypertension has substantial public health and economic implications: it affects 1 out of 3 adults and costs our health
+                                         system an estimated $46 billion each year1 . Already a global scourge, the prevalence of hypertension is expected to
+                                         rise dramatically2 . Successful management of hypertension is thus an important objective in light of the substantial
+                                         cost burden and high rate of adverse outcomes associated with uncontrolled hypertension, and will only increase in
+                                         importance in coming years. A guideline published by the American College of Cardiology defines uncontrolled
+                                         blood pressure as systolic ≥140 or diastolic ≥903 . Medication non-adherence, unhealthy lifestyle factors, and failure
+                                         to up-titrate or add anti-hypertensive medications are significant contributors to uncontrolled hypertension.
+                                         Strategic and innovative solutions are needed to improve hypertension management, especially in primary care settings
+                                         where most patients with hypertension are managed1 . Furthermore, owing to a shift to value-based health-care model,
+                                         achieving blood pressure control in hypertensive populations serves as an important quality measure for providers.
+                                         Patients at risk for uncontrolled hypertension stand to benefit from early identification as this can trigger proactive
+                                         treatment regimens and more aggressive education regarding lifestyle modification strategies, as well as use of sup-
+                                         portive technologies such as home-blood-pressure monitoring programs. However, some of these interventions are
+                                         costly and cannot be administered indiscriminately to all patients. Therefore, stratifying patients based on their indi-
+                                         vidual risk for uncontrolled hypertension could help providers make informed treatment decisions and in turn improve
+                                         long-term outcomes for hypertensive patients.
+                                         Prior work has shown that risk stratification can improve outcomes for high risk patients4, 5 . To improve the clinical
+                                         impact on patients and cost-effectiveness of anti-hypertensive interventions, special attention has to be paid to manag-
+                                         ing high-risk patients identified through stratification methods4 . Traditionally blood pressure (BP) was used to make
+                                         treatment decisions for managing hypertensive patients. However, recent studies indicate that BP alone is not sufficient
+                                         for making optimal treatment decisions. To make informed clinical decisions, clinicians should assess patient risk in
+                                         light of individual risk factors in addition to BP measurements4 .
+                                         Beyond the clinical benefits of decreasing complications due to uncontrolled hypertension and resultant overall qual-
+                                         ity of life improvement, providers have other incentives to optimize treatment so as to minimize the prevalence of
+                                         uncontrolled blood pressure. Specifically, under value-based care models, achieving blood pressure control in hyper-
+                                         tensive populations is a quality measure (At-Risk Population Hypertension ACO #28). This metric determines the
+                                         extent to which Medicare reimburses health-care organizations at the end of a given financial year6 . Accountable Care
+                                                   27,195
+                                                Hypertensive
+                                                  Patients
+
+                                                Deceased   Deceased
+                                                  True       False
+
+
+
+
+                                1977 Patients
+                                                                            25,198
+                                  dropped
+
+
+                                                                      Age > 90 and Age between
+                                                                        Age < 18    18 and 90
+
+
+
+
+                                                362 Patients
+                                                                                                       24,836
+                                                  dropped
+
+                                                                                             No Vital records
+                                                                                               less than 2
+                                                                                              ﬁscal records
+
+
+
+
+                                                                      2,284 Patients
+                                                                                                                           22,552
+                                                                         dropped
+
+                                                                                                                   No records
+                                                                                                                  within 90 days
+                                                                                                                  of ﬁnal records
+
+
+                                                                                                                                    19,972 Unique
+                                                                                                 2,580 Patients
+                                                                                                                                       patients
+                                                                                                    dropped
+                                                                                                                                       included
+
+
+
+Figure 1: The cohort used excludes deceased patients; patients older than 90 and younger than 18; those with fewer
+than 2 records in a year; and those with no vital sign records.
+
+Organizations (ACOs) face significant financial penalties if more than half of their hypertensive population remain
+uncontrolled at the end of the financial year7 . Thus, hospitals and care providers have additional incentives to mitigate
+uncontrolled hypertension and thus meet benchmark standards.
+In closely related prior work upon which we build, Sun et al.8 developed and evaluated an ML model that predicts
+transitions between controlled and uncontrolled hypertension and vice versa. Their task formulation is thus slightly
+different from ours, as their focus is on identifying transition points rather than general risk stratification (i.e., whether
+someone is likely to be uncontrolled or not in the near future, given current status and other variables extracted from
+the EHR). But the motivation is ultimately the same. Our findings here largely support those of this prior work8 , and
+this study thus serves as further evidence, derived from a larger corpus, that ML can be used to aid management of
+hypertension.
+Objectives and contributions. The aim of this work is to empirically evaluate the feasibility of using ML to risk-
+stratify patients with hypertension with respect to their likelihood of developing uncontrolled hypertension in a fixed
+time window. Our contributions are as follows. We develop and evaluate models for predicting which patients are
+likely to fall into the uncontrolled hypertension category within a window of 90 days from their last visit. Using a
+dataset of EHR from over 27,000 hypertensive patients, we show that ML based approaches outperform the obvious
+but competitive baseline of simply assuming no change will occur. This evaluation uses a dataset that is an order of
+magnitude larger that used in prior work8 . Also in contrast to this prior effort, we experiment with a modern RNN
+architecture, namely LSTMs9 . However we find that this does not consistently improve performance over a simple
+logistic regression model.
+
+Methods
+Inclusion Criteria. This is a retrospective analysis of electronic health records (EHR) data. We collected data
+from 27,195 hypertensive patients with approval from the Institutional Research Board (IRB) (protocol number
+2016P 001661) at Partners Healthcare. Data is from the period of 2010–2016, and includes patients with a primary
+diagnosis of hypertension. We excluded from this pool patients who were deceased, older than 90, or under 18. We
+also excluded patients with fewer than 2 records per fiscal year and/or those with no recorded vital sign data. Finally,
+we excluded patients who did not have any records within 90 days of their last recorded encounter, as this was the
+predictive window that we deemed operationally feasible. Note that this does imply a (potential) bias in our dataset:
+we are training and evaluating our model on only those patients who had at least two visits within 90 days of each
+other. This resulted in a corpus comprising 19,972 patients in total. Figure 1 provides a cohort selection flowchart.
+                                                                                            Data
+                                    Labs
+                   Health                                       Health                   Processing
+                                                Encounters      History
+                 Maintenance
+                                                                                        Clean, reformat and
+                                                                           Demo-       restructure the tables.
+                           Vitals             Co-                         graphics
+                                                         Medications
+                                           morbidities
+
+
+
+
+                                             <= 90 days
+                                                                                          Sequential
+                                                                                           records
+                                                                                          Create a sequential
+               Visit 1          Visit 2                         Visit T       Target   frame for a given patient
+                  X1             X2                               XT                    with one target value at
+             BP Status = 0 BP Status = 0                     BP Status = 1                the end of 6th visits
+             Systolic = 120 Systolic = 135                   Systolic = 141
+               Sex = M        Sex = M                          Sex = M
+                   ...            ...                              ...
+
+Figure 2: A schematic depicting the retrospective predictive task setup we consider. We acquired and cleaned EHR
+data from all patients in our cohort and created targets that reflect their hypertension status in a ninety window from
+point of prediction.
+     Patient Level
+     Demographic information Health history                                            Male Female Total
+     Health information           Vital information                      Train         6314 8093          14407
+     Laboratory test results      Co-morbidities                         Validation 1176 1380             2556
+     Medication information                                              Test          1742 1267          3009
+     Hospital Level
+     Admission information        Clinician notes              Table 2: Dataset sample size statistics, in terms of num-
+                                                               ber of patients.
+       Table 1: Features Categories in EHR data
+
+Design and Feature Engineering We categorized EHR variables as patient level or hospital level; see Table 1. We
+grouped patient records into encounters which included both inpatient and outpatient visits.
+We extracted vitals, medication, health history, problem list and procedure(s) from the encounter records and labora-
+tory orders. Similarly, we used medication codes from medication orders. Encounters are associated with diagnoses
+lists, encoded as ICD9 and ICD10 codes that we also extracted. For patients with multiple diagnosis codes we con-
+sidered the principal diagnosis. Medication, problems and lab test orders were coded using binary indicator variables.
+We report all numerical variables and associated statistics in the Appendix.We separated the dataset into training, val-
+idation, and testing at the patient level, i.e., these sets are disjoint with respect to the patients that they contain. We
+summarize these dataset splits in Table 2.
+For numeric variables (e.g., height, pulse) we replaced any missing values with averages taken over patients and/or
+visits, as appropriate. Records with systolic and diastolic reading less than 90 and 60 respectively were excluded from
+the study, as these indicate reading errors. The blood pressure fraction was defined as systolic over diastolic readings.
+We included lab tests related to hypertension, on the basis of domain expertise. We dropped tests with total frequency
+of less then 60 percent within total records.
+Medications were categorized as: ACE Inhibitor, Diuretic, Beta Blocker, Antihypertensive drug, Calcium Channel
+Blocker and Vasodilator (Table 5). All medications are reported in the Appendix. Numerical variables were scaled to
+range [0, 1], using maximum and minimum values in the training set. Variables with more than 99 percent missing
+                               Figure 3: LSTM model for processing visits in sequence.
+
+values were dropped (see Appendix D and Appendix E). Categorical variables were converted to one-hot representation
+(i.e., indicator vectors). We labeled patients with systolic BP above 140 or diastolic BP above 90 as uncontrolled and
+others as controlled. Uncontrolled and controlled statuses were coded as 1 and 0, respectively. We fit our model on
+the training set and chose hyperparameters using the validation set. Final model performances were evaluated on the
+test set, which was completely held-out during development and validation.
+The majority of patients (66%) have controlled hypertension at their target visit. This means our data exhibits class
+imbalance; one target class is substantially more prevalent than another. This can make training discriminative models
+tricky10 . Here we adjusted class weights associated with targets during training for both models. Specifically, weights
+for the respective classes were set inverse to their frequencies.
+Setting. We aim to predict which patients will have controlled vs. uncontrolled blood pressure in the near-future,
+operationally defined here as three months. We cast this as a binary classification task, and evaluated two standard
+models for such tasks: Logistic Regression (LR) and Long Short Term Memory (LSTM) networks9 . The latter is
+a particular type of Recurrent Neural Network (RNN) which has been successfully applied to EHR data in prior
+work11, 12 , although to our knowledge not for hypertension specifically.
+Experimental setup. Prior to any experimentation, we separated the data into training, validation and test sets. These
+splits were at the patient level, i.e., each patient’s records appear in only one of the sets. The test set was used for final
+evaluation but not used in any way during model development and tuning.
+LSTMs consume sequences of inputs (in our case, a set of ordered vectors encoding information from each visit).
+The number of prior visits to pass through the model is a hyperparameter. Using the validation set, we found 6 to be
+the optimal number of records and fed as input sequence to the model. We zero-padded sequences corresponding to
+patients with fewer than 6 encounter records. We thus modeled a patient’s sequence of records as x1 , · · · , xT , where
+each record xi ∈ RF is feature vector encoding F features. The hidden state obtained from the sequence records is
+passed to a fully connected layer with sigmoid activation. Figure 3 depicts this schematically.
+The LR model assumes a single fixed length vector as input from which to make predictions. Here we use this to
+encode information extracted from the last patient record, combined with previous blood pressure measurements up to
+six prior visits.
+For parameter tuning in both models, we performed ad-hoc search over the validation set. The L1 regularizer was
+chosen from range (1e-1,1e-6) and learning rate from range (1e-3, 1e-5). For the LSTM model, We first ran the model
+using Adam optimizer with learning rate (1e-3) then we ran the model for the second time with learning rate of (1e-5).
+Furthermore, the number of hidden nodes were optimized in range (6, 12, 80 , 120). Finally, batch size was chosen
+from (128,256,512,1024).
+The final optimized LSTM model has one hidden layer with 120 hidden nodes,dropout rate of 0.2 and 1e-5 penalty
+for L1 kernel regularizer. The optimized LR model uses L1 regularization with a corresponding weight of 0.001 and
+learning rate of 0.001.
+All models were implemented using Keras13 version 2.2.2 with TensorFlow14 version 1.9.0 and trained on GPU. We
+fit the LSTM using the RMSProp optimizer with binary cross entropy loss. For LR, we used the Adam15 optimizer.
+                                                                                                    ROC curve
+                                                                                1.0
+
+                                                                                0.8
+
+
+
+
+                                                           True positive rate
+    Model       Precision    Recall    F1        AUC
+                                                                                0.6
+    Baseline    0.674        0.671     0.672     0.634
+    LR          0.687        0.701     0.690     0.719                          0.4
+    LSTM        0.696        0.713     0.700     0.714
+                                                                                0.2                                LSTM (area = 0.714)
+             Table 3: Results on the test set.                                                                     Baseline (area = 0.634)
+                                                                                0.0                                LR (area = 0.719)
+                                                                                      0.0   0.2    0.4          0.6        0.8         1.0
+                                                                                                  False positive rate
+
+                                                          Figure 4: ROC curves of each method over the test set.
+
+We used early stopping criteria for assessing convergence, terminating training when loss decreased by ≤ 10−7 on the
+validation set. Under this criterion, the LR model trained for 500 epochs, and LSTM model ran for 250.
+
+Results
+We compared developed models against the natural baseline of using the patient’s BP measure from their most recent
+(last) visit as the prediction for current visit. This is a reasonably competitive approach because hypertension status
+exhibits strong auto-correlation, and our prediction window is relatively narrow (90 days.)
+We report results on the test set in Table 3, also summarized in Figure 4.
+To provide further insights into model predictions we inspect which variables are most responsible for the predictions
+of a given model. In case of LR, a linear model, we simply rank features by (absolute) weight. We report the top
+(highest weighted) 20 variables in Table 4a.
+Inferring the importance of variables in LSTMs is not as straightforward, and multiple options for doing so exist. Here
+we adopt a recently proposed method for analyzing deep neural networks, integrated gradients (IG)16 . This method
+provides a signed importance score for each variable that reflects its sum contribution to the output. More concretely,
+for each data point this method calculates the integral of the gradient of output (i.e., y) with respect to each input
+variable at each time step as we move said variable from the baseline of its current or observed value. If the output
+changes significantly as we vary only one dimension (i.e., the absolute value of integral is large), the corresponding
+variable is deemed important. For additional technical details, we refer the reader to the original paper16 . We report
+the top features for the LSTM inferred via IG in Table 4b. We report weights for the top 50 features for both models
+in the Appendix.
+Generally speaking, important features align with intuition. Blood pressure status (controlled vs uncontrolled encoded
+as 0 and 1 respectively) and systolic BP measurements from prior visits are strongly predictive features in both models,
+as would be expected.
+
+Conclusion
+All individuals involved in the various aspects of patient care stand to benefit from tools that aid informed clinical
+decision making. From a provider’s perspective, identifying which hypertensive patients are likely to become (or
+remain) uncontrolled can guide targeted, timely interventions and proactive tailored treatments. Thereby, preventing or
+decreasing the incidence of adverse complications due to uncontrolled hypertension; and improving clinical outcomes
+and reducing healthcare costs.
+Accurate risk stratification model for hypertension may help increase clinical efficiency, reduce healthcare costs, and
+improve overall quality of care delivered to hypertensive patients addressing a burgeoning problem in the US healthcare
+system. This work has provided new evidence that ML models can perform this task using a comparatively large
+             Variable Name              Weight                     Variable Name              Importance
+             Systolic(t−1)               1.492                     Time between visits(d)         -0.068
+             Systolic(t−2)               0.849                     Systolic(t−1)                   0.024
+             Systolic(t−3)               0.598                     Blood Pressure(t−2)             0.022
+             Blood Pressure(t−1)         0.550                     Blood Pressure(t−3)             0.019
+             Blood Pressure(t−2)         0.442                     Blood Pressure(t−1)             0.019
+             Systolic(t−4)               0.374                     Blood Pressure(t−6              0.018
+             Blood Pressure(t−3)         0.349                     Blood Pressure(t−7)             0.018
+             Blood Pressure(t−4)         0.290                     Systolic(t−1)                   0.015
+             Systolic(t−6)               0.289                     Systolic(t−7)                   0.013
+             Blood Pressure(t−5)         0.268                     White                          -0.013
+             Blood Pressure(t−6)         0.254                     Married/Partnered              -0.013
+             Systolic(t−5)               0.243                     Systolic(t−3)                   0.012
+             Blood Pressure(t−7)         0.226                     Blood Pressure(t−4)             0.012
+             Mets False                 -0.172                     Depression False               -0.012
+             BloodLoss False            -0.170                     Systolic(t−4)                   0.012
+             Systolic(t−7)               0.152                     Systolic(t−6)                   0.011
+             Smoker                     -0.152                     Hypertension NOS               -0.010
+             Lymphoma False             -0.132                     Blood Pressure(t−5)             0.010
+             HTN True                   -0.130                     BloodLoss False                -0.008
+             DSCOP                      -0.123                     Arrhythmia False               -0.008
+  (a) Top 20 Variables for LR. Subscripts index prior visits.            (b) Top 20 Variables for LSTM
+
+dataset of patients, thus complementing existing related work on the problem8 . We also find, perhaps somewhat
+surprisingly, that a simple logistic regression model performs about the same as a complex RNN. Simple linear models
+should always be considered as a strong baseline for predictive tasks over EHR.
+Study limitations. This study has several important limitations, both technical and conceptual. First, due to the tran-
+sition of the EHR system to EPIC, there was a gap between medical notes dates and the encounter dates. Therefore,
+we were not able to use notes in the current work; incorporating these may improve the model. Second, this retro-
+spective analysis means we had to winnow the set of patients included in the analysis for practical reasons (Figure
+1). Third, for simplicity we replaced missing values with simple means, a naive form of imputation. More sophis-
+ticated imputation methods, including Bayesian models17 and neural network imputation approaches18 , may yield
+improved performance17 . We excluded the variables presented in Appendix E, due to a high proportion of missing
+values (≥ 99%), which could adversely affect the performance of the model19 . Few of these excluded variables are
+likely to be clinically relevant, according to the domain experts involved in this project. Note that all patients had
+varying numbers of missing values, but we did not exclude any of them based on missing values (rather, these were
+simply imputed, as outlined above).
+A final potential limitation of this work concerns our creation of target ‘labels’. To do so we required that patients in
+our cohort had two visits within 90 days (so that the latter of these could serve as the target). This excluded 2,580
+patients who did not meet this condition. This winnowing process may have induced a bias in the sample used for this
+study, i.e., we cannot be certain that the resultant patient set is representative of the underlying population.
+We have here demonstrated that one can achieve reasonably good predictive performance for this task. But if such
+models are to be meaningfully used to inform care, a threshold for clinical action must be established in collaboration
+with physicians.
+
+References
+ 1. Q. Nguyen, J. Dominguez, L. Nguyen, and N. Gullapalli, “Hypertension management: an update,” American
+    health & drug benefits, vol. 3, no. 1, p. 47, 2010.
+ 2. D. Mozaffarian, “Heart disease and stroke statisticsâĂŤ2015 update: a report from the american heart association,”
+    Circulation, vol. 131, no. 4, pp. e29–e322, 2015.
+ 3. A. C. of Cardiology Foundation et al., “New acc/aha high blood pressure guidelines lower definition of hyperten-
+    sion,” 2018.
+
+ 4. L. G. Ogden, J. He, E. Lydick, and P. K. Whelton, “Long-term absolute benefit of lowering blood pressure in
+    hypertensive patients according to the jnc vi risk stratification,” Hypertension, vol. 35, no. 2, pp. 539–543, 2000.
+ 5. W. B. Kannel, “Risk stratification in hypertension: new insights from the framingham study,” American journal
+    of hypertension, vol. 13, no. S1, pp. 3S–10S, 2000.
+ 6. G. W. de la Torre JI, “Accountable care organization (aco),” Medical Care Research and Review, 2017.
+
+ 7. J. Gold, “Accountable care organizations, explained,” 2015.
+ 8. J. Sun, C. D. McNaughton, P. Zhang, A. Perer, A. Gkoulalas-Divanis, J. C. Denny, J. Kirby, T. Lasko, A. Saip, and
+    B. A. Malin, “Predicting changes in hypertension control using electronic health records from a chronic disease
+    management program,” Journal of the American Medical Informatics Association, vol. 21, no. 2, pp. 337–344,
+    2013.
+ 9. S. Hochreiter and J. Schmidhuber, “Long short-term memory,” Neural computation, vol. 9, no. 8, pp. 1735–1780,
+    1997.
+10. B. C. Wallace, K. Small, C. E. Brodley, and T. A. Trikalinos, “Class imbalance, redux,” in Data Mining (ICDM),
+    2011 IEEE 11th International Conference on, pp. 754–763, IEEE, 2011.
+
+11. Z. C. Lipton, D. C. Kale, C. Elkan, and R. Wetzel, “Learning to diagnose with lstm recurrent neural networks,”
+    arXiv preprint arXiv:1511.03677, 2015.
+12. A. Rajkomar, E. Oren, K. Chen, A. M. Dai, N. Hajaj, M. Hardt, P. J. Liu, X. Liu, J. Marcus, M. Sun, et al.,
+    “Scalable and accurate deep learning with electronic health records,” npj Digital Medicine, vol. 1, no. 1, p. 18,
+    2018.
+13. F. Chollet et al., “Keras.” https://keras.io, 2015.
+14. M. Abadi, P. Barham, J. Chen, Z. Chen, A. Davis, J. Dean, M. Devin, S. Ghemawat, G. Irving, M. Isard, et al.,
+    “Tensorflow: a system for large-scale machine learning.,” in OSDI, vol. 16, pp. 265–283, 2016.
+
+15. D. P. Kingma and J. Ba, “Adam: A method for stochastic optimization,” arXiv preprint arXiv:1412.6980, 2014.
+16. M. Sundararajan, A. Taly, and Q. Yan, “Axiomatic attribution for deep networks,” in International Conference on
+    Machine Learning, pp. 3319–3328, 2017.
+17. J. A. Sterne, I. R. White, J. B. Carlin, M. Spratt, P. Royston, M. G. Kenward, A. M. Wood, and J. R. Carpen-
+    ter, “Multiple imputation for missing data in epidemiological and clinical research: potential and pitfalls,” Bmj,
+    vol. 338, p. b2393, 2009.
+18. Z. C. Lipton, D. C. Kale, and R. Wetzel, “Modeling missing data in clinical time series with rnns,” Machine
+    Learning for Healthcare, 2016.
+19. S. B. Kotsiantis, I. Zaharakis, and P. Pintelas, “Supervised machine learning: A review of classification tech-
+    niques,” Emerging artificial intelligence applications in computer engineering, vol. 160, pp. 3–24, 2007.
+Appendix A        Medications
+  Drug Family     Types                                                   Drug Family               Types
+  ACE Inhibitor   Lisinopril, Benazepril                                  Calcium channel blocker   Amlodipine, Nifedipine
+  Diuretic        Hydrochlorothiazide, Triamterene,Chlorothiazide,        Antihypertensive drug     Nifedipine, Irbesartan,Candesartan,Felodipine,
+                  Hydrochlorothiazide/lisinopril, Chlortalidone                                     Valsartan, Hydrochlorothiazide / Losartan,Telmisartan,
+                                                                                                    Hydrochlorothiazide/lisinopril, Losartan, Chlortalidon
+  Beta blocker    Atenolol, Metoprolol, Nadolol, Labetalol, Bisoprolol,   Vasodilator               Hydralazine
+                  Carvedilol
+
+                                                     Table 5: Hypertensive Medication
+
+Appendix B        Results
+                                                                   VALIDATION SET
+                       Model             F1-SCORE                     PRECISION                     RECALL                AUC
+                                    Male Female Total            Male Female Total          Male     Female Total       Total
+                       Baseline     0.52   0.76   0.68           0.51   0.77    0.68        0.52     0.76   0.68        0.68
+                       LR           0.50   0.80   0.70           0.58   0.76    0.70        0.43     0.84   0.70        0.72
+                       LSTM         0.47   0.81   0.71           0.55   0.77    0.70        0.41     0.85   0.72        0.72
+                                                                       TEST SET
+                                           F1-SCORE                   PRECISION                     RECALL              AUROC
+                                    Male     Female Total        Male Female Total          Male     Female Total       Total
+                       Baseline     0.51     0.75   0.67         0.50   0.76    0.67        0.52     0.74   0.67        0.63
+                       LR           0.49     0.79   0.69         0.57   0.75    0.69        0.43     0.84   0.70        0.72
+                       LSTM         0.47     0.80   0.70         0.55   0.76    0.70        0.41     0.85   0.71        0.71
+
+                                                  Table 6: Model Performance per group
+
+Appendix C        Variables
+    Variable Name               Count       Mean       Std       Missing     Variable Name                   Count       Mean       Std       Missing
+    Heart Rate                  2223        79.36      14.69     0.98        Lytes/Renal/Glucose             21973       1.00       0.00      0.79
+    Height                      98151       66.82      19.91     0.08        Lytes/Renal/Glucose - POC       1273        1.00       0.00      0.99
+    Pulse                       93769       75.32      13.56     0.12        Microscopic Sediment            2761        1.00       0.00      0.97
+    Respiratory Rate            22594       16.94      4.08      0.79        Other Hematology                2651        1.00       0.00      0.98
+    Temperature                 51541       97.92      3.20      0.51        Routine Coagulation             2849        1.00       0.00      0.97
+    Weight                      64057       185.58     46.09     0.40        Smear Morphology                1326        1.00       0.00      0.99
+    Systolic(t−1)               106125      133.30     17.26     0.00        Thyroid Studies                 5758        1.00       0.00      0.95
+    Diastolic(t−1)              106064      75.92      10.67     0.00        Tumor Markers                   2114        1.00       0.00      0.98
+    delta time                  106125      36.12      25.10     0.00        Urinalysis                      5640        1.00       0.00      0.95
+    BMI                         40008       30.20      6.43      0.62        Urine Chemistries Random        3378        1.00       0.04      0.97
+    Fatigue (0-10)              3100        1.67       2.88      0.97        Blood Pressure(t−2)             106125      0.38       0.49      0.00
+    SexCD                       106125      0.43       0.50      0.00        Systolic(t−2)                   106106      134.51     17.98     0.00
+    Age As Of 2010              106125      61.93      13.57     0.00        Diastolic(t−2)                  106033      76.46      11.15     0.00
+    BP Fraction(t−1)            106064      1.78       0.55      0.00        Blood Pressure(t−3)             106125      0.35       0.48      0.00
+    Age Year                    76038       65.73      13.50     0.28        Systolic(t−3)                   102869      133.90     17.60     0.03
+    Visit Number                76038       8.32       8.94      0.28        Diastolic(t−3)                  102809      76.24      10.95     0.03
+    Acute Phase Reactants       1354        1.00       0.00      0.99        Blood Pressure(t−4)             106125      0.33       0.47      0.00
+    Anemia Related Studies      3188        1.00       0.00      0.97        Systolic(t−4)                   99544       133.70     17.42     0.06
+    Blood Diff Absolute         11573       0.79       0.41      0.89        Diastolic(t−4)                  99483       76.21      10.90     0.06
+    Blood Differential %        12425       0.73       0.44      0.88        Blood Pressure(t−5)             106125      0.32       0.47      0.00
+    Cardiac Tests               3241        1.00       0.00      0.97        Systolic(t−5)                   96105       133.57     17.31     0.09
+    Complete Blood Count        14325       1.00       0.00      0.87        Diastolic(t−5)                  96051       76.14      10.85     0.10
+    Endocrine Studies           7581        1.00       0.00      0.93        Blood Pressure(t−6)             106125      0.31       0.46      0.00
+    General Chemistries         23076       1.00       0.00      0.78        Systolic(t−6)                   92725       133.55     17.29     0.13
+    Hepatitis                   1195        0.99       0.10      0.99        Diastolic(t−6)                  92670       76.13      10.85     0.13
+    Immunoglobulin              1179        1.00       0.00      0.99        Blood Pressure(t−7)             106125      0.30       0.46      0.00
+    Lipid Tests                 7049        1.00       0.00      0.93        Systolic(t−7)                   89242       133.49     17.27     0.16
+    Liver Function Tests        12213       1.00       0.00      0.89        Diastolic(t−7)                  89188       76.10      10.88     0.16
+
+                                                          Table 7: Variables statistics
+Appendix D     Variables Weights
+
+       Variable Name                   Weight   Variable Name                 Weight
+       Systolic(t−1)                    1.492   Time between visits(d)        -0.068
+       Systolic(t−2)                    0.849   Systolic(t−1)                  0.024
+       Systolic(t−3)                    0.598   Blood Pressure(t−2)            0.022
+       Blood Pressure(t−1)              0.550   Blood Pressure(t−3)            0.019
+       Blood Pressure(t−2)              0.442   Blood Pressure(t−1)            0.019
+       Systolic(t−4)                    0.374   Blood Pressure(t−6             0.018
+       Blood Pressure(t−3)              0.349   Blood Pressure(t−7)            0.018
+       Blood Pressure(t−4)              0.290   Systolic(t−1)                  0.015
+       Systolic(t−6)                    0.289   Systolic(t−7)                  0.013
+       Blood Pressure(t−5)              0.268   White                         -0.013
+       Blood Pressure(t−6)              0.254   Married/Partnered             -0.013
+       Systolic(t−5)                    0.243   Systolic(t−3)                  0.012
+       Blood Pressure(t−7)              0.226   Blood Pressure(t−4)            0.012
+       Mets False                      -0.172   Depression False              -0.012
+       BloodLoss False                 -0.170   Systolic(t−4)                  0.012
+       Systolic(t−7)                    0.152   Systolic(t−6)                  0.011
+       Smoker                          -0.152   Hypertension NOS              -0.010
+       Lymphoma False                  -0.132   Blood Pressure(t−5)            0.010
+       HTN True                        -0.130   BloodLoss False               -0.008
+       DSCOP                           -0.123   Arrhythmia False              -0.008
+       Drugs False                     -0.122   Systolic(t−5)                  0.008
+       CHF True                        -0.105   AgeAsOf2010                    0.008
+       Diastolic(t−7)                  -0.104   Respiratory rate missing       0.008
+       Heart Rate missing              -0.103   Hypertension NOS              -0.007
+       Diastolic(t−1)                   0.095   Language English              -0.007
+       Blood Pressure(t−7) missing      0.095   Anemia False                  -0.007
+       Height missing                   0.095   Rheumatic False               -0.007
+       Blood Pressure(t−6) missing      0.089   Neuro/Other False             -0.007
+       Rheumatic False                 -0.083   Temperature missing           -0.007
+       PVD False                       -0.083   PUD False                     -0.007
+       Systolix(t−6) missing            0.082   Weight Loss False             -0.006
+       Blood Differential (%)          -0.082   Mets False                    -0.006
+       White                           -0.076   DDCD Other                    -0.006
+       Blood Pressure(t−4) missing      0.072   Liver False                   -0.006
+       PHSOTHER                        -0.069   Hypothyroid False             -0.006
+       Clinical referral               -0.067   Atenolol                      -0.006
+       Paralysis False                 -0.064   DMcx False                    -0.005
+       Systolix(t−3) missing            0.064   PVD True                      -0.005
+       Systolix(t−4) missing            0.062   AgeYearNBR                     0.005
+       PUD False                       -0.062   BMI missing                    0.005
+       Systolix(t−7) missing            0.061   HIV False                      0.005
+       Anemia False                    -0.060   Pulmonary False               -0.005
+       Fatigue (0-10) missing          -0.057   Paralysis False               -0.005
+       Emergency Flag                  -0.054   Diastolic(t−1)                 0.005
+       DDCON                           -0.054   Blood Diff Absolute missing   -0.005
+       FluidsLytes False               -0.052   Obesity False                 -0.005
+       MARRIED/PARTNERED               -0.051   Coagulopathy False            -0.005
+       Alcohol False                   -0.051   Blood Differential             0.005
+       Lisinopril                      -0.050   SexCD                         -0.004
+       RaceGRP ASIAN                   -0.049   Abdomnl pain                  -0.004
+
+             (a) LR Top 50 Variables Weights     (b) LSTM Top 50 Variables Weights
+Appendix E    Dropped Variables
+
+ AAA (Abdominal Aortic Aneurysm ) Screening , ANA Screen , Albumin/creatinine ratio , Alcohol Drinks Per Week
+ , Alcohol Oz Per Week , Alcohol Use Screening , Amino Acids , Amino Acids, urine , Antibody Screen , Antiphos-
+ pholipid Antibodies , Antiphospholipid Antibody , Auto-Antibodies , B12 injection , Blood Gases/Oximetry , Blood
+ Pressure-LFA1162 , Blood Type , Body Surface Area (BSA) , Bone Marrow Stain , Bone density , Breast Exam ,
+ Breast Exam - LHA3537 , Breast Exam - LHA4003 , Breast Exam Instruction , CRYOs , CSF Chemistries , CSF
+ Counts and Diff , CSF/Fluid, Other , Calcium Requirements Recommendation , Carnitine, serum , Carnitine, urine ,
+ Chlamydia , Cholesterol , Cholesterol-HDL , Cholesterol-LDL , Cigarettes , Coagulation Factor Studies , Colonoscopy
+ , Complement , Complete Physical Exam , Condoms , Creatinine , Cystic Fibrosis Carrier , DNA Diagnostic Tests ,
+ DPT , DS Glucose , Dental Exams , Depo-provera Shot , Diet , Diphtheria and Tetanus booster (DT booster) , Do-
+ mestic Violence Screening , Drug Use Screening , Drugs A-E , Drugs F-N , Drugs O-Z , EGD (upper GI endoscopy)
+ , EKG , Echocardiogram , Exercise Advice , FEV1-pre (Pre-Forced Expiratory Volume) , FVC-pre (Pre-Forced Vital
+ Capacity) , Fetal Activity , Fluid Chemistries , Fluid Counts and Diff , Folic Acid Recommendation , Foot exam ,
+ Functional Status Screen , GFR (estimated) , Glucose , Gonorrhea , HCG (Human Chorionic Gonadotropin) , HCV
+ Ab-LHA3507 , HIVx , Haemophilus Influenzae type B (HIB) , Hand Gun Counseling , HbA1c (Hemoglobin A1c) ,
+ Hct (Hematocrit) , Head Circumference , Hearing , Hemocult x 3 , Hemoglobin Electrophoresis , Hepatitis A vaccine
+ (Hep A vac) , Hepatitis B vaccine (Hep B vac) , Hgb (Hemoglobin) , HgbAIC , Home Hemocult , Home glucose
+ monitoring , Hypercoagulation Studies , Hypoglycemia Assessment/Counseling , INR Result , Immune globulin ,
+ Inhibitors , Japanese encephalitis , KPS (Karnofsky performance status) , Liver - AST , Liver - Alkaline Phosphatase
+ , Liver - Total Bilirubin , Liver ALT , Lyme , Lyme vaccine , Lymph - % Difference , Lymph - Left Arm Volume ,
+ Lymph - Right Arm Volume , Mammogram , Measles, Mumps, Rubella (MMR) , Medicare Annual Wellness Visit ,
+ Meningococcal vaccine , Microalbumin , Nutrition Referral , O2 Saturation - LFA15000 , O2 Saturation - LFA15000.1
+ , O2 Saturation - LFA12575 , O2 Saturation - LFA38131 , O2 Saturation - LFA38132 , O2 Saturation - LFA4826 , O2
+ Saturation - LFA4828 , O2 Saturation - LFA5392 , O2 Saturation - SPO2 , OPV / IPV , On Oxygen? , Ophthalmology
+ Exam , Organic Acids, urine , PSA , Pain 0-10 , Pain Assessment , Pain Scale (0-10) , Pain Score , Pap Smear , Peak
+ Flow , Peak Flow - LHA4483 , Pelvic Exam , Personal Best Peak Flow , Platelet Aggregation , Platelet Antibodies
+ , Pneumovax , Podiatry exam , Positive Antibody Screen , Pregnancy Weight , Prepregnancy Height , Prepregnancy
+ Weight , Principal ICD Procedure CD , Prostate exam , Rabies , Rabies immune globulin , Rapid Strep , Rectal Exam
+ , Rh Factor , Routine Serology , Safe Sexual Practice Counseling , Seat belt counseling , Second hand smoke expo-
+ sure , Sigmoidoscopy , Smoking Quit Date , Smoking Start Date , Special Coagulation Interp , Stool Guaiac - 3 ,
+ Stool Guaiac-LHA4072 , T-cell Subsets , TSH-LHA18009 , Testicular Exam , Testicular Exam Instruction , Tetanus,
+ Diphtheria, accellular Pertussis vaccine , Tobacco Pack Per Day , Tobacco Used Years , Toxicology , Triglycerides ,
+ Trisomy 21 , Tuberculin purified protein derivative , Typhoid , UA-Protein , Urine Chemistries , Urine Chemistries
+ Timed , Urine Chemistries Unspec , Urine Culture , Urine Dip-LHA4935 , Urine Glucose , Urine Protein , Urine Toxi-
+ cology , VAS score , Varicella , Vision , Vision-Left Eye , Vision-Right Eye , Vitamin D (25 OH) , Weight Management
+ , Yellow fever .
+
+         Table 9: Variables dropped from consideration due to high proportion of missing values (> 99%)
+

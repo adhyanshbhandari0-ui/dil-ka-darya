@@ -1,0 +1,665 @@
+          Theoretical Foundations of Gaussian
+         Convolution by Extended Box Filtering
+
+    Pascal Gwosdek1 , Sven Grewenig1 , Andrés Bruhn2 , and Joachim Weickert1
+1
+    Mathematical Image Analysis Group, Dept. of Mathematics and Computer Science,
+          Campus E1.1, Saarland University, 66041 Saarbrücken, Germany.
+            {gwosdek,grewenig,weickert}@mia.uni-saarland.de
+                         2
+                         Vision and Image Processing Group,
+            Cluster of Excellence Multimodal Computing and Interaction,
+           Saarland University, Campus E 1.1, 66041 Saarbrücken, Germany
+                         bruhn@mmci.uni-saarland.de
+
+
+
+        Abstract. Gaussian convolution is of fundamental importance in linear
+        scale-space theory and in numerous applications. We introduce iterated
+        extended box filtering as an efficient and highly accurate way to compute
+        Gaussian convolution. Extended box filtering approximates a continuous
+        box filter of arbitrary non-integer standard deviation. It provides a much
+        better approximation to Gaussian convolution than conventional iterated
+        box filtering. Moreover, it retains the efficiency benefits of iterated box
+        filtering where the runtime is a linear function of the image size and does
+        not depend on the standard deviation of the Gaussian. In a detailed
+        mathematical analysis, we establish the fundamental properties of our
+        approach and deduce its error bounds. An experimental evaluation shows
+        the advantages of our method over classical implementations of Gaussian
+        convolution in the spatial and the Fourier domain.
+
+
+Keywords: Gaussian scale-space, box filter, image processing, computer vision
+
+
+1     Introduction
+Convolution with a Gaussian is one of the most widely used linear filter opera-
+tions in signal and image processing. It forms the backbone of Gaussian scale-
+space theory [4,9,13] which has been introduced in Japanese and English papers
+of Iijima [8] long before it became popular in the western world by Witkin’s
+work [16]. The strong regularisation properties of Gaussian convolution render
+the filtered signal infinitely times differentiable and stabilise the numerical eval-
+uation of higher order derivatives. Gaussian convolution is inevitable for the
+detection of edges [2,11] and interest points [6,10] that play a central role in
+computer vision. The rapid decay properties of the Gaussian both in the spatial
+and the Fourier domain and the fact that it is the only filter that is rotationally
+invariant and separable under convolution make Gaussian convolution a perfect
+low-pass filter in linear systems theory.
+2       Pascal Gwosdek, Sven Grewenig, Andrés Bruhn, Joachim Weickert
+
+    Many applications require an accurate and efficient implementation of Gaus-
+sian convolution in order to ensure the high quality of the results, to meet runtime
+requirements, or even to guarantee convergence. However, this can be challeng-
+ing: It comes down to a convolution of the input signal with a kernel function
+with infinite support. The m-dimensional Gaussian kernel
+
+                                                      |x|2
+                                                           
+                                      1
+                       Kσ (x) =           m  exp   −                              (1)
+                                  (2πσ 2 ) 2         2 · σ2
+
+of standard deviation σ has a characteristic ‘bell curve’ shape which drops off
+rapidly towards ±∞. This is why in practice one often applies a discrete convo-
+lution with a sampled and renormalised kernel that is cut off at n · σ. However,
+this method becomes inefficient for large σ, as the number of operations grows
+linearly in the number of samples of both the signal and the kernel. A more
+efficient alternative for those cases is the computation as a point-wise multipli-
+cation in the frequency domain [1]. To this end, a Fourier transform is applied
+to both the kernel and the signal, the multiplication is performed, and the result
+is transformed back into the spatial domain. Since the Gaussian kernel in the
+frequency domain can immediately be evaluated, this method reduces to two
+fast Fourier transforms, and one point-wise multiplication.
+     Although these spatial and Fourier-based implementations are the most pop-
+ular algorithms for Gaussian convolution, and their trade-offs are well investi-
+gated [5], there are also further alternatives: Approximations with recursive fil-
+ters [3,17] offer a runtime behaviour that scales linearly in the number of pixels.
+However, these filters require a special boundary treatment and a higher imple-
+mentational effort than other methods which poses additional challenges [14].
+Since Gaussian scale-space is equivalent to evolving the image under a homo-
+geneous diffusion problem, one can also implement Gaussian convolution with
+efficient numerical methods for partial differential equations, e.g. with implicit
+finite difference schemes [7]. Unfortunately, this requires the fast solution of lin-
+ear systems of equations which is also a nontrivial task. Gaussian convolution
+can also be approximated by discrete convolution with binomial kernels. They
+have a finite support and offer some interesting properties from an implemen-
+tational viewpoint, but do not allow to approximate Gaussians with arbitrary
+standard deviations. This can constitute a drawback in scale-space applications
+which aim at representations at arbitrary scales.
+     A simple but extremely fast discrete approximation of Gaussian smoothing
+can be achieved by convolution with iterated box filters [15]. A box filter uses
+a normalised kernel with identical coefficients within its finite support. By the
+central limit theorem, a sufficiently high number of iterations with a box filter
+approximates a Gaussian arbitrarily well. However, this has the same drawback
+as convolution with binomial kernels: It introduces a quantisation to the range
+of standard deviations that can be approximated.
+     In our paper we address this problem. We advocate a modification of the
+box filter that is based on a new discretisation of the continuous box kernel. In
+particular, we concentrate on establishing important properties of the resulting
+Theoretical Foundations of Gaussian Convolution by Extended Box Filtering          3
+
+extended box filter: It combines the simplicity and algorithmic efficiency of the
+conventional box filter with a good approximation of theoretic properties of
+Gaussian filtering. In an experimental evaluation, we show that the extended
+box filter approximates the Gaussian filter significantly better than a classical
+box filter and offers advantages over spatial and Fourier-based approximations of
+Gaussian convolution. Moreover, our method introduces only marginal runtime
+overheads over classical box filtering.
+    Our paper is structured as follows. In Section 2, we first recapitulate the basic
+notations and definitions of conventional box filtering. Thereafter, we present
+our new method in Section 3. After an experimental evaluation in Section 4, we
+conclude with a summary in Section 5.
+
+
+2   Conventional Box Filtering
+Box filters are usually defined in a purely discrete context. However, in order
+to derive a new discretisation in this paper, we start with a short review of a
+continuous definition:
+
+Definition 1. A continuous box filter BΛ with a real-valued length Λ ∈ R+ :=
+{a ∈ R : a > 0} is a convolution
+                                       Z∞
+                     (BΛ ∗ f )(x) :=            BΛ (x − y) · f (y) dy            (2)
+                                       −∞
+
+of a signal f with a box kernel
+                                       (
+                                           1
+                                           Λ,     x ∈ (−λ, λ)
+                          BΛ (x) :=                                              (3)
+                                           0,     else
+
+for x ∈ R and Λ = 2λ.
+
+   In the literature, one usually finds the continuous length Λ being rounded to
+the closest odd integer L [15]:
+
+Definition 2. A discrete box filter BL of length L = h(2l + 1), l ∈ N0 , and
+sampled at an equidistant grid of spacing h > 0 is a convolution
+                                    X
+                 (BL ∗ f )(hk) :=       BL (h(k − m)) · f (hm)            (4)
+                                      m∈Z
+
+of a signal f with a discrete box kernel
+                                      (
+                                            h
+                                            L,     −l ⩽ k ⩽ l
+                          BL (hk) :=                                             (5)
+                                            0,     else
+
+for k ∈ Z.
+4       Pascal Gwosdek, Sven Grewenig, Andrés Bruhn, Joachim Weickert
+
+
+
+                      h
+                      L
+
+                                  -hl   ...   -h   0      h   ...   hl
+
+
+                      h
+                      Λ
+                 hw
+                          -hl-h -hl     ...   -h   0      h   ...   hl hl+h
+                             hα                    L
+                                                   Λ
+
+Fig. 1. Visualisation of box kernels. Top: Continuous box kernel BΛ (dotted) and its
+conventional discrete approximation BL . Bottom: Corresponding discrete extended
+box kernel EΛ .
+
+
+    An illustration of this construction is depicted in Figure 1. Note that we
+introduce an arbitrary grid spacing h, and couple the length L to a multiple of
+this distance. For h → 0, BL thus approaches BΛ (cf. Definition 1). If we set
+h = 1, we obtain the formulation in [15].
+    On discrete data, it can be implemented very efficiently in an iterative ‘sliding
+window’ manner, i.e.
+                                                         h
+                  (BL ∗ f )i = (BL ∗ f )i−1 +              (fi+l − fi−l−1 ) ,     (6)
+                                                         L
+with (·)k or fk denoting the discrete value at sampling point hk. After the
+initialisation of the first sample, the method needs one multiplication and two
+additions per pixel and dimension, independent of the size of the kernel. Thus,
+it enjoys a linear complexity in time.
+    A d-fold convolution of the kernel with the signal approximates a Gaussian
+convolution. This removes artefacts that arise from the piecewise linearity of the
+box kernel, as well as from the lack of a rotational invariance property in the
+multi-dimensional case. The resulting operation is equivalent to the convolution
+with a C d−1 -continuous kernel BLd of variance σ 2 (BLd ) [15]:
+
+                                                       L2 − 1
+                                  σ 2 (BLd ) = d              .                   (7)
+                                                         12
+Note that this formula only allows a discrete set of standard deviations to be
+chosen. In the literature, it is suggested to handle this problem by a series of box
+filters of different length [15]. Unfortunately, this idea does not solve the problem:
+By practical considerations, d is typically chosen from the range {3, 4, 5}, such
+that the distance between admissible σ cannot be reduced arbitrarily. Moreover,
+the kernel resulting from a convolution of box kernels with different lengths does
+not fulfil the continuity properties mentioned above.
+Theoretical Foundations of Gaussian Convolution by Extended Box Filtering            5
+
+    In contrast to this suggestion, we are now going to derive a better discreti-
+sation of the continuous formulation which does not have this problem by con-
+struction. Still, it possesses all advantages of the discrete box filter.
+
+
+3      Extended Box Filter
+
+Our goal is now to find a better discretisation EΛ of the continuous box filter
+BΛ than is given by the conventional discrete approximation BL . In doing so,
+we focus in particular on the following criteria:
+
+ 1. EΛ must be continuous over Λ to allow kernels with arbitrary variance.
+ 2. For Λ = L ∈ Nodd , it must equal the discrete box filter BL of length L.
+ 3. For h → 0, it must approach the continuous case, i.e. lim σ 2 (EΛ ) = σ 2 (BΛ ).
+                                                               h→0
+
+To this end, we decompose Λ into an integer part and a real-valued remainder:
+
+                         Λ = h(2l + 1 + 2α) = L + 2hα                              (8)
+
+such that 0 ⩽ α < 1 and l ∈ N0 . With this formalism, we are now able to set up
+an ‘extended’ variant of the discrete box filter:
+
+Definition 3. An extended box filter EΛ with a real-valued length Λ ∈ R+ and
+discretised on a uniform grid of spacing h > 0 is a convolution
+                                    X
+                  (EΛ ∗ f )(hk) :=      EΛ (h(k − m)) · f (hm)            (9)
+                                         m∈Z
+
+of a signal f with an extended box kernel
+                               
+                                 h
+                               Λ,
+                                      −l ⩽ k ⩽ l
+                    EΛ (hk) := hw, k ∈ {−(l + 1), l + 1}                          (10)
+                               
+                                 0,    else
+                               
+
+with
+                                                                  
+                             Λ   1              1       1   2l + 1
+                  l :=         −     ,     w :=           −              ,        (11)
+                             2h 2               2       h      Λ
+
+and k ∈ Z. bxc denotes the so-called floor function, which computes the largest
+integer not greater than x ∈ R.
+
+    Both constraints in (11) are necessary in order to ensure that all weights
+sum up to 1. A visualisation of the extended box kernel (10) is depicted in
+Figure 1. It is immediately clear that our new filter preserves many advantages
+of the original box filter. It is separable in space, and an efficient ‘sliding-window’
+implementation is still possible and beneficial: Apart from the first value in a row,
+6      Pascal Gwosdek, Sven Grewenig, Andrés Bruhn, Joachim Weickert
+
+only four additions and two multiplications are needed per pixel and dimension
+(since both weighting factors are constants):
+                                               h         
+          (EΛ ∗ f )i = (EΛ ∗ f )i−1        +          − hw (fi+l   − fi−l−1 )
+                                                  Λ
+                                           +           hw (fi+l+1 − fi−l−2 ) .   (12)
+
+This means, the computational complexity of a box filtering step is in O(n)
+in the number of pixels, and is thus in particular independent of the length of
+the chosen box kernel. Let us now discuss some mathematical properties of our
+construction. First of all, we immediately see that w depends proportionally on
+α (cf. Figure 1):
+                                                 
+          1       (2l + 1)h        1       Λ − 2αh        1 2αh       α
+   w =        1−                =      1−             =     ·      = . (13)
+         2h           Λ           2h           Λ         2h Λ         Λ
+
+Using this equivalence, we can formulate the variance of EΛ by considering the
+components of Λ only. Like for the conventional box filter, we regard the more
+general case for a convolution kernel that corresponds to a d-fold application of
+a single extended box kernel EΛ :
+
+Theorem 1. The variance σ 2 (EΛ
+                              d
+                                ) of a d-fold iterated extended box kernel is
+given by
+                         dh3
+             σ 2 (EΛ
+                   d
+                               2l3 + 3l2 + l + 6α(l + 1)2 .
+                                                         
+                     ) =                                                (14)
+                         3Λ
+Proof. By symmetry considerations, we see that the expectation value of EΛ is
+zero. For the variance σ 2 (EΛ ) of one (non-iterated) box kernel, it follows
+                     l+1
+                     X
+       σ 2 (EΛ ) =          EΛ (hk) · (hk − 0)2
+                 k=−(l+1)
+                     l
+                     X h                                 2
+                =                (hk)2 + hw (−(hl + h)) + hw(hl + h)2
+                            Λ
+                     k=−l
+                             l
+                  2h3 X 2
+                =      k + 2h3 w(l + 1)2
+                   Λ
+                            k=1
+                        3
+               (13) h
+                            2l3 + 3l2 + l + 6α(l + 1)2
+                                                         
+                =                                            .
+                     3Λ
+From probability theory, we obtain the variance σ 2 (EΛ
+                                                      d
+                                                        ) for the iterated extended
+box kernel as the sum of single variances. This concludes the proof.              
+
+    For h = 1 and Λ = 2l + 1 ∈ Nodd , i.e. α = 0, this is just a generalisation of
+Equation (7). This means that the extended box filter falls back to the notion
+of the conventional box filter in these cases:
+Theoretical Foundations of Gaussian Convolution by Extended Box Filtering              7
+
+Theorem 2. The extended box kernel EΛ constitutes a generalisation of the
+discrete box kernel BL for the case h = 1, i.e. EL = BL for L ∈ Nodd and
+
+  ∀L ∈ Nodd :      lim σ 2 (EΛ
+                             d
+                               ) = σ 2 (BLd ) and       lim σ 2 (EΛ
+                                                                  d
+                                                                    ) = σ 2 (BL+2
+                                                                              d
+                                                                                  ). (15)
+                Λ→L+                                Λ→(L+2)−
+
+Proof. It is clear that EL = BL for L ∈ Nodd , because in this case we get α = 0
+and w = 0. Thus, it immediately follows that lim+ σ 2 (EΛ   d
+                                                              ) = σ 2 (BLd ). So, it
+                                                        Λ→L
+remains to show the case Λ → (L + 2)− , for which we first consider a single
+extended box kernel EΛ :
+                                           1
+          lim σ 2 (EΛ ) =                    2l3 + 3l2 + l + 3(Λ − L)(l + 1)2
+                                                                              
+                                  lim
+      Λ→(L+2)−                 Λ→(L+2)−   3Λ
+                                1
+                          =          (2l3 + 9l2 + 13l + 6)
+                            3(L + 2)
+                                1
+                          =           (2l + 3)(l2 + 3l + 2)
+                            3(2l + 3)
+                            (L + 2)2 − 1
+                          =                ,
+                                  12
+where we have used that α = Λ−L
+                             2  and L = 2l + 1. It follows immediately that
+
+                                lim      σ 2 (EΛ
+                                               d
+                                                 ) = σ 2 (BΛ
+                                                           d
+                                                             ).
+                              Λ→(L+2)−
+
+                 d
+This shows that EΛ is a consistent generalisation of BLd with respect to Λ.            
+
+   Now that we have shown that the extended box filter extends the previ-
+ous discrete definition, we want to show that it is a good discretisation of the
+continuous box filter we are about to approximate:
+
+Theorem 3. The extended box kernel EΛ is a suitable discretisation of a box
+kernel BΛ in the continuous domain, i.e. for d-fold application,
+1. its variance approximates the continuous analogue arbitrarily well:
+
+                               lim σ 2 (EΛ
+                                         d
+                                           ) = σ 2 (BΛ
+                                                     d
+                                                       ),     and                   (16)
+                               h→0
+
+2. the order of consistency is O(h2 ).
+
+Proof. We can deduce an approximation of the continuous setting by computing
+the limit of σ 2 (EΛ
+                   d
+                     ) for the grid spacing h → 0. Since we are interested in the
+order of consistency, we must consider the variance in (14) and rewrite it:
+
+                (2hl)3       (2hl)2       2hl         α
+     σ 2 (EΛ
+           d
+             ) =        + dh        + dh2     + 2dh3 (l2 + 2l + 1)
+                  12Λ          4Λ         6Λ          Λ
+                  (2hl)3              (2hl)2                  2hl      2α
+              = d        + dh(1 + 2α)         + dh2 (1 + 12α)     + dh3 .
+                   12Λ                  4Λ                    6Λ       Λ
+8       Pascal Gwosdek, Sven Grewenig, Andrés Bruhn, Joachim Weickert
+
+Input: Signal u0, standard deviation σ, iterations d.
+Output: Signal ud := EΛ
+                      d
+                        ∗ u0
+
+l ← largest integer such that σ 2 (BL
+                                    d
+                                      ) ≤ σ2       (by (7))
+                              2
+               l(l + 1) − 3σd
+α ←   (2l + 1) σ2                                  (by σ 2 (EΛ
+                                                             d
+                                                               ) ≤ σ 2, (8), and (14))
+              6( d − (l + 1)2 )
+           α                1−α
+w ←               , ŵ ←                           (by (8) and (13))
+      2l + 1 + 2α        2l + 1 + 2α
+
+For all j ∈ {1, . . . , d}
+  Compute uj[0] (for the first pixel)
+  For all i > 0
+    Compute uj [i] ← uj [i-1] + w · (uj−1[i+l+1] - uj−1[i-l-2])
+                              + ŵ · (uj−1[i+l ] - uj−1[i-l-1])
+
+Fig. 2. Algorithm for 1-D extended box filtering. Boundaries can be handled on-the-fly.
+
+
+Now we replace 2hl by Λ − (1 + 2α)h and get for the first three terms:
+
+            (Λ − (1 + 2α)h)3   dΛ2    dh               dh2
+          d                  =      −    (1 + 2α)Λ +       (1 + 2α)2 + O(h3 ),
+                  12Λ           12     4                4
+            (Λ − (1 + 2α)h)2   dh              dh2
+dh(1 + 2α)                   =    (1 + 2α)Λ −      (1 + 2α)2 + O(h3 ),
+                   4Λ           4               2
+               Λ − (1 + 2α)h   dh2
+ dh2 (1 + 12α)               =     (1 + 12α) + O(h3 ).
+                    6Λ          6
+Finally, this yields
+
+                            dΛ2        d
+              σ 2 (EΛ
+                    d
+                                − h2 ·    12α2 − 12α + 1 + O(h3 ).
+                                                        
+                      ) =
+                             12        12
+Thus, the consistency order is O(h2 ) and we can state that
+                                   Λ
+                                  Z2                   Z∞
+                      Λ2               1
+    lim σ 2 (EΛ
+              d
+                ) = d    = d             · x2 dx = d        BΛ (x)x2 dx = σ 2 (BΛ
+                                                                                d
+                                                                                  ).
+    h→0               12               Λ
+                                  −Λ                −∞
+                                   2
+
+
+                                                                                       
+
+
+
+4    Experiments
+
+In order to investigate the properties of the extended box filter on real data,
+we have implemented the algorithm for application on images. Technically, this
+means we are dealing with 2-D images f ∈ Ω ⊂ R2 , and assume reflecting
+Theoretical Foundations of Gaussian Convolution by Extended Box Filtering               9
+
+
+
+
+      a.                        b.                          c.
+
+
+
+
+      d.                        e.                          f.
+
+Fig. 3. Visual quality for Boat, 512 × 512 pixels. a: Original, b: conventional and c:
+extended box filtering with d = 3, σ = 5.0, d: Discrete Gaussian filtering with σ = 5.0
+(truncated at 10σ), and e,f: differences of b and c to d, respectively, scaled by a factor
+10 to increase visibility. 50% grey means the error is zero.
+
+
+boundary conditions to preserve the average grey value. Using the separability of
+the kernel, we apply a ‘sliding window’ technique in both directions (cf. Figure 2).
+This operation is highly parallel, and can thus be significantly accelerated by the
+streaming SIMD extension mechanism (SSE) of modern desktop processors, by
+use of all CPU cores, and by graphics processors.
+
+
+4.1        Qualitative Gain
+
+Our aim in designing the extended box filter is to propose a fast but accurate
+way to perform Gaussian convolution for arbitrary standard deviations. Conse-
+quently, we are interested in the accuracy of the proposed method.
+    To evaluate the accuracy, we use the well-known Boat test image from the
+USC SIPI database (cf. Figure 3a), and convolve it with discrete box kernels.
+These results are then compared to a ground truth obtained by a convolution
+with a discretised Gaussian kernel that has been truncated at 10σ and renor-
+malised. Please note that this ground truth is also subject to discretisation arte-
+facts and may not exactly reflect the desired solution. A more complicated al-
+ternative to this implementation has been proposed in [12], but this variant also
+suffers from similar truncation problems. Finally, let us note that we chose the
+Boat test image as a good representative for many real-world examples, since it
+contains many different frequencies and both homogeneous and textured regions.
+10            Pascal Gwosdek, Sven Grewenig, Andrés Bruhn, Joachim Weickert
+
+
+                                                                   5                                                                    5
+     5                                                             4        5                                                           4
+                                                                   3                                                                    3
+     4                                                                      4
+                                                                   2                                                                    2
+     3                                                             1        3                                                           1
+     2                                                             0        2                                                           0
+
+     1                                                         0            1                                                       0
+     0                                                    10                0                                                  10
+                                                     20                                                                   20
+         0
+              5
+                                                30        σ                     0
+                                                                                    5
+                                                                                                                     30        σ
+                      10                   40                                               10                  40
+                           15         50                                                         15        50
+a.                d             20                                     b.               d             20
+
+
+Fig. 4. Plot of the mean square error to discrete Gaussian convolution on Boat, 512 ×
+512 pixels, depending on σ and d. a: Conventional box filter. b: Extended box filter.
+
+
+    In the first part of our experiment, we use conventional box kernels and
+a varying number of iterations d, and compare these results to the reference
+solution. Instead of focussing on one specific standard deviation σ, we evaluate
+many different values. As an error measure for equivalence, we use the mean
+square error (MSE) given by
+                                                                            N
+                                                  1 X
+                                     M SE(a, b) =       (ai − bi )2 ,                                                          (17)
+                                                  N i=1
+
+where N describes the number of pixels. The results for this experiment are
+given in Figure 4a. For large σ, we see that a box filter of order d = 5 is already
+sufficient to approximate the Gaussian very well. However, one also realises that
+small standard deviations cannot be represented well at all. This effect is caused
+by the integer length of the box kernel, and re-occurs for larger d and larger σ
+for similar reasons.
+    In the second part, we repeated the same experiment with the proposed
+kernel. This is shown in Figure 4b. Compared to the conventional box filter, the
+novel approach attenuates errors much stronger. For any σ, an order of d = 5
+yields almost identical results to Gaussian filtering. This justifies our model as
+a qualitatively equal alternative.
+    To conclude this experiment, we compare the visual quality of both ap-
+proaches. Figure 3 depicts a sample output of both methods under a standard
+deviation σ = 5.0, and further shows the desired result as given by Gaussian
+convolution. Albeit the visual quality differences are relatively low, the differ-
+ence images show that our extended box filter performs much better than the
+conventional box filtering.
+
+4.2          Runtime
+In the last experiment, we are interested in the tradeoff between the accuracy
+and the runtime of extended box filtering compared to other techniques. To this
+end, we convolve the Boat test image using a discrete Gaussian truncated at 3σ,
+Theoretical Foundations of Gaussian Convolution by Extended Box Filtering        11
+
+Table 1. CPU runtime t in milliseconds vs. mean square error (MSE) between the
+result and the ground truth for different techniques on Boat (512 × 512 pixels).
+
+                                    σ = 0.5       σ = 5.0        σ = 25.0
+                                    MSE t         MSE t          MSE t
+         Truncated Gaussian         0.000   8     0.001 45       0.007 148
+         FFT-based                  1.032 148     0.000 148      0.000 148
+         Conventional box           9.580   0     1.400 26       0.154 27
+         Extended box               0.030 41      0.051 43       0.098 43
+
+
+
+an FFT-based approach, a conventional, and an extended box filter (both with
+d = 5). Runtimes were acquired on a single-core 3.2 GHz Pentium 4 with 2MB
+L2 cache and 2 GB RAM.
+    Table 1 shows the results of this experiment. The truncated Gaussian con-
+vinces for small standard deviations, but scales linearly in σ such that this
+method becomes infeasible for large σ. Although the runtime of all remaining
+methods is independent from the standard deviation, box filters have a clear
+advantage if we consider larger images: While they only scale linearly in the
+number of pixels n, the FFT-based methods have a complexity of O(n log(n)).
+In return, the FFT-based approach offers a much better approximation quality
+for large σ. In this context, the extended box filter is a good tradeoff between
+classical box filtering and the FFT-based approaches: It provides a convincing
+approximation quality for all standard deviations at a slightly higher runtime
+than a classical box filter.
+
+
+
+5   Summary
+
+
+In view of the omnipresence of Gaussian convolution in scale-space theory and
+its numerous applications in image processing and computer vision, it is surpris-
+ing that one can still come up with novel algorithms that are extremely simple
+and offer a number of advantages. In our paper we have shown that a small
+modification of classical box filtering leads to an extended box filter which can
+be iterated in order to approximate Gaussian convolution with high accuracy
+and high efficiency. In contrast to classical box filtering, it does not suffer from
+the restriction that only a distinct set of standard deviations of the Gaussian
+are allowed. Although the main focus of our paper is on establishing the essen-
+tial mathematical properties of extended box filtering, we have also presented
+experiments that illustrate the advantages over spatial and Fourier-based imple-
+mentations of Gaussian convolution. In our ongoing research we will perform a
+more extensive evaluation with a large number of alternative implementations,
+taking also into account the potential of modern parallel hardware such as GPUs.
+12      Pascal Gwosdek, Sven Grewenig, Andrés Bruhn, Joachim Weickert
+
+Acknowledgements
+Our research was partly funded by the Cluster of Excellence “Multimodal Com-
+puting and Interaction”, and by the Deutsche Forschungsgemeinschaft under
+project We2602/7-1. This is gratefully acknowledged.
+
+
+References
+ 1. Bracewell, R.N.: The Fourier transform and its applications. McGraw-Hill, third
+    edn. (Jun 1999)
+ 2. Canny, J.: A computational approach to edge detection. IEEE Transactions on
+    Pattern Analysis and Machine Intelligence 8, 679–698 (1986)
+ 3. Deriche, R.: Fast algorithms for low-level vision. IEEE Transactions on Pattern
+    Analysis and Machine Intelligence 12, 78–87 (1990)
+ 4. Florack, L.: Image Structure, Computational Imaging and Vision, vol. 10. Kluwer,
+    Dordrecht (1997)
+ 5. Florack, L.: A spatio-frequency trade-off scale for scale-space filtering. IEEE Trans-
+    actions on Pattern Analysis and Machine Intelligence 22(9), 1050–1055 (Sep 2000)
+ 6. Förstner, W., Gülch, E.: A fast operator for detection and precise location of
+    distinct points, corners and centres of circular features. In: Proc. ISPRS Intercom-
+    mission Conference on Fast Processing of Photogrammetric Data. pp. 281–305.
+    Interlaken, Switzerland (Jun 1987)
+ 7. Gourlay, A.R.: Implicit convolution. Image and Vision Computing 3, 15–23 (1985)
+ 8. Iijima, T.: Theory of pattern recognition. Electronics and Communications in
+    Japan pp. 123–134 (Nov 1963), in English
+ 9. Lindeberg, T.: Scale-Space Theory in Computer Vision. Kluwer, Boston (1994)
+10. Lowe, D.G.: Distinctive image features from scale-invariant keypoints. Interna-
+    tional Journal of Computer Vision 60(2), 91–110 (2004)
+11. Marr, D., Hildreth, E.: Theory of edge detection. Proceedings of the Royal Society
+    of London, Series B 207, 187–217 (1980)
+12. Norman, E.: A discrete analogue of the Weierstrass transform. Proceedings of the
+    American Mathematical Society 11(596–604) (1960)
+13. Sporring, J., Nielsen, M., Florack, L., Johansen, P. (eds.): Gaussian Scale-Space
+    Theory, Computational Imaging and Vision, vol. 8. Kluwer, Dordrecht (1997)
+14. Triggs, B., Sdika, M.: Boundary conditions for Young - van Vliet recursive filtering.
+    IEEE Transactions on Signal Processing 54(5), 1–2 (May 2006)
+15. Wells, W.M.: Efficient synthesis of Gaussian filters by cascaded uniform filters.
+    IEEE Transactions on Pattern Analysis and Machine Intelligence 8(2), 234–239
+    (Mar 1986)
+16. Witkin, A.P.: Scale-space filtering. In: Proc. Eighth International Joint Conference
+    on Artificial Intelligence. vol. 2, pp. 945–951. Karlsruhe, West Germany (August
+    1983)
+17. Young, I.T., van Vliet, L.J.: Recursive implementation of the Gaussian filter. Signal
+    Processing 44, 139–151 (Jan 1995)
+

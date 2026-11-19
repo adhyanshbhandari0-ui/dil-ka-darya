@@ -1,0 +1,976 @@
+                                         SUOD: ACCELERATING L ARGE -S CALE U NSUPERVISED H ETEROGENEOUS
+                                                             O UTLIER D ETECTION
+
+
+                                             Yue Zhao * 1 Xiyang Hu * 1 Cheng Cheng 1 Cong Wang 2 Changlin Wan 3 Wen Wang 1 Jianing Yang 1
+                                               Haoping Bai 1 Zheng Li 4 Cao Xiao 5 Yunlong Wang 5 Zhi Qiao 5 Jimeng Sun 6 Leman Akoglu 1
+
+
+                                                                                                A BSTRACT
+
+
+
+
+arXiv:2003.05731v4 [cs.LG] 5 Mar 2021
+                                             Outlier detection (OD) is a key machine learning (ML) task for identifying abnormal objects from general samples
+                                             with numerous high-stake applications including fraud detection and intrusion detection. Due to the lack of
+                                             ground truth labels, practitioners often have to build a large number of unsupervised, heterogeneous models (i.e.,
+                                             different algorithms with varying hyperparameters) for further combination and analysis, rather than relying on a
+                                             single model. How to accelerate the training and scoring on new-coming samples by outlyingness (referred as
+                                             prediction throughout the paper) with a large number of unsupervised, heterogeneous OD models? In this study,
+                                             we propose a modular acceleration system, called SUOD, to address it. The proposed system focuses on three
+                                             complementary acceleration aspects (data reduction for high-dimensional data, approximation for costly models,
+                                             and taskload imbalance optimization for distributed environment), while maintaining performance accuracy.
+                                             Extensive experiments on more than 20 benchmark datasets demonstrate SUOD’s effectiveness in heterogeneous
+                                             OD acceleration, along with a real-world deployment case on fraudulent claim analysis at IQVIA, a leading
+                                             healthcare firm. We open-source SUOD for reproducibility and accessibility.
+
+                                        1    I NTRODUCTION                                                    combination approaches in both unsupervised (Zhao et al.,
+                                                                                                              2019a) and semi-supervised manners (Zhao & Hryniewicki,
+                                        Outlier detection (OD) aims at identifying the samples that           2018).
+                                        are deviant from the general data distribution (Zhao et al.,
+                                        2019b; Lai et al., 2020), which has been used in various ap-          However, training and prediction with a large number of
+                                        plications (Chandola et al., 2009; Zha et al., 2020). Notably,        heterogeneous OD models is computationally expensive on
+                                        most of the existing OD algorithms are unsupervised due to            high-dimensional, large datasets. For instance, proximity-
+                                        the high cost of acquiring ground truth (Zhao et al., 2019a).         based algorithms, assuming outliers behave differently in
+                                        Model selection and hyperparameter tuning in OD have                  specific regions (Aggarwal, 2013), can be prohibitively slow
+                                        been shown to be non-trivial problems (Zhao et al., 2020;             or even completely fail to work under this setting. Repre-
+                                        Li et al., 2020). To reduce the risk and instability of using a       sentative methods such as k nearest neighbors (kNN) (Ra-
+                                        single OD model, practitioners prefer to build a large corpus         maswamy et al., 2000), local outlier factor (LOF) (Breunig
+                                        of OD models with variation and diversity, e.g., different al-        et al., 2000), and local outlier probabilities (LoOP) (Kriegel
+                                        gorithms, varying parameters, distinct views of the datasets,         et al., 2009), operate in Euclidean space for distance/den-
+                                        etc (Aggarwal & Sathe, 2017). This approach is known as               sity calculation, suffering from the curse of dimensionality
+                                        heterogeneous OD. Ensemble methods that select and com-               (Schubert et al., 2015). Numerous works have attempted to
+                                        bine diversified base models can be leveraged to analyze              tackle this scalability challenge from various angles, e.g.,
+                                        heterogeneous OD models (Aggarwal, 2012; Zimek et al.,                data projection (Keller et al., 2012), subspacing (Liu et al.,
+                                        2013; Aggarwal & Sathe, 2017), and more reliable results              2008), and distributed learning for specific OD algorithms
+                                        may be achieved. The simplest combination is to take the              (Lozano & Acuña, 2005; Oku et al., 2014). However, none
+                                        average or maximum across all the base models as the final            of them provides a comprehensive solution by consider-
+                                        result (Aggarwal & Sathe, 2017), along with more complex              ing all aspects of large-scale heterogeneous OD, leading
+                                            *
+                                                                                                              to limited practicability and efficacy.
+                                              Equal contribution 1 Carnegie Mellon University 2 Peking Uni-
+                                        versity 3 Purdue University 4 Arima Inc. 5 IQVIA 6 University of      To tap the gap, we propose a comprehensive acceleration
+                                        Illinois at Urbana-Champaign. Correspondence to: Yue Zhao             framework called SUOD. As shown in Fig. 1, SUOD
+                                        <zhaoy@cmu.edu>, Xiyang Hu <xiyanghu@cmu.edu>.                        has three modules focusing on complementary levels: ran-
+                                        Proceedings of the 4 th MLSys Conference, San Jose, CA, USA,
+                                                                                                              dom projection (data level), pseudo-supervised approxi-
+                                        2021. Copyright 2021 by the author(s).                                mation (model level), and balanced parallel scheduling
+                       SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection
+
+(execution level). For high-dimensional data, SUOD gen-                  Data Level                   Model Level                  Execution Level
+erates a random low-dimensional subspace for each base
+model by Johnson-Lindenstrauss projection (Johnson & Lin-
+denstrauss, 1984), in which the corresponding base model
+is trained. If prediction on new-coming samples is needed,
+fast supervised models are employed to approximate costly             Random Projection:           Pseudo-Supervised                Balanced Parallel
+                                                                      For high-dimensional          Approximation:                    Scheduling:
+unsupervised outlier detectors (e.g., kNN and LOF). To train            data compression            For fast prediction on        For balanced distributed
+the supervised approximators, we regard the unsupervised                                            new-coming samples                task scheduling
+models’ outputs on the train set as “pseudo ground truth”.                All modules are independent and can be turned on/off by specific use case.
+Intuitively, this may be viewed as distilling knowledge from
+complex unsupervised models (Hinton et al., 2015) by fast
+                                                                         Figure 1. SUOD focuses on three independent levels.
+and more interpretable supervised models. We also build a
+taskload predictor to reduce the scheduling imbalance in dis-
+tributed environment. Other than generically assigning the
+equal number of models to each worker, our balanced par-
+allel scheduling mechanism forecasts OD model cost, e.g.,         2      R ELATED W ORK
+training time, before scheduling them, so that the taskload       2.1     Outlier Detection and Ensemble Learning
+is evenly distributed among workers. Notably, all three
+acceleration modules are designed to be independent but           Outlier detection has numerous important applications, such
+complementary, which can be used alone or combined as             as rare disease detection (Li et al., 2018), healthcare uti-
+a system. It is noted that SUOD is designed for offline           lization analysis (Hu et al., 2012), video surveillance (Lu
+learning with a stationary assumption, although it may be         et al., 2017), fraudulent online review analysis (Akoglu
+further extended to online setting for streaming data with ex-    et al., 2013), and network intrusion detection (Lazarevic
+tra effort (Wang et al., 2019a; 2020). It is noted that offline   et al., 2003). Yet, detecting outliers is challenging due
+training and prediction is one of the primary scenarios in        to various reasons (Aggarwal, 2012; Zhao et al., 2019a;b).
+machine learning applications (Amazon, 2020; Nakandala            Most of the existing detection algorithms are unsupervised
+et al., 2020).                                                    as ground truth is often absent in practice, and acquiring
+                                                                  labels can be prohibitively expensive. We include 8 popular
+Our contributions are summarized as follows:                      OD algorithms in this study for experimentation, includ-
+  1. The First Comprehensive OD Acceleration System:              ing Isolation Forest (Liu et al., 2008), Local Outlier Factor
+     We propose SUOD, (to our knowledge) the most com-            (LOF) (Breunig et al., 2000), Angle-based Outlier Detection
+     prehensive system for heterogeneous OD acceleration          (ABOD) (Kriegel et al., 2009), Feature Bagging (Lazarevic
+     by a holistic view on data, model, and execution level.      & Kumar, 2005), Histogram-based Outlier Score (HBOS)
+  2. Analysis of Data Compression: We examine various             (Goldstein & Dengel, 2012), and Clustering-Based Local
+     data compression methods and identify the best per-          Outlier Factor (CBLOF) (He et al., 2003). See Appendix B
+     forming method(s) for large-scale outlier ensembles.         for details on OD models.
+  3. Exploration of Model Approximation for OD: We                Consequently, relying on a single unsupervised model has
+     analyze the use of pseudo-supervised regression mod-         inherently high risk, and outlier ensembles that leverage
+     els’ performance in approximating costly unsupervised        a group of diversified (e.g., heterogeneous) detectors have
+     OD models, as the first research effort on this topic.       become increasingly popular (Aggarwal, 2012; Zimek et al.,
+  4. Forecasting-based Scheduling System: We fix an im-           2013; Aggarwal & Sathe, 2017). There are a group of un-
+     balance scheduling issue in distributed heterogeneous        supervised outlier ensemble frameworks proposed in the
+     OD efficiency, saving up to 61% execution time.              last several years from simple combination like averaging
+  5. Effectiveness: We conduct extensive experiments to           (Aggarwal & Sathe, 2017) to more complex model selection
+     show the effectiveness of the acceleration modules           approaches like SELECT (Rayana & Akoglu, 2016), LSCP
+     independently, and of the entire framework as a whole,       (Zhao et al., 2019a), and MetaOD (Zhao et al., 2020). In
+     along with a real-world case on fraud detection.             addition to fully unsupervised outlier ensembles, there are
+To foster accessibility and reproducibility, We release           (semi-)supervised ensembling frameworks that can incor-
+SUOD with industry-level implementation1 , which also be-         porate existing label information such like XGBOD (Zhao
+comes a core component of the leading OD library PyOD2 .          & Hryniewicki, 2018). For both unsupervised and (semi-
+   1
+                                                                  )supervised methods, a large group of unsupervised, het-
+       https://github.com/yzhao062/SUOD                           erogeneous OD models are used as base for robustness and
+   2
+       https://github.com/yzhao062/PyOD                           performance—SUOD is hereby proposed to accelerate for
+                                                                  this scenario.
+                        SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection
+
+2.2   Scalability and Efficiency Challenges in OD                  efficient task scheduling for “shorter tasks on larger degree
+                                                                   of parallelism”, e.g., Sparrow (Ousterhout et al., 2013) and
+Efforts have been made through various channels to accel-
+                                                                   Pigeon (Wang et al., 2019b). For instance, Sparrow dis-
+erate large-scale OD. On the data level, researchers try to
+                                                                   cusses scheduling millions of tasks (at millisecond scale)
+project high-dimensional data onto lower-dimensional sub-
+                                                                   on thousands of machines. Differently, Heterogeneous OD
+spaces (Achlioptas, 2001), including simple Principal Com-
+                                                                   applications typically use a few OD models (e.g., 5 to 1,000)
+ponent Analysis (PCA) (Shyu et al., 2003) and more com-
+                                                                   and each of them takes a few seconds to hours to run (a con-
+plex subspace method HiCS (Keller et al., 2012). However,
+                                                                   siderable number of tasks; each takes time to run), which is
+deterministic projection methods, e.g., PCA, are not ideal
+                                                                   “longer tasks with a small number of workers”. SUOD is,
+for building diversified heterogeneous OD—they lead to the
+                                                                   therefore, proposed to reduce the inefficiency in distributed
+same or similar subspaces with limited diversity by nature,
+                                                                   heterogeneous OD specifically.
+resulting in the loss of outliers (Aggarwal, 2013). Complex
+projection and subspace methods may bring performance
+improvement for outlier mining, but the generalization ca-         3     S YSTEM D ESIGN
+pacity is limited. Hence, projection methods preserving
+                                                                   3.1   Problem Formulation
+pairwise distance relationships for downstream tasks should
+be considered. SUOD’s considers both diversity induction           OD applications and research are primarily running a single,
+and pairwise distance preservation for downstream tasks,           on-prime, powerful machine with multiple cores/workers,
+leading to diversified and meaningful feature spaces (see          due to its high-stake nature (e.g., data sensitive of finan-
+§3.3).                                                             cial transactions). Therefore, we formulate unsupervised
+                                                                   heterogeneous OD training and prediction tasks with:
+On the model level, knowledge distillation emerges as a
+good way of compressing large neural networks (Hinton                  • m unsupervised heterogeneous OD models, where
+et al., 2015), while its usage in outlier detection is still un-         M = {M1 , ..., Mm }. We refer the combination of
+derexplored. Knowledge distillation refers to the notion                 an algorithm and its hyperparamters as a model.
+of compressing a large, often cumbersome model(s) into                                       R
+                                                                       • train data Xtrain ∈ n×d without ground truth labels.
+a small and more interpretable one(s). Under the context                                               R
+                                                                       • (optional) test data Xtest ∈ l×d for prediction. The
+of OD, proximity-based models, such as LOF, can be slow                  OD models should be trained first.
+(high time complexity) for predicting on new-coming sam-               • (optional) t available workers for distributed comput-
+ples with limited interpretability, which severely restricts             ing, e.g., t cores on a single machine. This constructs
+their usability. SUOD adapts a similar idea to outlier min-              the worker pool as W = {W1 , ..., Wt }. By default, a
+ing by “distilling” complex unsupervised models. Although                single worker setting (t = 1) is assumed.
+SUOD shares a similar concept as knowledge distillation
+                                                                   Without SUOD, one will train each model in M on Xtrain
+for computational cost optimization, there are a few notable
+                                                                   iteratively, e.g., with a for loop. If there are multiple workers
+differences (see §3.4).
+                                                                   available (t > 1), a generic scheduling system will equally
+There are also engineering cures on the execution level. For       split m models into t groups, so each available worker will
+various reasons, OD has no mature and efficient distributed        process roughly d m   t e models. Prediction on new-coming
+frameworks with thousands of clusters—distributed comput-          samples Xtest follows the similar manner as training. See
+ing for OD mainly falls into the category of “scale-up” that       Algorithm 1 for detailed symbol definition.
+focuses on leveraging multiple local cores on a single ma-
+chine more efficiently. To this end, specific OD algorithms        3.2   System Design
+can be accelerated by distributed computing with multi-
+ple workers (e.g., CPU cores) (Oku et al., 2014; Lozano &          SUOD is designed to accelerate the above procedures with
+Acuña, 2005). However, these frameworks are not designed          three independent modules targeting different levels (data,
+for a group of heterogeneous models but only a single algo-        model, and execution). Each module can be flexibly en-
+rithm, which limits their usability. It is noted that a group      abled or disabled as shown in Algorithm 1. For high-
+of heterogeneous detection models can have significantly           dimensional data, SUOD can randomly project the original
+varied computational cost. As a simple example, let us split       feature onto low-dimensional spaces (§3.3). Pairwise dis-
+100 heterogeneous models into 4 groups for parallel training.      tance relationships are expected to be maintained, and the
+If group #2 takes significantly longer time than the others        diversity is induced for ensemble construction. A fast super-
+to finish, it behaves like the bottleneck of the system. More      vised regressor could be used to approximate the output of
+formally, imbalanced task scheduling causes the system ef-         each slow and costly unsupervised detector. We could use
+ficiency to be curbed by the worker taking the most time.          the supervised regressor for fast prediction (§3.4). If there
+There are also a line of system researches focus on more           are multiple available workers for distributed computing, we
+                                                                   propose a forecasting-based scheduling mechanism (§3.5)
+                         SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection
+
+Algorithm 1 SUOD: Training and Prediction                             3.3   Data Level: Random Projection (RP) for Data
+Input: m unsupervised OD models M; train data Xtrain ∈     R n×d
+                                                                  ;         Compression
+    target dimension k; the number of available workers t (op-
+                                          R
+    tional, default to 1); test data Xtest ∈ l×d (optional); super-
+                                                                      For high-dimensional datasets, many proximity-based OD
+                                                                      algorithms suffer from the curse of dimensionality (Lazare-
+    vised regressor R (optional)
+Output: Trained OD models M; fitted pseudo-supervised regres-         vic & Kumar, 2005). A widely used dimensionality reduc-
+    sors R (optional); test prediction results ŷtest (optional)      tion to cure this is the Johnson-Lindenstrauss (JL) projection
+                                                                      (Johnson & Lindenstrauss, 1984), which has been applied
+ 1: for each model Mi in M do                                         to OD because of its great scalability (Schubert et al., 2015).
+ 2:    if random projection is enabled (§3.3) then
+ 3:                                                  R
+          Initialize a JL transformation matrix W ∈ d×k               Unlike PCA discussed in §2.2, JL projection could com-
+ 4:                                                  R
+          Get feature subspace ψi := hXtrain , Wi ∈ n×k               press the data without heavy distortion on the Euclidean
+ 5:    else                                                           space—outlyingness information is therefore preserved in
+ 6:                                             R
+          Use the original space ψi := Xtrain ∈ n×d                   the compression. Moreover, its built-in randomness can be
+ 7:    end if                                                         useful for diversity induction in heterogeneous OD—data
+ 8: end for
+ 9: if number of available workers t > 1 then                         randomness can also serve as a source of heterogeneity. Ad-
+10:    Scheduling the training of m models to t workers by mini-      ditionally, JL projection (O(ndk)) is more efficient than
+       mizing Eq. 2 (see §3.5). Models are trained on the corre-      popular PCA (O(nd2 + n3 )) with lower time complexity,
+       sponding feature space [ψ1 , ..., ψm ].                        where k is the target dimension for compression.
+11: else
+12:    Train each model Mi in M on its corresponding ψi .             JL projection is defined as: given a set of n samples
+13: end if
+14: Return trained models M
+                                                                                                        R
+                                                                      X = {x1 , x2 , ...xn }, each xi ∈ d , let W be a k × d pro-
+                                                                      jection matrix with each entry drawing independently from
+                                                                      a predefined distribution F , e.g., Gaussian, so that W ∼ F .
+                                                                                                                  R        R
+15: if Scoring on newcoming samples Xtest then
+16:    Acquire the pseudo ground truth targetψi as the output of      Then the JL projection is a function f : d → k such
+       Mi on ψi , i.e., targetψi := Mi (ψi )                          that f (xi ) = √1k xi WT . JL projection randomly projects
+17:    for each costly model Mi in Mc do                              high-dimensional data (d dimensions) to lower-dimensional
+18:      Initialize a supervised regressor Ri
+                                                                      subspaces (k dimensions), but preserves the distance rela-
+19:
+20:
+         Train Ri by {ψi , targetψi } (see §3.4)
+                                      i
+         Predict by supervised Ri , ŷtest = Ri .predict(Xtest )                                                            R
+                                                                      tionship between points. In fact, if we fix some v ∈ d , for
+21:    end for                                                        every  ∈ (0, 3), we have (Schubert et al., 2015):
+22:    Return ŷtest and approximation regressors R
+23: end if
+                                                                                                2
+                                                                                                             
+                                                                                          1                          2k
+                                                                       P (1 − )kvk2 ≤ k √ vWT k ≤ (1 + )kvk2 ≤ 2e− 6
+                                                                                           k
+                                                                                                                      (1)
+to reduce taskload imbalance in heterogeneous OD.
+                                                                      Let v to be the differences between vectors. Then, the
+SUOD’s API design follows scikit-learn (Pedregosa                     above bound shows that for a finite set of n vectors X =
+et al., 2011) and PyOD (Zhao et al., 2019b), with an initial-                            R
+                                                                      {x1 , x2 , ...xn } ∈ d , the pairwise Euclidean distance is
+ization, fit, and prediction schema (see Codeblock 1).                preserved within a factor of (1 ± ), reducing the vectors to
+                                                                      k = O( log(n)2 ) dimensions.
+import SUOD                                                           Four distributions F for JL projection are considered in this
+# initialize a group of heterogeneous OD models
+base_estimators=[                                                     study: (i) basic: the transformation matrix is generated by
+    LOF(n_neighbors=40), ABOD(n_neighbors=50),                        standard Gaussian; (ii) discrete: the transformation matrix
+    LOF(n_neighbors=60), IForest(n_estimators=100)]
+                                                                      is picked randomly from Rademacher distribution (uniform
+# initialize SUOD with module flags                                   in {−1, 1}); (iii) circulant: the transformation matrix is
+clf=SUOD(base_estimators=base_estimators,
+    rp_flag_global=True,                                              obtained by rotating the subsequent rows from the first row
+    approx_clf=RandomForestRegressor(),                               which is generated from standard Gaussian and (iv) toeplitz:
+    bps_flag=True,
+    approx_flag_global=True)                                          the first row and column of the transformation matrix are
+                                                                      generated from standard Gaussian, and each diagonal uses
+# fit and make prediction
+clf.fit(X_train)                                                      a constant value from the first row and column. A more
+test_labels=clf.predict(X_test)                                       thorough empirical study on JL methods can be found in
+test_scores=clf.decision_function(X_test)}
+                                                                      (Venkatasubramanian & Wang, 2011).
+                                                                      For Xtrain , RP can reduce the original feature space d to
+                                                                      the target dimension k. Specifically, SUOD initializes a JL
+Codeblock 1. SUOD’s easy-to-use API (inspired by scikit-learn)                                      R
+                                                                      transformation matrix W ∈ d×k by drawing from one of
+                              SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection
+
+the four distributions F . Xtrain is therefore projected onto               A pool of 𝒎 unsupervised models               Built on historical data (regress 𝑿 to 𝒚):
+the k dimension feature space as X0train = hXtrain , Wi ∈                                                                𝑿: {𝐝𝐚𝐭𝐚, 𝐦𝐨𝐝𝐞𝐥 𝐞𝐦𝐛𝐞𝐝𝐝𝐢𝐧𝐠}
+
+R
+                                                                             𝑴𝟏        𝑴𝟐                𝑴𝒎              𝒚: {𝐞𝐱𝐞𝐜𝐮𝐭𝐢𝐨𝐧 𝐭𝐢𝐦𝐞 𝐚𝐯𝐠 𝐨𝐟 𝟏𝟎 𝐭𝐢𝐦𝐞𝐬 }
+   n×k
+       . The transformation matrix W should be kept for
+transforming newcoming samples: X0test = hXtest , Wi ∈
+R  m×k
+        . It is noted that RP module should be used with cau-
+                                                                                        Model Cost
+                                                                                       Predictor 𝑪𝐜𝐨𝐬𝐭
+                                                                                                                         Balanced scheduling (nearly equal rank sum)
+tion. First, projection may not be helpful or even detrimental
+for subspace methods like Isolation Forest and HBOS. Sec-                   𝟐 𝒎 𝟒𝟐 … 𝟏 𝟑𝟕 𝟏𝟐 𝟑 𝟓𝟎
+                                                                                                                            𝟐 𝒎 𝟒𝟐 … 𝟏 𝟑𝟕 𝟏𝟐 𝟑 𝟓𝟎
+ond, if the number of samples n is too small, the bound in                 The rank of the forecasted time 𝑪𝐜𝐨𝐬𝐭 (𝑴𝒊 )      Worker 1   Worker 2   Worker 3 Worker 4
+Eq. (1) does not hold.
+
+3.4        Model Level: Pseudo-Supervised Approximation                   Figure 2. Flowchart of balanced parallel scheduling, which aims
+                                                                          to assign nearly equal rank sum by model cost predictor Ccost .
+           (PSA) for Fast Prediction
+PSA module is designed to speed up prediction on new-
+coming samples. Specifically, after the models in M are                   models. However, it works in a fully unsupervised manner,
+trained, SUOD uses PSA to approximate and replace each                    unlike the classic distillation under supervised settings.
+costly unsupervised model by a faster supervised regres-
+sor for fast offline prediction. Notably, only costly un-                 3.5        Execution level: Balanced Parallel Scheduling
+supervised models should be replaced; the cost can be                                (BPS) for Taskload Imbalance Reduction
+measured through time complexity analysis. For instance,
+proximity-based algorithms like kNN and LOF are costly                    Taskload Imbalance within Distributed Systems: It is
+in prediction (upper bounded by O(nd)), and can be effec-                 likely to observe system inefficiency due to taskload imbal-
+tively replaced by “cheaper” supervised models like random                ance among workers when a large number of heterogeneous
+forest (Breiman, 2001) (upper bounded by O(ph) where p                    models are used. For instance, we want to train 25 OD mod-
+denotes the number of base trees and h denotes the max                    els with varying parameters from each of the four algorithms
+depth of a tree; often p  n and h ≤ d). This “pseudo-                    {kNN, Isolation Forest, HBOS, OCSVM} (100 heteroge-
+supervised” model uses the output of unsupervised models                  neous models in total). The existing distributed frameworks,
+(outlyingness score) as “the pseudo ground truth”—the goal                e.g., the voting machine in scikit-learn (Pedregosa et al.,
+is to approximate the output of the underlying unsupervised               2011) or general frameworks like joblib2 , may simply split
+model. It is noted that the approximator’s prediction cost                the models into 4 subgroups by order and schedule the first
+(i.e., time complexity) must be lower than the underlying                 25 models (all kNNs) on worker 1, the next 25 models on
+unsupervised model, while maintaining a comparable level                  worker 2, etc. This does not account for the fact that within
+of prediction accuracy. For instance, fast (low time complex-             a group of heterogeneous models, the computational cost
+ity) OD algorithms like Isolation Forest and HBOS should                  varies. Scheduling the task with the equal number of mod-
+not be approximated and replaced. To facilitate this process,             els can result in highly imbalanced load. In the worst-case
+we predefine the pool of costly OD algorithm Mc . If a                    scenario, one worker may be assigned significant more load
+model Mi is in Mc , it will be approximated by default.                   than the rest, resulting in halt to the entire process. In this
+                                                                          example, the kNN subgroup will be the system curb due to
+As shown in Algorithm 1, for each costly trained unsuper-                 high time complexity. One naive solution is to shuffle the
+vised model Mi belonging to Mc , a supervised regressor                   base models randomly. However, there is no guarantee this
+Ri is trained by {Xtrain , yi }; yi is the outlyingness score by          heuristic could work, and it may be practically infeasible.
+Mi on the train set (referred as pseudo ground truth)1 . Ri is
+then used to predict on unseen data Xtest .                               The proposed BPS focuses on delivering a more bal-
+                                                                          anced task scheduling among workers via forecasting
+Remark 1: Supervised tree ensembles are recommended                       their cost in advance. Ideally, all workers can finish the
+for PSA due to their outstanding scalability, robustness to               scheduled tasks within a similar duration and return the re-
+overfitting, and interpretability (e.g., feature importance)              sults. To achieve this goal, SUOD comes with a model cost
+(Hu et al., 2019). In addition to the execution time reduction,           predictor Ccost to forecast the model execution time (sum
+supervised models are generally more interpretable. For                   of 10 trials) given the meta-features (descriptive features)
+instance, random forest used in the experiments can yield                 of a dataset (Zhao et al., 2020). Ccost is trained on 11 algo-
+feature importance automatically to facilitate understanding.             rithm family with 47 benchmark datasets by 10-fold cross
+Remark 2: Notably, PSA may be viewed as using super-                      validation, yielding an effective regressor (random forest is
+vised regressors to distill knowledge from unsupervised OD                used in this study). Ccost ’s outputs show high Spearman’s
+                                                                          Rank correlation (Spearman, 1904) (rs > 0.9) to the true
+      1
+          If RP is enabled, Xtrain is replaced by the compressed space.         2
+                                                                                    https://github.com/joblib/joblib
+                        SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection
+
+model cost rank with low p-value (p < 0.0001), in all folds.     nally, a real-world deployment case on fraudulent claim
+Given a dataset and a model, Ccost can predict the execution     analysis at IQVIA (a leading healthcare organization), is
+time of the model’s execution time with high accuracy. It        described (§4.5). The details of experiment setting, e.g.,
+is noted that the model cost predictor is only trained for the   datasets, evaluation metrics, and the pool of heterogeneous
+major methods in Python Outlier Detection Toolbox (PyOD)         OD models, can be found in the Appendix.
+(Zhao et al., 2019b). For unseen models, they are classified
+as “unknown” to be assigned with the max cost to prevent         4.1   Q1: Comparison of Model Compression Methods
+overoptimistic scheduling.
+                                                                 In this section, we demonstrate the effectiveness of RP
+As a result, a scheduling strategy is proposed by enforcing      module in high-dimensional OD tasks. To evaluate the
+a nearly equal rank sum by the forecasted execution time         effect of data projection, we choose three costly outlier de-
+among all available workers. Fig. 2 provides a simple exam-      tection algorithms, ABOD, LOF, and kNN to measure their
+ple of scheduling m models to 4 workers. More formally,          execution time, and prediction accuracy (ROC and P@N),
+before scheduling m models for training (or prediction),         before and after projection. These methods directly or indi-
+cost predictor Ccost is invoked to forecast the execution time   rectly measure sample similarity in Euclidean space, e.g.,
+of each model M in M as Ccost (M ) and output the model          pairwise distance, which is prone to the curse of dimension-
+cost rank of each model in {1, m} (the higher the rank, the      ality, where data compression can help.
+longer the forecasted execution time). If there are t cores
+(workers), each worker will be assigned a group of models to     Table 1 shows the comparison results on four datasets (see
+achieve the objective of minimizing the taskload imbalance       Appendix Table A); the reduced dimension is set as k = 23 d
+among workers (Eq. 2).                                           (33% compression). We compare the proposed four JL pro-
+                                                                 jection methods (see §3.3 for details of basic, discrete, circu-
+                                                                 lant, and toeplitz) with original (no projection), PCA, and
+                   t
+                   X    X                       m2 + m           RS (randomly select k features from the original d features,
+             min                Ccost (Mj ) −              (2)
+              W
+                   i=1 Mj ∈Wi
+                                                  2t             used in Feature Bagging (Lazarevic & Kumar, 2005) and
+                                                                 LSCP (Zhao et al., 2019a)). First, all compression methods
+Consequently, each worker is assigned with a group of            show superiority regarding time cost. Second, original (no
+models with the rank sum close to the average rank sum           compression) method rarely outperforms, possibly due to
+(1+m)m            2
+          /t = m 2t+m . Indeed, the accurate running time pre-   the curse of dimensionality and lack of diversity (Zhao et al.,
+    2
+diction is less relevant as it depends on the hardware—the       2019a). Third, PCA is inferior to original regarding predic-
+rank is more useful as a relevance measure with the transfer-    tion accuracy (see LOF performance in Table 1e, 1h, and 1k).
+ability to other hardware. That is, the running time will vary   The observation supports our claim that PCA is not suited in
+on different machines, but the relative rank should preserve.    this scenario (see §2.2). Fourth, JL methods generally lead
+One issue around the sum of ranks is the overestimation of       to equivalent or better prediction performance than original
+high-rank models. For instance, rank f -th model will be         regarding both time and prediction accuracy. Lastly, among
+counted f times more heavily than rank 1 model during the        all JL methods, circulant and toeplitz generally outperform
+sum calculation, even their actual running time difference       others. For instance, toeplitz brings more than 60% time
+will not be as big as f times. To fix this, we introduce a       reduction for kNN, demonstrating the effectiveness of RP
+discounted rank by rescaling model rank f to 1 + αf m , where
+                                                                 and chosen as the default choice.
+α denotes the scaling strength (default to 1). A larger α
+therefore puts more emphasis on costly models.                   4.2   Q2: The Visual and Quantitative Analysis of PSA
+                                                                 Through both visualization and quantitative analysis,
+4    E XPERIMENTS & D ISCUSSION                                  we observe PSA is useful for accelerating prediction of
+                                                                 proximity-based OD algorithms. To better understand the
+First, three experiments are conducted to understand the ef-
+                                                                 effect of pseudo-supervised approximation, we first gener-
+fectiveness of individual modules independently: Q1: how
+                                                                 ate a synthetic dataset with 200 two-dimensional samples,
+will different compression methods affect the performance
+                                                                 consisting of 40 outliers generated by Normal distribution
+of downstream OD accuracy (§4.1); Q2: will use pseudo-
+                                                                 and 160 normal samples generated from Uniform distribu-
+supervised regressors lead to more efficient prediction in
+                                                                 tion. In Fig. 3, we plot the decision surfaces of four costly
+comparison to the original unsupervised models (§4.2) and
+                                                                 unsupervised models (ABOD, Feature Bagging, kNN, and
+Q3: how does the proposed balanced scheduling strategy
+                                                                 LOF) and of their corresponding supervised approximators
+perform under different settings (varying number of models
+                                                                 (random forest regressor), with accuracy errors reported. In
+m, number of workers t, etc.) (§4.3). Then, the full SUOD
+                                                                 general, the faster pseudo supervised approximators do not
+with all three modules enabled is evaluated regarding time
+                                                                 lead to more errors, justifying the effectiveness of approx-
+cost and prediction accuracy (on new samples) (§4.4). Fi-
+                        SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection
+
+
+Table 1. Comparison of various data compression methods on different outlier detectors and datasets (see Appendix Table A). Each
+column corresponds to an evaluation metric (execution time is measured in seconds); the best performing method is indicated in bold. JL
+projection methods, especially circulant and toeplitz, outperform regarding both time cost and prediction accuracy.
+          (a) ABOD on Cardio                                (b) LOF on Cardio                              (c) kNN on Cardio
+ Method      Time     ROC       P@N             Method        Time    ROC       P@N            Method         Time     ROC        P@N
+ original     0.98     0.59      0.25           original       0.08    0.55     0.17           original        0.09     0.71      0.34
+ PCA          0.82     0.59      0.26           PCA            0.04    0.56     0.19           PCA             0.03     0.73      0.34
+ RS           0.92     0.63      0.29           RS             0.04    0.57     0.15           RS              0.03     0.69      0.38
+ basic        0.83     0.62      0.28           basic          0.04    0.60     0.20           basic           0.03     0.74      0.35
+ discrete     0.82     0.62      0.28           discrete       0.04    0.59     0.19           discrete        0.03     0.74      0.37
+ circulant    0.83     0.62      0.27           circulant      0.04    0.59     0.20           circulant       0.03     0.74      0.34
+ toeplitz     0.83     0.62      0.28           toeplitz       0.04    0.60     0.21           toeplitz        0.03     0.73      0.35
+
+         (d) ABOD on MNIST                                  (e) LOF on MNIST                               (f) kNN on MNIST
+ Method      Time     ROC       P@N             Method        Time    ROC       P@N            Method         Time     ROC        P@N
+ original    12.89      0.80     0.39           original       7.64    0.68     0.29           original        7.13     0.84      0.42
+ PCA          8.93      0.81     0.37           PCA            4.92    0.67     0.27           PCA             3.92     0.84      0.40
+ RS           8.27      0.74     0.32           RS             3.65    0.63     0.23           RS              3.33     0.77      0.34
+ basic        8.94      0.80     0.38           basic          4.87    0.70     0.31           basic           4.17     0.84      0.42
+ discrete     8.86      0.80     0.39           discrete       5.21    0.70     0.32           discrete        4.11     0.84      0.41
+ circulant    9.33      0.80     0.38           circulant      5.06    0.69     0.31           circulant       4.13     0.84      0.41
+ toeplitz     8.96      0.80     0.38           toeplitz       4.97    0.71     0.31           toeplitz        4.11     0.84      0.42
+
+        (g) ABOD on Satellite                            (h) LOF on Satellite                              (i) kNN on Satellite
+ Method      Time     ROC       P@N             Method        Time    ROC       P@N            Method         Time     ROC        P@N
+ original     4.03     0.59      0.41           original       0.82    0.55     0.37           original        0.71     0.67      0.49
+ PCA          3.01     0.62      0.44           PCA            0.23    0.54     0.36           PCA             0.18     0.67      0.50
+ RS           3.53     0.63      0.44           RS             0.39    0.54     0.37           RS              0.31     0.68      0.49
+ basic        3.10     0.64      0.45           basic          0.31    0.54     0.37           basic           0.24     0.68      0.49
+ discrete     3.12     0.65      0.46           discrete       0.32    0.54     0.37           discrete        0.25     0.69      0.50
+ circulant    3.14     0.66      0.48           circulant      0.39    0.55     0.38           circulant       0.33     0.70      0.50
+ toeplitz     3.14     0.66      0.47           toeplitz       0.37    0.54     0.37           toeplitz        0.30     0.70      0.51
+
+       (j) ABOD on Satimage-2                          (k) LOF on Satimage-2                          (l) kNN on Satimage-2
+ Method      Time     ROC       P@N             Method        Time    ROC       P@N            Method         Time     ROC        P@N
+ original     3.68     0.85      0.28           original       0.79    0.54     0.07           original        0.68     0.94      0.39
+ PCA          2.70     0.88      0.30           PCA            0.20    0.52     0.04           PCA             0.15     0.94      0.39
+ RS           3.20     0.89      0.28           RS             0.37    0.53     0.08           RS              0.29     0.94      0.38
+ basic        2.78     0.91      0.29           basic          0.29    0.52     0.08           basic           0.23     0.94      0.38
+ discrete     2.79     0.91      0.31           discrete       0.30    0.53     0.07           discrete        0.20     0.95      0.37
+ circulant    2.85     0.91      0.29           circulant      0.43    0.59     0.11           circulant       0.36     0.96      0.37
+ toeplitz     2.83     0.92      0.30           toeplitz       0.32    0.54     0.09           toeplitz        0.25     0.96      0.39
+
+
+
+
+imation. Fig. 3 subfigure 4 and 6 show that the approx-               models and pseudo-supervised approximators on 10 datasets
+imators have even lower errors than the original (Feature             with 6 costly algorithms, regarding ROC and P@N. Since
+Bagging and kNN). With a closer look at the decision sur-             these algorithms are more computationally expensive than
+faces, we assume that the approximation process improves              random forest regressors for prediction (by time complexity
+the generalization ability of the model by “ignoring” some            analysis), we skip the prediction time comparison where
+overfitted points. However, the approximation does not work           the gain is clear. Consequently, the focus is whether the
+with ABOD, possibly due to its extremely coarse decision              approximators could predict unseen samples as good as
+surface (see Fig. 3, subfigure 1).                                    the original unsupervised models. The tables reveal that
+                                                                      not all the algorithms are suited for PSA, which is in line
+Table 2 and 3 compare prediction performance (scoring on
+                                                                      with the visual analysis. For instance, ABOD shows per-
+new-coming samples) between the original unsupervised
+                                     SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection
+
+      6                                                6                                               6                                                  6
+      4                                                4                                               4                                                  4
+      2                                                2                                               2                                                  2
+      0                                                0                                               0                                                  0
+      2                                                2                                               2                                                  2
+      4                    learned decision function   4                   learned decision function   4                     learned decision function    4                    learned decision function
+                           true inliers                                    true inliers                                      true inliers                                      true inliers
+      6                    true outliers               6                   true outliers               6                     true outliers                6                    true outliers
+           6      4     2 0         2     4      6         6       4    2 0         2      4     6           6      4     2 0         2      4       6           6     4     2 0        2      4      6
+      1. Angle-based Outlier Detector (ABOD) (errors: 4)       2. ABOD Approximator (errors: 12)                 3. Feature Bagging (errors: 10)              4. Feature Bagging Approximator (errors: 4)
+
+      6                                                6                                               6                                                  6
+      4                                                4                                               4                                                  4
+      2                                                2                                               2                                                  2
+      0                                                0                                               0                                                  0
+      2                                                2                                               2                                                  2
+      4                    learned decision function   4                   learned decision function   4                     learned decision function    4                    learned decision function
+                           true inliers                                    true inliers                                      true inliers                                      true inliers
+      6                    true outliers               6                   true outliers               6                     true outliers                6                    true outliers
+           6      4      2 0        2      4      6        6       4     2 0        2      4      6          6     4       2 0         2      4       6         6      4     2 0        2      4      6
+           5. K Nearest Neighbors (kNN) (errors: 4)             6. kNN Approximator (errors: 2)              7. Local Outlier Factor (LOF) (errors: 4)              8. LOF Approximator (errors: 4)
+
+Figure 3. Decision surface comparison among unsupervised models and their pseudo-supervised approximators (in pairs). The approxima-
+tor’s decision boundary shows a tentative regularization effect, leading to even fewer detection errors.
+
+
+formance decrease on half of the datasets. Notably, ABOD                                                   than 40% on PageBlock and Pendigits when 8 cores are
+looks for a low-dimensional subspace to embed the normal                                                   used. This agrees with our assumption that model cost vary
+samples (Aggarwal, 2013), leading to a complex decision                                                    more drastically on large datasets given the time complexity
+surface to approximate. In contrast, proximity-based models                                                increase non-linearly to the size—the proposed BPS method
+benefit from the approximation. Both tables show, kNN,                                                     is particularly helpful.
+LoF, and akNN (average kNN) experience a performance
+gain. Specifically, all three algorithms yield around 100%                                                 4.4     Full System Evaluation with All Modules
+ROC increase on HTTP. Other algorithms, such as Feature
+Bagging and CBLOF, show a minor performance variation                                                      Table 5 shows the performance of SUOD with all three
+within the acceptable range. In other words, it is useful to                                               modules enabled, even not all of them are always needed
+perform PSA for these estimators as the time efficiency is                                                 in practice. In total, 600 hundred randomly selected OD
+greatly improved with little to no loss in prediction accuracy.                                            models from PyOD are trained and tested on 10 datasets.
+                                                                                                           To simulate the “worst-case scenario”, we build the model
+                                                                                                           pool M by randomly select OD models, which minimizes
+4.3       Q3: Time Reduction of Balanced Scheduling
+                                                                                                           the intrinsic task load imbalance. In real-world applications,
+To evaluate the effectiveness of the proposed BPS algorithm,                                               this order randomization may not be possible as discussed
+we run the following experiments by varying: (i) the size                                                  in §3.5—two adjacent models are often from the same al-
+(n) and the dimension (d) of the datasets, (ii) the number of                                              gorithm family and more prone to scheduling imbalance.
+estimators (m) and (iii) the number of CPU cores (t). Due to                                               Although this setting will make the effectiveness of BPS
+the space limit, we only show the training time comparison                                                 module less impressive, we choose it to provide an em-
+between the generic scheduling and BPS on Cardio, Letter,                                                  pirical worst-case performance guarantee—the frame-
+PageBlock, and Pendigits, by setting m ∈ {100, 500} and                                                    work should generally perform better in practice.
+t ∈ {2, 4, 8}, consistent with the single machine setting in
+                                                                                                           SUOD consistently yields promising results even we de-
+real-world applications.
+                                                                                                           liberately choose the unfavored setting. Fit B and Pred B
+Table 4 shows that the proposed BPS has a clear edge over                                                  denote the fit and prediction time of the baseline setting
+the generic scheduling mechanism (denoted as Generic in                                                    (no compression, no approximation, generic parallel task
+the tables) that equally splits the tasks by order. It yields a                                            scheduling; see §2.2). In comparison, SUOD (denoted as
+significant time reduction (denoted as % Redu in the table),                                               Fit S and Pred S) brings time reduction on majority of the
+which gets more remarkable if more cores are used along                                                    datasets with minor to no performance degradation. To mea-
+with large datasets. For instance, the time reduction is more                                              sure the prediction performance, we measure the ROC and
+                                      SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection
+
+
+Table 2. Prediction ROC scores of unsupervised models (Orig) and their pseudo-supervised approximators (Appr) by the average of 10
+independent trials. The better method within each pair is indicated in bold. The approximators (Appr) outperform in most cases.
+ Dataset     Annthyroid               Breastw                     Cardio            HTTP            MNIST         Pendigits       Pima         Satellite     Satimage-2      Thyroid
+ Model       Orig       Appr        Orig       Appr             Orig      Appr   Orig     Appr   Orig    Appr   Orig    Appr   Orig   Appr   Orig    Appr    Orig   Appr   Orig   Appr
+ ABOD        0.83       0.71        0.92         0.93           0.63      0.53   0.15     0.13    0.81   0.79   0.67    0.82   0.66   0.70   0.59     0.68   0.89   0.99   0.96   0.67
+ CBLOF       0.67       0.68        0.96         0.98           0.73      0.76   1.00     1.00    0.85   0.89   0.93    0.93   0.63   0.68   0.72     0.77   1.00   1.00   0.92   0.97
+ FB          0.81       0.45        0.34         0.10           0.61      0.70   0.34     0.97    0.72   0.83   0.39    0.51   0.59   0.63   0.53     0.64   0.36   0.40   0.83   0.46
+ kNN         0.80       0.79        0.97         0.97           0.73      0.75   0.19     0.85    0.85   0.86   0.74    0.87   0.69   0.71   0.68     0.75   0.96   0.99   0.97   0.98
+ akNN        0.81       0.82        0.97         0.97           0.67      0.72   0.19     0.88    0.84   0.85   0.72    0.87   0.69   0.71   0.66     0.74   0.95   0.99   0.97   0.98
+ LOF         0.74       0.85        0.44         0.45           0.60      0.68   0.35     0.75    0.72   0.76   0.38    0.47   0.59   0.65   0.53     0.66   0.36   0.38   0.80   0.95
+
+
+
+
+Table 3. Prediction P@N scores of unsupervised models (Orig) and their pseudo-supervised approximators (Appr) by the average of 10
+independent trials. The better method within each pair is indicated in bold. The approximators (Appr) outperform in most cases.
+ Dataset     Annthyroid               Breastw                     Cardio            HTTP            MNIST         Pendigits       Pima         Satellite     Satimage-2      Thyroid
+ Model       Orig       Appr        Orig       Appr             Orig      Appr   Orig     Appr   Orig    Appr   Orig    Appr   Orig   Appr   Orig    Appr    Orig   Appr   Orig   Appr
+ ABOD        0.31       0.08        0.80       0.83             0.27      0.20   0.00     0.00   0.40    0.27   0.05    0.05   0.48   0.52   0.41    0.46    0.21   0.64   0.36   0.00
+ CBLOF       0.25       0.24        0.86       0.90             0.31      0.34   0.02     0.01   0.42    0.48   0.35    0.36   0.43   0.48   0.54    0.57    0.96   0.96   0.26   0.38
+ FB          0.24       0.02        0.03       0.07             0.23      0.26   0.02     0.04   0.34    0.36   0.03    0.07   0.37   0.44   0.37    0.42    0.03   0.04   0.05   0.02
+ kNN         0.30       0.32        0.89       0.89             0.37      0.46   0.03     0.03   0.42    0.45   0.08    0.06   0.47   0.47   0.49    0.53    0.32   0.43   0.33   0.42
+ AkNN        0.30       0.33        0.88       0.89             0.34      0.40   0.03     0.03   0.41    0.45   0.05    0.13   0.48   0.49   0.47    0.52    0.25   0.43   0.31   0.44
+ LOF         0.27       0.36        0.19       0.35             0.23      0.23   0.01     0.03   0.33    0.32   0.03    0.08   0.40   0.44   0.37    0.42    0.04   0.07   0.19   0.25
+
+
+
+
+                                                                                                            the pseudo-approximation (§3.4)—the baseline setting may
+Table 4. Training time comparison (in seconds) between Simple
+                                                                                                            be overfitted on certain datasets. It is noted that SUOD leads
+scheduling and BPS against various number of OD models and
+workers. Percent of time reduction, Redu (%), is indicated in bold.                                         to more improvement on high-dimensional, large datasets.
+BPS consistently outperform to Generic scheduling                                                           For instance, the fit time is significantly reduced on Shuttle
+                                                        .                                                   (more than 50%). On the contrary, SUOD is less meaning-
+ Dataset            n          d           m                t     Generic         BPS       Redu (%)        ful for small datasets like Pima and Cardio, although they
+ Cardio             1831       21          500              2          240.12    221.34           7.82      may also yield performance improvement. Again, our set-
+ Cardio             1831       21          500              4          185.44    154.43          16.72
+ Cardio             1831       21          500              8          140.63    120.02          14.65      tings mimics the worst case scenario for SUOD (the model
+ Cardio             1831       21          1000             2          199.77    185.63           7.08      order is already randomly shuffled) but still observe a great
+ Cardio             1831       21          1000             4          130.82    110.60          15.45
+ Cardio             1831       21          1000             8           97.75     73.43          24.88      performance improvement; real-world applications should
+ Letter             1600       32          500              2          111.95    109.52           2.17      generally expect more significant results.
+ Letter             1600       32          500              4           92.69     86.24           6.94
+ Letter             1600       32          500              8           57.21     48.72          14.84
+ Letter             1600       32          1000             2          224.61    222.59           0.90      4.5    Real-World Deployment: Fraudulent Medical
+ Letter             1600       32          1000             4          228.08    172.07          24.56             Claim Analysis at IQVIA
+ Letter             1600       32          1000             8          109.50     89.51          17.80
+ PageBlock          5393       10          100              2           51.11     35.17          31.19      Estimated by the United States Government Accountabil-
+ PageBlock          5393       10          100              4           42.49     16.23          61.80      ity Office and Federal Bureau of Investigation, healthcare
+ PageBlock          5393       10          100              8           38.45     16.97          55.86
+ PageBlock          5393       10          500              2          197.84    137.46          30.52      frauds cost American taxpayers tens of billions dollars a year
+ PageBlock          5393       10          500              4          167.36     76.14          54.51      (Aldrich et al., 2014; Bagdoyan, 2018). Detecting fraudu-
+ PageBlock          5393       10          500              8          127.08     66.29          47.84
+                                                                                                            lent medical claims is crucial for taxpayers, pharmaceutical
+ Pendigits          6870       16          500              2          351.97    287.14          18.42
+ Pendigits          6870       16          500              4          288.51    146.50          49.22      companies and insurance companies. To further demon-
+ Pendigits          6870       16          500              8          180.86    102.11          43.33      strate SUOD’s performance on industry data, we deploy it
+ Pendigits          6870       16          1000             2          697.20    561.15          19.51
+ Pendigits          6870       16          1000             4          579.70    288.11          50.33      on a proprietary pharmacy claim dataset owned by IQVIA
+ Pendigits          6870       16          1000             8          365.20    182.32          50.08      (a leading healthcare firm) consisting of 123,720 medical
+                                                                                                            claims among which 19,033 (15.38%) are labeled as fraud-
+                                                                                                            ulent. In each of the claim, there are 35 features including
+P@N by averaging the base model results (denoted as Avg )                                                   information such as drug brand, copay amount, insurance
+and the maximum of average of the base models (denoted                                                      details, location and pharmacy/patient demographics. The
+as MOA ), a widely used two-phase outlier score combi-                                                      current system in use is based on a group of selected detec-
+nation framework (Aggarwal & Sathe, 2017). Surprisingly,                                                    tion models in PyOD, and an averaging method is applied on
+SUOD even leads to small performance boost in scoring                                                       top of the base model results as the initial result. The cases
+new samples on most of the datasets (Annthyroid, Cardio,                                                    marked as high risk are then transferred to human inves-
+MNIST, Optdigits, Pendigits, and Thyroid). This per-                                                        tigators in special investigation unit (SIU) for verification.
+formance gain may be jointly credited to the regularization                                                 It is important to provide prompt and accurate first-round
+effect by the randomness injected in JL projection (§3.3) and                                               screening for SIU, which leads to huge expense save.
+                                 SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection
+
+
+Table 5. Comparison between the baseline (denoted as B) and SUOD (denoted as S) regarding time cost, and prediction accuracy (ROC
+and P@N). The better method within each pair is indicated in bold (Optdigits fail to yield meaningful P@N). SUOD generally brings
+time reduction with no loss in prediction accuracy on majority of datasets.
+              Data Information                     Time Cost (in seconds)              Ensemble Model Performance (ROC)      Ensemble Model Performance (P@N)
+    Dataset        n        d       t      Fit B       Fit S    Pred B      Pred S    Avg B       Avg S   MOA B    MOA S    Avg B   Avg S    MOA B     MOA S
+    Annthyroid     7200     6       5      73.91      65.23       47.48       44.26    0.91        0.93     0.91     0.93    0.46     0.54      0.46      0.55
+    Annthyroid     7200     6       10     71.00      42.94       44.68       38.66    0.91        0.93     0.92     0.93    0.46     0.54      0.46      0.54
+    Annthyroid     7200     6       30     42.80      33.98       30.92       25.67    0.91        0.93     0.92     0.93    0.46     0.54      0.46      0.54
+    Cardio         1831     21      5      78.84      79.70       46.09       46.68    0.91        0.93     0.91     0.93    0.46     0.54      0.45      0.55
+    Cardio         1831     21      10     72.04      53.43       44.57       38.31    0.91        0.93     0.91     0.93    0.46     0.54      0.46      0.54
+    Cardio         1831     21      30     47.53      44.57       31.31       31.43    0.91        0.93     0.92     0.93    0.46     0.54      0.46      0.55
+    MNIST          7603     100     5     856.53     748.40      453.39      324.76    0.77        0.81     0.77     0.81    0.29     0.35      0.28      0.34
+    MNIST          7603     100     10    726.76     573.66      367.85      328.95    0.78        0.81     0.78     0.81    0.29     0.35      0.30      0.34
+    MNIST          7603     100     30    357.40     329.71      260.80      134.08    0.78        0.81     0.78     0.81    0.29     0.35      0.29      0.34
+    Optdigits      5216     64      5     295.38     267.71      162.28      149.19    0.73        0.75     0.75     0.77    0.00     0.00      0.00      0.00
+    Optdigits      5216     64      10    247.24     224.82      136.12      125.54    0.73        0.75     0.74     0.75    0.00     0.00      0.00      0.00
+    Optdigits      5216     64      30    825.23     791.95      110.06       62.63    0.73        0.75     0.73     0.76    0.00     0.00      0.00      0.00
+    Pendigits      6870     16      5     287.75     282.25      184.20      158.26    0.92        0.95     0.92     0.94    0.19     0.23      0.19      0.20
+    Pendigits      6870     16      10    281.49     155.06      179.83      160.94    0.92        0.95     0.92     0.94    0.19     0.25      0.19      0.23
+    Pendigits      6870     16      30    149.93     145.59      104.25       89.85    0.92        0.94     0.93     0.94    0.19     0.25      0.19      0.22
+    Pima           768      8       5      28.72      31.94       21.16       23.79    0.71        0.71     0.71     0.70    0.51     0.51      0.53      0.51
+    Pima           768      8       10     27.38      20.15       20.81       25.03    0.71        0.70     0.71     0.70    0.51     0.51      0.51      0.51
+    Pima           768      8       30     19.36      17.89       13.83       17.43    0.71        0.70     0.71     0.70    0.51     0.50      0.52      0.50
+    Shuttle        49097    9       5    3326.54    1453.93     2257.50     1956.12    0.99        0.99     0.99     0.99    0.95     0.95      0.95      0.95
+    Shuttle        49097    9       10   2437.10    1396.21     1549.97     1321.16    0.99        0.99     0.99     0.99    0.95     0.95      0.95      0.95
+    Shuttle        49097    9       30   1378.29    1258.69      837.41      651.00    0.99        0.99     0.99     0.99    0.95     0.95      0.95      0.95
+    SpamSpace      4207     57      5     247.98     244.39      130.95      110.08    0.57        0.56     0.56     0.56    0.45     0.45      0.46      0.45
+    SpamSpace      4207     57      10    233.39     186.91      128.24      115.83    0.57        0.56     0.56     0.56    0.46     0.45      0.46      0.46
+    SpamSpace      4207     57      30    604.00     538.91       70.19       61.38    0.57        0.56     0.57     0.56    0.46     0.46      0.46      0.45
+    Thyroid        3772     6       5      87.90      71.34       49.51       48.20    0.91        0.93     0.91     0.93    0.46     0.54      0.46      0.55
+    Thyroid        3772     6       10     74.76      46.91       44.81       38.60    0.91        0.93     0.91     0.93    0.46     0.54      0.46      0.54
+    Thyroid        3772     6       30     45.84      43.86       28.90       26.75    0.91        0.93     0.92     0.93    0.46     0.54      0.46      0.54
+    Waveform       3443     21      5     167.98     147.00      109.94       94.46    0.78        0.76     0.78     0.76    0.11     0.13      0.11      0.13
+    Waveform       3443     21      10    154.72      94.36       91.69       55.17    0.78        0.76     0.78     0.77    0.11     0.11      0.11      0.11
+    Waveform       3443     21      30     97.11      95.77       53.47       48.04    0.78        0.76     0.78     0.76    0.11     0.13      0.11      0.13
+
+
+
+
+SUOD is applied on top of the aforementioned dataset                                    the extra benefit, e.g., interpretability and (iii) Balanced Par-
+(74,220 records are used for training and 49,500 records are                            allel Scheduling module ensures that nearly equal amount
+set aside for validation). Similarly to the full framework                              of workload is assigned to available workers in distributed
+evaluation in §4.4, the new system with SUOD (all three                                 computing. The extensive experiments on more than 20
+modules enabled) is compared with the current distributed                               benchmark datasets and a real-world claim fraud analysis
+system on 10 cores. The fit time is reduced from 6232.54                                case show the great potential of SUOD, and many intriguing
+seconds to 4202.30 seconds (32.57% reduction), and the                                  results are observed. For reproducibility and accessibility,
+prediction time is reduced from 3723.45 seconds reduced                                 all code, figures, and datasets are openly shared1 .
+to 2814.92 seconds (24.40%). In addition to the time reduc-
+                                                                                        More investigations are currently underway. First, we plan
+tion, ROC and P@N also show improvements at 3.59% and
+                                                                                        to demonstrate SUOD’s effectiveness as an end-to-end
+7.46%, respectively. Through this case, we are confident
+                                                                                        framework on more complex downstream combination mod-
+the proposed framework can be useful for many real-world
+                                                                                        els like unsupervised LSCP (Zhao et al., 2019a) and super-
+applications for scalable outlier detection.
+                                                                                        vised XGBOD (Zhao & Hryniewicki, 2018). Second, we
+                                                                                        would further emphasize the interpretability provided by
+5    C ONCLUSION & F UTURE D IRECTIONS                                                  the pseudo-supervised approximation, which can be beyond
+                                                                                        feature importance provided in tree regressors. Third, there
+In this work, we propose SUOD to expedite the training
+                                                                                        is room to investigate why and how the pseudo-supervised
+and prediction of a large number of unsupervised hetero-
+                                                                                        approximation could work in a more strict and theoretical
+geneous outlier detection models. It consists of three mod-
+                                                                                        way. This study, as the first step, empirically shows that
+ules with focus on different levels (data, model, execution):
+                                                                                        proximity-based models can benefit from the approximation.
+(i) Random Projection module compresses data into low-
+                                                                                        , whereas linear models may not. Lastly, we may incorpo-
+dimensional subspaces to alleviate the curse of dimension-
+                                                                                        rate the emerging automated OD, e.g., MetaOD (Zhao et al.,
+ality; (ii) Pseudo-supervised Approximation module could
+                                                                                        2020), to trim down the model space for further acceleration.
+accelerate costly unsupervised models’ prediction by replac-
+ing them by faster supervised regressors, which also brings                                   1
+                                                                                                  https://github.com/yzhao062/SUOD
+                     SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection
+
+R EFERENCES                                                    sigmod/sigmod2000.html#BreunigKNS00.
+                                                               SIGMOD Record 29(2), June 2000.
+Achlioptas, D. Database-friendly random projections.
+  In Buneman, P. (ed.), Proceedings of the Twentieth        Chandola, V., Banerjee, A., and Kumar, V. Anomaly detec-
+ ACM SIGACT-SIGMOD-SIGART Symposium on Prin-                  tion: A survey. ACM Comput. Surv., 41(3):15:1–15:58,
+  ciples of Database Systems, May 21-23, 2001, Santa          2009. doi: 10.1145/1541880.1541882. URL https:
+  Barbara, California, USA. ACM, 2001. doi: 10.               //doi.org/10.1145/1541880.1541882.
+ 1145/375551.375608. URL https://doi.org/10.
+  1145/375551.375608.                                       Goldstein, M. and Dengel, A. Histogram-based outlier
+                                                              score (hbos): A fast unsupervised anomaly detection
+Aggarwal, C. C. Outlier ensembles: position paper.
+                                                              algorithm. KI-2012: Poster and Demo Track, pp.
+ SIGKDD Explor., 14(2):49–58, 2012. doi: 10.1145/
+                                                              59–63, 2012. URL https://citeseerx.ist.
+  2481244.2481252. URL https://doi.org/10.
+                                                              psu.edu/viewdoc/download?doi=10.1.1.
+ 1145/2481244.2481252.
+                                                             401.5686&rep=rep1&type=pdf.
+Aggarwal, C. C. Outlier Analysis. Springer, 2013. ISBN
+  978-1-4614-6396-2. URL http://dx.doi.org/10.              He, Z., Xu, X., and Deng, S. Discovering cluster-
+ 1007/978-1-4614-6396-2.                                      based local outliers. Pattern Recognit. Lett., 24(9-
+                                                             10):1641–1650, 2003. doi: 10.1016/S0167-8655(03)
+Aggarwal, C. C. and Sathe, S. Outlier Ensembles - An          00003-5.    URL https://doi.org/10.1016/
+ Introduction. Springer, 2017. ISBN 978-3-319-54764-          S0167-8655(03)00003-5.
+  0. doi: 10.1007/978-3-319-54765-7. URL https://
+  doi.org/10.1007/978-3-319-54765-7.                        Hinton, G. E., Vinyals, O., and Dean, J. Distilling the knowl-
+                                                              edge in a neural network. CoRR, abs/1503.02531, 2015.
+Akoglu, L., Chandy, R., and Faloutsos, C.          Opin-      URL http://arxiv.org/abs/1503.02531.
+  ion fraud detection in online reviews by network ef-
+  fects. In Kiciman, E., Ellison, N. B., Hogan, B.,         Hu, J., Wang, F., Sun, J., Sorrentino, R., and
+  Resnick, P., and Soboroff, I. (eds.), Proceedings           Ebadollahi, S.      A healthcare utilization anal-
+  of the Seventh International Conference on Weblogs         ysis framework for hot spotting and contextual
+  and Social Media, ICWSM 2013, Cambridge, Mas-               anomaly detection. In AMIA 2012, American Med-
+  sachusetts, USA, July 8-11, 2013. The AAAI Press, 2013.     ical Informatics Association Annual Symposium,
+  URL http://www.aaai.org/ocs/index.php/                     Chicago, Illinois, USA, November 3-7, 2012. AMIA,
+  ICWSM/ICWSM13/paper/view/5981.                              2012.    URL http://knowledge.amia.org/
+                                                              amia-55142-a2012a-1.636547/t-003-1.
+Aldrich, N., Crowder, J., and Benson, B. How much does        640625/f-001-1.640626/a-044-1.641102/
+  medicare lose due to fraud and improper payments each       a-045-1.641099.
+  year. The Sentinel, 2014.
+                                                            Hu, X., Rudin, C., and Seltzer, M. I. Optimal sparse
+Amazon.     The total cost of ownership (tco) of              decision trees. In Wallach, H. M., Larochelle, H.,
+ amazon sagemaker., 2020.         URL https:                  Beygelzimer, A., d’Alché-Buc, F., Fox, E. B., and
+ //pages.awscloud.com/rs/112-TZM-766/                         Garnett, R. (eds.), Advances in Neural Information
+ images/Amazon_SageMaker_TC_uf.pdf.                          Processing Systems 32: Annual Conference on Neural
+ Accessed: 2-21-2021.                                        Information Processing Systems 2019, NeurIPS 2019,
+Bagdoyan, S. J. Medicare: Actions needed to better manage    December 8-14, 2019, Vancouver, BC, Canada, pp. 7265–
+  fraud risks. https://www.gao.gov/assets/700/693156.pdf,    7273, 2019.         URL https://proceedings.
+  2018.                                                       neurips.cc/paper/2019/hash/
+                                                              ac52c626afc10d4075708ac4c778ddfc-Abstract.
+Breiman, L. Random forests. Mach. Learn., 45(1):5–32,         html.
+  2001. doi: 10.1023/A:1010933404324. URL https:
+  //doi.org/10.1023/A:1010933404324.                        Johnson, W. B. and Lindenstrauss, J. Extensions of lipschitz
+                                                              mappings into a hilbert space. Contemporary mathemat-
+Breunig, M. M., Kriegel, H.-P., Ng, R. T., and                ics, 26(189-206):1, 1984.
+  Sander, J.     Lof: Identifying density-based lo-
+  cal outliers. In Chen, W., Naughton, J. F., and           Keller, F., Müller, E., and Böhm, K. Hics: High con-
+  Bernstein, P. A. (eds.), SIGMOD Conference, pp.             trast subspaces for density-based outlier ranking. In Ke-
+  93–104. ACM, 2000. ISBN 1-58113-217-4. URL                  mentsietsidis, A. and Salles, M. A. V. (eds.), IEEE 28th
+  http://dblp.uni-trier.de/db/conf/                           International Conference on Data Engineering (ICDE
+                      SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection
+
+  2012), Washington, DC, USA (Arlington, Virginia), 1-            URL https://doi.org/10.1109/ICDM50108.
+  5 April, 2012, pp. 1037–1048. IEEE Computer Soci-               2020.00135.
+  ety, 2012. doi: 10.1109/ICDE.2012.88. URL https:
+  //doi.org/10.1109/ICDE.2012.88.                               Liu, F. T., Ting, K. M., and Zhou, Z. Isolation forest. In
+                                                                  Proceedings of the 8th IEEE International Conference on
+Kriegel, H., Kröger, P., Schubert, E., and Zimek, A. Loop:       Data Mining (ICDM 2008), December 15-19, 2008, Pisa,
+  local outlier probabilities. In Cheung, D. W., Song,            Italy, pp. 413–422. IEEE Computer Society, 2008. doi:
+  I., Chu, W. W., Hu, X., and Lin, J. J. (eds.), Pro-             10.1109/ICDM.2008.17. URL https://doi.org/
+  ceedings of the 18th ACM Conference on Information              10.1109/ICDM.2008.17.
+  and Knowledge Management, CIKM 2009, Hong Kong,
+                                                                Liu, Y., Li, Z., Zhou, C., Jiang, Y., Sun, J., Wang, M.,
+  China, November 2-6, 2009, pp. 1649–1652. ACM,
+                                                                  and He, X. Generative adversarial active learning for
+  2009. doi: 10.1145/1645953.1646195. URL https:
+                                                                  unsupervised outlier detection. IEEE Trans. Knowl.
+  //doi.org/10.1145/1645953.1646195.
+                                                                  Data Eng., 32(8):1517–1528, 2020. doi: 10.1109/
+Kriegel, H.-P., Schubert, M., and Zimek, A. Angle-                TKDE.2019.2905606. URL https://doi.org/10.
+  based outlier detection in high-dimensional data. In            1109/TKDE.2019.2905606.
+  Li, Y., Liu, B., and Sarawagi, S. (eds.), KDD, pp.
+                                                                Lozano, E. and Acuña, E. Parallel algorithms for distance-
+  444–452. ACM, 2008.         ISBN 978-1-60558-193-4.
+                                                                  based and density-based outliers. In Proceedings of
+  URL http://dblp.uni-trier.de/db/conf/
+                                                                  the 5th IEEE International Conference on Data Mining
+  kdd/kdd2008.html#KriegelSZ08.
+                                                                  (ICDM 2005), 27-30 November 2005, Houston, Texas,
+Lai, K., Zha, D., Wang, G., Xu, J., Zhao, Y., Kumar, D.,          USA, pp. 729–732. IEEE Computer Society, 2005. doi:
+  Chen, Y., Zumkhawaka, P., Wan, M., Martinez, D., and            10.1109/ICDM.2005.116. URL https://doi.org/
+  Hu, X. TODS: an automated time series outlier detection         10.1109/ICDM.2005.116.
+  system. CoRR, abs/2009.09822, 2020. URL https:                Lu, W., Cheng, Y., Xiao, C., Chang, S., Huang, S., Liang,
+  //arxiv.org/abs/2009.09822.                                     B., and Huang, T. S. Unsupervised sequential outlier
+Lazarevic, A. and Kumar, V. Feature bagging for out-              detection with deep architectures. IEEE Trans. Image
+  lier detection. In Grossman, R., Bayardo, R. J., and            Process., 26(9):4321–4330, 2017. doi: 10.1109/TIP.2017.
+  Bennett, K. P. (eds.), Proceedings of the Eleventh ACM          2713048. URL https://doi.org/10.1109/TIP.
+  SIGKDD International Conference on Knowledge Dis-               2017.2713048.
+  covery and Data Mining, Chicago, Illinois, USA, Au-           Nakandala, S., Saur, K., Yu, G., Karanasos, K., Curino,
+  gust 21-24, 2005, pp. 157–166. ACM, 2005. doi: 10.              C., Weimer, M., and Interlandi, M. A tensor compiler
+  1145/1081870.1081891. URL https://doi.org/                      for unified machine learning prediction serving. In 14th
+  10.1145/1081870.1081891.                                        USENIX Symposium on Operating Systems Design and
+                                                                  Implementation, OSDI 2020, Virtual Event, November
+Lazarevic, A., Ertöz, L., Kumar, V., Ozgur, A., and Sri-
+                                                                  4-6, 2020, pp. 899–917. USENIX Association, 2020.
+  vastava, J. A comparative study of anomaly detection
+                                                                  URL https://www.usenix.org/conference/
+  schemes in network intrusion detection. In Barbará,
+                                                                  osdi20/presentation/nakandala.
+  D. and Kamath, C. (eds.), Proceedings of the Third
+  SIAM International Conference on Data Mining, San             Oku, J., Tamura, K., and Kitakami, H. Parallel processing
+  Francisco, CA, USA, May 1-3, 2003, pp. 25–36. SIAM,             for distance-based outlier detection on a multi-core cpu.
+  2003. doi: 10.1137/1.9781611972733.3. URL https:                In IEEE International Workshop on Computational In-
+  //doi.org/10.1137/1.9781611972733.3.                            telligence and Applications (IWCIA), pp. 65–70. IEEE,
+                                                                  2014.
+Li, W., Wang, Y., Cai, Y., Arnold, C. W., Zhao, E., and Yuan,
+  Y. Semi-supervised rare disease detection using genera-       Ousterhout, K., Wendell, P., Zaharia, M., and Stoica, I. Spar-
+   tive adversarial network. CoRR, abs/1812.00547, 2018.          row: distributed, low latency scheduling. In Kaminsky,
+   URL http://arxiv.org/abs/1812.00547.                           M. and Dahlin, M. (eds.), ACM SIGOPS 24th Symposium
+                                                                  on Operating Systems Principles, SOSP ’13, Farming-
+Li, Z., Zhao, Y., Botta, N., Ionescu, C., and Hu, X. COPOD:       ton, PA, USA, November 3-6, 2013, pp. 69–84. ACM,
+   copula-based outlier detection. In Plant, C., Wang, H.,        2013. doi: 10.1145/2517349.2522716. URL https:
+   Cuzzocrea, A., Zaniolo, C., and Wu, X. (eds.), 20th IEEE      //doi.org/10.1145/2517349.2522716.
+  International Conference on Data Mining, ICDM 2020,
+  Sorrento, Italy, November 17-20, 2020, pp. 1118–1123.         Pedregosa, F., Varoquaux, G., Gramfort, A., Michel, V.,
+   IEEE, 2020. doi: 10.1109/ICDM50108.2020.00135.                 Thirion, B., Grisel, O., Blondel, M., Prettenhofer, P.,
+                     SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection
+
+  Weiss, R., Dubourg, V., VanderPlas, J., Passos, A.,        Wang, Z., Kong, Z., Chandra, S., Tao, H., and Khan, L.
+  Cournapeau, D., Brucher, M., Perrot, M., and Duches-        Robust high dimensional stream classification with novel
+  nay, E. Scikit-learn: Machine learning in python. J.        class detection. In 35th IEEE International Conference on
+  Mach. Learn. Res., 12:2825–2830, 2011. URL http:            Data Engineering, ICDE 2019, Macao, China, April 8-11,
+  //dl.acm.org/citation.cfm?id=2078195.                       2019, pp. 1418–1429. IEEE, 2019a. doi: 10.1109/ICDE.
+                                                              2019.00128. URL https://doi.org/10.1109/
+Ramaswamy, S., Rastogi, R., and Shim, K. Efficient al-        ICDE.2019.00128.
+  gorithms for mining outliers from large data sets. In
+  Chen, W., Naughton, J. F., and Bernstein, P. A. (eds.),    Wang, Z., Li, H., Li, Z., Sun, X., Rao, J., Che, H., and
+  Proceedings of the 2000 ACM SIGMOD International            Jiang, H. Pigeon: an effective distributed, hierarchical
+  Conference on Management of Data, May 16-18, 2000,          datacenter job scheduler. In Proceedings of the ACM
+  Dallas, Texas, USA, pp. 427–438. ACM, 2000. doi:            Symposium on Cloud Computing, SoCC 2019, Santa Cruz,
+  10.1145/342009.335437. URL https://doi.org/                 CA, USA, November 20-23, 2019, pp. 246–258. ACM,
+  10.1145/342009.335437.                                      2019b. doi: 10.1145/3357223.3362728. URL https:
+Rayana, S. and Akoglu, L. Less is more: Build-                //doi.org/10.1145/3357223.3362728.
+  ing selective anomaly ensembles.       ACM Trans.
+                                                             Wang, Z., Wang, Y., Lin, Y., Delord, E., and Khan, L.
+  Knowl. Discov. Data, 10(4):42:1–42:33, 2016. URL
+                                                              Few-sample and adversarial representation learning for
+  http://dblp.uni-trier.de/db/journals/
+                                                              continual stream mining. In Huang, Y., King, I., Liu,
+  tkdd/tkdd10.html#RayanaA16.
+                                                              T., and van Steen, M. (eds.), WWW ’20: The Web
+Schubert, E., Zimek, A., and Kriegel, H. Fast and scal-       Conference 2020, Taipei, Taiwan, April 20-24, 2020,
+  able outlier detection with approximate nearest neigh-      pp. 718–728. ACM / IW3C2, 2020. doi: 10.1145/
+  bor ensembles. In Renz, M., Shahabi, C., Zhou, X.,          3366423.3380153. URL https://doi.org/10.
+  and Cheema, M. A. (eds.), Database Systems for Ad-          1145/3366423.3380153.
+  vanced Applications - 20th International Conference,
+  DASFAA 2015, Hanoi, Vietnam, April 20-23, 2015, Pro-       Zha, D., Lai, K., Wan, M., and Hu, X. Meta-aad: Active
+  ceedings, Part II, volume 9050 of Lecture Notes in           anomaly detection with deep reinforcement learning. In
+  Computer Science, pp. 19–36. Springer, 2015. doi:            Plant, C., Wang, H., Cuzzocrea, A., Zaniolo, C., and
+  10.1007/978-3-319-18123-3\ 2. URL https://doi.               Wu, X. (eds.), 20th IEEE International Conference on
+  org/10.1007/978-3-319-18123-3_2.                             Data Mining, ICDM 2020, Sorrento, Italy, November
+                                                               17-20, 2020, pp. 771–780. IEEE, 2020. doi: 10.1109/
+Schölkopf, B., Platt, J. C., Shawe-Taylor, J., Smola,         ICDM50108.2020.00086. URL https://doi.org/
+  A. J., and Williamson, R. C. Estimating the support          10.1109/ICDM50108.2020.00086.
+  of a high-dimensional distribution. Neural Compu-
+  tation, 13(7):1443–1471, July 2001. doi: 10.1162/          Zhao, Y. and Hryniewicki, M. K. XGBOD: improving
+  089976601750264965. URL https://doi.org/10.                  supervised outlier detection with unsupervised repre-
+  1162%2F089976601750264965.                                   sentation learning. In 2018 International Joint Confer-
+                                                               ence on Neural Networks, IJCNN 2018, Rio de Janeiro,
+Shyu, M.-L., Chen, S.-C., Sarinnapakorn, K., and Chang,
+                                                               Brazil, July 8-13, 2018, pp. 1–8. IEEE, 2018. doi:
+  L. A novel anomaly detection scheme based on principal
+                                                               10.1109/IJCNN.2018.8489605. URL https://doi.
+  component classifier. Technical report, 2003.
+                                                               org/10.1109/IJCNN.2018.8489605.
+Spearman, C. The proof and measurement of association
+  between two things. The American Journal of Psychology,    Zhao, Y., Nasrullah, Z., Hryniewicki, M. K., and Li, Z.
+  15(1):72–101, 1904. ISSN 00029556. URL http://               LSCP: locally selective combination in parallel outlier
+  www.jstor.org/stable/1412159.                                ensembles. In Berger-Wolf, T. Y. and Chawla, N. V. (eds.),
+                                                               Proceedings of the 2019 SIAM International Conference
+Venkatasubramanian, S. and Wang, Q. The johnson-               on Data Mining, SDM 2019, Calgary, Alberta, Canada,
+  lindenstrauss transform: An empirical study. In Müller-     May 2-4, 2019, pp. 585–593. SIAM, 2019a. doi: 10.1137/
+  Hannemann, M. and Werneck, R. F. F. (eds.), Proceed-         1.9781611975673.66. URL https://doi.org/10.
+  ings of the Thirteenth Workshop on Algorithm Engi-           1137/1.9781611975673.66.
+  neering and Experiments, ALENEX 2011, Holiday Inn
+  San Francisco Golden Gateway, San Francisco, Cali-         Zhao, Y., Nasrullah, Z., and Li, Z. Pyod: A python
+  fornia, USA, January 22, 2011, pp. 164–173. SIAM,            toolbox for scalable outlier detection. J. Mach. Learn.
+  2011. doi: 10.1137/1.9781611972917.16. URL https:            Res., 20:96:1–96:7, 2019b. URL http://jmlr.org/
+  //doi.org/10.1137/1.9781611972917.16.                        papers/v20/19-011.html.
+                     SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection
+
+Zhao, Y., Rossi, R. A., and Akoglu, L. Automating out-
+  lier detection via meta-learning. CoRR, abs/2009.10606,
+  2020.      URL https://arxiv.org/abs/2009.
+  10606.
+Zimek, A., Campello, R. J. G. B., and Sander, J. En-
+  sembles for unsupervised outlier detection: challenges
+  and research questions a position paper. SIGKDD
+  Explor., 15(1):11–22, 2013. doi: 10.1145/2594473.
+  2594476.     URL https://doi.org/10.1145/
+  2594473.2594476.
+                      SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection
+
+S UPPLEMENTARY M ATERIAL                                        model pool M by sampling from it.
+Details on Datasets and Models.
+
+A       DATASETS AND S ETUP
+Table A.1 describes the selected outlier detection bench-
+mark datasets, and more than 20 outlier detection bench-
+mark datasets are used in this study1,2 . The data size n
+varies from 452 (Arrhythmia) to 567,479 (HTTP) sam-
+ples and the dimension d ranges from 3 to 274. For both
+random projection and parallel scheduling experiments, the
+full datasets are used for model building (training). For the
+pseudo-supervised approximation experiments and the full
+framework assessment, 60% of the data is used for training
+and the remaining 40% is set aside for validation. For all
+experiments, performance is evaluated by taking the average
+of 10 independent trials using area under the receiver op-
+erating characteristic (ROC) curve and precision at rank n
+(P@N)—here n denotes the actual number of outliers. Both
+metrics are widely used in outlier research (Zimek et al.,
+2013; Liu et al., 2020).
+
+
+     Table A.1. Selected real-world benchmark datasets
+ Dataset        Pts (n) Dim (d) Outliers % Outlier
+ Annthyroid       7200          6         534         7.41
+ Arrhythmia        452        274          66        14.60
+ Breastw           683          9         239        34.99
+ Cardio           1831         21         176         9.61
+ HTTP           567479          3        2211         0.40
+ Letter           1600         32         100         6.25
+ MNIST            7603        100         700         9.21
+ Musk             3062        166          97         3.17
+ PageBlock        5393         10         510         9.46
+ Pendigits        6870         16         156         2.27
+ Pima              768          8         268        34.90
+ Satellite        6435         36        2036        31.64
+ Satimage-2       5803         36          71         1.22
+ seismic          2584         10         170         6.59
+ Shuttle         49097          9        3511         7.15
+ SpameSpace       4207         57        1679        39.91
+ speech           3686        400          61         1.65
+ Thyroid          3772          6          93         2.47
+ Vertebral         240          6          30        12.50
+ Vowels           1456         12          50         3.43
+ Waveform         3443         21         100         2.90
+ Wilt             4819          5         257         5.33
+
+
+
+B       O UTLIER D ETECTION M ODELS
+As shown in Table B.1, we use a large group of outlier
+detection models in the experiment by varying algorithms
+and their corresponding hyperparameters. We build the
+    1
+   ODDS Library: http://odds.cs.stonybrook.edu
+    2
+   DAMI Datasets:    http://www.dbs.ifi.lmu.de/
+research/outlier-evaluation/DAMI
+                          SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection
+
+
+
+
+               Table B.1. Outlier Detection Models in SUOD; see parameter definitions from PyOD (Zhao et al., 2019b)
+Method                                      Parameter 1                                                           Parameter 2
+ABOD (Kriegel et al., 2008)                 n neighbors: [3, 5, 10, 15, 20, 25, 50, 60, 70, 80, 90, 100]          N/A
+CBLOF (He et al., 2003)                     n clusters: [3, 5, 10, 15, 20]                                        N/A
+Feature Bagging (Lazarevic & Kumar, 2005)   n estimators: [10, 20, 30, 40, 50, 75, 100, 150, 200]                 N/A
+HBOS (Goldstein & Dengel, 2012)             n histograms: [5, 10, 20, 30, 40, 50, 75, 100]                        tolerance: [0.1, 0.2, 0.3, 0.4, 0.5]
+iForest (Liu et al., 2008)                  n estimators: [10, 20, 30, 40, 50, 75, 100, 150, 200]                 max features: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+kNN (Ramaswamy et al., 2000)                n neighbors: [1, 5, 10, 15, 20, 25, 50, 60, 70, 80, 90, 100]          method: [’largest’, ’mean’, ’median’]
+LOF (Breunig et al., 2000)                  n neighbors: [1, 5, 10, 15, 20, 25, 50, 60, 70, 80, 90, 100]          method: [’manhattan’, ’euclidean’, ’minkowski’]
+OCSVM (Schölkopf et al., 2001)             nu (train error tol): [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]   kernel: [’linear’, ’poly’, ’rbf’, ’sigmoid’]
+

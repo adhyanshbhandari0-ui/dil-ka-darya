@@ -1,0 +1,1715 @@
+                                            Data segmentation algorithms: Univariate mean change and
+                                                                                         beyond
+                                                                          Haeran Cho1 and Claudia Kirch2
+
+                                                                                        July 9, 2021
+
+
+
+
+arXiv:2012.12814v2 [stat.ME] 8 Jul 2021
+                                                                                          Abstract
+
+                                                    Data segmentation a.k.a. multiple change point analysis has received considerable
+                                                attention due to its importance in time series analysis and signal processing, with appli-
+                                                cations in a variety of fields including natural and social sciences, medicine, engineering
+                                                and finance.
+                                                    The goal of this survey article is twofold: In the first part, we review the existing liter-
+                                                ature on the canonical data segmentation problem which aims at detecting and localising
+                                                multiple change points in the mean of univariate time series. We provide an overview
+                                                of popular methodologies on their computational complexity and theoretical properties.
+                                                In particular, our theoretical discussion focuses on the separation rate relating to which
+                                                change points are detectable by a given procedure, and the localisation rate quantifying the
+                                                precision of corresponding change point estimators, and we distinguish between whether
+                                                a homogeneous or multiscale viewpoint has been adopted in their derivation. We further
+                                                highlight that the latter viewpoint provides the most general setting for investigating the
+                                                optimality of data segmentation algorithms.
+                                                    Arguably, the canonical segmentation problem has been the most popular framework
+                                                to propose new data segmentation algorithms and study their efficiency in the last decades.
+                                                In the second part of this survey, we motivate the importance of attaining an in-depth
+                                                understanding of strengths and weaknesses of methodologies for the change point problem
+                                                in a simpler, univariate setting, as a stepping stone for the development of methodologies
+                                                for more complex problems. We illustrate this with a range of examples showcasing
+                                                the connections between complex distributional changes and those in the mean. We also
+                                                discuss extensions towards high-dimensional change point problems where we demonstrate
+                                                that the challenges arising from high dimensionality are orthogonal to those in dealing
+                                                with multiple change points.
+
+                                            1
+                                              School of Mathematics, University of Bristol, UK. Email: haeran.cho@bristol.ac.uk.
+                                          Supported by the Leverhulme Trust Research Project Grant (RPG-2019-390).
+                                            2
+                                              Department of Mathematics, Otto-von-Guericke University; Center for Behavioral Brain Sciences (CBBS);
+                                          Magdeburg, Germany. Email: claudia.kirch@ovgu.de.
+
+
+
+
+                                                                                               1
+1    Introduction
+Change point analysis has a long tradition in statistics dating back to 1950s (see Page [148])
+and has been a very active field of research ever since due to its importance in time series
+analysis, signal processing and many other applications where data is routinely collected over
+time in naturally nonstationary environments. This popularity can partly be explained by
+the fact that the assumption of piecewise stationarity underlying change point analysis, is
+one of the simplest forms of departure from stationarity while at the same time, it is found
+to be reasonable for many applications. There are also other types of non-stationarities such
+as unit roots or local stationarity that have been studied extensively in the literature which,
+however, will not be discussed in this article.
+Research in change point analysis has predominantly focused on the following two directions:
+One line of research is on the development of sequential or online methodologies based on
+optimal stopping (see e.g. the recent books by Tartakovsky et al. [172] and Tartakovsky [171])
+which is being actively studied to date but will not be part of this review. The second direction
+addresses the problem of change point detection in a posteriori or offline settings. Much of the
+research in the last century dealt with change point testing against the at-most-one-change
+(AMOC) alternative (see e.g. the books by Csörgö and Horváth [51] and Chen and Gupta
+[38]). Based on such tests, the location of a single change point can be estimated with the
+optimal localisation properties, typically by scanning for the point where the corresponding
+statistic attains its maximum. More recent papers tackle change point problems in complex
+situations (see the review papers by Aue and Horváth [15] and Horváth and Rice [89] and
+also Section 4 below), both sequentially and retrospectively, and this review paper focuses on
+the latter.
+In retrospective change point analysis, it is often more realistic to allow for multiple change
+points, where the goal is to estimate both the total number and locations of the change points,
+a.k.a. data segmentation. While there already exist early papers showing the consistency of
+various change point procedures that make use of e.g. binary segmentation (i.e. iteratively
+testing for a change point and partitioning the data into two, [182]), or information criteria
+[125, 190], the problem of detecting multiple change points in data sequences experienced
+renewed interest in the statistical literature during the last 10 years. This was driven by
+several factors including the emergence of scientific problems requiring high-precision and
+high-speed segmentation algorithms: Such examples can be found in genomics [35, 128, 144,
+145], astronomy [71], neurophysiology [140], climatology [156], cyber-security [1] and finance
+[41], to name but a few. Accordingly, there has been a surge of interest for computationally
+fast and statistically efficient methods for data segmentation, and most effort in this direction
+has been devoted to the problem of detecting multiple change points in the mean of univariate
+data. In this article, we also take this as an important starting point for developing change
+point methodologies in more complex situations. We first review the methods for detection
+
+
+                                                  2
+and localisation of multiple change points in the mean of univariate data, which we refer to
+as the canonical segmentation problem, complementing the articles reviewing and comparing
+different change point detection algorithms such as [2, 61, 68, 178].
+As noted by Brodsky and Darkhovsky [31] (see also the discussion in Section 4.1 below),
+more complex change point problems that allow changes in stochastic properties other than
+the mean, can be reduced to the (possibly multivariate) canonical segmentation problem after
+applying a suitable transformation to the input data that reveals the changes as those in the
+mean of the transformed data. Also, the challenges due to high dimensionality of the data,
+which is another important area of active research (see Section 4.2 below), are orthogonal to
+those arising from the presence of multiple change points over time. Thus we argue that the
+suite of algorithms developed for the canonical segmentation problem serve as a foundation
+for developing methodologies for more complex change point problems.
+The rest of the paper is organised as follows. Section 2 describes the canonical segmentation
+problem including its aim and theoretical benchmarks, and Section 3 reviews the state-of-
+the-art methodologies developed for this purpose. Section 4 provides an overview of the
+existing literature on more complex change point problems beyond mean changes and finite
+dimensionality, and discuss how the data segmentation algorithms described in Section 3 can
+be adapted for such problems.
+
+
+2     Multiple change point detection in the mean of univariate
+      data
+We regard the following change point model
+                          qn
+                          X
+    Xt = ft + εt = f0 +         dj · It≥θj +1 + εt ,   E(εt ) = 0 and Var(εt ) = σ 2 ,   t = 1, . . . , n,   (1)
+                          j=1
+
+
+as the canonical change point model, where we denote by qn the total number of change points
+in the mean of {Xt }nt=1 , by θj = θj,n , j = 1, . . . , qn , their locations, by dj = dj,n the (signed)
+magnitude of change and by δj = δj,n = min(θj − θj−1 , θj+1 − θj ) the minimum distance
+from θj to its neighbouring change points, with the notational convention that θ0 = 0 and
+θqn +1 = n. In data segmentation, the goal is to consistently estimate the number and the
+locations of the change points, and we review the methodologies proposed for this purpose in
+Section 3.
+In contrast, in the corresponding testing problems, the aim is to test H0 : qn = 0 against
+H1 : qn ≥ 1; in the AMOC setting, the alternative hypothesis is given by H1 : qn = 1.
+There exist a wide variety of procedures proposed for change point testing, not only against
+the alternative of mean shifts but also allowing for more complicated structural breaks (see
+Section 4.1 for such examples). There are also a few methods that sequentially test for an
+
+
+                                                       3
+increasing number of change points, i.e. H0 : qn = m against H1 : qn = m + 1 for given m
+[21, 136]. These tests can be used as a pre-processing step to determine whether the data is
+sufficiently close to stationary, or whether a multiple change point detection methodology is
+required to segment the data into (approximately) stationary stretches. They can also serve
+as a basis for developing a data segmentation methodology, with the simplest example being
+the binary segmentation algorithm, see Section 3.2 below.
+We assume that max1≤j≤qn |dj | = O(1) as well as min1≤j≤qn δj → ∞, separating the change
+point detection problem under (1) from that of outlier detection. Indeed, one of the main
+differences between the two problems is that in outlier detection, an increase in sample size
+does not benefit the performance of an outlier detection procedure beyond that it helps getting
+more precise estimators for the quantiles and, even so, the size of the outlier is required to be
+larger than these quantiles for its detection. On the other hand, in change point detection,
+the increased sample size (which corresponds to δj → ∞ under (1)) allows for the detection
+of local changes where dj → 0; therefore, looking for outliers in the differenced time series
+{Xt − Xt−1 }nt=2 cannot provide an adequate solution to the change point problem.
+Generally, the detectability of change points is determined by an interplay between the mag-
+nitude of changes and their distance to neighbouring change points: Large changes are de-
+tectable even if they are close to the adjacent change points while for smaller changes, they
+should be sufficiently distanced away from the neighbouring change points to be detectable.
+When large frequent changes and small changes over long stretches are simultaneously present
+in the same time series, it calls for a multiscale methodology that adapts to such situations
+and detects all change points. This gives rise to the distinction between a homogeneous change
+point scenario where the magnitude of changes and the spacing between change points are on
+the same scale for all change points, and the multiscale scenario where this is not the case. The
+difficulty of the canonical segmentation problem for a given time series under (1), is gauged
+by the detection lower bound ∆n relating the magnitude of the change dj to the minimum
+distance to neighbouring change points δj , and different formulations of the detection lower
+bound reflect these different scenarios, see Definition 2.1 (a) for the precise statement. When
+∆n diverges faster than the separation rate associated with a given methodology, changes are
+detectable with asymptotic power one and their locations can be estimated with accuracy.
+Frequently, a methodology is deemed consistent in multiple change point detection with the
+                                       b = {θbj , 1 ≤ j ≤ qb : θb1 < . . . < θbqb} satisfying
+localisation rate ρn , when it returns Θ
+
+                         qb = qn   and    max wj |θbj · Ij≤qn − θj | ≤ ρn                    (2)
+                                         1≤j≤qn
+
+
+with probability tending to one, for some ρn /n → 0. The quantity wj denotes the difficulty
+associated with localising each change point θj , which can also be formulated within the
+homogeneous or multiscale scenarios.
+Definition 2.1, taken from Cho and Kirch [45], distinguishes multiscale formulations of detec-
+
+                                                  4
+tion lower bound and localisation rate from their non-multiscale, homogeneous counterparts.
+
+Definition 2.1.     (a) Detection lower bound:
+
+       (i) Homogeneous change points: ∆n = min1≤j≤qn d2j · min1≤j≤qn δj .
+      (ii) Finite mixture of homogeneous change points: There are N < ∞ disjoint
+           subsets of change points with their indices given by Jk , k = 1, . . . , N , such that
+           SN
+             k=1 Jk = {1, . . . , qn }, whereby change points within each subset are homogeneous
+           as defined in (i) and ∆n = min1≤k≤N (minj∈Jk d2j · minj∈Jk δj ). A special case is
+           when there are finitely many changes with N = qn .
+      (iii) Multiscale change points: ∆n = min1≤j≤qn d2j δj .
+
+ (b) Localisation rate: We distinguish between a homogeneous localisation rate where
+     the estimation error for the j-th change point, |θbj − θj |, is weighted globally with wj =
+      min1≤j≤qn d2j , and a multiscale localisation rate where it is weighted locally with
+      wj = d2j .
+
+In the AMOC situation where qn ≤ 1, all scenarios in Definition 2.1 (a) coincide and reduce
+to the assumption d21 min(θ1 , n − θ1 ) → ∞ which is commonly found in the change point
+testing literature, see Section 1.5 of Csörgö and Horváth [51]. However, when qn > 1 (and
+possibly diverging with n), they truly reflect different scenarios: Proceeding from (i) to (iii)
+enlarges the associated parameter space, and thus (iii) provides the most general setting in
+which to investigate the detection power of a segmentation procedure. While most of the
+literature deals with the homogeneous setting (see Section 3.3), it is often too restrictive and
+does not permit large frequent jumps alternate with small jumps over long segments – a
+situation naturally embedded in the multiscale setting. In Definition 2.1 (b), the multiscale
+localisation rate relates the difficulty in accurate localisation of each change point to the size
+of the corresponding jump.
+Propositions 2.1 and 2.2 state the benchmarks for the minimax optimal separation and lo-
+calisation rates, which have been established under the special case where {εt }nt=1 are i.i.d.
+(sub-)Gaussian random variables. To the best of our knowledge, there do not exist equivalent
+results on the detection lower bound or the localisation rate (when qn → ∞) beyond the
+case of i.i.d. sub-Gaussianity. For the AMOC alternative, it is well known that the minimax
+optimal localisation rate is given by OP (1) (see Korostelev [119]), i.e. ρn → ∞ arbitrarily
+slowly in (2). This rate extends beyond Gaussianity and independence when there are a finite
+number of change points, see Corollary 4.4 of Cho and Kirch [45].
+
+Proposition 2.1 (Proposition 1 of Arias-Castro et al. [10], lower bound on the
+minimax separation rate). Under (1), let H0,n : qn = 0 and H1,n describe the setting
+where qn = 2, dn := d1 = −d2 and δn := θ2 − θ1 with n−1 δn → 0. Then, H0,n and H1,n are
+                                   √    p
+asymptotically inseparable if |dn | δn ≤ 2 log(n/δn ) − νn where νn → ∞.
+
+                                                5
+Proposition 2.2 (Proposition 6 of Fromont et al. [73], lower bound on the minimax
+localisation rate for possibly an unbounded number of change points). Under (1)
+with qn ≥ 2, let |dj | =: dn for all j = 1, . . . , qn , and denote by
+
+                Ξ = {(θ1 , . . . , θqn ) : 0 ≡ θ0 < θ1 < . . . < θqn < θqn +1 ≡ n,   and
+                                                                                        
+                                                  d2n    min (θj+1 − θj−1 ) > c log(qn )
+                                                        1≤j≤qn
+
+
+for some c > 0, the parameter space for the locations of change points. Then, for some C > 0,
+
+                               inf sup EΘ {dH (K, Θ)} ≥ Cd−2
+                                                          n log(qn )
+                             K∈Nqn Θ∈Ξ
+
+
+where dH (K, Θ) = max{maxk∈K minθ∈Θ |k − θ|, maxθ∈Θ mink∈K |θ − k|} denotes the Hausdorff
+distance.
+
+
+3     Review of data segmentation methodologies
+Broadly, algorithms for the canonical segmentation problem can be categorised into two: One
+line of research casts the problem as that of globally optimising an objective function, which
+imposes a penalty on the model complexity given e.g. by the number of change points; the
+other is closely related to the change point testing literature, whereby the test for detecting a
+single change point is applied locally for detection and estimation of multiple change points.
+We briefly mention that there exist methods based on hidden Markov models where the main
+focus lies in modelling such phenomena, with algorithms for estimating the sequence of hidden
+states [79, 177]. There are also methods allowing for Bayesian inference under change point
+models [25, 60, 66, 159, 189], see Eckley et al. [61] for further references.
+In what follows, we review the literature on the canonical segmentation problem under (1)
+according to the above categorisation, providing brief descriptions of representative method-
+ologies and their computational complexity as well as theoretical properties in relation to the
+benchmark provided in Section 2.
+
+3.1     Global optimisation methods
+3.1.1    `0 -penalisation
+
+Information criteria have popularly been adopted in change point problems. Under (1), the
+Schwarz criterion [164, SC] takes the form
+                                           
+                     n             RSS(A)
+              SC(A) = log                       + pn (A)    where                            (3)
+                     2               n
+
+
+
+
+                                                        6
+                        m kX
+                           j+1                                                     b
+                        X                                                      1  X
+             RSS(A) =              (Xt − X̄kj :kj+1 )2     with     X̄a:b =         Xt .       (4)
+                                                                              b−a
+                        j=0 t=kj +1                                              t=a+1
+
+
+The function pn (A) denotes the penalty imposed on the complexity of a model determined by
+a set of change point candidates A = {kj , 1 ≤ j ≤ m : k1 < . . . < km } ⊂ I1 := {1, . . . , n − 1}
+(with k0 = 0 and km+1 = n); a popular choice is pn (A) = λn |A| where λn is a tuning
+parameter. For some integer N ≤ n, we denote a collection of all subsets of I1 with their
+cardinality bounded by N , by A[N ] = {A ⊂ I1 : |A| ≤ N }. Then, minimising SC(A) over
+A ∈ A[N ] returns a set of change point estimators, b
+                                                    Θ(A[N ]) = minA∈A(N ) SC(A).
+With the penalty linear in the number of candidate change points as pn (A) = (1+) log(n)·|A|,
+the consistency of SC in estimating the total number of change points has been established
+under i.i.d. Gaussianity, in Yao [190] (with  = 0) and Lee [125] (with a small constant  > 0),
+in the setting where both qn and N are fixed with N > qn . This result is complemented by
+Yao and Au [192], where the consistency of the least squares estimators of θj , 1 ≤ j ≤ qn , is
+established and their distribution is derived when qn is fixed and known. Penalties depending
+on the spacing between the change points as well as the total number |A|, are considered in
+Chen et al. [37], Pan and Chen [149] and Zhang and Siegmund [194], and the application of
+the Akaike information criterion to the change point problem is studied in Ninomiya [143].
+Boysen et al. [30] consider the minimisation of the Potts functional
+
+                                                                    1
+                Θ(A) = arg min P0 (A),
+                b                           where        P0 (A) =     RSS(A) + pn (A)          (5)
+                             A∈A                                    n
+
+with pn (A) = λn |A|, over A ∈ A[n − 1] =: A, i.e. without any bound on the cardinality of A
+other than the trivial one. Under i.i.d. sub-Gaussianity, they show the consistency of b
+                                                                                       Θ(A)
+both in estimating the total number and the locations of change points, provided that λn → 0
+and nλn / log(n) → ∞. Lavielle and Moulines [123] establish the asymptotic consistency of the
+minimiser of the Potts functional under general conditions on {εt }, given that a suitable upper
+bound on the number of change points N is available. Wang et al. [185] extend the results of
+Boysen et al. [30] to the settings where qn → ∞, min1≤j≤qn |dj | → 0 and n−1 min1≤j≤qn δj → 0
+as n → ∞, with the penalty pn (A) = log1+ (n) · |A| for some small  > 0. By considering
+a location-dependent penalty pn (A) = n−1 L{λ|A| + 2 m
+                                                      P
+                                                         j=0 log(n/(kj+1 − kj ))} with some
+tuning parameters L, λ > 0, Fromont et al. [73] show that the minimisation of P0 (A) achieves
+minimax optimality in both detection lower bound and change point localisation, matching
+the rates provided in Propositions 2.1–2.2.
+There exist dynamic programming algorithms which solve the `0 -penalised least squares esti-
+mation problem in (5). The segment neighbourhood approach [19] requires an upper bound
+on the number of change points, say N , and solves the constrained minimisation problems
+for a varying number of change points, attaining the computational complexity of O(N n2 ).
+The optimal partitioning [105] approach, by recursively searching for the optimal partition
+
+                                                  7
+conditioning on the latest change point estimator, achieves the computational complexity of
+O(n2 ) for a given choice of the penalty. There are several methods which aim at speeding
+up the dynamic programming algorithms by pruning the search space, such as the pruned
+exact linear time method [110], the functional pruning technique [157] and their extensions
+[135]. Haynes et al. [85] provide a methodology for finding the solution path for a range
+of penalty parameters λ ∈ [λmin , λmax ], when the penalty increases linearly in the size of A
+as pn (A) = λ|A|, while Lebarbier [124] proposes the slope heuristic method that examines
+how the segmentation result varies with such λ. Tickle et al. [176] investigate the paralleli-
+sation of dynamic programming-based methods for fast computation when n is very large.
+Imposing an autoregressive (AR) structure of order one on {εt }, Chakar et al. [34] propose an
+adaptation of (3) and provide an algorithm for approximating its global minimiser. Further
+allowing for random walk-like fluctuations, Romano et al. [162] provides an efficient dynamic
+programming algorithm that returns an exact solution of the minimisation problem.
+Finally, we mention that the objective function based on the minimum description length
+principle [83, 161] imposes an `0 -type penalty on the model complexity, and has successfully
+been applied to piecewise parametric modelling [17, 52, 53] in combination with the genetic
+algorithm to traverse the parameter space and solve the optimisation problem.
+
+3.1.2   `1 -penalisation
+
+While efficient algorithms exist for the optimisation of `0 -penalised objective functions, the
+computational complexity typically scales quadratically in n. Relaxing the `0 -penalty in (5)
+to an `1 -penalty (a.k.a. total variation penalty) gives rise to
+
+                           n                  n−1
+                         1X                 X
+              P1 (g) =     (Xt − gt )2 + λn   |gt+1 − gt |,        g = (g1 , . . . , gn )> ,   (6)
+                         n
+                           t=1                 t=1
+
+which is closely related to the fused Lasso, originally introduced in Tibshirani et al. [174] to
+take into account the ordering of the features in the data. The locations of change points
+are estimated by the locations of jumps in g b = arg ming∈Rn P1 (g). Harchaoui and Lévy-
+Leduc [84] show that adopting the least angle regression proposed by Efron et al. [62] in the
+context of `1 -penalised linear regression, the computational complexity of solving for gb is
+O(N 3 + N n log(n)), where N denotes the maximal number of change point candidates to be
+considered and needs to be specified. The properties of the `1 -penalised least squares estimator
+g
+b, both in its `2 -error in estimating the mean and change point localisation, has been studied
+in Rinaldo [160] and Harchaoui and Lévy-Leduc [84] under i.i.d. (sub-)Gaussianity. Lin et al.
+[130] provide a near-minimax optimal rate (up to log log(n)) for the `2 -error when the change
+points are sparse, but also show that g
+                                      b tends to over-estimate the number of change points
+and requires further post-processing for consistent estimation of qn .
+
+
+
+                                                8
+3.1.3    Multiscale change point segmentation methods
+
+Li et al. [129] define a class of multiscale change point segmentation (MCPS) methods, which
+include the simultaneous multiscale change point estimators controlling for the family-wise
+error rate [72, SMUCE] and the false discovery rate [128, FDRseg] in estimating the number
+of change points. They solve a (non-convex) optimisation problem, which searches for the
+most parsimonious candidate estimator of the piecewise constant function over the acceptance
+region of a suitable multiscale test. More specifically, the optimisation problem is given by
+                                                                       
+                                                 1    X                
+             min #J(g)      subject to      max   p      (Xt − γI ) − sI ≤ η,                (7)
+           g∈S[0,1)                         I∈M 
+                                          g≡γI on I
+                                                   |I|    t/n∈I
+                                                                        
+
+where #J(g) denotes the number of jumps in g ∈ S[0, 1), the space of right-continuous step
+                                                              n−1
+functions on [0, 1) (whose change points lie on the grid {i/n}i=0 ), M a multiscale system
+of sub-intervals of [0, 1) fulfilling a set of requirements, sI a scale penalty and η a threshold
+controlling the over-estimation probability.
+Frick et al. [72] establish the near-minimax optimality of SMUCE as given in Propositions 2.1–
+2.2, under the exponential family regression model with the parameter varying over time in
+a piecewise constant manner, and discuss an efficient implementation of the optimisation
+problem in (7) via dynamic programming. For the canonical segmentation problem, Pein
+et al. [150] and Dette et al. [58] address the issues arising from heteroscedasticity and serial
+dependence in {εt }nt=1 , respectively.
+
+3.1.4    Model selection-based segmentation
+
+Arlot and Celisse [11] investigate the use of cross-validation for the change point problem
+under (1). With RSS(A) defined in (4) serving as the empirical risk measure of a change point
+model A, the proposed method adopts the leave-one-out or K-fold cross-validation methods
+for final model selection, in place of imposing a penalty on the model complexity as the class
+of methods discussed in Sections 3.1.1 and 3.1.2. The paper provides a dynamic programming
+approach to efficiently compute the procedure and studies its theoretical performance in terms
+of the `2 -error.
+
+3.2     Local testing methods
+The methodologies belonging to this class generally proceed in two stages: First, the data is
+scanned for candidate change point estimators, from which the final estimators are selected
+via a model selection method.
+In the first step, candidate generation is achieved by multiscale scanning of the data for
+change points using the following weighted cumulative sum (CUSUM) statistics computed on
+
+
+
+                                                 9
+the segment {Xt , s < t ≤ e}:
+                        r                                                        b
+                            (k − s)(e − k)                                   1  X
+         Ts,k,e (X) =                      X̄s:k − X̄k:e     where   X̄a:b =       Xt ,
+                                e−s                                          b−a
+                                                                               t=a+1
+
+for 0 ≤ s < k < e ≤ n. In the AMOC setting, it is well-known that the location of the
+maximum of the CUSUM statistics given by k◦ = arg max0<k<n |T0,k,n (X)|, is a consistent
+minimax optimal estimator for the change point. This motivates taking the maximiser of the
+CUSUM statistics as a change point candidate within the local interval (s, e) provided that
+maxs<k<e |Ts,k,e (X)| is large enough.
+A variety of methods adopt Ts,k,e (X) in order to scan the data for change points with a
+method-specific search space S ⊂ I3 := {(s, k, e) : 0 ≤ s < k ≤ n}, which is either fixed,
+random or data-dependent. The construction of the search space aims at isolating change
+points for their detection and localisation: Ideally, for each change point, S contains at least
+one interval which is as large as possible for the detection of even a small change, while
+containing only a single change point for its localisation and thus avoiding the contamination
+by multiple change points (further discussion on this point is found in Section 3.2.1). Once
+candidate change point estimators are identified, it remains to determine the final set of
+estimators which is achieved by a model selection (pruning) methodology, such as thresholding
+or information criteria.
+In Sections 3.2.1–3.2.3, we discuss candidate generation strategies which scan the data us-
+ing Ts,k,e (X) with different search spaces (s, k, e) ∈ S. Then in Section 3.2.4, we describe
+popular model selection methodologies applied to the thus-generated candidate change point
+estimators.
+
+3.2.1   Binary segmentation algorithm and its extensions
+
+Binary segmentation (BS) algorithm [165, 182] is a generic method for multiple change point
+estimation which recursively partitions the data into two. For multiple change point detec-
+tion under (1), it identifies a candidate estimator k1 from scanning the CUSUM statistic
+|T0,k,n (X)|, 1 ≤ k < n, as its maximiser. If the maximum CUSUM (max-CUSUM) statistic
+  max = max                                                                             k1
+T0,n        1≤k<n |T0,k,n (X)| is sufficiently large, the data is partitioned into {Xt }t=1 and
+{Xt }nt=k1 +1 , and the scanning and maximisation of the CUSUM statistics is repeated over each
+partition separately until a stopping criterion is met. The search space of BS is stochastic,
+as the search space at the i-th iteration with i ≥ 2 depends on the change points detected at
+earlier iterations, and its complexity is typically O(n log(n)). Venkatraman [179] established
+the consistency of BS while allowing the number of change points, qn , to diverge with n.
+The CUSUM statistic coincides with the likelihood ratio statistic for testing the null hypoth-
+esis of no change point (H0 : qn = 0) against the AMOC alternative (H1 : qn = 1) under
+i.i.d. Gaussian errors, and thus is particularly well-adopted for the detection and localisation
+
+                                                   10
+      6
+
+
+      4
+
+
+      2
+
+
+      0
+
+
+      −2
+
+                       0     50            100           150            200           250   300
+
+                                                         Index
+
+
+
+
+      10 15 20 25 30
+
+
+      5
+
+      0
+
+                       0     50            100            150           200           250   300
+
+Figure 1: Top: A realisation {Xt }nt=1 from (1) with ft = 2 · It≥141 + 2 · It≥161 , εt ∼iid N (0, 1)
+and n = 300 and the piecewise constant signal ft (bold). Bottom: |T0,k,n (X)|, 1 ≤ k < n
+(solid), and |Tk−G,k,k+G (X)|, k ∈ SM (G) with a boundary correction and G = 15 (broken, see
+Section 3.2.2 for further details), plotted with the vertical dotted lines denoting the locations
+of θj , j = 1, 2.
+
+
+of a single change point. On the other hand, in the presence of multiple change points, BS
+often performs poorly in estimating the locations of the change points as the search space
+may include intervals contaminated by more than one change points. The CUSUM-based test
+still attains good power when applied to such intervals, but the statistic may be unsuitable
+for locating the change points due to this contamination. Figure 1 provides an illustration
+where, while |T0,k,n (X)|, 1 ≤ k < n, attain large values near the two change points, their
+precise locations are not well pointed out by the statistic. In such a situation, procedures
+that aim at isolating each change point for its detection and localisation, such as the moving
+sum procedure (see Section 3.2.2), perform better in locating the change points although they
+tend to lack power by comparison when used solely for testing.
+The wild binary segmentation (WBS) algorithm proposed in Fryzlewicz [74] sets out to remedy
+the limitation of BS by scanning the data over a random grid Rn ⊂ I2 := {(s, e) : 0 ≤ s <
+e ≤ n}, which amounts to examining Ts,k,e (X), (s, k, e) ∈ SW (Rn ) with
+
+                           SW (Rn ) = {(s, k, e) : k = s + 1, . . . , e, (s, e) ∈ Rn } .
+
+As in BS, WBS recursively identifies candidate change point estimators and partitions the
+data into two, but the search is performed over the randomly drawn background intervals and
+thus its computational complexity is determined by the choice of Rn as O(n|Rn |). In order
+
+
+                                                        11
+to ensure that each change point is considered on its own within a large enough interval for
+its detection and estimation, WBS requires that a sufficiently large number of background
+intervals are drawn; more precisely, |Rn | is required to increase as the minimum distance
+between the change points, δn := min1≤j≤qn δj , decreases such that (n/δn )−2 |Rn | → ∞.
+Fryzlewicz [74] refines the theoretical analysis of Venkatraman [179], and shows that WBS
+outperforms BS in terms of both the separation and the localisation rates.
+There exist several modifications and extensions of WBS. Wang et al. [185] consider WBS
+with the lengths of the background intervals in Rn bounded from above by δn , which en-
+sures that each background interval contains a single change point at most, leading to an
+improvement of the localisation rate. Baranowski et al. [23] propose a change point-like
+feature detection method termed the narrowest-over-threshold (NOT) where, at each recur-
+sive iteration, the shortest interval (s, e] over which the associated max-CUSUM statistic,
+maxs<k<e |Ts,k,e (X)|, exceeds a given threshold is selected, rather than the interval returning
+the largest max-CUSUM. Fryzlewicz [76] proposes WBS2, which iteratively draws random in-
+tervals and produces a complete solution path, i.e. an ordered sequence of I1 = {1, . . . , n − 1}
+according to their importance measured by the associated CUSUM statistics. Kovács et al.
+[120] investigate the seeded binary segmentation (SBS), which generates the search grid Rn in
+a deterministic fashion. In Lu et al. [133], a sampling strategy is investigated in combination
+with BS and WBS for handling very large n.
+In all above, the theoretical investigation is focused on the case of uncorrelated data, while
+Cho and Fryzlewicz [44] discuss the usefulness of the WBS-like strategy in separating the
+effects of change points and time series fluctuations in the presence of serial correlations.
+Finally, we mention the circular binary segmentation proposed in Venkatraman and Olshen
+[180] for the analysis of array CGH data, where the test statistics are tailored for detecting
+changes of epidemic nature, where fθ2j+1 = fθ2j+2 +1 for j = 0, . . . , bqn /2c under (1).
+
+3.2.2   Moving sum procedures
+
+The moving sum (MOSUM) procedure has been adopted for simultaneously detecting and
+locating multiple change points [47, 63, 102]. For the canonical segmentation problem it scans
+the data for change points using the statistics Ts,k,e (X) over a fixed grid (s, k, e) ∈ SM (G),
+which is fully determined by the choice of a bandwidth G = Gn as
+
+                SM (G) = {(s, k, e) : s = k − G, e = k + G, k = G, . . . , n − G} .           (8)
+
+The search space is of cardinality |SM (G)| = O(n) since for every time point k, only the local
+interval (s, e) = (k − G, k + G) is considered; we sometimes denote that k ∈ SM (G) where
+there is no confusion. Eichinger and Kirch [63] propose two criteria for the simultaneous
+localisation of the change points whereby each estimator is obtained as a local maximiser of
+|Ts,k,e (X)|, k ∈ SM (G), over a sufficiently large interval relative to G, at which the MOSUM
+
+                                                12
+statistic exceeds a theoretically motivated threshold.
+Messer et al. [140, 141] consider a multiscale extension of the MOSUM procedure with the
+search space
+
+        SM (G) = {(s, k, e) : s = k − Gh , e = k + Gh , k = Gh , . . . , n − Gh ; h = 1, . . . , H}
+
+where G = {G1 , . . . , GH } denotes a set of bandwidths. The screening and ranking procedure
+of Niu and Zhang [144] also adopt a multiscale MOSUM procedure for candidate generation.
+The use of asymmetric bandwidths G = (G` , Gr ) with SM (G) = {(s, k, e) : s = k − G` , e =
+k + Gr , k = G` , . . . , n − Gr } has been investigated by Meier et al. [139]. Cho and Kirch
+[45] propose the following scheme for asymmetric bandwidth selection based on the Fibonacci
+series {Fm } constructed as Fm = Fm−1 + Fm−2 , m ≥ 2 with F0 = F1 = 1: The set of
+asymmetric bandwidths is determined as
+                                                                                                 
+                                                                             max(G` , Gr )
+    Hn =           (G` , Gr ) : G`/r = Gmin · F`/r , 1 ≤ `, r ≤ Hn ,   and                 ≤ Casym ,
+                                                                             min(G` , Gr )
+
+with Hn chosen such that GHn < bn/ log(n)c for some minimum allowable bandwidth Gmin
+and a fixed constant Casym ≥ 1. The latter constant controls the unbalancedness of the
+asymmetric bandwidth (G` , Gr ) such that the computational complexity of the multiscale
+MOSUM procedure involving Ts,k,e (X), (s, k, e) ∈ SM (Hn ) is O(n log(n)).
+The multiscale application of the MOSUM procedure necessitates a pruning procedure for
+the removal of conflicting estimators detected for the identical change points at multiple
+bandwidths, as well as possibly spurious estimators detected at small bandwidths.
+
+3.2.3    Bottom-up and sequential approaches
+
+There exist data segmentation methods that set out to isolate each change point by considering
+the data from finer to coarser scales. Fryzlewicz [75] propose a method based on the tail-
+greedy unbalanced Haar (TGUH) transform, which performs a bottom-up data decomposition
+using the unbalanced Haar wavelet basis. Starting from the finest grid S (0) = {1, 2, . . . , n−1},
+it identifies the regions (defined by the adjacent elements of the grid) to be merged as where
+                                                                               (0)   (0)   (0)   (0)
+the corresponding statistics |Ts,k,e (X)| computed over (s, k, e) = (ki−1 , ki , ki+1 ), ki            ∈ S (0)
+         (`)                    (`)
+(with k0 = 0 and k|S (`) |+1 = n for all ` ≥ 0) are small, and accordingly update the search
+grid. Repeatedly applying the above steps until all |Ts,k,e (X)| are large enough over (s, k, e) =
+  (`)    (`)       (`)    (`)
+(ki−1 , ki , ki+1 ), ki         ∈ S (`) for some `, we obtain an ordering of change point candidates with
+an implicit tree-like structure on which model selection is performed. By greedily selecting
+the regions to be merged, which is managed by a parameter controlling their proportion out of
+the remaining regions, TGUH achieves a computational complexity of O(n log2 (n)). A similar
+idea of bottom-up change point analysis has also been explored in the reverse segmentation
+proposed by Chan and Chen [35], and the backward procedure of Shin et al. [167].
+
+                                                        13
+The pseudo-sequential procedure of Venkatraman [179] adapts an online change point de-
+tection algorithm to the offline data segmentation problem. The Isolate-Detect (IDetect)
+proposed in Anastasiou and Fryzlewicz [4] operates in a similar vein, sequentially searching
+for change points from both ends. More specifically, it scans Ts,k,e (X), (s, k, e) ∈ SL (`, r) ∪
+SR (`, r), where SL (`, r) and SR (`, r) denote the search spaces containing the intervals ex-
+panded from the left to the right, and those expanded from the right to the left, respectively,
+for given 0 ≤ ` < r ≤ n, as
+
+             SL (`, r) = {(s, k, e) : ` = s < k < e ≤ r with e = mλn , m ∈ N} ,
+             SR (`, r) = {(s, k, e) : ` ≤ s < k < e = r with s = n − mλn , m ∈ N} ,
+
+where λn denotes a parameter satisfying λn ≤ δn = min1≤j≤qn δj . Starting with (`, r) = (0, n),
+it iteratively updates (`, r) with the previously detected change point estimators. The choice
+of λn involves balancing between the computational complexity O(n2 λ−1
+                                                                    n ), and the change
+point localisation property (smaller λn providing better guarantee of isolating each change
+point for their detection and localisation).
+
+3.2.4   Model selection
+
+The methods outlined in Sections 3.2.1–3.2.3 produce a set of candidate change point estima-
+tors C from scanning the data at multiple scales; some return a subset of I1 = {1, . . . , n − 1},
+while the others generate a (complete) solution path ordering the elements of I1 according
+to their importance. For the estimation of the total number and the locations of the change
+points, it remains to select the final model from the set of candidate estimators.
+Closely related to the change point testing literature, thresholding is popularly adopted for
+model selection in change point detection. Eichinger and Kirch [63] derive the (distributional)
+limit behaviour of the MOSUM test statistic maxk∈SM (G) |Ts,k,e (X)| under the null hypothesis
+of no change, under general conditions allowing for heavy tails and serial dependence in {εt }
+with the bandwidth G satisfying G → ∞ while G/n → 0; the result is extended for the
+asymmetric MOSUM statistic in Meier et al. [139]. Messer et al. [140, 141] approximate
+the MOSUM statistic by a Gaussian process when G grows linearly with n. With such
+asymptotic null distributions at hand, we can derive a theoretically motivated threshold at a
+chosen significance level and control for the family-wise error rate.
+For methods such as BS, WBS and their extensions, the test statistics associated with change
+point estimators are dependent on the previously detected ones, and thus it is challenging
+to investigate their asymptotic null distributions. Instead, the thresholds are often given by
+a range depending on n, the level of noise and other typically unknown quantities such as
+minj |dj | and minj δj , see [4, 23, 74, 75, 179, 185]. Fang et al. [65] provide a detailed analysis
+of the tail probability of max(s,k,e)∈I3 |Ts,k,e (X)| under i.i.d Gaussianity, which enables the
+
+
+                                                14
+selection of the threshold at a prescribed significance level.
+For a critical value or a threshold to be useful, we need to estimate the level of noise given by
+the error variance σ 2 = Var(εt ) under independence or the long-run variance τ 2 = Var(εt ) +
+2 ∞                                                                                            2
+ P
+    h=1 Cov(ε0 , εh ) when serial dependence is permitted. Several estimators exist for both σ
+and τ 2 under the model (1) [20, 58, 173], but the difficulty associated with the estimation of
+the latter has been well-documented particularly in the presence of multiple change points
+[152], and the former also becomes challenging to estimate when frequent change points are
+present. As a remedy, Fryzlewicz [76] proposes the ‘steepest drop to low levels’ (SDLL) model
+selection methodology applicable with a complete solution path ordering I1 = {1, . . . , n − 1},
+with thresholding adopted as a secondary criterion.
+Information criteria such as those discussed in Section 3.1.1, have frequently been adopted
+for final model selection in combination with the methods belonging to the local testing
+category. Fryzlewicz [74] propose to minimise the strengthened SC, defined in (3) with the
+penalty function pn (A) = log1+ (n) · |A| for some small  > 0, along a solution path {k1 } ⊂
+{k1 , k2 } ⊂ . . . ⊂ {k1 , . . . , kN } ⊂ I1 returned by WBS with some pre-determined N > qn ; the
+subset that minimises the criterion is chosen as the final model. A similar approach is also
+taken by [4, 23, 144].
+Alternatively, Cho and Kirch [45] propose a top-down pruning methodology based on SC,
+                                   b from a set of candidate change point estimators, say C,
+which searches for the final model Θ
+according to the following rules: (i) Adding further estimator to Θ
+                                                                  b monotonically increases
+SC, and (ii) among all subsets satisfying (i), Θ
+                                               b attains the minimal cardinality and (if there
+exist ties) the minimum SC. This approach gains computationally compared to minimising
+the SC exhaustively among all the 2|C| subsets of C, and achieves consistency in multiple
+change point estimation under general assumptions permitting dependence and heavy tails in
+{εt }. A localised version of the pruning method attaining linear complexity is proposed for
+further computational consideration, and it is shown to match the minimax optimal multiscale
+separation and localisation rates when applied to the candidates generated by a multiscale
+MOSUM procedure. Cho and Fryzlewicz [44] explore the top-down approach under a para-
+metric modelling assumption on {εt }, which effectively avoids the difficult task of evaluating
+the information criterion at a model under-specifying the number of change points.
+Messer et al. [140, 141] consider a bottom-up merging method for the multiscale MOSUM
+procedure: Accepting all the estimators from the smallest bandwidth, it proceeds to coarser
+scales and only accepts a change point estimator if its detection interval does not contain any
+estimators that are already accepted. A similar strategy, named the local segmentation, has
+also been considered in Chan and Chen [35], which permits asymmetric bandwidths.
+
+
+
+
+                                               15
+Table 1: Comparison of change point detection methodologies on their detection lower bound
+and the separation and localisation rates derived under i.i.d. (sub-)Gaussianity, where dn =
+min1≤j≤qn |dj | and δn = min1≤j≤qn δj . Also, we provide the computational complexity of
+different methods with N denoting the maximum allowable number of change points where
+relevant, and list their software implementations. The results reported here for BS and WBS
+are taken from [43, 188].
+                          Detection lower bound                 Localisation         Computational
+                           ∆n       Separation rate      wj            Rate            complexity         Implementations
+ `0 -           [73]    minj d2j δj     log(n/δn )       d2j         log(qn )             O(n2 )           [111, 49, 158]
+ penalisation   [185]     d2n δn           log(n)        d2j          log(n)              O(n2 )
+ `1 -           [84]         –                –           1          log2 (n)            O(N 3 +                 –
+ penalisation   [130]        –                –          d2n    log(n) log log(n)      N n log(n))
+ MCPS           [72]      d2n δn        log(n/δn )       d2n          log(n)              O(n2 )             [151, 127]
+                [129]     d2n δn         qn log(n)       d2n        qn log(n)                 –
+                            2         3   −5/2
+ BS             [74]      dn δn      n δn       log(n)   d2n     (n/δn )5 log(n)       O(n log(n))             [111]
+ WBS            [74]      d2n δn     (n/δn )4 log(n)     d2j     (n/δn )4 log(n)        O(n|Rn |)               [5]
+                [185]     d2n δn           log(n)        d2j          log(n)               with
+ NOT            [23]      d2n δn           log(n)        d2j          log(n)        (n/δn )2 /|Rn | → 0
+ MOSUM          [63]      d2n δn        log(n/δn )       d2j         log(qn )              O(n)                [138]
+                [45]    minj d2j δj        log(n)        d2j         log(qn )          O(n log(n))
+                [35]      d2n δn        log(n/δn )       d2j          log(n)           O(n log(n))
+ IDetect        [4]       d2n δn           log(n)        d2j          log(n)            O(n2 /δn )             [5, 3]
+ TGUH           [75]      d2n δn          log2 (n)       d2n         log2 (n)         O(n log2 (n))
+
+
+3.3     An overview of change point detection methodologies
+Table 1 provides a comprehensive overview of change point methodologies discussed in Sec-
+tions 3.1–3.2, which expands upon Table 1 of Cho and Kirch [45]. They are compared on their
+theoretical properties such as how the detection lower bound is formulated, their separation
+and localisation rates under i.i.d. (sub)-Gaussianity (according to Definition 2.1 and (2)) and
+computational complexity, and their software implementations are listed where available.
+
+3.3.1      Numerical performance
+
+We briefly discuss the practical performance of the representative change point methods in
+Table 1, based on the numerical experiments conducted in [45] using their respective imple-
+mentations listed in the table; see also Fearnhead and Rigaill [67] for an extensive comparison
+of data segmentation algorithms based on their numerical performance, and the vignette
+accompanying the R package breakfast [5] comparing various CUSUM-based candidate gen-
+eration and model selection methods.
+We emphasize that different algorithms excel at different performance criteria, and their
+performance vary with different test signals. For instance, dynamic programming algorithms
+for minimising the `0 -penalised cost functions, such as [110] and [135] (implemented in [111]
+and [158], respectively), take a fraction of a second in processing long data sequences (n ≥
+2 × 104 ), followed by the multiscale MOSUM procedure with bottom-up merging [35, 140];
+the SDLL model selection method of [76] is well-suited to detect a large number of frequent
+
+
+                                                               16
+change points; FDRseg [128] shows favourable performance for relatively short test signals;
+TGUH [75] tends to incur few false positives even when change points are sparse while n
+is large. Between those methods that employ information criteria for model selection, the
+localised pruning proposed in [45] outperforms the sequential minimisation along the solution
+path considered in [74] in terms of correctly estimating the number of change points. Overall,
+the localised pruning methodology shows well-rounded performance in combination of either
+MOSUM- or CUSUM-based candidate generating procedures on a variety of test signals with
+both sparse and dense change points.
+These observations apply to the case of i.i.d. Gaussian errors. Most of the methods considered
+above are not easily extended to cope with heavy-tailed or serially correlated {εt }, as their
+tuning parameters are specifically tailored for the i.i.d. (sub-)Gaussian setting. The localised
+pruning, on the other hand, provides a framework for selecting a theoretically-motivated
+penalty in the SC that is well-justified in the numerical experiments where {εt } are generated
+as i.i.d. random variables following t5 -distributions, or AR(1) processes with both strong and
+weak autocorrelations.
+
+3.4   Inference for the multiple change point problem
+In this section, we review the literature on inference for multiple change points in the context
+of the canonical segmentation problem. For a review of the literature in the case of a single
+change point, see Jandhyala et al. [106].
+In order to quantify the uncertainty in the detection of multiple change points, MCPS methods
+(see Section 3.1.3) such as SMUCE [72] and FDRseg [128] allow for controlling the probabil-
+ity of over-estimating the number of change points in terms of family-wise error rate or false
+discovery rate. Eichinger and Kirch [63] provide the asymptotic null distribution of the test
+statistic of the single-scale MOSUM procedure, namely that of max(s,k,e)∈SM (G) |Ts,k,e (X)|
+(see (8)) when there is no change point present, under general assumptions permitting heavy
+tails and serial dependence in {εt }. Using this distribution, we can test whether or not there
+exists a mean shift within the G-environment at each time point k, where the thus-obtained p-
+value controls the family-wise error rate by construction. There also exist resampling methods
+for change point tests in the i.i.d. setting which generate better small sample approximations
+of the p-values, see Antoch and Hušková [8] and also Hušková [94] for a survey. For the
+case of i.i.d. Gaussian errors, Fang et al. [65] give the approximation of the tail probabil-
+ity of max0≤s<k<e≤n |Ts,k,e (X)| (maximum of the CUSUM statistics over all possible triplets
+(s, k, e)) under the null hypothesis of no change points, which in turn provides an approxi-
+mation of the probability of a false positive error.
+Post-selection inference methods exist for the change point problem when {εt } are i.i.d. Gaus-
+sian, where the interest lies in testing for the equality of the mean around estimated change
+point locations conditional on their estimation process, see e.g. Hyun et al. [104] and Jew-
+
+
+                                               17
+ell et al. [107]. Thanks to the conditioning sets being polyhedral in the case of BS and its
+variants, or via efficient characterisation of the conditioning set afforded by the functional
+pruning technique [135] for minimising the `0 -penalised objective functions (Section 3.1.1),
+the corresponding p-values can be computed from truncated normal distributions; however,
+their interpretation is involved and this approach requires further correction for multiple test-
+ing. Fryzlewicz [77] considers an alternative framework called post-inference selection under
+which the interest lies in identifying intervals containing at least one change points at a given
+global significance level without locating them.
+In a more classical sense, there are also a few methods for quantifying the uncertainty about
+the locations of change points. Eichinger and Kirch [63] derive the asymptotic distribution of
+the MOSUM-based change point estimators in the case of local changes (i.e. dj → 0), and Cho
+and Kirch [46] show that the corresponding limit for the fixed change case (i.e. dj constant)
+depends on the unknown distribution of {εt }, extending similar observations made in the
+AMOC setting for CUSUM-based estimators [7, 9]. This motivates constructing bootstrap
+confidence intervals around change points, as proposed by [7, 9] in the case of i.i.d. errors
+and by [96, 97] in time series settings, all for the AMOC problem. Meier et al. [139] outline
+the bootstrap construction of pointwise and uniform confidence intervals for multiple change
+points based on the MOSUM procedure, and Cho and Kirch [46] show its theoretical validity
+for both local and fixed changes in the presence of i.i.d. (not necessarily Gaussian) {εt }.
+In addition, MCPS [72, 128] provide a confidence set for all candidate signals from which
+confidence intervals around the change points can be obtained. Using the inverse relation
+between confidence intervals and hypothesis tests, [65] describe how approximate confidence
+regions can be generated.
+
+
+4    Extensions to more complex problems
+In this section, we discuss several avenues for extending the methodologies from Section 3
+to more complex change point problems beyond that of detecting change points in the mean
+of univariate data sequence under (1), which include high-dimensional change point analysis.
+While some literature in these directions already exists, it is far scarcer than the literature
+on the canonical data segmentation problem. We argue that a thorough understanding on
+theoretical and computational performance of different data segmentation methods for the
+simpler problem in the univariate setting, forms the basis for the methodological development
+in more complex situations.
+In Section 4.1, we discuss that many tests for changes in the stochastic properties other than
+the mean (mostly in the AMOC scenario), are closely related to those proposed for detecting
+a change in the mean of univariate data. Therefore, data segmentation algorithms that have
+proven useful for the canonical segmentation problem can be adapted for complex change
+
+
+
+                                               18
+point detection problems in combination with such tests. These combined methodologies are
+expected to deliver satisfactory or even optimal performance, although they require more
+sophisticated mathematical analysis which in turn necessitates an in-depth understanding of
+both parts to be combined.
+In Section 4.2, we give a brief overview of the state-of-the-art methodologies for high-dimensional
+change point problems. Focusing on the problem of change point detection in the mean of
+high-dimensional panel data, we show that the challenges in dealing with high dimensionality
+are orthogonal to those arising from the presence of multiple change points.
+
+4.1   Extensions beyond detecting mean changes under Gaussianity
+First we provide a brief review of the existing literature on the detection of multiple change
+points in stochastic properties other than the mean, in univariate or multivariate data se-
+quences. Under parametric models for linear and non-linear time series, `0 - [17, 53, 54] and
+`1 -penalisation [26, 36] methods, the MOSUM procedure based on likelihood ratio statistic
+[193] and BS [78] have been adopted for detecting change points in the parameters that vary
+over time in a piecewise constant manner. Data segmentation under piecewise polynomial
+(mostly linear) models have been addressed in [23, 69, 134, 175], also adopting the algorithms
+discussed in Section 3. For nonparametric change point analysis, BS [137], WBS [147] and
+`0 -penalisation [12, 80, 196] have been combined with various methods for measuring distri-
+butional changes, and some computational efforts have been made to improve the dynamic
+programming algorithms for the methods in the latter category [33, 86]. In the time series
+setting, methods based on local periodograms [154] and wavelet transform [41] have been
+developed in combination with the MOSUM procedure and BS, respectively.
+As seen in the above, data segmentation problems beyond that of mean change point detection
+require a methodology appropriate for revealing and measuring the time-varying characteris-
+tics of the data, which is of separate concern from handling multiple change points. We can
+tackle complex data segmentation problems by combining suitable methodologies addressing
+the two different aspects. This in turn requires an in-depth understanding of both strengths
+and weaknesses of the procedures for the canonical data segmentation problem as discussed
+in Section 3, in addition to understanding how extensions beyond detecting mean changes are
+achieved. We will use the remainder of this section to focus on the latter aspect and provide
+a short overview of the techniques developed mainly in the AMOC setting.
+The effective dimensionality of data segmentation problems is given by the number of un-
+known parameters such that even for univariate observations, the effective dimensionality of
+a given problem can be large, see e.g. Kirch and Kamgaing [113] for an example for testing
+for parameter stability in non-linear autoregressive models by means of a semiparametric
+approach based on neural networks, which involves a large number of parameters. To make
+the problem even more difficult, statistics for revealing changes (e.g. obtained after a suitable
+
+
+                                               19
+data transformation) are often not independent even if the observed data is. Bücher et al. [32]
+consider a test for detecting changes in the serial dependence using a copula approach, and
+discuss how the result from such a test can be combined with those from change point tests
+for distributional changes (all based on resampling methodology) even though these tests are
+dependent. Kirch et al. [116] describe in detail how testing for changes in moderately large
+linear vector autoregressive processes becomes a high-dimensional problem, and provide dis-
+cussions on how to resolve the complications arising from the high dimensionality. This shows
+that techniques for high-dimensional change point analysis as discussed later in Section 4.2,
+are also of relevance for data segmentation under complex time series models.
+
+Data transformation
+
+Some complex change point problems can be reduced to that of detecting changes in the
+mean by adopting a suitable data transformation where typically, the dimensionality of the
+transformed data is larger (sometimes much larger) than that of the original observation
+sequence. For example, the problem of detecting changes in the covariance of p-dimensional
+data Xt = (X1t , . . . , Xpt )> (under the assumption of a constant mean), can be transformed
+to that of detecting changes in the mean of p(p + 1)/2-dimensional data by considering the
+vector consisting of cross-products, i.e. Xt = (Xit Xjt : 1 ≤ i ≤ j ≤ p)> . Clearly, the effective
+dimensionality is quadratic in the dimension of the original data. Also, the components
+of Xt are not independent and the dependence is not negligible. Such a transformation
+has been adopted for change point analysis in the covariance structure of multivariate [16],
+functional [170] and high-dimensional [169] data, and Cho and Fryzlewicz [42] propose a
+similarly motivated wavelet transform for the segmentation of high-dimensional time series
+in the second-order structure.
+
+Generalised method of moments
+
+The above approach is applicable only if the parameters of interest, which are subject to
+change over time, can be expressed as the expected values of an appropriately transformed
+data, i.e. as some moments. For most parametric models, however, this is not the case. For
+example, suppose that {Xt } follows a (centered) linear AR model of order one, i.e.
+
+                      Xt = αXt−1 + et ,    et ∼ WN(0, σ 2 ),   t = 1, . . . , n.              (9)
+
+Then, the AR parameter α cannot be written as any moment after a simple data transforma-
+tion. However, it can be written as a generalised moment, namely the quotient E(Xt Xt−1 )/E(Xt2 ),
+as given by the well-known Yule-Walker equation and moreover, can be estimated (locally)
+from the data by using the method of moments. This observation gives rise to the following
+two approaches for change point analysis.
+
+
+                                               20
+The Wald approach compares directly the distance between the estimators obtained from
+different stretches of the data: At location k, we evaluate d(βb0:k , βbk:n ) where d is some measure
+of distance, and βba:b denotes the estimator for the parameter of interest β obtained from
+the data stretch {Xt , a < t ≤ b}. The Wald approach leads to good performance if the
+parameters are identifiable and the local estimators can be obtained without resorting to
+numerical algorithms. On the other hand, its application may not be appropriate when there
+exist many (local) optima of the objective function for parameter estimation. Such a situation
+arises e.g. for neural networks, where different parameters describing the same or very similar
+regression functions might be far from each other in the parameter space. Further, this is
+particularly problematic if the estimators can only be obtained numerically. Even when the
+objective function does not have multiple local maxima, if it is relatively flat around the
+true parameter, it can be misleading to gauge the distance between the estimators of the
+parameters instead of the processes that they describe.
+A score-type approach is more robust in this respect and is closely related to the CUSUM
+statistic described in Section 3.2. In contrast to simple data transformations as described
+previously, the transformations adopted in the score-type approach often involve the (local)
+parameter estimators. Let us illustrate this by re-visiting the example of a linear AR(1) time
+series (9) in the AMOC situation, where the score-type statistic is given by
+
+                                         k
+                               1        X
+                              √ max         Xt−1 (Xt − α
+                                                       b0:n Xt−1 ) ,                            (10)
+                                n 2≤k<n t=2
+
+where α
+      b0:n denotes an estimator of the AR parameter based on the full data set. Some
+authors suggest to use partial sums of estimated residuals; however, the thus-constructed
+test has power only against some alternatives, namely those leading to changes in the mean
+of estimated residuals (see e.g. [116]). The statistic in (10) bears clear resemblance to the
+CUSUM statistic for mean change detection (written below with slightly different location-
+dependent weights from Section 3.2 for better comparison):
+
+                                              k
+                                    1        X
+                                   √ max         (Xt − X̄0:n ) .
+                                     n 1≤k<n t=1
+
+Here, X̄0:n can be regarded as an estimator of the unknown mean based on the full sample,
+analogously to α
+               b0:n being the global estimator of α.
+There are many other examples where the score-type statistics are adopted for change point
+analysis, including the tests based on likelihood ratio or classical M -estimators (see the next
+subsection on robust change point analysis) and those for changes in linear (auto)regression
+[103, 116], integer-valued time series such as Poisson autoregressive processes [112] and even
+regression models based on neural networks [113]. In all of the above, the test statistics are
+
+
+
+                                                 21
+based on partial sums
+
+                             k                             n
+                   1        X                              X
+                  √ max         F (Yt , βb0:n )    where         F (Yt , βb0:n ) = 0,
+                    n 1≤k<n t=1                            t=1
+
+
+where F is a suitable estimating function and βb0:n the global estimator based on the full sample
+from this estimating function. The norm k · k often involves the unknown covariance matrix
+of F (Yt , β) or an appropriate estimator thereof. In many instances, Yt is not the original
+observation sequence; e.g. in the above AR(1) example, Yt contains lagged observations. This
+shows that effectively, one is looking for mean changes in the pseudo-data F (Yt , βb0:n ), whose
+dimension is equal to the number of unknown parameters. For linear models, the Wald and
+the score-type statistics are equivalent in the AMOC setting, see Kirch and Kamgaing [112].
+In non-linear situations, this does not hold in small samples but does so asymptotically in
+well-behaved situations.
+The Wald approach can be extended to multiple change point detection e.g. in combination
+with the MOSUM procedure by comparing the distance between local estimators over moving
+windows. Alternatively, the corresponding moving sum score statistic with a local estimator
+can be used. However, both suffer from the problem of having to calculate O(n) local es-
+timators which, as noted above, brings in further numerical challenges when there does not
+exist an analytic solution to the estimating function. Using a slightly modified score-type
+statistic replacing the local estimator with a global inspection parameter, say βe (which may
+be data-dependent), alleviates this issue but typically, there is no guarantee that all changes
+are detectable as changes in the mean of F (Yt , eβ). Reckrühm [155] shows that even so, at
+least one change is made detectable therein, which naturally leads to adopting several of such
+inspection parameters. Some first results have been obtained by Reckrühm [155] and Kirch
+and Reckrühm [115], on the combined methodology of the MOSUM procedure and the use of
+estimating functions for the detection of multiple change points in general settings.
+
+Robust change point analysis
+
+The framework of generalised method of moments also prominently includes robust tests for
+changes in the mean or regression parameters (often known as M -estimation in this context).
+Selecting a suitable estimating function F (related to what is known as a score function),
+one can obtain not only more robust estimators of the parameters of interest but also more
+robust methods to test for their changes. For example, under the mean change model as
+in (1) with qn ≤ 1, choosing F (X, β) = I{X>β} − I{X<β} (with β corresponding to f0 = E(Xt )
+when there exists no change point) results in βb0:n that coincides with the median where
+Pn
+   t=1 F (Xt , β0:n ) = 0. Such an approach is also known as L1 -procedure and discussed e.g. in
+               b
+Hušková [91] for detecting changes in linear regression. Theoretical investigation into change
+point detection procedures based on M -estimation can be found in [6, 91, 92, 93, 101] under
+
+                                                  22
+the i.i.d. assumption, and in [98, 153] for dependent data. A more detailed survey of the
+literature on this topic, including references on a-posteriori as well as sequential change point
+testing, is given in [95]. The paper includes some discussions on rank-based tests as well,
+which is an alternative approach to achieve robustness in change point testing. One such an
+example is the generalisation of the Wilcoxon rank sum test to the change point setting which
+is a special case of a (non-degenerate) U -statistic. U -statistics are adopted for the estimation
+of a range of different parameters far beyond the mean, and also used in testing for the
+stability of the corresponding parameters. Importantly, they involve a data transformation
+that translates the problem at hand into that of mean change point testing. To elaborate, the
+Hoeffding decomposition is an important tool to prove asymptotic results for U -statistics and
+shows equality between the original statistic and a sum of i.i.d. random variables (obtained
+from the Hajék projection) plus an asymptotically negligible remainder. Change point tests
+based on U -statistics were first proposed in the i.i.d. setting [50, 70, 81] and then generalised
+to weakly [57] and even long-range dependent data [29, 56]. Extensions based on U -quantiles
+are also available [55, 181]. Some first results for the data segmentation problem based on U -
+statistics already exist [59, 146], and Fearnhead and Rigaill [67] investigate the minimisation
+of penalised costs based on M -estimation via dynamic programming for change point analysis
+in the presence of outliers.
+
+Asymptotic embeddings
+
+Another extension is based on asymptotic results for partial sum processes such as functional
+central limit theorems or (strong) invariance principles [28, 82, 87, 117, 118, 121, 168]. Most
+importantly, such results enable the investigation into change point analysis of stochastic
+processes including multivariate Wiener processes with drift, renewal processes or integrated
+diffusion processes. A univariate version of such a model was introduced by Horváth and
+Steinebach [90] for change point testing against the AMOC alternative, and has been extended
+to multiple change point problems in Kühn [122] where the consistency is established for the
+estimator of the number of change points based on the SC described in Section 3.1.1. For
+the specific example of univariate renewal processes, Messer et al. [141] propose a multiscale
+MOSUM procedure with bandwidths linear in sample size (see Sections 3.2.2 and 3.2.4).
+Kirch and Klein [114] investigate a MOSUM procedure in the general multivariate framework
+adopting both linear and sub-linear bandwidths and derive localisation rates for the change
+point estimators that are shown to be minimax optimal when there are a finite number of
+change points; when there are an unbounded number of change points, this remains to be valid
+for Wiener processes with drift. Beyond such settings, minimax optimality in the localisation
+rate has not been established to the best of our knowledge (see also Section 2).
+
+
+
+
+                                               23
+Nonparametric change point analysis
+
+Truly nonparametric change point tests do not have obvious connections to the canonical mean
+change point detection problem. These tests often involve appropriately weighted integrals
+over differences of the estimators of the nonparametric quantity of interest, such as those based
+on functionals of two-sample rank-based test statistics [191], empirical characteristic function
+[99, 100], and kernel estimators of nonparametric conditional mean functions [142] among
+others. In principle, local test methods for the canonical data segmentation problem discussed
+in Section 3.2, such as (W)BS or the MOSUM procedure, can be adapted to accommodate
+such tests, since they are based on localised applications of tests designed for the AMOC
+setting. Application of the global optimisation approaches to nonparametric settings is more
+involved, although some attempts exist [196].
+
+4.2   High-dimensional change point analysis
+Recent years have seen a surge of interest in the development of change point methodologies for
+high-dimensional data including functional and panel data and networks, with many papers
+addressing the problem of change point testing in the mean of panel data, see e.g. Sections 7
+and 8 of the review paper by Horváth and Rice [89]. In this section, our aim is to show that
+the challenge due to high dimensionality of the data is orthogonal to that due to the presence
+of multiple change points in the following sense:
+
+  (i) As argued in Section 2, the goal of the canonical data segmentation problem is to achieve
+      consistency in multiple change point detection even in difficult situations arising from
+      the multiscale nature of the change points (see Definition 2.1 (a)). In particular, the
+      interplay between the spacing between change points, δj = min(θj − θj−1 , θj+1 − θj ),
+      and the magnitude of changes, |dj |, in their detectability is well-understood under (1).
+      Accordingly, the methodological challenge lies in isolating each change point within an
+      interval that is long enough for its detection and localisation.
+
+ (ii) In high-dimensional change point problems, the main question is how to boost the signal
+      (on each change) across large dimensions. Adopting a minimax-viewpoint, this is closely
+      related to the choice of the norm adopted for measuring the cross-sectional size of the
+      change, which is highly relevant in high-dimensional settings since, unlike in univariate
+      or even multivariate situations, standard norms are no longer equivalent.
+
+Clearly, these two aspects, multiple change point detection and high-dimensional change point
+analysis, merit separate attention when developing a methodology that is most suitable for the
+problem at hand. There already exist papers addressing the problem of multiple change point
+detection in high-dimensional settings through combining the data segmentation algorithms
+for the canonical data segmentation problem with methods for cross-sectional aggregation of
+information on changes. We provide an incomplete review of the literature below.
+
+                                               24
+The application of the BS algorithm has been investigated in panel data segmentation prob-
+lems based on first- [40] and second-order [42] properties, as well as under a factor model
+[24]. The WBS algorithm has been adopted for multiple change point detection in the mean
+[188] and the covariance [186] of high-dimensional panel data in combination with data-
+driven projections, and also adopted in regression settings [183]. Chu and Chen [48] and
+Liu and Chen [132] propose graph-based change point tests for non-Euclidean and possibly
+high-dimensional data, and the latter paper heuristically discusses their extensions to data
+segmentation problems in combination with BS and WBS. Chen et al. [39] adopt the MOSUM
+procedure for panel data segmentation in the mean, and a MOSUM-type screening strategy
+has also been adopted in Zhao et al. [195] for change point detection in dynamic networks. The
+`0 -penalisation method has been adopted in parametric settings such as regression [109, 126]
+and vector autoregressive [184] models and the `1 -penalisation method, together with an in-
+formation criterion-based model selection, has been applied to high-dimensional time series
+segmentation under vector autoregressive models [22, 163].
+We further elaborate on the issue discussed in (ii) above by focusing on the problem that has
+seen the most development, namely the problem of detecting changes in the mean of panel
+data under the following model:
+                                      qn
+                                      X
+            Xit = fit + εit = fi0 +         dij · It≥θj +1 + εit ,   i = 1, . . . , p, t = 1, . . . , n.   (11)
+                                      j=1
+
+
+It extends the canonical model (1) to the panel data setting with the vector dj = (dij , . . . , dp )>
+denoting the change in the mean of Xt = (X1t , . . . , Xpt )> at t = θj , and εt = (ε1t , . . . , εpt )>
+is assumed to satisfy E(εt ) = 0 and Cov(εt ) = Σ. Unlike in the multivariate setting, the
+dimensionality of the data p = pn depends on the sample size n and is even allowed to
+increase faster than n.
+Detectability of a change point depends on the magnitude of the corresponding change, and
+selecting a norm for measuring the magnitude of dj effectively corresponds to modelling
+the (cross-sectional) type of a change for which the proposed change point methodology is
+particularly tailored. High-dimensional efficiency of change point tests, as proposed in Aston
+and Kirch [14], relates to the separation rate between detectable and undetectable changes.
+The norms associated with the high-dimensional efficiency of different methods proposed in
+the existing literature indeed vary: Methods designed for detecting sparse changes (where
+kdj k0 := pi=1 I|dij |>0  p) such as those proposed in Jirak [108], Cho and Fryzlewicz [42],
+          P
+
+Wang and Samworth [188], Chen et al. [39] and the scan statistic of Enikeeva and Harchaoui
+                                                                          p
+[64], are associated with the `∞ -norm (sometimes implicitly so via kdj k/ kdj k0 ), while the
+methods from Horváth and Hušková [88], Wang et al. [187] and the linear statistic of Enikeeva
+and Harchaoui [64] are associated with the `2 -norm, see Table 2 for a summary which extends
+Table 1 of Cho [40].
+
+
+                                                      25
+Table 2: Comparison of high-dimensional change point detection methods for the problem (11)
+on their high-dimensional efficiency [14] when qn = 1, min(θ1 , n−θ1 ) ≥ cn for some c ∈ (0, 1/2]
+and Σ is diagonal with all the variances of the same order, i.e. 0 < σmin2                  2
+                                                                             ≤ Var(εit ) ≤ σmax <
+∞ for all i = 1, . . . , p. The efficiency, denoted by E(d1 ), indicates that the corresponding
+                                            √
+procedure has asymptotic power one if nE(d1 ) → ∞. By Ln,p , we denote a term logarithmic
+in n and/or p which varies from one instance to another.
+           [14]: oracle           kd1 k        [14]: random            p−1/2 kd1 k
+                                 −1/4 kd1 k                           L−1
+           [88, 187]           p               [42, 108, 39]            n,p kd1 k∞
+           [64]: linear (p Ln,p ) kd1 k [64]: scan, [188] (kd1 k0 Ln,p )−1/2 kd1 k
+                             1/4       −1
+
+
+
+Minimax optimality is also linked to the choice of norm, in the sense that minimax optimality
+of a given procedure with respect to a norm indicates that the procedure is optimal in the worst
+possible case defined by that particular norm. On the other hand, this does not provide much
+information as to how the procedure performs in the worst case scenarios defined with different
+norms. For example, the test proposed by Horváth and Hušková [88] is minimax optimal with
+respect to the `2 -norm, when the panel is spatially independent and all variances are of the
+same order (in the sense described in Table 2), see the discussion below Theorem 2.1 of [14].
+The test statistic proposed therein increases the signal-to-noise ratio (while controlling for the
+size) by summing up squared change point statistics; as more cross-sectional components are
+considered, the signal increases according to the squared `2 -norm, i.e. linear in the number
+                                                                  √
+of components with a change, whereas the noise only increases as p due to the central limit
+theorem applicable under the spatial independence assumption. However, it does not adapt
+to the sparsity of change or match the minimax optimal rate with respect to the `∞ -norm; we
+refer to Liu et al. [131] where the authors show the presence of a phase transition boundary for
+the sparsity in the minimax rate of the high-dimensional change testing problem under (11)
+(i.e. qn ≤ 1).
+The difficulty in high-dimensional data analysis is that spurious low-dimensional signals ap-
+pear simply by chance, another flavour of the curse of dimensionality which needs to be
+accounted for in any data science problem. Under (11) with a single change point, the direc-
+tion of a change, d1 , is a one-dimensional object such that the projection of Xt with respect
+to the ‘oracle’ projection vector po = Σ−1 d1 yields the optimal signal-to-noise ratio, see
+Proposition 3.3 of [14]. In practice, however, neither d1 nor Σ are known, and maximising
+over all possible projections p ∈ Rp will lead to too large a noise level due to the above
+observation. Random projections (independent of the data) have been considered as an al-
+ternative, see Steland [169] addressing the problem of change point testing in the covariance
+structure. However, this is at the cost of the loss of detection power as illustrated by the high-
+dimensional efficiency of such random projections, see Table 2 which shows that a random
+projection is a magnitude of p−1/2 worse than oracle efficiency when Σ is a diagonal matrix,
+and also Theorem 3.5 of [14].
+Data-driven projections such as those proposed in [39, 42, 64, 188] can keep the increased noise
+
+                                               26
+level at bay, by effectively working under the sparsity assumption on dj and consequently
+considering only a subset of all possible projections. This comes at the cost of decreased
+high-dimensional efficiency when the sparsity assumption is not met, compared to the oracle
+projection with respect to po or the `2 -norm minimax optimal procedures such as [88, 187].
+Compared to the panel data setting, change point analysis in functional data is benefited by
+the additional structure implied by the assumption of observing a random function, which
+helps lifting part of the curse of dimensionality. Some approaches [13, 27] to the problem of
+detecting changes in the mean function are based on dimension reduction e.g. via functional
+principal component analysis. Another line of research proposes ‘fully functional’ procedures
+[18, 166] in the sense that they do not employ any dimension reduction. Stoehr et al. [170]
+propose a compromise between the two approaches in the context of change point detection
+in the covariance structure.
+
+
+5    Conclusions
+In this paper, we first review and compare different approaches to the canonical segmentation
+problem where the aim is to estimate the number and the locations of multiple change points
+in the mean of univariate data. In Section 3.3, we provide an overview of representative
+methodologies comparing them according to the theoretical framework given in Section 2, and
+briefly comment on their numerical performance based on comparative simulation studies on
+a range of test signals.
+In the second part of the paper, we give a survey on topics such as change point analysis
+beyond the detection of mean changes under Gaussianity (Section 4.1), and high-dimensional
+change point analysis (Section 4.2). In Section 4.1, we argue that change point tests de-
+veloped for more complex problems are closely related to the mean change point problem
+and make the connection transparent. As discussed in Section 2, some of the methods for
+the canonical data segmentation problem are based on localised applications of the tests for
+the AMOC alternative, and thus can be applied to more complex change point problems in
+combination with corresponding tests. Clearly, theoretical underpinnings of the combined
+methodology depend on those of the individual components. In Section 4.2, we show that in
+high-dimensional change point analysis, challenges arising from the high dimensionality are
+orthogonal to those arising from the presence of multiple change points and, based on in-
+depth understanding of the component problems, methods addressing individual aspects can
+be combined to best address the given problems. Finally, combining the elements from the
+three fields opens up a new avenue for future research, namely the development of statistical
+methodologies for complex, high-dimensional data segmentation problems.
+
+
+
+
+                                             27
+References
+ [1] Niall M Adams and Nicholas Heard. Dynamic Networks and Cyber-security, volume 1. World
+     Scientific, 2016.
+ [2] Samaneh Aminikhanghahi and Diane J Cook. A survey of methods for time series change point
+     detection. Knowledge and Information Systems, 51:339–367, 2017.
+ [3] Andreas Anastasiou and Piotr Fryzlewicz. IDetect: Detecting multiple generalized change-points
+     by isolating single ones, 2018. URL https://CRAN.R-project.org/package=IDetect. R pack-
+     age version 1.0.
+ [4] Andreas Anastasiou and Piotr Fryzlewicz. Detecting multiple generalized change-points by
+     isolating single ones. Metrika, pages 1–34, 2021.
+ [5] Andreas Anastasiou, Yining Chen, Haeran Cho, and Piotr Fryzlewicz. breakfast: Methods for
+     Fast Multiple Change-Point Detection and Estimation, 2021. URL https://CRAN.R-project.
+     org/package=breakfast. R package version 2.2.
+ [6] Jaromı́r Antoch and Marie Hušková. Procedures for the detection of multiple changes in series
+     of independent observations. In Asymptotic Statistics, pages 3–20. Springer, 1994.
+ [7] Jaromir Antoch and Marie Hušková. Estimators of changes. In Asymptotics, Nonparametrics,
+     and Time Series, pages 557–561. CRC Press, 1999.
+ [8] Jaromır Antoch and Marie Hušková. Permutation tests in change point analysis. Statistics &
+     Probability Letters, 53(1):37–46, 2001.
+ [9] Jaromir Antoch, Marie Hušková, and Noël Veraverbeke. Change-point problem and bootstrap.
+     Journal of Nonparametric Statistics, 5(2):123–144, 1995.
+[10] Ery Arias-Castro, Emmanuel J Candes, and Arnaud Durand. Detection of an anomalous cluster
+     in a network. The Annals of Statistics, 39:278–304, 2011.
+[11] Sylvain Arlot and Alain Celisse. Segmentation of the mean of heteroscedastic data via cross-
+     validation. Statistics and Computing, 21(4):613–632, 2011.
+[12] Sylvain Arlot, Alain Celisse, and Zaid Harchaoui. A kernel multiple change-point algorithm via
+     model selection. Journal of Machine Learning Research, 20(162), 2019.
+[13] John AD Aston and Claudia Kirch. Detecting and estimating changes in dependent functional
+     data. Journal of Multivariate Analysis, 109:204–220, 2012.
+[14] John AD Aston and Claudia Kirch. High dimensional efficiency with applications to change
+     point tests. Electronic Journal of Statistics, 12:1901–1947, 2018.
+[15] Alexander Aue and Lajos Horváth. Structural breaks in time series. Journal of Time Series
+     Analysis, 34:1–16, 2013.
+[16] Alexander Aue, Siegfried Hörmann, Lajos Horváth, and Matthew Reimherr. Break detection
+     in the covariance structure of multivariate time series models. The Annals of Statistics, 37:
+     4046–4087, 2009.
+[17] Alexander Aue, Rex CY Cheung, Thomas CM Lee, and Ming Zhong. Segmented model selection
+     in quantile regression using the minimum description length principle. Journal of the American
+     Statistical Association, 109:1241–1256, 2014.
+[18] Alexander Aue, Gregory Rice, and Ozan Sönmez. Detecting and dating structural breaks in
+     functional data without dimension reduction. Journal of the Royal Statistical Society, Series B,
+     80:509–529, 2018.
+[19] Ivan E Auger and Charles E Lawrence. Algorithms for the optimal identification of segment
+     neighborhoods. Bulletin of Mathematical Biology, 51:39–54, 1989.
+[20] Ieva Axt and Roland Fried. On variance estimation under shifts in the mean. ASta Advanced
+     in Statistical Analysis, 104:417–457, 2020.
+[21] Jushan Bai and Pierre Perron. Estimating and testing linear models with multiple structural
+     changes. Econometrica, pages 47–78, 1998.
+[22] Peiliang Bai, Abolfazl Safikhani, and George Michailidis. Multiple change points detection in low
+     rank and sparse high dimensional vector autoregressive models. IEEE Transactions on Signal
+     Processing, 68:3074–3089, 2020.
+[23] Rafal Baranowski, Yining Chen, and Piotr Fryzlewicz. Narrowest-over-threshold detection of
+
+
+                                                 28
+     multiple change-points and change-point-like features. Journal of the Royal Statistical Society,
+     Series B, 81:649–672, 2019.
+[24] Matteo Barigozzi, Haeran Cho, and Piotr Fryzlewicz. Simultaneous multiple change-point and
+     factor analysis for high-dimensional time series. Journal of Econometrics, 206:187–225, 2018.
+[25] Daniel Barry and John A Hartigan. A Bayesian analysis for change point problems. Journal of
+     the American Statistical Association, 88:309–319, 1993.
+[26] Simon Behrendt and Karsten Schweikert. A note on adaptive group Lasso for structural break
+     time series. Econometrics and Statistics, 17:156–172, 2021.
+[27] István Berkes, Robertas Gabrys, Lajos Horváth, and Piotr Kokoszka. Detecting changes in the
+     mean of functional observations. Journal of the Royal Statistical Society, Series B, 71:927–946,
+     2009.
+[28] István Berkes, Weidong Liu, and Wei Biao Wu. Komlós–Major–Tusnády approximation under
+     dependence. The Annals of Probability, 42:794–817, 2014.
+[29] Annika Betken. Testing for change-points in long-range dependent time series by means of a
+     self-normalized wilcoxon test. Journal of Time Series Analysis, 37(6):785–809, 2016.
+[30] Leif Boysen, Angela Kempe, Volkmar Liebscher, Axel Munk, and Olaf Wittich. Consistencies
+     and rates of convergence of jump-penalized least squares estimators. The Annals of Statistics,
+     37:157–183, 2009.
+[31] B. E. Brodsky and B. S. Darkhovsky. Nonparametric Statistical Diagnosis: Problems and Meth-
+     ods, volume 509. Springer Science & Business Media, 2000.
+[32] Axel Bücher, Jean-David Fermanian, and Ivan Kojadinovic. Combining cumulative sum change-
+     point detection tests for assessing the stationarity of univariate time series. Journal of Time
+     Series Analysis, 40(1):124–150, 2019.
+[33] Alain Celisse, Guillemette Marot, Morgane Pierre-Jean, and GJ Rigaill. New efficient algorithms
+     for multiple change-point detection with reproducing kernels. Computational Statistics & Data
+     Analysis, 128:200–220, 2018.
+[34] Souhil Chakar, E Lebarbier, Céline Lévy-Leduc, and Stéphane Robin. A robust approach for
+     estimating change-points in the mean of an AR(1) process. Bernoulli, 23(2):1408–1447, 2017.
+[35] Hock Peng Chan and Hao Chen. Multi-sequence segmentation via score and higher-criticism
+     tests. arXiv preprint, arXiv:1706.07586, 2017.
+[36] Ngai Hang Chan, Chun Yip Yau, and Rong-Mao Zhang. Group Lasso for structural break time
+     series. Journal of the American Statistical Association, 109:590–599, 2014.
+[37] Jiahua Chen, AK Gupta, and Jianmin Pan. Information criterion and change point problem for
+     regular models. Sankhyā: The Indian Journal of Statistics, 68:252–282, 2006.
+[38] Jie Chen and Arjun K Gupta. Parametric statistical change point analysis: with applications to
+     genetics, medicine, and finance. Springer Science & Business Media, 2nd edition, 2011.
+[39] Likai Chen, Weining Wang, and Weibiao Wu. Inference of break-points in high-dimensional time
+     series. Journal of the American Statistical Association (to appear), 2021.
+[40] Haeran Cho. Change-point detection in panel data via double CUSUM statistic. Electronic
+     Journal of Statistics, 10:2000–2038, 2016.
+[41] Haeran Cho and Piotr Fryzlewicz. Multiscale and multilevel technique for consistent segmenta-
+     tion of nonstationary time series. Statistica Sinica, 22:207–229, 2012.
+[42] Haeran Cho and Piotr Fryzlewicz. Multiple change-point detection for high-dimensional time
+     series via sparsified binary segmentation. Journal of the Royal Statistical Society, Series B, 77:
+     475–507, 2015.
+[43] Haeran Cho and Piotr Fryzlewicz. Corrections on ‘multiple change-point detection for high-
+     dimensional time series via sparsified binary segmentation’. https://people.maths.bris.ac.
+     uk/~mahrc/papers/sbs_correction.pdf, 2015.
+[44] Haeran Cho and Piotr Fryzlewicz. Multiple change point detection under serial dependence:
+     Wild energy maximisation and gappy Schwarz criterion. arXiv preprint arXiv:2011.13884, 2020.
+[45] Haeran Cho and Claudia Kirch. Two-stage data segmentation permitting multiscale change
+     points, heavy tails and dependence. arXiv preprint arXiv:1910.12486, 2020.
+[46] Haeran Cho and Claudia Kirch. Bootstrap confidence intervals for multiple change points based
+
+
+                                                 29
+     on moving sum procedures. arXiv preprint arXiv:2106.12844, 2021.
+[47] Chia-Shang J Chu, Kurt Hornik, and Chung-Ming Kaun. MOSUM tests for parameter constancy.
+     Biometrika, 82:603–617, 1995.
+[48] Lynna Chu and Hao Chen. Asymptotic distribution-free change-point detection for multivariate
+     and non-Euclidean data. The Annals of Statistics, 47:382–414, 2019.
+[49] Alice Cleynen, Guillem Rigaill, and Michel Koskas. Segmentor3IsBack: A fast segmentation
+     algorithm, 2016. URL https://CRAN.R-project.org/package=Segmentor3IsBack. R package
+     version 2.0.
+[50] Miklós Csörgő and Lajos Horváth. Invariance principles for changepoint problems. In Multi-
+     variate statistics and probability, pages 151–168. Elsevier, 1989.
+[51] Miklós Csörgö and Lajos Horváth. Limit Theorems in Change-point Analysis, volume 18. John
+     Wiley & Sons Inc, 1997.
+[52] Richard A Davis and Chun Yip Yau. Consistency of minimum description length model selection
+     for piecewise stationary time series models. Electronic Journal of Statistics, 7:381–411, 2013.
+[53] Richard A Davis, Thomas C M Lee, and Gabriel A Rodriguez-Yam. Structural break estimation
+     for nonstationary time series models. Journal of the American Statistical Association, 101:
+     223–239, 2006.
+[54] Richard A Davis, Thomas CM Lee, and Gabriel A Rodriguez-Yam. Break detection for a class
+     of nonlinear time series models. Journal of Time Series Analysis, 29:834–867, 2008.
+[55] H Dehling, R Fried, and M Wendler. A robust method for shift detection in time series.
+     Biometrika, 107(3):647–660, 2020.
+[56] Herold Dehling, Aeneas Rooch, and Murad S Taqqu. Non-parametric change-point tests for
+     long-range dependent data. Scandinavian Journal of Statistics, 40(1):153–173, 2013.
+[57] Herold Dehling, Roland Fried, Isabel Garcia, and Martin Wendler. Change-point detection under
+     dependence based on two-sample U-statistics. In Asymptotic Laws and Methods in Stochastics,
+     pages 195–220. Springer, 2015.
+[58] Holger Dette, Theresa Schüler, and Mathias Vetter. Multiscale change point detection for de-
+     pendent data. Scandinavian Journal of Statistics, 47:1243–1274, 2020.
+[59] Maik Döring. Multiple change-point estimation with U-statistics. Journal of Statistical Planning
+     and Inference, 140(7):2003–2017, 2010.
+[60] Chao Du, Chu-Lan Michael Kao, and SC Kou. Stepwise signal extraction via marginal likelihood.
+     Journal of the American Statistical Association, 111:314–330, 2016.
+[61] Idris A Eckley, Paul Fearnhead, and Rebecca Killick. Analysis of changepoint models. In David
+     Barber, A. Taylan Cemgil, and Silvia Chiappa, editors, Bayesian Time Series Models, pages
+     205–224. Cambridge University Press, 2011.
+[62] Bradley Efron, Trevor Hastie, Iain Johnstone, and Robert Tibshirani. Least angle regression.
+     The Annals of Statistics, 32:407–499, 2004.
+[63] Birte Eichinger and Claudia Kirch. A MOSUM procedure for the estimation of multiple random
+     change points. Bernoulli, 24:526–564, 2018.
+[64] Farida Enikeeva and Zaid Harchaoui. High-dimensional change-point detection under sparse
+     alternatives. The Annals of Statistics, 47:2051–2079, 2019.
+[65] Xiao Fang, Jian Li, and David Siegmund. Segmentation and estimation of change-point models:
+     false positive control and confidence regions. The Annals of Statistics, 48:1615–1647, 2020.
+[66] Paul Fearnhead. Exact and efficient Bayesian inference for multiple changepoint problems.
+     Statistics and Computing, 16:203–213, 2006.
+[67] Paul Fearnhead and Guillem Rigaill. Changepoint detection in the presence of outliers. Journal
+     of the American Statistical Association, 114:169–183, 2019.
+[68] Paul Fearnhead and Guillem Rigaill. Relating and comparing methods for detecting changes in
+     mean. Stat, page e291, 2020.
+[69] Paul Fearnhead, Robert Maidstone, and Adam Letchford. Detecting changes in slope with an
+     l0 penalty. Journal of Computational and Graphical Statistics, 28:265–275, 2019.
+[70] Dietmar Ferger. On the power of nonparametric changepoint-tests. Metrika, 41(1):277–292,
+     1994.
+
+
+                                                 30
+[71] Alexander Tristan Maximilian Fisch, Idris Arthur Eckley, and Paul Fearnhead. A linear time
+     method for the detection of point and collective anomalies. arXiv preprint arXiv:1806.01947,
+     2018.
+[72] Klaus Frick, Axel Munk, and Hannes Sieling. Multiscale change point inference. Journal of the
+     Royal Statistical Society, Series B, 76:495–580, 2014.
+[73] M. Fromont, M. Lerasle, and N. Verzelen. Optimal change point detection and localization.
+     arXiv preprint arXiv:2010.11470, 2020.
+[74] Piotr Fryzlewicz. Wild binary segmentation for multiple change-point detection. The Annals of
+     Statistics, 42:2243–2281, 2014.
+[75] Piotr Fryzlewicz. Tail-greedy bottom-up data decompositions and fast multiple change-point
+     detection. The Annals of Statistics, pages 3390–3421, 2018.
+[76] Piotr Fryzlewicz. Detecting possibly frequent change-points: Wild Binary Segmentation 2 and
+     steepest-drop model selection. Journal of the Korean Statistical Society, 49:1–44, 2020.
+[77] Piotr Fryzlewicz. Narrowest significance pursuit: inference for multiple change-points in linear
+     models. arXiv preprint arXiv:2009.05431, 2020.
+[78] Piotr Fryzlewicz and Suhasini Subba Rao. Multiple-change-point detection for auto-regressive
+     conditional heteroscedastic processes. Journal of the Royal Statistical Society, Series B, 76:
+     903–924, 2014.
+[79] Cheng-Der Fuh. Asymptotic operating characteristics of an optimal change point detection in
+     hidden Markov models. The Annals of Statistics, 32:2305–2339, 2004.
+[80] Damien Garreau and Sylvain Arlot. Consistent change-point detection with kernels. Electronic
+     Journal of Statistics, 12:4440–4486, 2018.
+[81] Edit Gombay. U-statistics for change under alternatives. Journal of Multivariate Analysis, 78
+     (1):139–158, 2001.
+[82] Tomasz Górecki, Lajos Horváth, and Piotr Kokoszka. Change point detection in heteroscedastic
+     time series. Econometrics and Statistics, 7:63–88, 2018.
+[83] Peter Grunwald. A tutorial introduction to the minimum description length principle. arXiv
+     preprint arXiv:math/0406077, 2004.
+[84] Zaıd Harchaoui and Céline Lévy-Leduc. Multiple change-point estimation with a total variation
+     penalty. Journal of the American Statistical Association, 105:1480–1493, 2010.
+[85] Kaylea Haynes, Idris A Eckley, and Paul Fearnhead. Computationally efficient changepoint
+     detection for a range of penalties. Journal of Computational and Graphical Statistics, 26:134–
+     143, 2017.
+[86] Kaylea Haynes, Paul Fearnhead, and Idris A Eckley. A computationally efficient nonparametric
+     approach for changepoint detection. Statistics and Computing, 27:1293–1305, 2017.
+[87] A. J. Heunis. Strong invariance principle for singular diffusions. Stochastic Processes and their
+     Applications, 104:57–80, 2003.
+[88] L. Horváth and M. Hušková. Change-point detection in panel data. Journal of Time Series
+     Analysis, 33:631–648, 2012.
+[89] Lajos Horváth and Gregory Rice. Extensions of some classical methods in change point analysis.
+     TEST, 23:1–37, 2014.
+[90] Lajos Horváth and Josef Steinebach. Testing for changes in the mean or variance of a stochastic
+     process under weak invariance. Journal of Statistical Planning and Inference, 91:365–376, 2000.
+[91] Marie Hušková. Asymptotics for robust MOSUM. Commentationes Mathematicae Universitatis
+     Carolinae, 31(2):345–356, 1990.
+[92] Marie Hušková. Some asymptotic results for robust procedures for testing the constancy of
+     regression models over time. Kybernetika, 26(5):392–403, 1990.
+[93] Marie Hušková. Tests and estimators for the change point problem based on M-statistics. Statis-
+     tics & Risk Modeling, 14:115–136, 1996.
+[94] Marie Hušková. Permutation principle and bootstrap in change point analysis. In L. Horváth
+     and B. Szyszkowicz, editors, Asymptotic Methods in Stochastics. Festschrift for Miklós Csörgö,
+     volume 44, pages 273–292. American Mathematical Society, 2004.
+[95] Marie Hušková. Robust change point analysis. In Robustness and Complex Data Structures,
+
+
+                                                 31
+      pages 171–190. Springer, 2013.
+ [96] Marie Hušková and Claudia Kirch. Bootstrapping confidence intervals for the change-point of
+      time series. Journal of Time Series Analysis, 29:947–972, 2008.
+ [97] Marie Hušková and Claudia Kirch. A note on studentized confidence intervals for the change-
+      point. Computational Statistics, 25:269–289, 2010.
+ [98] Marie Hušková and Miriam Marušiaková. M-procedures for detection of changes for dependent
+      observations. Communications in Statistics – Simulation and Computation, 41(7):1032–1050,
+      2012.
+ [99] Marie Hušková and Simos G Meintanis. Change point analysis based on empirical characteristic
+      functions. Metrika, 63:145–168, 2006.
+[100] Marie Hušková and Simos G Meintanis. Change-point analysis based on empirical characteristic
+      functions of ranks. Sequential Analysis, 25(4):421–436, 2006.
+[101] Marie Hušková and Jan Picek. M-tests for detection of structural changes in regression. In
+      Statistical data analysis based on the L1-norm and related methods, pages 213–227. Springer,
+      2002.
+[102] Marie Hušková and Aleš Slabỳ. Permutation tests for multiple changes. Kybernetika, 37:605–622,
+      2001.
+[103] Marie Hušková, Zuzana Prášková, and Josef Steinebach. On the detection of changes in autore-
+      gressive time series I. Asymptotics. Journal of Statistical Planning and Inference, 137:1243–1259,
+      2007.
+[104] Sangwon Hyun, Kevin Z Lin, Max G’Sell, and Ryan J Tibshirani. Post-selection inference for
+      changepoint detection algorithms with application to copy number variation data. Biometrics,
+      2021.
+[105] Brad Jackson, Jeffrey D Scargle, David Barnes, Sundararajan Arabhi, Alina Alt, Peter Giou-
+      mousis, Elyus Gwin, Paungkaew Sangtrakulcharoen, Linda Tan, and Tun Tao Tsai. An algorithm
+      for optimal partitioning of data on an interval. IEEE Signal Processing Letters, 12:105–108, 2005.
+[106] Venkata Jandhyala, Stergios Fotopoulos, Ian MacNeill, and Pengyu Liu. Inference for single and
+      multiple change-points in time series. Journal of Time Series Analysis, 34(4):423–446, 2013.
+[107] Sean Jewell, Paul Fearnhead, and Daniela Witten. Testing for a change in mean after changepoint
+      detection. arXiv preprint arXiv:1910.04291, 2019.
+[108] Moritz Jirak. Uniform change point tests in high dimension. The Annals of Statistics, 43:
+      2451–2483, 2015.
+[109] Abhishek Kaul, Venkata K Jandhyala, and Stergios B Fotopoulos. Detection and estimation of
+      parameters in high dimensional multiple change point regression models via `1 /`0 regularization
+      and discrete optimization. arXiv preprint arXiv:1906.04396, 2019.
+[110] Rebecca Killick, Paul Fearnhead, and Idris A Eckley. Optimal detection of changepoints with
+      a linear computational cost. Journal of the American Statistical Association, 107:1590–1598,
+      2012.
+[111] Rebecca Killick, Kaylea Haynes, and Idris A. Eckley. changepoint: An R package for changepoint
+      analysis, 2016. URL https://CRAN.R-project.org/package=changepoint. R package version
+      2.2.2.
+[112] Claudia Kirch and J Tadjuidje Kamgaing. Detection of change points in discrete valued time
+      series. In Richard A. Davis, Scott H. Holan, Robert Lund, and Nalini Ravishanker, editors,
+      Handbook of Discrete Valued Time Series. Chapman and Hall/CRC, New York, 2014.
+[113] Claudia Kirch and Joseph Tadjuidje Kamgaing. Testing for parameter stability in nonlinear
+      autoregressive models. Journal of Time Series Analysis, 33:365–385, 2012.
+[114] Claudia Kirch and Philipp Klein. Moving sum data segmentation for stochastics processes based
+      on invariance. arXiv preprint arXiv:2101.04651, 2021.
+[115] Claudia Kirch and Kerstin Reckrühm. Data segmentation for time series based on a general
+      moving sum approach. In preparation, 2021.
+[116] Claudia Kirch, Birte Muhsal, and Hernando Ombao. Detection of changes in multivariate time
+      series with application to EEG data. Journal of the American Statistical Association, 110:
+      1197–1216, 2015.
+
+
+                                                  32
+[117] János Komlós, Péter Major, and Gábor Tusnády. An approximation of partial sums of inde-
+      pendent RV’s, and the sample DF. I. Zeitschrift für Wahrscheinlichkeitstheorie und verwandte
+      Gebiete, 32:111–131, 1975.
+[118] János Komlós, Péter Major, and Gábor Tusnády. An approximation of partial sums of inde-
+      pendent RV’s, and the sample DF. II. Zeitschrift für Wahrscheinlichkeitstheorie und verwandte
+      Gebiete, 34:33–58, 1976.
+[119] A. Korostelev. On minimax estimation of a discontinuous signal. Theory of Probability and its
+      Applications, 32:727–730, 1987.
+[120] Solt Kovács, Housen Li, Peter Bühlmann, and Axel Munk. Seeded binary segmentation: A gen-
+      eral methodology for fast and optimal change point detection. arXiv preprint arXiv:2002.06633,
+      2020.
+[121] James Kuelbs and Walter Philipp. Almost sure invariance principles for partial sums of mixing
+      B-valued random variables. The Annals of Probability, 8:1003–1036, 1980.
+[122] Christoph Kühn. An estimator of the number of change points based on a weak invariance
+      principle. Statistics & Probability Letters, 51:189–196, 2001.
+[123] Marc Lavielle and Eric Moulines. Least-squares estimation of an unknown number of shifts in a
+      time series. Journal of Time Series Analysis, 21:33–59, 2000.
+[124] Émilie Lebarbier. Detecting multiple change-points in the mean of Gaussian process by model
+      selection. Signal Processing, 85(4):717–736, 2005.
+[125] Chung-Bow Lee. Estimating the number of change points in a sequence of independent normal
+      random variables. Statistics & Probability Letters, 25:241–248, 1995.
+[126] Florencia Leonardi and Peter Bühlmann. Computationally efficient change point detection for
+      high-dimensional regression. arXiv preprint arXiv:1601.03704, 2016.
+[127] Housen Li and Hannes Sieling. FDRSeg: FDR-control in multiscale change-point segmentation,
+      2017. URL https://CRAN.R-project.org/package=FDRSeg. R package version 1.0-3.
+[128] Housen Li, Axel Munk, and Hannes Sieling. FDR-control in multiscale change-point segmenta-
+      tion. Electronic Journal of Statistics, 10:918–959, 2016.
+[129] Housen Li, Qinghai Guo, and Axel Munk. Multiscale change-point segmentation: Beyond step
+      functions. Electronic Journal of Statistics, 13:3254–3296, 2019.
+[130] Kevin Lin, James L Sharpnack, Alessandro Rinaldo, and Ryan J Tibshirani. A sharp error
+      analysis for the fused Lasso, with application to approximate changepoint screening. In Advances
+      in Neural Information Processing Systems, pages 6884–6893, 2017.
+[131] Haoyang Liu, Chao Gao, and Richard J Samworth. Minimax rates in sparse, high-dimensional
+      change point detection. The Annals of Statistics, 49(2):1081–1112, 2021.
+[132] Yi-Wei Liu and Hao Chen. A fast and efficient change-point detection framework for modern
+      data. arXiv preprint arXiv:2006.13450, 2020.
+[133] Zhiyuan Lu, Moulinath Banerjee, and George Michailidis. Intelligent sampling for mul-
+      tiple change-points in exceedingly long time series with rate guarantees. arXiv preprint
+      arXiv:1710.07420, 2020.
+[134] Hyeyoung Maeng and Piotr Fryzlewicz. Detecting linear trend changes and point anomalies in
+      data sequences. arXiv preprint arXiv:1906.01939, 2019.
+[135] Robert Maidstone, Toby Hocking, Guillem Rigaill, and Paul Fearnhead. On optimal multiple
+      changepoint algorithms for large data. Statistics and Computing, 27:519–533, 2017.
+[136] Miriam Marušiaková. Tests for multiple changes in linear regression models. PhD thesis, Charles
+      University in Prague, 2009.
+[137] David S. Matteson and Nicholas A. James. A nonparametric approach for multiple change point
+      analysis of multivariate data. Journal of the American Statistical Association, 109:334–345,
+      2014.
+[138] Alexander Meier, Haeran Cho, and Claudia Kirch. mosum: Moving sum based procedures for
+      changes in the mean, 2021. URL https://CRAN.R-project.org/package=mosum. R package
+      version 1.2.6.
+[139] Alexander Meier, Claudia Kirch, and Haeran Cho. mosum: A package for moving sums in
+      change-point analysis. Journal of Statistical Software, 97(1):1–42, 2021.
+
+
+                                                  33
+[140] Michael Messer, Marietta Kirchner, Julia Schiemann, Jochen Roeper, Ralph Neininger, and
+      Gaby Schneider. A multiple filter test for the detection of rate changes in renewal processes with
+      varying variance. The Annals of Applied Statistics, 8:2027–2067, 2014.
+[141] Michael Messer, Stefan Albert, and Gaby Schneider. The multiple filter test for change point
+      detection in time series. Metrika, 81:589–607, 2018.
+[142] Maria Mohr and Natalie Neumeyer. Consistent nonparametric change point detection combining
+      CUSUM and marked empirical processes. Electronic Journal of Statistics, 14:2238–2271, 2020.
+[143] Yoshiyuki Ninomiya. Information criterion for Gaussian change-point model. Statistics & Prob-
+      ability Letters, 72:237–247, 2005.
+[144] Yue S Niu and Heping Zhang. The screening and ranking algorithm to detect DNA copy number
+      variations. The Annals of Applied Statistics, 6:1306–1326, 2012.
+[145] Adam B Olshen, ES Venkatraman, Robert Lucito, and Michael Wigler. Circular binary seg-
+      mentation for the analysis of array-based DNA copy number data. Biostatistics, 5:557–572,
+      2004.
+[146] M Orasch. Using U-statistcs based processes to detect multiple change-points. In L. Horváth
+      and B. Szyszkowicz, editors, Asymptotic Methods in Stochastics. Festschrift for Miklós Csörgö,
+      volume 44, pages 315–334. American Mathematical Society, 2004.
+[147] Oscar Hernan Madrid Padilla, Yi Yu, Daren Wang, and Alessandro Rinaldo. Optimal nonpara-
+      metric change point detection and localization. arXiv preprint arXiv:1905.10019, 2019.
+[148] Ewan S Page. Continuous inspection schemes. Biometrika, 41:100–115, 1954.
+[149] Jianmin Pan and Jiahua Chen. Application of modified information criterion to multiple change
+      point problems. Journal of Multivariate Analysis, 97:2221–2241, 2006.
+[150] Florian Pein, Hannes Sieling, and Axel Munk. Heterogeneous change point inference. Journal
+      of the Royal Statistical Society, Series B, 79:1207–1227, 2017.
+[151] Florian Pein, Thomas Hotz, Hannes Sieling, and Timo Aspelmeier. stepR: Multiscale change-
+      point inference, 2019. URL https://CRAN.R-project.org/package=stepR. R package version
+      2.0-3.
+[152] Pierre Perron. Dealing with structural breaks. Palgrave Handbook of Econometrics, 1:278–352,
+      2006.
+[153] Zuzana Prášková and Ondřej Chochola. M-procedures for detection of a change under weak
+      dependence. Journal of Statistical Planning and Inference, 149:60–76, 2014.
+[154] Philip Preuss, Ruprecht Puchstein, and Holger Dette. Detection of multiple structural breaks
+      in multivariate time series. Journal of the American Statistical Association, 110:654–668, 2015.
+[155] Kerstin Reckrühm. Estimating multiple structural breaks in time series – a generalized MOSUM
+      approach based on estimating functions. PhD thesis, Otto-von-Guericke University, Magdeburg,
+      Germany, 2019.
+[156] Jaxk Reeves, Jien Chen, Xiaolan L Wang, Robert Lund, and Qi Qi Lu. A review and compar-
+      ison of changepoint detection techniques for climate data. Journal of Applied Meteorology and
+      Climatology, 46:900–915, 2007.
+[157] Guillem Rigaill. A pruned dynamic programming algorithm to recover the best segmentations
+      with 1 to K max change-points. Journal de la Société Frankcaise de Statistique, 156:180–205,
+      2015.
+[158] Guillem Rigaill and Toby Dylan Hocking. fpop: Segmentation using Optimal Partitioning and
+      Function Pruning, 2019. URL https://R-Forge.R-project.org/projects/opfp/. R package
+      version 2019.01.22/r56.
+[159] Guillem Rigaill, Émilie Lebarbier, and Stephane Robin. Exact posterior distributions and model
+      selection criteria for multiple change-point detection problems. Statistics and Computing, 22:
+      917–929, 2012.
+[160] Alessandro Rinaldo. Properties and refinements of the fused Lasso. The Annals of Statistics,
+      37:2922–2952, 2009.
+[161] Jorma Rissanen. Modeling by shortest data description. Automatica, 14:465–471, 1978.
+[162] Gaetano Romano, Guillem Rigaill, Vincent Runge, and Paul Fearnhead. Detecting abrupt
+      changes in the presence of local fluctuations and autocorrelated noise. Journal of the American
+
+
+                                                  34
+      Statistical Association (to appear), 2021.
+[163] Abolfazl Safikhani and Ali Shojaie. Joint structural break detection and parameter estimation in
+      high-dimensional nonstationary VAR models. Journal of the American Statistical Association,
+      pages 1–14, 2020.
+[164] Gideon Schwarz. Estimating the dimension of a model. The Annals of Statistics, 6:461–464,
+      1978.
+[165] Andrew Jhon Scott and M Knott. A cluster analysis method for grouping means in the analysis
+      of variance. Biometrics, 6:507–512, 1974.
+[166] Olimjon Sharipov, Johannes Tewes, and Martin Wendler. Sequential block bootstrap in a Hilbert
+      space with application to change point analysis. Canadian Journal of Statistics, 44:300–322,
+      2016.
+[167] Seung Jun Shin, Yichao Wu, and Ning Hao. A backward procedure for change-point detection
+      with applications to copy number variation detection. Canadian Journal of Statistics, 48:366–
+      385, 2020.
+[168] J. Steinebach and V. R. Eastwood. Extreme value asymptotics for multivariate renewal processes.
+      Journal of Multivariate Analysis, 56:284–302, 1996.
+[169] Ansgar Steland. Testing and estimating change-points in the covariance matrix of a high-
+      dimensional time series. Journal of Multivariate Analysis, 177:104582, 2020.
+[170] Christina Stoehr, John AD Aston, and Claudia Kirch. Detecting changes in the covariance
+      structure of functional time series with application to fmri data. Econometrics and Statistics,
+      18:44–62, 2021.
+[171] Alexander Tartakovsky. Sequential Change Detection and Hypothesis Testing: General Non-iid
+      Stochastic Models and Asymptotically Optimal Rules. CRC Press, 2019.
+[172] Alexander Tartakovsky, Igor Nikiforov, and Michele Basseville. Sequential analysis: Hypothesis
+      testing and changepoint detection. CRC Press, 2014.
+[173] Inder Tecuapetla-Gómez and Axel Munk. Autocovariance estimation in regression with a dis-
+      continuous signal and m-dependent errors: A difference-based approach. Scandinavian Journal
+      of Statistics, 44:346–368, 2017.
+[174] Robert Tibshirani, Michael Saunders, Saharon Rosset, Ji Zhu, and Keith Knight. Sparsity and
+      smoothness via the fused Lasso. Journal of the Royal Statistical Society, Series B, 67:91–108,
+      2005.
+[175] Ryan J Tibshirani. Adaptive piecewise polynomial estimation via trend filtering. The Annals of
+      Statistics, 42:285–323, 2014.
+[176] SO Tickle, IA Eckley, Paul Fearnhead, and Kaylea Haynes. Parallelization of a common change-
+      point detection method. Journal of Computational and Graphical Statistics, 29:149–161, 2020.
+[177] Michalis K Titsias, Christopher C Holmes, and Christopher Yau. Statistical inference in hidden
+      Markov models using k-segment constraints. Journal of the American Statistical Association,
+      111:200–215, 2016.
+[178] Charles Truong, Laurent Oudre, and Nicolas Vayatis. Selective review of offline change point
+      detection methods. Signal Processing, 167:107299, 2020.
+[179] E. S. Venkatraman. Consistency Results in Multiple Change-point Problems. PhD thesis, Stan-
+      ford University, 1992.
+[180] ES Venkatraman and Adam B Olshen. A faster circular binary segmentation algorithm for the
+      analysis of array CGH data. Bioinformatics, 23:657–663, 2007.
+[181] Daniel Vogel and Martin Wendler. Studentized U-quantile processes under dependence with
+      applications to change-point analysis. Bernoulli, 23(4B):3114–3144, 2017.
+[182] L. J. Vostrikova. Detecting ‘disorder’ in multidimensional random processes. Soviet Doklady
+      Mathematics, 24:55–59, 1981.
+[183] Daren Wang, Kevin Lin, and Rebecca Willett. Statistically and computationally efficient change
+      point localization in regression settings. arXiv preprint arXiv:1906.11364, 2019.
+[184] Daren Wang, Yi Yu, Alessandro Rinaldo, and Rebecca Willett. Localizing changes in high-
+      dimensional vector autoregressive processes. arXiv preprint arXiv:1909.06359, 2019.
+[185] Daren Wang, Yi Yu, and Alessandro Rinaldo. Univariate mean change point detection: Penal-
+
+
+                                                 35
+      ization, cusum and optimality. Electronic Journal of Statistics, 14:1917–1961, 2020.
+[186] Daren Wang, Yi Yu, and Alessandro Rinaldo. Optimal covariance change point localization in
+      high dimension. Bernoulli, 27:554–575, 2021.
+[187] Runmin Wang, Stanislav Volgushev, and Xiaofeng Shao. Inference for change points in high
+      dimensional data. arXiv preprint arXiv:1905.08446, 2019.
+[188] Tengyao Wang and Richard J Samworth. High dimensional change point estimation via sparse
+      projection. Journal of the Royal Statistical Society, Series B, 80:57–83, 2018.
+[189] Yi-Ching Yao. Estimation of a noisy discrete-time step function: Bayes and empirical Bayes
+      approaches. The Annals of Statistics, pages 1434–1447, 1984.
+[190] Yi-Ching Yao. Estimating the number of change-points via Schwarz’ criterion. Statistics &
+      Probability Letters, 6:181–189, 1988.
+[191] Yi-Ching Yao. On the asymptotic behavior of a class of nonparametric tests for a change-point
+      problem. Statistics & Probability Letters, 9:173–177, 1990.
+[192] Yi-Ching Yao and Siu-Tong Au. Least-squares estimation of a step function. Sankhyā: The
+      Indian Journal of Statistics, Series A, pages 370–381, 1989.
+[193] Chun Yip Yau and Zifeng Zhao. Inference for multiple change points in time series via likelihood
+      ratio scan statistics. Journal of the Royal Statistical Society, Series B, 78:895–916, 2016.
+[194] Nancy R Zhang and David O Siegmund. A modified Bayes information criterion with applications
+      to the analysis of comparative genomic hybridization data. Biometrics, 63:22–32, 2007.
+[195] Zifeng Zhao, Li Chen, and Lizhen Lin. Change-point detection in dynamic networks via graphon
+      estimation. arXiv preprint arXiv:1908.01823, 2019.
+[196] Changliang Zou, Guosheng Yin, Long Feng, and Zhaojun Wang. Nonparametric maximum
+      likelihood approach to multiple change-point problems. The Annals of Statistics, 42:970–1002,
+      2014.
+
+
+
+
+                                                 36
+

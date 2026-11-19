@@ -1,0 +1,725 @@
+“© 2016 IEEE. Personal use of this material is permitted. Permission from IEEE must be
+obtained for all other uses, in any current or future media, including
+reprinting/republishing this material for advertising or promotional purposes, creating
+new collective works, for resale or redistribution to servers or lists, or reuse of any
+copyrighted component of this work in other works.”
+          Unsupervised Feature Selection for Outlier Detection
+          by Modelling Hierarchical Value-Feature Couplings
+                 Guansong Pang, Longbing Cao, Ling Chen                                              Huan Liu
+                            School of Software                                          Computer Science and Engineering
+                     University of Technology Sydney                                       Arizona State University
+                       Ultimo, NSW 2007, Australia                                          Tempe, AZ 85287, USA
+            {Guansong.Pang,Longbing.Cao,Ling.Chen}@uts.edu.au                                 Huan.Liu@asu.edu
+
+
+
+
+   Abstract—Proper feature selection for unsupervised outlier de-       features - weakly relevant features that contribute very limited
+tection can improve detection performance but is very challenging       capability, or none, for identifying outliers when combined
+due to complex feature interactions, the mixture of relevant            with other features.
+features with noisy/redundant features in imbalanced data, and
+the unavailability of class labels. Little work has been done on this      In outlier detection, most unsupervised methods for cat-
+challenge. This paper proposes a novel Coupled Unsupervised             egorical data (e.g., [4]–[9]) are pattern-based. They search
+Feature Selection framework (CUFS for short) to filter out              for outlying/normal patterns and employ pattern frequency
+noisy or redundant features for subsequent outlier detection in         as a direct outlierness measure. However, these methods fail
+categorical data. CUFS quantifies the outlierness (or relevance)        to perform effectively and efficiently in data sets that have
+of features by learning and integrating both the feature value
+couplings and feature couplings. Such value-to-feature couplings        the characteristics discussed above for three main reasons:
+capture intrinsic data characteristics and distinguish relevant         (i) noisy/redundant features are deeply mixed with relevant
+features from those noisy/redundant features. CUFS is further           features and make it difficult to distinguish outliers from
+instantiated into a parameter-free Dense Subgraph-based Feature         normal objects; (ii) many noisy features mislead the pattern
+Selection method, called DSFS. We prove that DSFS retains a             search and result in a large proportion of faulty patterns and a
+2-approximation feature subset to the optimal subset.
+   Extensive evaluation results on 15 real-world data sets show         high ‘false positive’ rate; and (iii) feature redundancy results
+that DSFS obtains an average 46% feature reduction rate, and            in numerous redundant patterns and downgrades the efficiency
+enables three different types of pattern-based outlier detection        of the pattern search and outlier detection.
+methods to achieve substantially better AUC improvements                   Filtering out noisy and redundant features may therefore
+and/or perform orders of magnitude faster than on the original          substantially improve the effectiveness and efficiency of sub-
+feature set. Compared to its feature selection contender, on
+average, all three DSFS-based detectors achieve more than 20%           sequent outlier detection. However, it is very challenging to
+AUC improvement.                                                        recognise and remove these features when there are complex
+                                                                        interactions between noisy/redundant features and relevant
+                       I. I NTRODUCTION                                 features in highly imbalanced data without class labels.
+   Outliers are usually rare, i.e., those objects with rare combi-         Little work has been designed to conduct feature selection
+nations of feature values, compared to the majority of objects.         for unsupervised outlier detection in categorical data. Most
+Unsupervised outlier detection in categorical data is essential         feature selection research focuses on classification, regression
+for broad applications in various domains, such as fraud                and clustering [10]–[12]. Existing work on feature selection for
+detection, insider trading, intrusion detection and terrorist           very imbalanced data, including studies in [13]–[15], concerns
+detection. In these cases, categorical features are uniquely            imbalanced classification or supervised outlier detection. The
+available or indispensable in data objects [1].                         feature weighting method in [5] weights features for outlier de-
+   Unsupervised outlier detection faces typical challenges such         tection in categorical data, but it evaluates individual features
+as sophisticated interactions within and between features, the          without considering feature interactions and fails to handle
+mixture of relevant features with noisy/redundant features, and         noisy features.
+the extreme imbalance between normal and outlying objects.                 In this paper, we propose a novel Coupled Unsupervised
+In such a complex problem nature, outliers are easily masked            Feature Selection framework (CUFS for short) to filter out
+as normal objects in noisy features - features for which normal         noisy and redundant features that are coupled with relevant
+objects contain infrequent behaviours while outliers contain            features for outlier detection in categorical data. CUFS first
+frequent behaviours, and only detectable in a subset of features        estimates the outlierness of feature values by modelling the
+[2], [3]. For example, in fraud detection, suspects may be              low-level intra- and inter-feature value couplings. These value
+spotted by partial features, such as marital status, income level       couplings reflect the intrinsic data characteristics and facilitate
+and professional, while they may fake themselves as normal              the differentiation between relevant and other features. We fur-
+with other features, such as gender and education. In addition,         ther incorporate the value-level outlierness into feature outlier-
+many categorical data sets contain a large number of redundant          ness by learning value-to-feature interactions. This value-to-
+feature outlierness is then mapped onto graph representations,     an effective distance measure on categorical features with
+on which existing graph mining techniques will be used to          unordered values [16].
+identify the desirable relevant feature subset.
+                                                                      Most methods for categorical data are pattern-based, to
+   We further instantiate CUFS to a Dense Subgraph-based
+                                                                   address the discrete nature of this data. They can be generally
+Feature Selection method called DSFS, which synthesises the
+                                                                   classified into three categories: association rule-based [6]–[8],
+advantages of hierarchical couplings captured in CUFS and
+                                                                   information theory-based [4], [5], and probability test-based
+the dense subgraph search theories. DSFS computes value
+                                                                   methods [9]. Typically, these methods first identify subspaces
+outlierness by integrating intra-feature value frequency devi-
+                                                                   that contain normal/outlying patterns and then define an outlier
+ation and inter-feature value correlation and obtains feature
+                                                                   score based on the pattern frequency in each subspace. Outlier
+outlierness by a linear combination of value outlierness. The
+                                                                   scores are assigned to objects based on the summation of the
+max-relevance feature subset evaluation criterion, which is
+                                                                   outlier scores in subspaces. However, these methods identify
+equivalent to the maximum subgraph density of a feature
+                                                                   a large proportion of misleading patterns when a data set
+graph, and sequential search strategy are then used to identify
+                                                                   has many noisy features, leading to a high ‘false positive’
+the relevant feature subset.
+                                                                   rate. In addition, many pattern-based methods (e.g., [4]–[7])
+   This work makes the following major contributions.
+                                                                   have at least quadratic time complexity w.r.t. the number of
+   1) We propose a novel and flexible coupled unsupervised         features. The presence of redundant features aggravates the
+      feature selection (CUFS) framework for detecting out-        computational cost of pattern discovery and outlier detection
+      liers in categorical data, in which relevant features are    whereas detectors receive no improvement in accuracy.
+      highly mixed with noisy and redundant features. CUFS
+      captures complex feature interactions by modelling the          Feature selection has been shown critical for removing
+      outlierness (relevance) of features w.r.t. hierarchically    irrelevant and redundant features (note that all features that are
+      intra- and inter-feature couplings, which distinguish rel-   not relevant to learning tasks are defined as irrelevant features,
+      evant features from noisy and redundant features.            including noisy features [17]), but most existing methods
+   2) The performance of CUFS is verified by its instance,         focus on regression, classification and clustering [10]–[12].
+      i.e., a parameter-free feature subset selection method       Very few feature selection methods have been specifically
+      DSFS. We prove that the feature subset selected by           designed for outlier detection. Some relate work has been
+      DSFS has a 2-approximation to the optimal subset.            on feature selection for imbalanced data classification and
+      This demonstrates the flexibility of CUFS in enabling        supervised outlier detection [13]–[15]. However, they fail in
+      state-of-the-art graph mining techniques to tackle the       the context without class label information or being costly
+      feature selection challenge in unlabelled and imbalanced     to obtain class labels. Unfortunately, many real-life outlier
+      categorical data.                                            detection applications fall in this scenario.
+   Extensive experiments show that (1) DSFS obtains a large           Even less work is available on unsupervised feature selec-
+average feature reduction rate (46%) on 15 data sets with a        tion for outlier detection. Two related studies are [18] and
+variety of complexities, including different levels of noisy and   [5]. In [18], the partial augmented Lagrangian method simul-
+redundant features, and greatly improves three different types     taneously selects objects from the minority class and features
+of pattern-based outlier detectors in AUC and/or runtime per-      that are relevant to minority class detection. While it shows to
+formance; (2) DSFS substantially defeats its feature weighting-    be effective in selecting features for unsupervised rare class
+based contender (maximally 94% improvement on a data set);         detection, as pointed out by its authors, this method assumes
+and (3) DSFS achieves good scalability w.r.t. data size (linear    that the objects of rare classes are strongly self-similar. This
+to data size, completing execution within one second for a data    assumption does not apply to the nature of outlier detection,
+set with over one million objects) and the number of features      where many outliers are isolated objects and distributed far
+(completing the execution within 20 seconds for a data set         away from each other in data space. The unsupervised entropy-
+with over 1000 features).                                          based feature weighting in [5] for categorical data is most
+   The rest of this paper is organised as follows. We discuss      closely related to this paper. It weights features and highlights
+related work in Section II. CUFS is detailed in Section III.       strongly relevant features for subsequent outlier detection.
+DSFS is introduced in Section IV. Empirical results are            However, as shown in the experiments, it evaluates individual
+provided in Section V. We conclude this work in Section VI.        features without considering underlying feature interactions,
+                     II. R ELATED W ORK                            and thus wrongly treats noisy features as relevant.
+   Numerous outlier detection methods have been introduced,           Recently, learning value-to-object coupling relationships has
+e.g., distance-based methods, clustering-based methods, and        shown valuable and been successfully applied to various prob-
+density-based methods [1], but most of them are proximity-         lems, e.g., abnormal group behaviour detection [19] and simi-
+based and require a distance/similarity measure. Consequently,     larity learning [20]. This work builds on their methodology to
+they are ineffective for handling data sets with many irrelevant   learn value-to-feature outlierness in unlabelled categorical data
+or noisy features due to the curse of dimensionality [2], [3].     and integrate the outlierness with graph mining techniques to
+Also, it is difficult for proximity-based methods to define        select features for unsupervised outlier detection.
+                 III. T HE CUFS F RAMEWORK                          we define value couplings and value graph as follows.
+   In this section, we introduce the CUFS framework. CUFS              Definition 1 (Value Coupling): The couplings in a value
+builds and integrates two-level hierarchical couplings, i.e.,       v of feature f are represented by a three-dimensional tuple
+feature value couplings and feature couplings, toward a proper      VC = (f, δ(·), η(·, ·)) , where
+estimation of the feature relevance to outlier detection. Specif-      • f ∈ F, where F is the feature space.
+ically, it learns the intra- and inter-feature value couplings to      • δ(·) captures the outlying behaviours of the value v w.r.t.
+compute outlierness on the feature value level and constructs a           the value interactions within feature f . For example, δ(·)
+value graph with the outlierness being the edge weights. We               may be a function of deviations of value frequencies from
+then feed the value graph to feature-level coupling analysis              the mode frequency or value similarities, etc.
+and construct a feature graph by aggregating the value-                • η(·, ·) captures the outlying behaviours of the value v
+level outlierness. Our coupled feature selection framework for            w.r.t. interactions with the values in the rest of features
+unsupervised outlier detection (i.e., CUFS) is shown in Fig. 1.           in F. For example, η(·, ·) may be a function of value co-
+                                                                          occurrence frequency, conditional probabilities or other
+                                                                          value correlation quantisation methods.
+                                                                       With the value couplings of all feature values, a value graph
+                                                                    can be built to present their relationship.
+                                                                       Definition 2 (Value Graph): The value graph G is defined as
+                                                                    G =< V, A, g(δ(·), η(·, ·)) >, where a value v ∈ V represents
+                                                                    a node, the entry of the weighted adjacent matrix A(v, v 0 ) (i.e.,
+                                                                    edge weight) is determined by function g(·, ·), which is a joint
+Fig. 1: The Proposed CUFS Framework. VCA and FCA                    function of δ(v) and η(v, v 0 ), ∀v, v 0 ∈ V.
+are short for Value Coupling Analysis and Feature Coupling             The graph G can be an undirected or directed graph
+Analysis, respectively.                                             depending on how the edge weight is defined.
+                                                                       One major benefit of mapping the value couplings to the
+   The value coupling analysis captures the intrinsic inter-        value graph is that we can utilise the value graph properties
+actions between the values of data objects, which enables           (e.g., ego-network, shortest path, node centrality, or random
+a proper estimation of the value outlierness in data and            walk distance [21]) to infer deeper value interactions and to
+distinguish outlying values from noisy values. As the features      further explore feature interactions by building the following
+build their capability on their values, feature outlierness is      feature graph.
+thus modelled by aggregating value outlierness in terms of
+the value-to-feature interactions. Such feature couplings dis-      B. Feature Graph Construction
+tinguish useful features from noisy and redundant features.             The feature couplings are derived from the value couplings
+   As a result of these factors, CUFS builds on the deep under-     to capture the value-to-feature interactions.
+standing of intrinsic data characteristics in outlying data, and        Definition 3 (Feature Coupling): The couplings within a
+effectively combines the advantages of data-driven complex          feature f are described as a three-dimensional tuple FC =
+feature relation analysis with unsupervised feature selection       (dom(f ), δ ∗ (·), η ∗ (·, ·)), where
+and graph theories for outlier detection. It has the graph
+                                                                        • dom(f ) is the domain of the feature f , which consists
+properties and a feature subset search strategy as input to
+                                                                           of a finite set of possible feature values contained in f .
+search and select a feature subset for outlier detection. Table              ∗
+                                                                        • δ (·) computes the outlying degree of f based on its value
+I presents major notations used throughout this paper.
+                                                                           outlierness δ(·). For example, δ ∗ (f ) may be a linear or
+               TABLE I: Symbols and Definitions                            non-linear function for combining all δ(v), ∀v ∈ dom(f ).
+                                                                             ∗
+                                                                        • η (·, ·) captures the outlying degree of f w.r.t. its value
+      Symbol    Definition                                                 interactions with other features in F. Specifically, given
+      X         A set of data objects with size N = |X |                   ∀f 0 ∈ F \ f , η ∗ (f, f 0 ) may be a linear or non-linear
+      F         The set of D = |F | categorical features in X              function for incorporating η(v, v 0 ) for ∀v ∈ dom(f ) and
+      V         The whole set of feature values contained in F             ∀v 0 ∈ dom(f 0 ).
+      S         Feature subset of F with D0 = |S| features              These couplings are then mapped into a feature graph G∗ .
+      G         Value graph in which each node is a feature value
+                                                                        Definition 4 (Feature Graph): The feature graph G∗ is
+      A         The weighted adjacent matrix of G
+      G∗        Feature graph in which each node is a feature
+                                                                    defined as G =< F, A∗ , h(δ ∗ (·), η ∗ (·, ·)) >, where a feature
+      A∗        The weighted adjacent matrix of G∗                  f ∈ F represents a node and the entry of the weighted adjacent
+                                                                    matrix A∗ (f, f 0 ) is determined by h(·, ·), a function combining
+                                                                    δ ∗ (f ) and η ∗ (f, f 0 ) for ∀f, f 0 ∈ F.
+A. Value Graph Construction                                             With the feature graph, existing graph mining algorithms
+   The outlying behaviours of a feature value are captured by       and theories (e.g., dense subgraph discovery, graph partition
+intra-feature and inter-feature value couplings. Accordingly,       and frequent graph pattern mining [21]) can then be applied to
+identify the most relevant feature subset for outlier detection.    where m is the mode of the feature f , freq(·) is a frequency
+As presented in Section IV, by utilising dense subgraph             counting function and  = N1 .
+discovery theories, the CUFS instance can efficiently retain           In Equation (2), the mode frequency is used as a benchmark,
+a 2-approximation feature subset.                                   and the more the frequency of a feature value deviates from the
+                                                                    mode frequency, the more outlying the value is. We use  = N1
+C. Feature Subset Selection
+                                                                    to estimate the outlierness of the mode, which is proportional
+   Our goal here is to find a feature subset, i.e., a subgraph of   to the data size. δ(·) makes the outlierness of values from dif-
+the feature graph, which reserves feature nodes with high out-      ferent frequency distributions more comparable, which differs
+lierness while at the same time reduces redundancy between          from many existing work [4], [6], [7] in which the outlierness
+the reserved features.                                              of each pattern is measured without considering its associated
+   The feature subset searching contains two major ingredients:     frequency distributions.
+search strategy and objective function (i.e., subset evalua-           Definition 6 (Inter-feature Value Outlierness η): The inter-
+tion criteria) [22]. Typical search strategies include complete     feature outlierness η(v, v 0 ) of a value v ∈ dom(f ) and another
+search, sequential forward or backward search, and random           value v 0 ∈ dom(f 0 ) is defined as follows:
+search. Complete search can obtain an optimal feature subset,
+but its runtime is prohibitive for high-dimensional data. Se-                       η(v, v 0 ) = δ(v)conf (v, v 0 )δ(v 0 )          (3)
+quential search and random search are heuristic and result in                                      0
+
+a suboptimal subset, but they are more practical than complete      where conf (v, v 0 ) = freq(v,v    )
+                                                                                             freq(v 0 ) .
+search as they have much better efficiency.                           The component δ(v)conf (v, v 0 ) can be interpreted as the
+   A generic objective function for this context is:                outlierness of the value v 0 w.r.t. its coupling with the value v.
+                                                                    That is, a value has high outlierness if it has strong correlation
+                           max J(S)                          (1)    with outlying values. For example, taking obese persons as
+where J(·) is a function evaluating the outlierness in the          outliers compared with persons of average weights, if someone
+feature subset S, which needs to be specified based on the          has an overweight friend, his/her chance of becoming obese
+chosen search strategy.                                             increases by 57% [24].
+   As illustrated in Fig. 1, we may need to iteratively update        Definition 7 (Edge Weighting Function g for Value Graph
+the value graph and feature graph during the subset searching,      G): The edge weight of the value graph G, i.e., the entry
+e.g., when adding or removing features in sequential search,        (v, v 0 ) of the weight matrix A, is defined as follows:
+before obtaining an optimal subset.                                                                       (
+                                                                                      0          0         δ(v),     v = v0
+                                                                               A(v, v ) = g(v, v ) =             0
+                                                                                                                                   (4)
+              IV. T HE CUFS I NSTANCE : DSFS                                                               η(v, v ), otherwise
+   The CUFS framework can be instantiated by first specifying
+                                                                       We have δ(·) ∈ (0, 1) and η(·, ·) ∈ [0, 1) according to
+the three functions δ, η and g for constructing the value graph
+                                                                    Equations (2) and (3), and thus δ(v)η(v, v 0 )δ(v 0 ) ∈ [0, 1). That
+and the other three functions δ ∗ , η ∗ and h for building the
+                                                                    is, the edge weight would be zero iff two distinctive nodes v
+feature graph. A subset search strategy can then be formed by
+                                                                    and v 0 have no association.
+utilising the graph properties of the feature graph to identify
+the desired feature subset.                                            Note that although the two cases in Equation (4) are in
+   We illustrate the instantiation of CUFS by identifying the       slightly different ranges, they will be used independently in the
+dense subgraph of the feature graph, i.e., DSFS. DSFS uses          next section to avoid incomparable issues. We will also discuss
+the recursive backward elimination search with the subgraph         in Section IV-D how this function helps us to distinguish noisy
+density as the objective function.                                  features from relevant features.
+                                                                       Overall, the value graph G has the following properties.
+A. Specifying Functions δ, η and g for the Value Graph                 1) G is a directed graph with self loops, as A(v, v 0 ) 6=
+   Per the definition of outliers, the frequencies of values               A(v 0 , v) and A(v, v) 6= 0.
+are closely related to the degree of outlierness. Hence, the           2) Its adjacent matrix A is a value outlierness matrix,
+outlierness of feature values is dependent on its intra-feature            representing outlying degree of individual values and
+frequency distribution and inter-feature value co-occurrence               pairs of distinctive values. The larger a matrix entry is,
+frequencies. Motivated by this, we specify the intra- and inter-           the higher the outlierness of the incoming value node is.
+feature value outlierness in terms of frequency deviation and
+confidence values [23].                                             B. Specifying Functions δ ∗ , η ∗ and h for the Feature Graph
+   Definition 5 (Intra-feature Value Outlierness δ): The intra-        For simplicity and the consideration of common scenar-
+feature outlierness δ(v) of a feature value v ∈ dom(f ) is          ios, we assume that the intra-feature and inter-feature value
+defined as the extent to which its frequency deviates from the      outlierness measures are linearly dependent. Accordingly, we
+frequency of the mode:                                              estimate the intra- and inter-feature outlierness of a feature
+                         freq(m) − freq(v) +                       and their integration for feature-level outlierness by simply
+                δ(v) =                                       (2)    summing its associated δ and η values.
+                               freq(m)
+  Definition 8 (Intra-feature Outlierness δ ∗ ): The intra-feature    best subset. RBE conducts an iterative search as shown in
+outlierness of a feature f ∈ F is specified below:                    Algorithm 1. In the next section, we prove that the resultant
+                                X                                     subset is a 2-approximation to the optimum.
+                    δ ∗ (f ) =         δ(v)                    (5)
+                               v∈dom(f )                              Algorithm 1 RBE (F)
+  Definition 9 (Inter-feature Outlierness η ∗ ): The inter-feature    Input: F - full feature set
+outlierness of a feature f w.r.t. feature f 0 is quantified as:       Output: S - the feature subset selected
+                                 X                                     1: while |F| > 0 do
+            η ∗ (f, f 0 ) =                    η(v, v 0 )       (6)    2:   for f ∈ F do
+                         v∈dom(f ),v 0 ∈dom(f 0 )                      3:      Compute J(F \ f )
+   Similar to g, we specify the function h using intra-feature         4:   end for
+outlierness as diagonal entries and inter-feature outlierness as       5:   Remove the feature f that results in the largest J(F \f )
+off-diagonal entries in the weight matrix A∗ .                         6: end while
+   Definition 10 (Edge Weighting Function h for Feature                7: return Return the subset with the largest J(·) as S
+Graph G∗ ): The edge weight A∗ (f, f 0 ) of the feature graph
+G∗ , i.e., the entry (f, f 0 ) of A∗ , is measured as:
+                                   (                                  D. Theoretical Analysis
+           ∗     0             0      δ ∗ (f ),   f = f0                 Theoretical analysis is provided for DSFS in the first
+        A (f, f ) = h(f, f ) =          ∗       0
+                                                             (7)      subsection and we then discuss why DSFS can handle noisy
+                                      η (f, f ), otherwise
+                                                                      and redundant features in the remaining two subsections.
+   Note that, to make the entries in A∗ comparable, δ ∗ and              1) Approximation: Following the definition of subgraph
+ ∗
+η are normalised into the same range [0, 1] for further use in        density for unweighted graphs in [26], [27], we define the
+feature subset searching.                                             subgraph density for weighted graphs by replacing the total
+   The feature graph G∗ has the following key properties.             number of edges with the total weight defined in our graph.
+   1) G∗ is a complete graph with self loops, as δ ∗ (·) > 0             Definition 11 (Subgraph Density): The density of an undi-
+      and η ∗ (·, ·) > 0.                                             rected weighted subgraph S is its average weighted degree:
+   2) G∗ is an undirected graph, as we always have                                                         vol (S)
+      A∗ (f, f 0 ) = A∗ (f 0 , f ) for ∀f 0 , f ∈ F.                                         den(S) =                                 (9)
+                                                                                                             |S|
+   3) Its adjacent matrix A∗ is a feature outlierness matrix,
+                                                                                                       A∗ (f,f 0 )
+                                                                                        P      P
+                                                                                                   0
+      representing outlying degree of features and their combi-       where vol (S) = f ∈S f 2∈S                is the volume of S.
+      nations. Larger values in A∗ indicate higher outlierness.          With Equations (8) and (9), we have the following lemma.
+   4) The total edge weight of a feature node f is large if              Lemma 1 (Equivalence to the Densest Subgraph Discovery):
+      both of its intra- and inter-feature outlierness are high.      Equation (8) is equivalent to calculating the maximum of
+                                                                      den(S), i.e., the densest subgraph of the feature graph G∗ .
+C. The Search Strategy                                                     Proof: It is easy to see that Equation (8) is equivalent to
+   Our target is to find a subset of features with the highest        2den(S), and thus the densest subgraph of G∗ is the exact
+relevance to outlier detection, i.e., with the highest outlierness.   solution S to Equation (8).
+A feature has high outlierness if it has large edge weights in           We show below that the RBE search with quadratic time
+the feature graph G∗ , according to the properties (3) and (4) of     complexity can be simplified to an equivalent procedure with
+G∗ . However, simply selecting the top-ranked k features does         linear time complexity. Following theorems of dense subgraph
+not necessarily obtain the best feature subset, since the out-        discovery in unweighted graphs [26], [27], we further prove
+lierness of a feature also depends on its coupled features. This      that the RBE search on the weighted graph G∗ achieves a
+distinguishes our design from most of the existing methods,           feature subset with a 2-approximation to the optimum.
+which overlook hierarchical feature interactions.                        Lemma 2 (Search Strategy Equivalence): Steps (2-5) of RBE
+   Motivated by the max-relevance idea in [25], the following         in Algorithm 1 are equivalent to the removal of the feature
+max-relevance objective function is designed to search for the        node f with the smallest weighted degree.
+most relevant feature subset S.                                                                P node f has the smallest weighted
+                                                                           Proof: IfPthe feature
+                         1 X X ∗                                      degree, then f 0 ∈F \f f 00 ∈F \f A∗ (f 0 , f 00 ) is the largest in
+                   max                 A (f, f 0 )              (8)                                   1                        0
+                        |S|                                           the current iteration. Since |F \f 0 | is the same ∀f      ∈ F, the
+                                  0
+                            f ∈S f ∈S
+                                                                      removal of f results in the largest J(·).
+In other
+     P words,       we specify J(·) in Equation (1) as J(S) =            Instead of recursively computing J(·) for each feature in
+  1                   ∗     0
+            P
+|S|    f ∈S   f 0 ∈S A (f, f ).                                       each iteration, we therefore remove the feature node with the
+    Searching the exact S is computationally intractable for high     smallest weighted degree to achieve the same result, which
+dimensional (D) data, as the search space is 2D . A heuris-           avoids the inner loop and has linear time complexity.
+tic sequential search strategy, namely Recursive Backward                Theorem 1 (2-Approximation): The feature subset S created
+Elimination (RBE), is used to search for an approximately             by the RBE search is a 2-approximation to the optimal subset.
+     Proof: Let Sopt be the set of feature nodes in the densest     words, their intra-feature outlierness is quite high, but its inter-
+subgraph. According to Lemma 1, below we show den(S) ≥              feature outlierness is low. This results in a low overall feature
+den(Sopt )
+    2      to prove the theorem.                                    outlierness, and consequently these features are not retained
+  Since Sopt forms the densest subgraph, we have                    in S since all the features in S have high outlierness.
+                 vol (Sopt )     vol (Sopt ) − d(f )                Algorithm 2 DSFS (X )
+  den(Sopt ) =                ≥                      , ∀f ∈ Sopt
+                   |Sopt |           |Sopt | − 1                    Input: X - data objects
+, where d(f ) =
+                    P             ∗     0                           Output: S - the feature subset selected
+                       f 0 ∈Sopt A (f, f ) denotes the weighted
+                                                                     1: Initialise A as a |V | × |V | matrix
+degree of a feature node. After some replacements we have
+                                                                     2: for f ∈ F do
+d(f ) ≥ den(Sopt ), ∀f ∈ Sopt , i.e., every node in Sopt has
+weighted degree at least den(Sopt ).                                 3:    Compute δ(v) for each v ∈ dom(f )
+  Let Ti be the set of feature nodes left after the i-th node is     4:    for f 0 ∈ F do
+removed. Considering the iteration of RBE, let Tj be the set of      5:       A(v, v 0 ) ← g(v, v 0 ), ∀v 0 ∈ dom(f 0 )
+remaining nodes when the first node f contained in the optimal       6:    end for
+                                                                     7: end for
+subset Sopt is removed, so Tj−1 is the set of remaining nodes
+                                                                     8: Initialise A∗ as a |D| × |D| matrix
+before the node f is removed, which indicates that d(f ) ≥
+                                                                     9: for f ∈ F do
+den(Sopt ), ∀f ∈ Tj−1 , according to Lemma 2. Since G∗ is a
+complete graph with self loops, we have                             10:    for f 0 ∈ F do
+                                              X                     11:       A∗ (f, f 0 ) ← h(f, f 0 )
+      2vol (Tj−1 ) ≥ den(Sopt )|Tj−1 | +            A∗ (f, f )      12:    end for
+                                           f ∈Tj−1                  13: end for
+                                                                    14: Set S ← F and s ← den(A∗ )
+. We then have                                                      15: for i = 1 to D do
+                                                  ∗
+                                                                           Find f that has the smallest weighted degree in A∗
+                                     P
+        vol (Tj−1 )   den(Sopt )         f ∈Tj−1 A (f, f )          16:
+                    ≥            +                                  17:    F ← F \ f and update A∗
+          |Tj−1 |         2                 2|Tj−1 |
+                                                                    18:    S ← F and s ← den(A∗ ) if s ≤ den(A∗ )
+, and accordingly                                                   19: end for
+                           vol (Tj−1 )   den(Sopt )                 20: return S
+            den(Tj−1 ) =               ≥
+                             |Tj−1 |         2
+                                                                    E. The DSFS Algorithm
+. Since RBE returns the feature subset S with the largest
+subgraph density over all iterations and Tj−1 is one of the            Algorithm 2 presents the procedures of the proposed instan-
+                                                  den(Sopt )        tiation DSFS. Steps (1-7) and (8-13) construct the value graph
+feature subset candidates, den(S) has at least               .
+                                                      2             G and the feature graph G∗ , respectively. Steps (14-19) obtain
+   2) Handling Noisy Features: According to Equation (4),
+                                                                    the feature subset S. As proved in Lemma 2, Steps (16-17)
+a value node has high outlierness if δ and η are high.
+                                                                    are equivalent to Steps (2-5) in RBE in Algorithm 1.
+Given a noisy feature value that occurs infrequently but is
+                                                                       DSFS requires only one database scan to compute the intra-
+contained by normal objects, since it has low frequency, its
+                                                                    and inter-feature value outlierness in Steps (1-7), and thus
+intra-feature value outlierness δ is high. However, since these
+                                                                    has O(N ). DSFS has O(D2 ), as two loops are required in
+noisy values tend to be more frequently or only contained by
+                                                                    order to generate the adjacent matrices of the value graph and
+normal objects, they are presumed to have stronger couplings
+                                                                    the feature graph. However, the computation within the inner
+with normal values versus weak/no couplings with outlying
+                                                                    loop, i.e., Steps (5) and (11), is a very simple multiplication
+values. On the other hand, truly outlying values have high
+                                                                    and value assignment, enabling it to complete the execution
+outlierness in terms of both δ and η, because the frequency is
+                                                                    quickly in high dimensional data. Hence, DSFS has good
+low and the couplings with other outlying values are strong,
+                                                                    scalability w.r.t. data size and the number of features.
+and thus the overall value outlierness is often much higher
+than that of noisy feature values. Since the intra- and inter-                   V. E XPERIMENTS AND E VALUATION
+feature outlierness is linearly correlated to intra- and inter-     A. Data Sets
+feature value outlierness respectively, the intra- and inter-          Due to the lack of benchmark data for performance evalua-
+feature outlierness of outlying features is also higher than that   tion in outlier detection, balanced or imbalanced classification
+of noisy features. As a result, the noisy features are removed      data is transformed to create outlier and normal classes for the
+during the iterative procedure in RBE, while the relevant           evaluation in literature [4], [28]–[30]. Following the above, 15
+features are reserved in order to maximise J(·).                    publicly available real-world data sets 1 are used, which cover
+   3) Handling Redundant Features: Many redundant features
+                                                                       1 aPascal and CelebA are available at http://vision.cs.uiuc.edu/attributes/ and
+are often only weakly relevant to outlier detection and have
+                                                                    http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html, respectively. Sylva is avail-
+very limited or no capability for identifying outliers when         able at http://www.agnostic.inf.ethz.ch/datasets.php. The other 12 data sets are
+they are combined with strongly relevant features. In other         from the UCI machine learning repository at http://archive.ics.uci.edu/ml/.
+diverse domains, e.g., intrusion detection, image object recog-        1,024,000 objects. For AD, the data with the smallest fea-
+nition, advertising and marketing, population and ecological           ture subset contains 40 features, and subsequent subsets are
+informatics, as shown in Table II. Eleven of these data sets           increased by a factor of two, until the largest feature subset
+are directly transformed from highly imbalanced data, where            which contains 1,280 features.
+the smallest class is treated as outliers and the rest of classes as      DSFS, ENFW, FPOF and MarP were implemented in JAVA
+normal [28], [30]. For the other four data sets, Probe and U2R         in WEKA [31]. COMP was obtained from the authors of [4]
+are derived from the KDDCUP99 data sets which integrates               in MATLAB. All the experiments were performed at a node
+multiple types of probing and user-to-root attacks as outliers;        in a 3.4GHz Phoenix Cluster with 32GB memory.
+following [4], [29], we transform two balanced classification
+                                                                       C. Performance Evaluation Method
+data sets (i.e., Mushroom, and Optdigits with classes ‘1’ and
+‘7’) by sampling a small subset of the small class as outliers,           We measure the detector effectiveness in terms of the area
+resulting in 5% outliers in the created data sets. The above           under ROC curve (AUC). All the three outlier detectors assign
+transformation methods guarantee that the outlier class chosen         an outlier score to each data object and thus rank all objects
+is either a rare class or a class with outlying semantics.             w.r.t. their degree of outlierness. AUC is then computed based
+   All data sets are used with categorical features only. Fea-         on the ranking using the Mann-Whitney-Wilcoxon test [32].
+tures with only one feature value are removed. Missing values          Higher AUC indicates better detection accuracy.
+are replaced with the mode.                                               The unsupervised detectors are trained and evaluated on the
+                                                                       same data set, but the class labels are not employed in training;
+B. Baselines and Settings                                              rather they are used in testing for computing AUC.
+                                                                          The runtime of feature selection and outlier detection is
+   We first evaluate the feature selection method DSFS by              recorded to evaluate their efficiency. Here runtime is the time
+examining its capability of improving the effectiveness and            for executing the core algorithms, excluding the runtime for
+efficiency of unsupervised outlier detectors. Three different          data loading and outputting results.
+types of representative pattern-based outlier detection methods,          Two data indicators are introduced to describe the underly-
+MarP [9], Comprex (denoted by COMP) [4] and FPOF [6],                  ing data characteristics, which are sensitive to the performance
+are compared.                                                          of learning methods. They provide some insights into our
+  • MarP is a probabilistic method. It uses the inverse of             design, and their quantisation is reported in Table II.
+    marginal probabilities of feature values of individual fea-           • Feature noise level κnos . Based on the AUC measured
+    tures as an outlier measure. It has linear time complexity               by using MarP for each feature, a feature is regarded as
+    w.r.t. the number of features and is parameter-free.                     noisy if AUC is less than 0.5. We report the percentage
+  • COMP is an information-theory-based method. It com-
+                                                                             of noisy features as κnos .
+    bines minimum description length models with informa-                 • Feature redundancy level κrdn . Features are retained if
+    tion gain to automatically partition the features and builds             their corresponding AUC is more than 0.5 (i.e., redundant
+    coding tables based on feature groups to detect objects                  features need to be relevant features). The pairs of se-
+    with high compression cost as outliers. It has quadratic                 lected features are checked to compare the AUC by using
+    time complexity w.r.t. the number of features and requires               pairwise feature combinations with that using individual
+    no parameter settings.                                                   features. One feature is thought to be redundant to another
+  • FPOF is an association rule-based method. It uses the
+                                                                             if the AUC difference is less than 0.01. We report the
+    inverse of the frequencies of frequent patterns as an                    percentage of such combinations as κrdn .
+    outlier measure. It has exponential time complexity w.r.t.
+                                                                          Having an accurate estimation of the data complexity itself
+    the number of features. Following [6], FPOF is set with
+                                                                       is a very challenging task. Although the above two indicators
+    the minimum support threshold supp = 0.1 and the
+                                                                       are based on low-order information only, they assist us in
+    maximum pattern length l = 5.
+                                                                       understanding data complexity and our empirical results.
+   We further compare DSFS with the entropy-based feature
+weighting method (denoted by ENFW) [5] for outlier detection           D. Findings and Analysis
+by the above three detectors. Feature weighting methods only              The feature selection results are presented in the first
+assign relevance weights to features and require a decision            subsection. The next two subsections discuss the AUC perfor-
+threshold to select a feature subset. To have a fair comparison,       mance and runtime of three outlier detectors with or without
+the top-ranked k features are selected, where k is the number          using DSFS and compare DSFS with its contender ENFW,
+of features in the feature subset selected by DSFS.                    respectively. Lastly, a scale-up test is conducted.
+   The scalability of DSFS w.r.t. data size and the number                1) Large Average Feature Reduction Rate: We record the
+of features is evaluated on six subsets of the two UCI data            number of selected features by DSFS, D0 , and the reduction
+sets LINK and AD, which have the largest number of objects             rate, RED. The reduction rate is defined as the rate of the
+and features in our data sets. For LINK, the smallest subset           reduced number of features in the feature subset selected by
+contains 1,000 objects, and subsequent subsets are increased           DSFS to that in the full feature set, which is shown in the
+by a factor of four until the largest subset which contains            last column in Table II. The results show that DSFS leads to a
+significant reduction rate, ranging from 13% up to 97% across                    runs six orders of magnitude faster than FPOF on CT. DSFS
+15 data sets. On average, DSFS obtains 46% reduction rate.                       enables COMP and FPOF to perform outlier detection on high
+   The two data indicators κnos and κrdn demonstrate that                        dimensional data, such as Sylva with 87 features and AD with
+nearly all data sets have a large proportion of noisy or                         1555 features, where these detectors are otherwise prohibitive
+redundant features. These noisy and redundant features make                      in terms of runtime and/or space requirements.
+the three types of pattern-based outlier detectors less effective                   A more straightforward benefit is that the simplest detector
+and efficient. We show in the next section that proper feature                   MarP empowered by DSFS can obtain the AUC performance
+selection is essential for enabling the detectors to handle the                  that is the same as, or very competitive with, that of the two
+data complexities.                                                               other detectors COMP and FPOF, while at the same time
+   2) Improving Three Different Types of Pattern-based Outlier                   saving several orders of magnitude runtime. However, COMP
+Detectors in AUC and/or Efficiency: The AUC performance                          and FPOF have much higher time and spaces complexities in
+and runtime of three detectors: MarP, COMP and FPOF                              complex data sets (e.g., aPascal, CMC and AD).
+compared with their editions by incorporating DSFS: MarP∗ ,                         Next two subsections further explore the performance of
+COMP∗ and FPOF∗ are presented in Table III 2 . On average,                       these three detectors in data sets with many noisy or redundant
+MarP∗ , COMP∗ and FPOF∗ obtain 7%, 4% and 4% AUC                                 features, respectively.
+improvements respectively while they only use averagely 54%                         2.1) Substantially Enhancing both AUC and Runtime on
+features compared to their counterparts. In particular, MarP∗                    Data Sets with High Feature Noise Level: In data with many
+achieves maximally 42% improvement on aPascal, COMP∗                             noisy features, e.g., BM (90% w.r.t. κnos ), aPascal (81%),
+makes maximally 33% improvement on aPascal, and FPOF∗                            Sylva (78%), Census (58%), CelebA (49%) and CMC (38%)
+gains maximally 18% on Census. It is interesting to see                          (see Table II), on average, DSFS removes 43% features
+that less improvement is made on UCI data sets, which is                         and enables MarP, COMP and FPOF to respectively obtain
+understandable as UCI data sets tend to be highly manipulated                    14%, 10% and 9% AUC improvements as shown in Table
+and simpler.                                                                     III, compared to their counterparts. This is because DSFS
+                                                                                 successfully removes many noisy features from these highly
+TABLE II: Feature Selection Results on Data Sets with                            noisy data, and enables pattern-based detectors to work on
+Different Characteristics. The data sets are sorted by κnos .                    much cleaner data, which thus perform more effectively.
+The middle horizontal line roughly separates data sets with                         In other data sets (e.g., Sylva and CelebA) where feature
+many noisy features (i.e., κnos > 35%) from other data sets.                     reduction rates are smaller, resulting in a number of noisy
+              0
+RED = D−D   D   (%) denotes the reduction rate by DSFS. N is                     features retained in the selected feature subset, it is very dif-
+the number of data objects in a data set, D is the number of                     ficult to separate them from the relevant features. As a result,
+features, and D0 is the number of reserved features by DSFS.                     the detectors make very limited, or none, AUC improvements.
+Avg. indicates the averaged figure.                                              This shows that such tough noisy features are deeply mixed
+                                                                                 with the outlier-discriminative features, and generate higher
+  Data Set         Acronym κnos       κrdn    N         D        D0     RED
+                                                                                 outlierness than truly outlying features. In these cases, it is too
+  BankMarketing BM            90%     0%      41188   10         7      30%      difficult for DSFS to distinguish them from outlying features.
+  aPascal        -            81%     0%      12695   64         20     69%         In addition to the AUC improvement, the DSFS-enabled
+  Sylva          -            78%     0%      14395   87         66     24%      detectors can also have a significant speedup due to the
+  Census         -            58%     0%      299285 33          10     70%
+                                                                                 significant feature reduction rate, e.g., FPOF runs 409 times
+  CelebA         -            49%     4%      202599 39          34     13%
+                                                                                 slower than FPOF∗ on Census.
+  CMC            -            38%     4%      1473    8          5      38%
+  CoverType      CT           34%     22%     581012 44          5      89%
+                                                                                    2.2) Achieving a Substantial Speedup on Data Sets with
+  Chess          -            33%     0%      28056   6          4      33%      High Feature Redundancy Level: In data sets with a high
+  U2R            -            17%     7%      60821   6          3      50%      feature redundancy level, e.g., CT (22% w.r.t. κrdn ) and AD
+  SolarFlare     SF           9%      0%      1066    11         8      27%      (78% w.r.t. κrdn ), DSFS generates a very aggressive feature
+  Optdigits      DIGIT        8%      26%     601     64         46     28%      reduction, removing 89% and 97% features, respectively.
+  Mushroom       MRM          5%      2%      4429    22         13     41%      Although this massive feature reduction might result in little
+  Advertisements AD           5%      78%     3279    1555       49     97%      loss in terms of AUC, e.g., 1% on CT, the outlier detectors
+  Linkage        LINK         0%      0%      5749132 5          4      20%
+                                                                                 can obtain up to six orders of magnitude speedup by working
+  Probe          -            0%      7%      64759   6          2      67%
+                                                                                 on a substantially smaller feature set, e.g., FPOF on CT and
+  Avg.                        34%     10%     470986 131         18     46%
+                                                                                 COMP on AD. On the other hand, MarP using DSFS obtains
+                                                                                 6% AUC improvement on AD even if it works on the data
+  With regard to efficiency, MarP∗ , COMP∗ and FPOF∗ run                         with only 3% original features left.
+orders of magnitude faster than their counterparts as they work                     For data sets such as U2R, SF, MRM, Probe and LINK, the
+on the highly reduced feature subsets. For example, FPOF∗                        reduction rates are more than the sum of κnos and κrdn . It
+  2 All runtime refers to the runtime of the detectors only, excluding that of
+                                                                                 should be noted that we only have a conservative estimation
+DSFS, but our empirical results show that the runtime of DSFS is within one      of κnos and κrdn , so the true feature noise and redundancy
+second in most data sets and that is almost negligible in practice.              levels might be much higher than the estimated values. This
+TABLE III: AUC and Runtime of the Three Detectors with or without DSFS. Three baseline detectors are MarP, COMP and FPOF.
+Their editions using DSFS are MarP∗ , COMP∗ and FPOF∗ , respectively. IMP and SU indicate the AUC improvement and runtime
+speedup of the detectors combined with DSFS. Avg. indicates the averaged figure.
+
+                                AUC Performance                                                         Runtime (s)
+
+          MarP   MarP∗ IMP    COMP COMP∗ IMP         FPOF   FPOF∗ IMP      MarP   MarP∗ SU     COMP COMP∗ SU           FPOF        FPOF∗      SU
+  BM      0.56   0.59  5%     0.63 0.64  2%          0.55   0.59  7%       0.17   0.15  1      212.46 170.43 1         0.85        0.57       1
+  aPascal 0.62   0.88  42%    0.66 0.88  33%          ◦     0.88    ◦      0.31   0.12  3      451.36 41.00      11      ◦         53.29      ◦
+  Sylva 0.96     0.96  0%     0.95 0.96  1%           ◦       ◦     ◦      0.21   0.20  1      1137.07 498.59 2          ◦           ◦        ◦
+  Census 0.59    0.69  17%    0.64 0.71  11%         0.61   0.72  18%      1.62   0.51  3      18174.49 12878.14 1     30790.78    75.23      409
+  CelebA 0.74    0.74  0%     0.76 0.76  0%          0.74   0.75  1%       0.89   0.82  1      1647.47 1169.27 1       159377.51   50188.65   3
+  CMC 0.54       0.66  22%    0.57 0.66  16%         0.56   0.65  16%      0.14   0.01  11     5.14     2.42     2     0.10        0.06       2
+  CT      0.98   0.97  -1%    0.98 0.97  -1%         0.98   0.97  -1%      3.14   0.36  9      3914.33 341.98 11       410016.55   1.09       377547
+  Chess 0.64     0.64  0%     0.64 0.63  -2%         0.62   0.61  -2%      0.12   0.08  1      95.35    49.30    2     0.42        0.18       2
+  U2R     0.88   0.92  5%     0.99 0.99  0%          0.92   0.97  5%       0.28   0.13  2      318.95 255.28 1         0.39        0.22       2
+  SF      0.84   0.85  1%     0.85 0.86  1%          0.86   0.86  0%       0.02   0.01  1      6.33     4.40     1     0.39        0.09       4
+  DIGIT 0.95     0.95  0%     0.97 0.97  0%          0.96   0.94  -2%      0.04   0.03  1      217.10 111.51 2         10196.85    31.99      319
+  MRM 0.89       0.89  0%     0.93 0.94  1%          0.91   0.91  0%       0.07   0.07  1      48.72    32.18    2     19.32       2.70       7
+  AD      0.70   0.74  6%      •   0.75    •          ◦     0.74    ◦      0.85   0.10  9        •      126.35 •         ◦         54088.52   ◦
+  Probe 0.98     0.98  0%     0.98 0.98  0%          0.99   0.98  -1%      0.28   0.11  3      576.08 456.00 1         0.47        0.20       2
+  LINK 1.00      1.00  0%     1.00 1.00  0%          1.00   1.00  0%       2.74   2.27  1      6365.26 5203.67 1       23.56       17.93      1
+  Avg.                 7%                4%                       4%                    3                        3                            31525
+
+ ‘◦’ indicates out-of-memory exceptions.
+ ‘•’ indicates that we cannot obtain the results within four weeks, i.e., 2,419,200 seconds.
+
+
+explains why the three detectors empowered by DSFS can still                 TABLE IV: AUC Performance Comparison of the Three
+perform equally well or very competitively on these data sets,               Detectors Using ENFW and DSFS respectively. IMP denotes
+compared to their counterparts not using DSFS.                               the improvement of DSFS over ENFW.
+   3) Defeating the Feature Weighting-based Contender:                                         MarP                   COMP                FPOF
+The performance comparison between two feature selection
+                                                                                        ENFW DSFS     IMP    ENFW DSFS       IMP    ENFW DSFS     IMP
+methods ENFW and DSFS in terms of the three detectors                           BM      0.53 0.59     12%    0.56 0.64       15%    0.53 0.59     12%
+is shown in Table IV. On average, MarP, COMP and FPOF                           aPascal 0.46 0.88     91%    0.46 0.88       92%    0.46 0.88     91%
+using DSFS obtain 24%, 26% and 24% AUC improvements,                            Sylva 0.82   0.96     17%    0.82 0.96       18%      ◦    ◦       ◦
+compared to MarP, COMP and FPOF using ENFW, respec-                             Census 0.43  0.69     61%    0.43 0.71       65%    0.46 0.72     55%
+                                                                                CelebA 0.74  0.74     0%     0.76 0.76       0%     0.75 0.75     0%
+tively. Impressively, DSFS-empowered MarP gains maximally
+                                                                                CMC 0.50     0.66     31%    0.52 0.66       27%    0.51 0.65     28%
+91% improvement over ENFW-based MarP on aPascal, DSFS-                          CT      0.51 0.97     90%    0.50 0.97       94%    0.51 0.97     90%
+empowered COMP makes maximally 94% improvement over                             Chess 0.64   0.64     0%     0.63 0.63       0%     0.61 0.61     0%
+ENFW-based COMP on CT, and DSFS-empowered FPOF                                  U2R     0.86 0.92     8%     0.83 0.99       20%    0.86 0.97     13%
+achieves maximally 91% improvement over ENFW-based                              SF      0.81 0.85     5%     0.82 0.86       5%     0.83 0.86     4%
+                                                                                DIGIT 0.93   0.95     2%     0.95 0.97       2%     0.93 0.94     1%
+FPOF on aPascal.
+                                                                                MRM 0.89     0.89     1%     0.93 0.94       1%     0.90 0.91     0%
+   3.1) Beating ENFW in Data Sets with Noisy Features: We                       AD      0.56 0.74     33%    0.56 0.75       35%    0.56 0.74     33%
+further explore the power of DSFS on noisy features. As                         Probe 1.00   1.00     0%     1.00 1.00       0%     1.00 1.00     0%
+shown in IV, DSFS generally performs much better than                           LINK 0.93    0.98     6%     0.88 0.98       12%    0.93 0.98     5%
+ENFW on almost all data sets, as long as a data set con-                        Avg                   24%                    26%                  24%
+tains noisy features. This is mainly because ENFW evaluates                   ‘◦’ indicates out-of-memory exceptions.
+features independently and wrongly takes noisy features as
+relevant features. However, DSFS estimates the outlierness
+of features based on the intra- and inter-feature couplings
+embedded within/between features, thus can much better filter                features for outlier detection.
+out noisy features than ENFW.                                                   4) Good Scalability: The scalability test results of DSFS
+   The exceptional cases are on CelebA (with 39 features) and                against ENFW as a baseline are illustrated in Fig. 2. As
+Chess (with 6 features), where DSFS and ENFW perform                         expected, DSFS has linear time complexity with respect to data
+equally well. This is because both DSFS and ENFW cannot                      size and is quadratic to the number of features. Although DSFS
+remove a sufficient number of noisy features, and as a result                runs slower than ENFW, it still has quite good scalability with
+the three detectors not using DSFS and ENFW obtain equally                   respect to both data size and the number of features, given that
+good performance as their counterparts using either DSFS or                  DSFS completes its execution within one second for the largest
+ENFW. This also shows the significant challenge of identifying               data set with 1,024,000 objects and less than 20 seconds for
+intrinsic characteristics and sophisticated interactions between             the high-dimensional data with 1,028 features.
+                               0.8
+                                                                DSFS                                                                       DSFS
+                                                                                                           20
+
+
+
+
+ Execution Time (in seconds)                                                 Execution Time (in seconds)
+                               0.7                              ENFW                                                                       ENFW
+
+                               0.6
+                                                                                                           15
+                               0.5
+
+                               0.4
+                                                                                                           10
+                               0.3
+
+                               0.2                                                                          5
+                               0.1
+
+                                 0                                                                          0
+                                1000   4000   16000   64000 256000 1024000                                  40   80       160   320    640    1280
+                                               Data Size                                                              Number of Features
+
+Fig. 2: Scale-up Test Results of DSFS against ENFW w.r.t.
+Data Size and the Number of Features.
+
+
+                                                           VI. C ONCLUSIONS                                                                                                       R EFERENCES
+
+                                                                                                                                                      [1] V. Chandola, A. Banerjee, and V. Kumar, “Anomaly detection: A survey,”
+   This paper proposes a novel and flexible unsupervised                                                                                                  ACM Computing Surveys, vol. 41, no. 3, 2009.
+feature selection framework for outlier detection (CUFS).                                                                                             [2] C. C. Aggarwal and P. S. Yu, “Outlier detection for high dimensional
+Unlike existing feature selection and unsupervised outlier                                                                                                data,” in ACM Sigmod Record, vol. 30, no. 2, 2001, pp. 37–46.
+detection, CUFS effectively captures the low-level hierarchical                                                                                       [3] A. Zimek, E. Schubert, and H.-P. Kriegel, “A survey on unsupervised
+                                                                                                                                                          outlier detection in high-dimensional numerical data,” Statistical Anal-
+interactions embedded in relevant features which are mixed                                                                                                ysis and Data Mining, vol. 5, no. 5, pp. 363–387, 2012.
+with noisy and redundant features. We further introduce a                                                                                             [4] L. Akoglu, H. Tong, J. Vreeken, and C. Faloutsos, “Fast and reliable
+parameter-free instantiation (DSFS) of the CUFS framework.                                                                                                anomaly detection in categorical data,” in CIKM, 2012, pp. 415–424.
+                                                                                                                                                      [5] S. Wu and S. Wang, “Information-theoretic outlier detection for large-
+DSFS combines the advantage of CUFS with graph-based                                                                                                      scale categorical data,” IEEE Transactions on Knowledge and Data
+strategies. We prove that the feature subset selected by DSFS                                                                                             Engineering, vol. 25, no. 3, pp. 589–602, 2013.
+achieves a 2-approximation to the optimum.                                                                                                            [6] Z. He, X. Xu, Z. J. Huang, and S. Deng, “FP-outlier: Frequent pattern
+                                                                                                                                                          based outlier detection,” Computer Science and Information Systems,
+   Our extensive evaluation results show that, on average, (i)                                                                                            vol. 2, no. 1, pp. 103–118, 2005.
+DSFS obtains 46% feature reduction rate on 15 data sets                                                                                               [7] K. Smets and J. Vreeken, “The odd one out: Identifying and character-
+with different levels of noisy features and redundant features,                                                                                           ising anomalies,” in SDM, 2011, pp. 109–148.
+                                                                                                                                                      [8] G. Tang, J. Pei, J. Bailey, and G. Dong, “Mining multidimensional
+and (ii) DSFS enables three different types of pattern-based                                                                                              contextual outliers from categorical relational data,” Intelligent Data
+outlier detectors (i.e., MarP, COMP and FPOF) to respectively                                                                                             Analysis, vol. 19, no. 5, pp. 1171–1192, 2015.
+obtain 7%, 4% and 4% AUC improvements compared to their                                                                                               [9] K. Das and J. Schneider, “Detecting anomalous records in categorical
+counterparts not using DSFS.                                                                                                                              datasets,” in SIGKDD, 2007, pp. 220–229.
+                                                                                                                                                     [10] K. Yu, X. Wu, W. Ding, and J. Pei, “Towards scalable and accurate
+   On data sets with high noise level, in particular, DSFS is                                                                                             online feature selection for big data,” in ICDM, 2014, pp. 660–669.
+able to remove a large proportion of noisy features, resulting                                                                                       [11] L. Du and Y.-D. Shen, “Unsupervised feature selection with adaptive
+                                                                                                                                                          structure learning,” in SIGKDD, 2015, pp. 209–218.
+in higher AUC improvements of the three detectors (14%, 10%
+                                                                                                                                                     [12] J. Li, K. Cheng, S. Wang, F. Morstatter, R. P. Trevino, J. Tang,
+and 9%, respectively). Moreover, by working on data sets with                                                                                             and H. Liu, “Feature selection: A data perspective,” arXiv preprint
+significantly smaller feature subsets, COMP and FPOF, which                                                                                               arXiv:1601.07996, 2016.
+have at least quadratic time complexity with respect to the                                                                                          [13] X. Chen and M. Wasikowski, “FAST: A ROC-based feature selection
+                                                                                                                                                          metric for small samples and imbalanced data classification problems,”
+number of features, perform orders of magnitude faster than                                                                                               in SIGKDD, 2008, pp. 124–132.
+on the original full feature set.                                                                                                                    [14] S. Maldonado, R. Weber, and F. Famili, “Feature selection for high-
+                                                                                                                                                          dimensional class-imbalanced data sets using support vector machines,”
+   Compared to its feature selection contender ENFW, DSFS                                                                                                 Information Sciences, vol. 286, pp. 228–246, 2014.
+performs substantially better in most data sets with noisy                                                                                           [15] F. Azmandian, A. Yilmazer, J. G. Dy, J. Aslam, D. R. Kaeli et al.,
+features. On average, all three DSFS-based detectors obtain                                                                                               “GPU-accelerated feature selection for outlier detection using the local
+more than 20% AUC improvements compared to ENFW.                                                                                                          kernel density ratio,” in ICDM, 2012, pp. 51–60.
+                                                                                                                                                     [16] C. C. Aggarwal, “Outlier detection in categorical, text and mixed
+   As expected, DSFS has linear time complexity to data size                                                                                              attribute data,” in Outlier Analysis, 2013, pp. 199–223.
+and completes the outlier scanning of a data set containing                                                                                          [17] R. Kohavi and G. H. John, “Wrappers for feature subset selection,”
+1,024,000 objects within one second. Although DSFS has                                                                                                    Artificial intelligence, vol. 97, no. 1, pp. 273–324, 1997.
+                                                                                                                                                     [18] J. He and J. Carbonell, “Coselection of features and instances for
+quadratic time complexity to the number of features, it com-                                                                                              unsupervised rare category analysis,” Statistical Analysis and Data
+pletes the data set containing 1,280 features within 20 seconds.                                                                                          Mining, vol. 3, no. 6, pp. 417–430, 2010.
+This enables DSFS to scale up well with respect to data size                                                                                         [19] L. Cao, Y. Ou, and P. S. Yu, “Coupled behavior analysis with applica-
+                                                                                                                                                          tions,” IEEE Transactions on Knowledge and Data Engineering, vol. 24,
+and the number of features.                                                                                                                               no. 8, pp. 1378–1392, 2012.
+   We are working on enhancing CUFS and DSFS by deeply                                                                                               [20] C. Wang, X. Dong, F. Zhou, L. Cao, and C.-H. Chi, “Coupled attribute
+understanding the sophisticated interactions between relevant                                                                                             similarity learning on categorical data,” IEEE Transactions on Neural
+                                                                                                                                                          Networks and Learning Systems, vol. 26, no. 4, pp. 781–797, 2015.
+and noisy/redundant relations to address the challenges in                                                                                           [21] D. Chakrabarti and C. Faloutsos, “Graph mining: Laws, generators, and
+extremely imbalanced data with highly noisy features.                                                                                                     algorithms,” ACM Computing Surveys, vol. 38, no. 1, p. 2, 2006.
+[22] H. Liu and L. Yu, “Toward integrating feature selection algorithms for
+     classification and clustering,” IEEE Transactions on Knowledge and
+     Data Engineering, vol. 17, no. 4, pp. 491–502, 2005.
+[23] R. Agrawal, R. Srikant et al., “Fast algorithms for mining association
+     rules,” in VLDB, 1994, pp. 487–499.
+[24] N. A. Christakis and J. H. Fowler, “The spread of obesity in a large
+     social network over 32 years,” New England Journal of Medicine, vol.
+     357, no. 4, pp. 370–379, 2007.
+[25] H. Peng, F. Long, and C. Ding, “Feature selection based on mu-
+     tual information criteria of max-dependency, max-relevance, and min-
+     redundancy,” IEEE Transactions on Pattern Analysis and Machine
+     Intelligence, vol. 27, no. 8, pp. 1226–1238, 2005.
+[26] M. Charikar, “Greedy approximation algorithms for finding dense com-
+     ponents in a graph,” in Approximation Algorithms for Combinatorial
+     Optimization, 2000, pp. 84–95.
+[27] S. Khuller and B. Saha, “On finding dense subgraphs,” in Automata,
+     Languages and Programming, 2009, pp. 597–608.
+[28] A. Lazarevic and V. Kumar, “Feature bagging for outlier detection,” in
+     SIGKDD, 2005, pp. 157–166.
+[29] A. Zimek, M. Gaudet, R. J. Campello, and J. Sander, “Subsampling
+     for efficient and effective unsupervised outlier detection ensembles,” in
+     SIGKDD, 2013, pp. 428–436.
+[30] G. O. Campos, A. Zimek, J. Sander, R. J. Campello, B. Micenková,
+     E. Schubert, I. Assent, and M. E. Houle, “On the evaluation of
+     unsupervised outlier detection: Measures, datasets, and an empirical
+     study,” Data Mining and Knowledge Discovery, pp. 1–37, 2016.
+[31] I. H. Witten, E. Frank, and M. Hall, Data Mining: Practical Machine
+     Learning Tools and Techniques. Morgan Kaufmann, 2011.
+[32] D. J. Hand and R. J. Till, “A simple generalisation of the area under
+     the ROC curve for multiple class classification problems,” Machine
+     Learning, vol. 45, no. 2, pp. 171–186, 2001.
+

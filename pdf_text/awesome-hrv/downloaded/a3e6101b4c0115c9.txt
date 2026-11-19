@@ -1,0 +1,505 @@
+                                Outlier Detection with Autoencoder Ensembles
+
+               Jinghui Chen∗              Saket Sathe†        Charu Aggarwal†            Deepak Turaga†
+
+
+Abstract                                                      cause of the aforementioned drawbacks.
+In this paper, we introduce autoencoder ensembles for             In this work, we employ autoencoder ensembles
+unsupervised outlier detection. One problem with neural       for unsupervised outlier detection. More specifically,
+networks is that they are sensitive to noise and often        instead of fully connected autoencoders, various ran-
+require large data sets to work robustly, while increasing    domly connected autoencoders with different structures
+data size makes them slow. As a result, there are only a      and connection densities, which reduces the computa-
+few existing works in the literature on the use of neural     tional complexity, are used as base ensemble compo-
+networks in outlier detection. This paper shows that neural   nents. Moreover, we leverage a carefully designed adap-
+networks can be a very competitive technique to other         tive sample size method within the ensemble frame-
+existing methods. The basic idea is to randomly vary on       work to achieve the dual goals of improved diversity
+the connectivity architecture of the autoencoder to obtain    and training time. Therefore, our approach combines
+significantly better performance. Furthermore, we combine     adaptive sampling with randomized model construction
+this technique with an adaptive sampling method to make       in order to achieve high-quality results. We refer to this
+our approach more efficient and effective. Experimental       model as RandNet, which stands for Randomized Neural
+results comparing the proposed approach with state-of-the-    Network for Outlier Detection.
+art detectors are presented on several benchmark data sets        Even though the sparse structure of each autoen-
+showing the accuracy of our approach.                         coder allows overfitting, significant overall gains in effi-
+                                                              ciency and benefits from diversity of the various com-
+1    Introduction                                             ponents can be obtained if the scores from individual
+                                                              ensemble components are combined. We present experi-
+Outliers are data points that differ significantly from
+                                                              mental results showing the effectiveness of the approach.
+the remaining data. In the unsupervised outlier de-
+                                                              Although we do not investigate the option of training
+tection setting, prior labels about the anomalousness
+                                                              the base ensemble components in parallel, a salient ob-
+of data points are not available. In such cases, the
+                                                              servation about this approach is that the training pro-
+most common techniques for scoring data points for
+                                                              cess can be easily parallelized.
+outlierness include, distance-based methods [5, 11, 17],
+                                                                  The remainder of this paper is organized as follows.
+density-based methods [6], and linear methods [21]. An
+                                                              We will discusses related work in Section 2. Section 3
+overview of different outlier detection algorithms may be
+                                                              discusses our proposed autoencoder ensemble method
+found in [1]. The basic approach in neural networks is
+                                                              for outlier detection. Section 4 discusses the experi-
+to use a multi-layer symmetric neural network to recon-
+                                                              mental results, while the conclusions are presented in
+struct (i.e, replicate) the data. The reconstruction error
+                                                              Section 5.
+is used as the outlier score. There are several problems
+with this approach. First, even though deep neural net-
+                                                              2   Related Work
+works are generally considered a powerful learning tool
+on large data sets, the effectiveness on smaller data sets    The problem of outlier analysis has been studied widely
+remains in doubt because of the overfitting caused by         in the community [1]. Numerous methods such as
+the large number of parameters. Training such neural          distance-based methods [5, 11, 17], density-based meth-
+networks often results in convergence to local optima.        ods [6], linear methods [21], and spectral methods [8,
+Increasing data size reduces overfitting but can cause        18] have been proposed. The autoencoder method
+computational challenges. Furthermore, there is some-         can be seen as a generalization of the class of linear
+times an inherent bottleneck on data availability. Al-        schemes [10], in which a nonlinear representation of the
+though neural networks have been explored for outlier         data is constructed for outlier detection. Comparisons
+detection [10, 13, 22], this class of approaches has not      of neural network methods may be found in [22] and a
+been popular in the outlier detection community be-           detailed survey on neural networks may be found in [13].
+                                                              One can view a neural network as a model that scores
+    ∗ University of Virginia.                                 outliers with the use of nonlinear dimensionality reduc-
+    † IBM T. J. Watson Research Center.                       tion. Recently, ensemble methods have found increas-
+ing interest in the literature [2, 3, 4]. Several ensem-       inliers (or normal points). Therefore, on reconstructing
+ble methods such as feature bagging [12], subspace his-        an outlier, the error will be large. This provides a natu-
+tograms [19], high-contrast subspaces [9], and locally         ral way to score a data point. Nonlinear dimensionality
+relevant subspaces [14, 15] have been proposed. The            reduction methods such as spectral transformations [18]
+spectral methods in [8, 18] can also be viewed as non-         have recently been explored in the literature with some
+linear dimensionality reduction methods that reduce the        success. In this light, it is somewhat surprising that the
+data representation in a nonlinear way in order to score       success with neural networks has been limited. An im-
+data points as outliers.                                       portant issue is that the outliers are often themselves
+     We also use adaptive sampling in order to speed up        included within the training model. As a result, over-
+our training process of the neural network. Although           fitting becomes increasingly likely. This is one of the
+the adaptive sampling approach has been used in a dif-         reasons that neural networks have not achieved much
+ferent stochastic optimization problem (which is con-          success in spite of the known success of other dimen-
+vex) [7], there is no guarantee that it will work in prac-     sionality reduction methods in outlier detection. En-
+tice in a non-convex optimization problem like neural          semble learning methods [2] present a natural solution
+networks. Correspondingly, the precise approach for            to address this dilemma.
+adaptive sampling is also somewhat different from the               Ensemble learning methods are algorithms that
+linear adjustment advocated in [7] which seems to be           combine the predictions from different base detectors
+unreasonable with the settings in this paper (a detailed       in order to create more robust results. The basic idea is
+discussion on this topic is provided in section 3.3).          that predictive algorithms often have a natural variance
+                                                               in the scores, depending on the choice of the data or
+3 The RandNet Model                                            the design of the base model. Therefore, by using
+An autoencoder is a special type of multi-layer neural multiple executions of the model and taking a central
+network that performs hierarchical and nonlinear di- estimator of the scores (such as the mean or median),
+mensionality reduction of the data. Typically, the num- the variance is reduced. However, there is no guarantee
+ber of nodes in the output layer is the same as the input that the combination of multiple detectors will always
+layer, and the architecture is layered and symmetric. perform better than the best individual detector in
+The goal of an autoencoder is to train the output to the ensemble. In order to make ensemble learning
+reconstruct the input as closely as possible. The nodes methods work, the individual ensemble components
+in the middle layers are smaller in number, and there- must be adequately diverse. This is achieved by creating
+fore the only way to reconstruct the input is to learn predictive models such that each ensemble component
+weights so that the intermediate outputs of the nodes is able to capture different parts of the underlying
+in the middle layers represent reduced representations. patterns. The combined model is often more powerful
+Figure 1 illustrates a fully connected autoencoder. Note than the individual detectors.
+that the outputs of the bottleneck layer represent the              The general idea of our method is to use ensemble
+reduced representation.                                        learning   method with autoencoders to obtain higher
+     Since the autoencoder creates a reduced representa-       accuracy.     However, directly combining a set of fully
+tion of the data, it is a natural approach for discovering     connected    autoencoders   will often not be helpful. Due
+outliers. The basic idea here is that outliers are much        to  the  fact  that the  same   network structure is used,
+harder to be accurately represented in this form than the      the  results  we obtain  from   the autoencoders would be
+                                                               somewhat similar. This lack of diversity is unhelpful
+                                                               from the point of view of variance reduction. To address
+                                                               this problem, we use randomly connected autoencoders
+input layer               approximate             output layer
+                        reconstruction                         in which some of the connections are randomly dropped.
+                                                               Figure 2 shows a two-layer example of a randomly
+                                                               connected autoencoder. It is worth noting that this
+                                                               approach is fundamentally different from methods like
+                                                               Dropout [20], in which some of the connections are
+                                                               randomly masked during training and there is only a
+                                                               single model being trained. In RandNet, we have a set
+                                                               of completely independent (different) neural networks,
+                    bottleneck hidden layer
+                                                               and the result are combined. In Dropout [20], the
+                                                               main purpose of masking connections is to avoid co-
+Figure 1: Sketch of the fully connected autoencoder adaptation of the weights within the same network.
+model used by RandNet.                                         While in RandNet, we allow overfitting within a single
+                                                                     the two activation functions. In practice, we found that
+                                                                     this combination achieves better performance than a
+                                                                     fixed choice. The Sigmoid function is known to cause
+                                                                     the “vanishing gradient problem”, and its operations
+                       randomized connection                         are also expensive compared to the ReLU unit. The
+                             dropping                                ReLU unit is simple and computationally costless, and
+                                                                     it does not suffer from the vanishing gradient problem.
+                                                                     However, it suffers from a different problem known
+    fully connected                            randomly connected    as the “Dying ReLU” problem, recently discovered by
+  autoencoder layers                            autoencoder layers
+                                                                     researchers in [24]. It means that during training, a
+                                                                     weight update triggered by a large gradient flowing
+Figure 2: Left: A two-layer fully connected autoen-                  through a ReLU neuron could make the neuron inactive
+coder. Right: The same autoencoder after permanently                 for other data points in all future time. Finally, this will
+dropping connections.                                                cause many of the neurons to be in a dying state where
+                                                                     no weight is updated and the network continues to give
+network but reduce the variance only in the combination              the same output over iterations. This motivates the use
+from multiple networks.                                              of Sigmoid functions at the two ends of the network, and
+                                                                     the ReLU for other layers. On one hand, the use of the
+3.1 Neural Network Structure The basic autoen-                       Sigmoid functions will ensure that even if all the middle
+coder structure uses a symmetric design that is similar              layer ReLU neurons are dead, at least we have two layers
+to that shown in Figure 1. The input layer has exactly               properly working at the two ends of the network, which
+the same number of nodes as the dimension of our train-              guarantees an improved worst case. On the other hand,
+ing data, denoted as d. The output layer will have the               the dying ReLU problem usually happens when the
+same number of nodes due to the symmetric design of                  gradients are too large, the vanishing gradient caused
+autoencoders. For all the following layers, up to the                by the Sigmoid function actually helps in preventing
+bottleneck hidden layer, the number of nodes is set at a             ReLU units from dying during backpropagation.
+ratio of α from the previous layer. α is referred to as the          Random Connection Generation: Here we intro-
+structure parameter. An exactly symmetric structure                  duce the randomly connected model for autoencoders.
+applies to the layers after the bottleneck layer. Note               The basic idea of our approach is to randomly drop con-
+that for all layers, the minimum limit for number of                 nections in a neural network, and yet retain a certain
+nodes is 3. Therefore, if the ratio-wise approach indi-              level of control on the connection density between var-
+cates fewer than 3 nodes for a layer, then the number                ious layers and also create models with different types
+of nodes in the layer is set to 3. This is to avoid an ex-           of densities.
+cessive level of compression in the middle layer so that                  The random connection generation proceeds as fol-
+the data cannot be properly reconstructed.                           lows. Suppose, we have two adjacent layers with nodes
+Choice of Activation Functions: At the basic level,                  `1 and `2 , then there are `1 · `2 connections possible be-
+each node in the neural network computes a linear                    tween these two layers. From these possible connections
+function of its inputs. The activation function applies              we choose `1 · `2 connections with replacement. Since we
+a nonlinear function to the linear combination of inputs             sampled with replacement, in the sampled `1 · `2 con-
+created by a unit of computation. For the choice of                  nections we will have some redundant (or repeated) and
+the activation functions we use the Sigmoid and the                  some missing connections. Then we keep all the con-
+Rectified Linear (ReLU) [16] units. Specifically, in the             nections that are present in the `1 · `2 -sized sample we
+first hidden layer (i.e., the one nearest to the input layer)        choose. The dropped connections are those connections
+and the output layer, the Sigmoid activation function                that we did not pick during sampling. Notice that with
+is used. The Sigmoid activation function is defined as               this approach we vary on the rate of sampling by the
+follows:                                                             uncertain number of missing connections, and thus are
+                                   1                                 able to produce different types of randomly connected
+                      σ(x) =           .                             autoencoders with varying densities.
+                               1 + e−x
+For all other layers, we use the ReLU activation func-
+                                                              3.2 Outlier Scoring Each ensemble component is
+tion:
+                                                              constructed by randomly sampling connections, insert-
+                     f (x) = max(0, x).                       ing the aforementioned activation functions and enforc-
+                                                              ing the network structure. Also it is trained only on
+Using different activation functions in different layers a randomly drawn sample of size s from the full data
+aims at balancing the advantages and disadvantages of
+set. However, once all the neural networks (or ensemble                   rithm for training a neural network is fairly standard,
+components) are trained, each data point can be scored                    there are a few major issues related to the learning rate
+by each network by computing autoencoder reconstruc-                      and adaptive sampling that we addressed in our design
+tion error. The outlier score of each data point in each                  of RandNet. These issues are discussed below:
+ensemble component is obtained as the reconstruction                      Adaptive Learning Approach: We use an adaptive
+error of that point, when we run it through the neural                    learning method, referred to as RMSprop [23]. The basic
+network.                                                                  idea is to divide the gradient by a running average of its
+                                                                          recent magnitude. It keeps a running average RA(t) as
+                                                                          follows:
+
+                                                                                    RA(t) = ρ · RA(t − 1) + (1 − ρ) · gt2 ,
+
+                                                                          where gt stands for the gradient computed at time
+                                                                          t. The parameter ρ regulates the adaptive level of
+                                                                          adjustment, and it was chosen to be 0.9. The RMSprop
+                                                                          approach works by updating the parameters as follows:
+                                                                                                           η
+                                                                                        θt+1 = θt − p               · gt ,
+                                                                                                        RA(t) + 
+                                                                          Here, η is the static learning rate and  is a small
+                                                                          value that avoids ill-conditioned solutions, such as those
+                                                                          caused by division by zero.
+                                                                          Pre-training: It is well-known that with deep neural
+Figure 3: Example of the outlier score vector and final                   networks, it is very easy to get trapped in local optima,
+outlier score computation.                                                which prevents further effective backpropagation of
+                                                                          errors. Pre-training is a way of initializing the weights,
+    Suppose we have m ensemble components, with                           so that the initial starting point is in a good “basin”
+the training set of n data points and d dimensions.                       from where gradient-descent procedure has a better
+We denote the i-th ensemble component’s j-th record                       chance of reaching a global optimum. Pre-training is not
+input data point as xij ∈ Rd and the autoencoder’s                        always needed for accuracy when a very large amount of
+reconstructed output as oij ∈ Rd . Thus, for i-th                         data is available. However, pre-training speeds up the
+ensemble component, we create an Outlier Score Vector,                    gradient-descent because the starting point is of a higher
+denoted by OSi and represented as follows:                                quality. Furthermore, pre-training also has accuracy
+                                                                          advantages for smaller data sets. We used layer-wise
+             d
+             X                                                            pre-training where the weights of two symmetrically
+ [OSi ]j =         ([xij ]k − [oij ]k )2 . i ∈ 1 . . . m, j ∈ 1 . . . n
+                                                                          chosen layers were trained at one time. The idea here is
+             k=1
+                                                                          to first train the outermost pair of layers with a single
+Note that the outlier score vector is obtained by the                     hidden layer (thereby creating a shallow, three-layer
+squared sum of the error in reconstruction over the                       network) in order to learn the initial set of the weights
+different dimensions of the data point. If this outlier                   of the outermost layers and the corresponding reduced
+score vector is not normalized, then the scores may vary                  representation. This reduced representation is then
+rather wildly over different components, especially since                 used to train the next set of layers with another three-
+different components might have different overfitting                     layer model and the next level of hierarchical reduction
+propensities. To address this problem, we normalize                       is obtained. For each ensemble component, we used 1/3
+the score vector of each component, so that it has a                      of its training data to perform layer-wise pre-training.
+standard deviation of one unit. The final outlier score of                Adaptive Sampling: The purpose of adaptive sam-
+a data point is obtained by computing the median score                    pling is to make the optimization procedure more effi-
+over different ensemble components. An illustration of                    cient by changing (or adapting) the training sample size
+the scoring process is shown in Figure 3, where each                      in each iteration. The key insight is that typically a
+row represents the outlier score vector of an ensemble                    very accurate computation of the gradient is not neces-
+component.                                                                sary during the early stages of training. This is because
+                                                                          in early stages the solution is relatively crude and all we
+3.3 Training and Adaptive Sampling In this sec-                           need is an approximately correct direction. Therefore,
+tion we present RandNet’s training and adaptive sam-                      small sample sizes are sufficient. As the algorithm pro-
+pling process. Although the back-propagation algo-                        gresses and the candidate solution starts to approach
+                     (a)                                 (b)                                       (c)
+
+
+                 Figure 4: An illustration of the modified adaptive sample size selection method.
+
+
+the optimal point in the solution space, more accurate         The adaptive factor is set as 1.01. We perform the
+gradients are needed to make further progress. Thus, in        experiments on 100 ensembles and train each of them
+practice using an adaptively increasing sample size dur-       for 300 iterations. The training size s equals n/10.
+ing training would be a beneficial strategy. Although
+some adaptive sampling methods are occasionally used           4.1 Data Sets and Performance Metrics We
+in convex optimization problems, it is generally harder        used several real data sets from the UCI Machine
+to use them in neural networks because the optimization        Learning Repository1 . We summarize the important
+problem is highly nonlinear.                                   statistics about these data sets in Table 1. In data sets
+      In particular, the original algorithm in [7] that is     with unbalanced classes, the instances from the majority
+suited to convex optimization problems is adapted to           class(es) are labeled as inliers, while the instances from
+neural networks.. The original method of adaptive              the minority class(es) are labeled as outliers. In data
+sampling is shown in Figure 4(a). This method uses             sets with reasonably balanced classes, a minority class is
+a constant sample size in an initial phase. At some            created by uniformly down-sampling one of the majority
+point, the sample size increase linearly until the size        classes. Furthermore, every feature column in each data
+increases to that of the full data set. However, a linear      set has been normalized to be within the range of [0, 1].
+increase can be too slow for a neural network in which
+each iteration is significantly slow and the amount of
+improvement in later iterations can often be small. A                    Table 1: Summary of the data sets.
+second solution is to forego the initial phase of using             Data set      Samples     Features      Percent
+a constant sample size and start with a larger sample                                                      Outliers(%)
+size. This approach is shown in Figure 4(b). This                   Cardio          1,831         21             9.6
+solution is even worse because the use of an initially              Ecoli            336           7             2.7
+large sample size will result in rather slow training.              Kddcup99       102,563        41             5.2
+In order to solve these problems, we use a strategy of              Lympho           148          18             4.1
+increasing the sample size by a constant factor in each             Optdigits       5,216         64             2.9
+iteration, which results in an exponentially increasing             Pendigits       6,870         16             2.2
+                                                                    Seismic         2,584         11             6.5
+sample size with the number of iterations. Our strategy
+                                                                    Thyroid         3,772          6             2.4
+is illustrated in Figure 4(c). Given a fixed number of
+                                                                    Waveform        3,509         21             4.7
+iterations and a factor by which to increase the sample             Yeast           1,364          8             4.8
+size in each iteration, it is easy to compute the starting
+sample size and to increase it by the pre-defined factor
+in each iteration.
+                                                             The Cardiotocography (Cardio) data set contained
+                                                        measurements of fetal heart rate signals. The classes
+4 Experimental Results
+                                                        in the data set were normal, suspect, and pathologic.
+In this section, we present our experimental results The suspect class was discarded. The normal class was
+on several publicly available data sets. We compare marked as inliers, while the pathologic class formed the
+our approach against several baseline methods and also outliers. The Ecoli data set contained 8 classes; here
+present sensitivity analysis results. We set the number
+of layers to be 7, the structure parameter α as 0.5.       1      https://archive.ics.uci.edu/ml/datasets.html
+    Table 2: Accuracy comparison with state-of-the-art methods. The best AUC is highlighted in boldface.
+                  Data set   RandNet Hawkins [10] LOF [6] HiCS [9] Spectral [18]
+                       Cardio         92.87        92.36        50.63       92.37        78.90
+                       Ecoli          85.42        82.87        39.35       53.89        91.81
+                       Lympho         99.06        98.70        97.77       92.37        78.16
+                       Optdigits      87.11        87.63        67.11       43.63         2.66
+                       Pendigits      93.44        89.81        54.37       60.61        87.88
+                       Seismic        71.28        68.25        55.59       59.90        66.71
+                       Thyroid        90.42        87.47        63.04       43.76        72.94
+                       Waveform       70.05        61.57        55.48       59.24        62.88
+                       Yeast          82.95        82.12        54.30       54.45        77.70
+
+                     1.0
+                     0.9
+
+
+         AUC Score
+                     0.8
+                     0.7
+                     0.6
+                     0.5
+                            a r d io ecoli up99 pho digits digits ismic yroid formyeast
+                                               m                              e
+                           c            kddc ly opt pen se th wav
+                                                   Datasets
+                            Figure 5: Box-plots showing the ensemble performance of RandNet.
+
+
+we used classes omL, imL and imS as outliers and the          marked as outliers, while the non-hazardous was marked
+rest were included as inliers. The Kddcup99 data set          as inlier. Non-numerical features were removed from the
+was a network intrusion data set from the KDD Cup             data set. The ANN-Thyroid (Thyroid) and Pendigits
+Challenge, 1999. The data points corresponding to in-         data sets are from [9]. There are 10 classes in the Yeast
+trusion attacks were marked as outliers, while exclud-        data set. Out of which, classes ME3, MIT, NUC and
+ing the DDoS (Denial-of-Service) attacks from the data        CYT were included as inliers, while a 5% sample of ran-
+set because of their copious nature. The other packets        domly selected points from other classes were included
+were marked as inliers. In the Lymphography (Lym-             as outliers.
+pho) data set, classes 1 and 4 were outliers while the             The Receiver Operating Characteristic (ROC)
+others were inliers. The Waveform data set contained          curves are used to generate the full trade-off between
+three classes (namely 0,1, and 2) of waves. We sam-           the true positive rate and the false positive rate. The
+pled 10% of the points from class 0 and included them         ROC curve can be summarized by the area under the
+as outliers, while all instances of the other classes were    ROC curve. This is known as the AUC. For RandNet we
+included as inliers. The Optdigits was a data set that        report the AUC computed using the final outlier scores.
+contained digits in the range of 0-9. The instances of
+digits 1-9 were inliers and the outliers were 150 instances   4.2 Baselines We compare our results with several
+of the digit 0. The Seismic Bumps (Seismic) contains          other baselines reflecting the different aspects of our
+the data set for forecasting seismic bumps as hazardous       approach. Specifically, we use another neural network
+or non-hazardous. Instances of the hazardous class were       method by Hawkins [10], a conventional distance-based
+algorithm like LOF [6], an ensemble-centric algorithm        especially with larger data sets. On the one hand, more
+HiCS [9], and another spectral nonlinear dimensionality      depth in the network provides more powerful model-
+reduction method [18]. We set the number of nearest          ing ability for the autoencoder. On the other hand,
+neighbors to k = 5 in all our experiments. The HiCS          deeper networks are significantly harder to train, espe-
+method is an ensemble-centric subspace outlier detec-        cially with limited data. Observe that in Figure 7 the
+tion technique that averages the scores from multiple        AUC initially shows improvement but then it starts to
+subspaces. For HiCS the number of Monte Carlo trials         degrade. It performs quite poorly when 9 layers are
+was set to 80, α = 0.1, and candidate cutoff was set to      used. It is evident that using 7 layers offers a good
+40.                                                          trade-off point between modeling capability and train-
+                                                             ing challenges.
+4.3 Accuracy Results In Table 2, we compare our              Adaptive Sampling Factor: We analyze the pa-
+experimental results with the other state-of-the-art out-    rameter sensitivity to the adaptive sampling factor.
+lier detection baselines. In most cases, our approach is     The adaptive sampling factor controls the exponential
+able to outperform the state-of-the-art methods signif-      growth of the training sample size in each training it-
+icantly. The results are somewhat correlated with the        eration, and regulates the effectiveness of the adaptive
+other neural network baseline, which is not particularly     sampling method. We test it by setting the sample-size
+surprising. In order to show the specific relationship be-   to exponential growth ratios of 1.001, 1.005 and 1.01. In
+tween the performances of our method and the baseline        addition, we tested the case in which there is no adap-
+technique by Hawkins [10], we use box plots to show          tive sample size, which corresponds to the case in which
+the performances of the individual base detectors. The       the growth ratio is set to 1.
+box-plot shows the variation in AUC performance of the            The results from this experiment are shown in Fig-
+base components. The median of the box plot is shown         ure 8. It is evident that the algorithm could indeed
+by a black line. The grey diamond shows the perfor-          achieve good performance without an adaptive sam-
+mance of the baseline neural network by Hawkins [10],        pling strategy. However, the computational cost is much
+and the blue dot represents RandNet’s ensemble AUC           higher if adaptive sampling is not used. In particu-
+score. In Figure 5 we show the box plot results of our       lar, if 300 iterations as shown in Figure 8 are used
+ensemble method on several public data sets. We can          then the performance is quite similar for all experi-
+see that in almost all data sets our method achieves ma-     ments. With the adaptive factor set to 1.001, 1.005,
+jor gains over the baseline method. This demonstrates        and 1.01 respectively, we need to respectively perform
+the advantages of using ensembles of neural networks.        only 86%, 51%, 31% of the original number of gradient
+Note that there is some degradation in the base perfor-      updates. This result clearly illustrates the significant
+mance, but we can still achieve high-quality results due     efficiency improvement brought by adaptive sampling.
+to variance reduction.                                       Structure Parameter α: The structure parameter α
+                                                             regulates the number of nodes in various layers. We test
+4.4 Parameter Sensitivity In this part we test the           it under four situations, by setting α to 0.3, 0.4, 0.5 and
+sensitivity of the key parameters in our experiments.        0.6, respectively. The results from these experiments
+Due to space limitations, we only show the results for a     are shown in Figure 9. Observe that the accuracy is
+subset of the data sets.                                     not very sensitive to the structure factor α, as long as α
+Number of Ensemble Components: We analyze the                lies in a reasonable range. Intuitively speaking, larger
+parameter sensitivity to the number of ensemble compo-       α’s denote more nodes in the network hence it should
+nents m. We vary the number of ensemble components           have more powerful modeling ability. However, higher
+from 25 to 200, to demonstrate the effect of varying         modeling ability does not always translate to higher
+this parameter. The result shows that RandNet is not         accuracy due to the tendency of the neural network
+very sensitive to the number of ensemble components.         to overfit. Within the tested range, the performance
+As we can see in Figure 6, there is no significant accu-     improved slightly with α but the differences were not
+racy improvement after the number of ensembles reaches       substantial.
+100. This is typical behavior observed in all ensemble
+methods where the performance stabilizes after a cer-        5   Conclusions
+tain point.                                                  This paper shows how to use an ensemble of autoen-
+Number of Layers: We analyze the parameter sensi-            coders in order to perform anomaly detection. The
+tivity to the number of layers that regulate the depth       proposed technique improves significantly over the ear-
+of the network. The number of layers was varied from         lier neural network methods for anomaly detection. It
+3 to 9. It is evident from Figure 7 that our method is       uses random edge sampling in conjunction with adap-
+quite sensitive to the number of layers in the network,      tive data sampling in order to achieve high-quality re-
+                                                           1.0                                      1.00
+            0.94
+                                                           0.9                                      0.95
+            0.92                                                                                    0.90
+            0.90                                           0.8
+                                               AUC Score
+                                                                                                    0.85
+AUC Score                                                                               AUC Score
+            0.88                                                                                    0.80
+            0.86                                           0.7                                      0.75
+            0.84                                           0.6                                      0.70
+            0.82                                                                                    0.65
+            0.80                                           0.5                                      0.60
+                    25 50 100 200                                 25 50 100 200                             25 50 100 200
+                   Ensemble Components                           Ensemble Components                       Ensemble Components
+                        (a) Cardio                                    (b) Thyroid                            (c) Pendigits
+
+
+                                     Figure 6: Sensitivity to number of ensemble components.
+                                                           1.0                                      1.00
+            0.94
+                                                           0.9                                      0.95
+            0.92                                                                                    0.90
+            0.90                                           0.8
+                                               AUC Score
+                                                                                                    0.85
+AUC Score                                                                               AUC Score
+            0.88                                                                                    0.80
+            0.86                                           0.7                                      0.75
+            0.84                                           0.6                                      0.70
+            0.82                                                                                    0.65
+            0.80                                           0.5                                      0.60
+                    3       5    7         9                      3       5    7    9                       3      5    7    9
+                            Layers                                        Layers                                   Layers
+                        (a) Cardio                                    (b) Thyroid                            (c) Pendigits
+
+
+                                     Figure 7: Sensitivity to number of neural network layers.
+                                                           1.0                                      1.00
+            0.94
+                                                           0.9                                      0.95
+            0.92                                                                                    0.90
+            0.90                                           0.8
+                                               AUC Score
+                                                                                                    0.85
+AUC Score                                                                               AUC Score
+            0.88                                                                                    0.80
+            0.86                                           0.7                                      0.75
+            0.84                                           0.6                                      0.70
+            0.82                                                                                    0.65
+            0.80                                           0.5                                      0.60
+                    1 1.001 1.005 1.01                            1 1.001 1.005 1.01                        1 1.001 1.005 1.01
+                     Adaptive Factor                               Adaptive Factor                           Adaptive Factor
+                        (a) Cardio                                    (b) Thyroid                            (c) Pendigits
+
+
+                                        Figure 8: Sensitivity to adaptive sampling factor.
+                                                         1.0                                         1.00
+               0.94
+                                                         0.9                                         0.95
+               0.92                                                                                  0.90
+               0.90                                      0.8
+                                             AUC Score
+                                                                                                     0.85
+   AUC Score                                                                             AUC Score
+               0.88                                                                                  0.80
+               0.86                                      0.7                                         0.75
+               0.84                                      0.6                                         0.70
+               0.82                                                                                  0.65
+               0.80                                      0.5                                         0.60
+                       0.3 0.4 0.5 0.6                          0.3 0.4 0.5 0.6                              0.3 0.4 0.5 0.6
+                      Structure parameter (α)                  Structure parameter (α)                      Structure parameter (α)
+                         (a) Cardio                                (b) Thyroid                                (c) Pendigits
+
+
+                                      Figure 9: Sensitivity to the structure parameter α.
+
+
+sults. Unlike the earlier methods proposed for neural-                         2: neural network based approaches. Signal processing,
+network based outlier detection, our approach is able to                       83(12), 2003.
+avoid overfitting and achieve robustness because of its                   [14] E. Muller, M. Schiffer, T. Seidl. Statistical Selection
+ensemble-centric approach. Furthermore, it is also com-                        of Relevant Subspace Projections for Outlier Ranking.
+petitive with respect to the state-of-the-art methods.                         ICDE, 2011.
+                                                                          [15] E. Muller, I. Assent, P. Iglesias, Y. Mulle, K. Bohm.
+                                                                               Outlier Ranking via Subspace Analysis in Multiple
+References                                                                     Views of the Data, ICDM, 2012.
+                                                                          [16] V. Nair, G. Hinton. Rectified linear units improve
+                                                                               restricted boltzmann machines. ICML, 2010.
+ [1] C. Aggarwal. Outlier Analysis. Springer, 2017.                       [17] S. Ramaswamy, R. Rastogi, K. Shim. Efficient Algo-
+ [2] C. Aggarwal. Outlier Ensembles: Position Paper, ACM                       rithms for Mining Outliers from Large Data Sets. SIG-
+     SIGKDD Explorations, 2013.                                                MOD, 2000.
+ [3] C. Aggarwal, S. Sathe. Theoretical Foundations and                   [18] S. Sathe, C. Aggarwal. LODES: Local Density Meets
+     Algorithms for Outlier Ensembles. ACM SIGKDD Ex-                          Spectral Outlier Detection. SDM, 2013.
+     plorations, 2015.                                                    [19] S. Sathe, C. Aggarwal. Subspace Outlier Detection in
+ [4] C. Aggarwal, S. Sathe. Outlier Ensembles: An Intro-                       Linear Time with Randomized Hashing. ICDM, 2016.
+     duction. Springer, 2017.                                             [20] N. Srivastava, G. E. Hinton, A. Krizhevsky, I.
+ [5] F. Angiulli, C. Pizzuti. Fast outlier detection in high                   Sutskever, R. Salakhutdinov. Dropout: a simple way
+     dimensional spaces, PKDD, 2002.                                           to prevent neural networks from overfitting. Journal of
+ [6] M. Breunig, H.-P. Kriegel, R. Ng, J. Sander. LOF:                         Machine Learning Research, 15(1), 1929-1958, 2014.
+     Identifying Density-based Local Outliers, SIGMOD,                    [21] M. Shyu, S. Chen, K. Sarinnapakorn, L. Chang. A
+     2000.                                                                     novel anomaly detection scheme based on principal
+ [7] H. Daneshmand, A. Lucchi, and T. Hofmann. Starting                        component classifier. ICDMW, 2003.
+     small–learning with adaptive sample sizes. ICML, 2016.               [22] G. Williams, R. Baxter, H. He, S. Hawkins, L. Gu. A
+ [8] X. Dang, B. Misenkova, I. Assent, R. Ng. Outlier detec-                   Comparative Study of RNN for Outlier Detection in
+     tion with space transformation and spectral analysis.                     Data Mining. ICDM , 2002.
+     SDM, 2013.                                                           [23] http://climin.readthedocs.io/en/latest/
+ [9] F. Keller, E. Muller, K. Bohm. HiCS: High-Contrast                        rmsprop.html
+     Subspaces for Density-based Outlier Ranking. ICDE,                   [24] http://cs231n.github.io/neural-networks-1/
+     2012.
+[10] S. Hawkins, H. He, G. Williams, R. Baxter. Outlier
+     detection using replicator neural networks. In DaWaK,
+     pages 170–180. Springer, 2002.
+[11] E. Knorr, and R. Ng. Algorithms for Mining Distance-
+     based Outliers in Large Datasets. VLDB , 1998.
+[12] A. Lazarevic, V. Kumar. Feature Bagging for Outlier
+     Detection, KDD, 2005.
+[13] M. Markou, S. Singh. Novelty detection: a review: part
+

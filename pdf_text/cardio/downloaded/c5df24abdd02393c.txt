@@ -1,0 +1,703 @@
+                                                                    RefineNet: Multi-Path Refinement Networks for
+                                                                        High-Resolution Semantic Segmentation
+
+                                                                  Guosheng Lin1,2 , Anton Milan1 , Chunhua Shen1,2 , Ian Reid1,2
+                                                              1
+                                                                  The University of Adelaide, 2 Australian Centre for Robotic Vision
+                                                            {guosheng.lin;anton.milan;chunhua.shen;ian.reid}@adelaide.edu.au
+
+
+
+
+arXiv:1611.06612v3 [cs.CV] 25 Nov 2016
+                                                                   Abstract
+
+                                             Recently, very deep convolutional neural networks
+                                         (CNNs) have shown outstanding performance in object
+                                         recognition and have also been the first choice for dense
+                                         classification problems such as semantic segmentation.
+                                         However, repeated subsampling operations like pooling or
+                                         convolution striding in deep CNNs lead to a significant de-
+                                         crease in the initial image resolution. Here, we present            Figure 1. Example results of our method on the task of object pars-
+                                         RefineNet, a generic multi-path refinement network that             ing (left) and semantic segmentation (right).
+                                         explicitly exploits all the information available along the
+                                         down-sampling process to enable high-resolution predic-
+                                         tion using long-range residual connections. In this way,            and semantic segmentation [36, 5]. Multiple stages of spa-
+                                         the deeper layers that capture high-level semantic features         tial pooling and convolution strides reduce the final image
+                                         can be directly refined using fine-grained features from ear-       prediction typically by a factor of 32 in each dimension,
+                                         lier convolutions. The individual components of RefineNet           thereby losing much of the finer image structure.
+                                         employ residual connections following the identity map-                 One way to address this limitation is to learn deconvolu-
+                                         ping mindset, which allows for effective end-to-end train-          tional filters as an up-sampling operation [38, 36] to gener-
+                                         ing. Further, we introduce chained residual pooling, which          ate high-resolution feature maps. The deconvolution oper-
+                                         captures rich background context in an efficient manner. We         ations are not able to recover the low-level visual features
+                                         carry out comprehensive experiments and set new state-              which are lost after the down-sampling operation in the con-
+                                         of-the-art results on seven public datasets. In particular,         volution forward stage. Therefore, they are unable to output
+                                         we achieve an intersection-over-union score of 83.4 on the          accurate high-resolution prediction. Low-level visual infor-
+                                         challenging PASCAL VOC 2012 dataset, which is the best              mation is essential for accurate prediction on the bound-
+                                         reported result to date.                                            aries or details. The method DeepLab recently proposed by
+                                                                                                             Chen et al. [6] employs atrous (or dilated) convolutions to
+                                                                                                             account for larger receptive fields without downscaling the
+                                         1. Introduction                                                     image. DeepLab is widely applied and represents state-of-
+                                                                                                             the-art performance on semantic segmentation. This strat-
+                                            Semantic segmentation is a crucial component in image            egy, although successful, has at least two limitations. First,
+                                         understanding. The task here is to assign a unique label (or        it needs to perform convolutions on a large number of de-
+                                         category) to every single pixel in the image, which can be          tailed (high-resolution) feature maps that usually have high-
+                                         considered as a dense classification problem. The related           dimensional features, which are computational expensive.
+                                         problem of so-called object parsing can usually be cast as          Moreover, a large number of high-dimensional and high-
+                                         semantic segmentation. Recently, deep learning methods,             resolution feature maps also require huge GPU memory re-
+                                         and in particular convolutional neural networks (CNNs),             sources, especially in the training stage. This hampers the
+                                         e.g., VGG [42], Residual Net [24], have shown remark-               computation of high-resolution predictions and usually lim-
+                                         able results in recognition tasks. However, these approaches        its the output size to 1/8 of the original input. Second, di-
+                                         exhibit clear limitations when it comes to dense prediction         lated convolutions introduce a coarse sub-sampling of fea-
+                                         in tasks like dense depth or normal estimation [13, 33, 34]         tures, which potentially leads to a loss of important details.
+
+
+                                                                                                         1
+    Another type of methods exploits features from interme-           score of 83.4 on the PASCAL VOC 2012 dataset, out-
+diate layers for generating high-resolution prediction, e.g.,         performing the currently best approach DeepLab by a
+the FCN method in [36] and Hypercolumns in [22]. The in-              large margin.
+tuition behind these works is that features from middle lay-        To facilitate future research, we release both source code
+ers are expected to describe mid-level representations for       and trained models for our RefineNet.1
+object parts, while retaining spatial information. This infor-
+mation is though to be complementary to the features from        1.1. Related Work
+early convolution layers which encode low-level spatial vi-
+                                                                     CNNs become the most successful methods for seman-
+sual information like edges, corners, circles, etc., and also
+                                                                 tic segmentation in recent years. The early methods in
+complementary to high-level features from deeper layers
+                                                                 [18, 23] are region-proposal-based methods which classify
+which encode high-level semantic information, including
+                                                                 region proposals to generate segmentation results. Recently
+object- or category-level evidence, but which lack strong
+                                                                 fully convolution network (FCNNs) based based methods
+spatial information.
+                                                                 [36, 5, 10] show effective feature generation and end-to-
+    We argue that features from all levels are helpful for se-   end training, and thus become the most popular choice for
+mantic segmentation. High-level semantic features helps          semantic segmentation. FCNNs have also been widely ap-
+the category recognition of image regions, while low-level       plied in other dense-prediction tasks, e.g., depth estimation
+visual features help to generate sharp, detailed boundaries      [15, 13, 33], image restoration [14], image super-resolution
+for high-resolution prediction. How to effectively exploit       [12]. The proposed method here is also based on fully
+middle layer features remains an open question and de-           convolution-style networks.
+serves more attentions. To this end we propose a novel net-          FCNN based methods usually have the limitation of low-
+work architecture which effectively exploits multi-level fea-    resolution prediction. There are a number of proposed tech-
+tures for generating high-resolution predictions. Our main       niques which addressed this limitation and aim to generate
+contributions are as follows:                                    high-resolution predictions. The atrous convolution based
+ 1. We propose a multi-path refinement network (Re-              approach DeepLab-CRF in [5] directly output a middle-
+    fineNet) which exploits features at multiple levels          resolution score map then applies the dense CRF method
+    of abstraction for high-resolution semantic segmenta-        [27] to refine boundaries by leveraging color contrast in-
+    tion. RefineNet refines low-resolution (coarse) seman-       formation. CRF-RNN [47] extends this approach by im-
+    tic features with fine-grained low-level features in a       plementing recurrent layers for end-to-end learning of the
+    recursive manner to generate high-resolution seman-          dense CRF and FCNN. Deconvolution methods [38, 2]
+    tic feature maps. Our model is flexible in that it can be    learn deconvolution layers to up-sample the low-resolution
+    cascaded and modified in various ways.                       predictions. The depth estimation method [34] employs
+                                                                 super-pixel pooling to output high-resolution prediction.
+ 2. Our cascaded RefineNets can be effectively trained               There are several existing methods which exploit mid-
+    end-to-end, which is crucial for best prediction per-        dle layer features for segmentation. The FCN method in
+    formance. More specifically, all components in Re-           [36] adds prediction layers to middle layers to generate
+    fineNet employ residual connections [24] with iden-          prediction scores at multiple resolutions. They average
+    tity mappings [25], such that gradients can be directly      the multi-resolution scores to generate the final prediction
+    propagated through short-range and long-range resid-         mask. Their system is trained in a stage-wise manner rather
+    ual connections allowing for both effective and effi-        than end-to-end training. The method Hypercolumn [22]
+    cient end-to-end training.                                   merges features from middle layers and learns dense clas-
+                                                                 sification layers. Their method employs stage-wise training
+ 3. We propose a new network component we call                   instead of end-to-end training. The method Seg-Net [2] and
+    “chained residual pooling” which is able to capture          U-Net [40] apply skip-connections in the deconvolution ar-
+    background context from a large image region. It does        chitecture to exploit the features from middle layers.
+    so by efficiently pooling features with multiple win-            Although there are a few existing work, how to effec-
+    dow sizes and fusing them together with residual con-        tively exploit middle layer features remains an open ques-
+    nections and learnable weights.                              tion. We propose a novel network architecture, RefineNet,
+                                                                 to address this question. The network architecture of Re-
+ 4. The proposed RefineNet achieves new state-of-the-            fineNet is clearly different from existing methods. Re-
+    art performance on 7 public datasets, including PAS-         fineNet consists of a number of specially designed compo-
+    CAL VOC 2012, PASCAL-Context, NYUDv2, SUN-                   nents which are able to refine the coarse high-level semantic
+    RGBD, Cityscapes, ADE20K, and the object parsing               1 Our source code will be available at https://github.com/
+
+    Person-Parts dataset. In particular, we achieve an IoU       guosheng/refinenet
+features by exploiting low-level visual features. In particu-      tation of deep CNN-based segmentation methods.
+lar, RefineNet employs short-range and long-range residual             An alternative approach to avoid lowering the resolu-
+connections with identity mappings which enable effective          tion while retaining a large receptive field is to use di-
+end-to-end training of the whole system, and thus help to          lated (atrous) convolution. This method introduced in [6],
+archive good performance. Comprehensive empirical re-              has the state-of-the-art performance on semantic segmenta-
+sults clearly verify the effectiveness of our novel network        tion. The sub-sampling operations are removed (the stride
+architecture for exploiting middle layer features.                 is changed from 2 to 1), and all convolution layers after
+                                                                   the first block use dilated convolution. Such a dilated con-
+2. Background                                                      volution (effectively a sub-sampled convolution kernel) has
+                                                                   the effect of increasing the receptive field size of the fil-
+    Before presenting our approach, we first review the            ters without increasing the number of weights that must be
+structure of fully convolutional networks for semantic seg-        learned (see illustration in Fig. 2(b)). Even so, there is a
+mentation [36] in more detail and also discuss the recent          significant cost in memory, because unlike the image sub-
+dilated convolution technique [6] which is specifically de-        sampling methods, one must retain very large numbers of
+signed to generate high-resolution predictions.                    feature maps at higher resolution. For example, if we retain
+    Very deep CNNs have shown outstanding performance              all channels in all layers to be at least 1/4 of the original im-
+on object recognition problems. Specifically, the re-              age resolution, and consider a typical number of filter chan-
+cently proposed Residual Net (ResNet) [24] has shown               nels to be 1024, then we can see that the memory capacity
+step-change improvements over earlier architectures, and           of even high-end GPUs is quickly swamped by very deep
+ResNet models pre-trained for ImageNet recognition tasks           networks. In practice, therefore, dilation convolution meth-
+are publicly available. Because of this, in the following we       ods usually have a resolution prediction of no more than
+adopt ResNet as our fundamental building block for seman-          1/8 size of the original rather than 1/4, when using a deep
+tic segmentation. Note, however, that replacing it with any        network.
+other deep network is straightforward.                                 In contrast to dilated convolution methods, in this paper
+    Since semantic segmentation can be cast as a dense clas-       we propose a means to enjoy both the memory and compu-
+sification problem, the ResNet model can be easily modified        tational benefits of deresolving, while still able to produce
+for this task. This is achieved by replacing the single label      effective and efficient high-resolution segmentation predic-
+prediction layer with a dense prediction layer that outputs        tion, as described in the following section.
+the classification confidence for each class at every pixel.
+This approach is illustrated in Fig. 2(a). As can be seen, dur-    3. Proposed Method
+ing the forward pass in ResNet, the resolution of the feature
+maps (layer outputs) is decreased, while the feature depth,           We propose a new framework that provides multiple
+i.e. the number of feature maps per layer (or channels) is         paths over which information from different resolutions and
+increased. The former is caused by striding during convo-          via potentially long-range connections, is assimilated using
+lutional and pooling operations.                                   a generic building block, the RefineNet. Fig. 2(c) shows
+    The ResNet layers can be naturally divided into 4 blocks       one possible arrangement of the building blocks to achieve
+according to the resolution of the output feature maps, as         our goal of high resolution semantic segmentation. We be-
+shown in Fig. 2(a). Typically, the stride is set to 2, thus re-    gin by describing the multi-path refinement arrangement
+ducing the feature map resolution to one half when passing         in Sec. 3.1 followed by a detailed description of each Re-
+from one block to the next. This sequential sub-sampling           fineNet block in Sec. 3.2.
+has two effects: first it increases the receptive field of con-
+                                                                   3.1. Multi-Path Refinement
+volutions at deeper levels, enabling the filters to capture
+more global and contextual information which is essential             As noted previously, we aim to exploit multi-level fea-
+for high quality classification; second it is necessary to keep    tures for high-resolution prediction with long-range resid-
+the training efficient and tractable because each layer com-       ual connections. RefineNet provides a generic means to
+prises a large number of filters and therefore produces an         fuse coarse high-level semantic features with finer-grained
+output which has a corresponding number of channels, thus          low-level features to generate high-resolution semantic fea-
+there is a trade-off between the number of channels and res-       ture maps. A crucial aspect of the design ensures that the
+olution of the feature maps. Typically the final feature map       gradient can be effortlessly propagated backwards through
+output ends up being 32 times smaller in each spatial dimen-       the network all the way to early low-level layers over long-
+sion than the original image (but with 1000s of channels).         range residual connections, ensuring that the entire network
+This low-resolution feature map loses important visual de-         can be trained end-to-end.
+tails captured by early low-level filters, resulting in a rather      For our standard multi-path architecture, we divide the
+coarse segmentation map. This issue is a well-known limi-          pre-trained ResNet (trained with ImageNet) into 4 blocks
+  (a)                                                                                       ResNet                                        (c)                                  ReﬁneNet
+                         1/4                           1/8                1/16                                                                                                                                                                                               1
+                                                                                     1/32      1/32
+                                                                                                                                                1/4                                                                                                             ReﬁneNet
+
+
+                                                                                                                                                                                                                                    t                                                              1/4
+                                                                                                                                                                                                                           en                         2
+                                                                                                                                                                                                                          m
+                                                                                                                                                1/8                                                           ﬁ        ne               ReﬁneNet
+
+    (b)                                                                          Dilated convolutions
+                                                                                                                                                                                                       h   Re                                                         1/8                          1/4
+                                                                                                                                                                                                    at                         3
+                                                                                                                                                                                                i- P
+                                                                                                                                                1/16
+                                                                                                                                                                             M           u lt                  ReﬁneNet
+
+                                                                                                                                                                                                   4                                          1/16
+                                                                                                                                                1/32                                     ReﬁneNet                       1/32
+                   1/4                     1/8                          1/8        1/8          1/8                                                                                                                                                                                          Prediction
+Figure 2. Comparison of fully convolutional approaches for dense classification. Standard multi-layer CNNs, such as ResNet (a) suffer
+from downscaling of the feature maps, thereby losing fine structures along the way. Dilated convolutions (b) remedy this shortcoming
+by introducing atrous filters, but are computationally expensive to train and quickly reach memory limits even on modern GPUs. Our
+proposed architecture that we call RefineNet (c) exploits various levels of detail at different stages of convolutions and fuses them to obtain
+a high-resolution prediction without the need to maintain large intermediate feature maps. The details of the RefineNet block are outlined
+in Sec. 3 and illustrated in Fig 3.
+
+                                                                                                                                                (a)
+
+                                                                              Adaptive Conv.                                                                                                                                  ReﬁneNet
+
+
+
+
+                                                                                                              Multi-resolution Fusion                         Chained Residual Pooling
+                                                                                 2x RCU
+
+
+
+
+Multi-path input
+                                                                                                                                                                                                           Output Conv.
+
+                                                                                 2x RCU
+                                                                                                                                                                                                                1x RCU
+
+
+                               ...                                                ...          ...
+                                                                                 2x RCU
+
+
+
+
+                                                                                                Multi-resolution Fusion                                                                     Chained Residual
+                   RCU: Residual Conv Unit
+                                                                                                                                                                                                                                                                      5x5 Pool   3x3 Conv
+                                                                                                                                                                                            Pooling
+
+
+                                                                                                  3x3 Conv   Upsample
+                                                                                                                                                                                                                                                                ...
+
+                     ReLU      3x3 Conv         ReLU         3x3 Conv                                                                                                                                                                   5x5 Pool     3x3 Conv
+                                                                                                                                                       Sum
+                                                                                                                                                                                                            5x5 Pool     3x3 Conv
+                                                                                            ...
+                                                                                                  3x3 Conv   Upsample
+                                                                        Sum                                                                                                                     ReLU                                    Sum                      Sum                        Sum
+
+
+
+                                          (b)                                                                                           (c)                                                                                                        (d)
+Figure 3. The individual components of our multi-path refinement network architecture RefineNet. Components in RefineNet employ
+residual connections with identity mappings. In this way, gradients can be directly propagated within RefineNet via local residual connec-
+tions, and also directly propagate to the input paths via long-range residual connections, and thus we achieve effective end-to-end training
+of the whole system.
+
+
+according to the resolutions of the feature maps, and employ                                                                                      a 2-cascaded version, a single-block approach as well as a
+a 4-cascaded architecture with 4 RefineNet units, each of                                                                                         2-scale 7-path architecture later in Sec. 4.3.
+which directly connects to the output of one ResNet block
+as well as to the preceding RefineNet block in the cascade.                                                                                          We denote RefineNet-m as the RefineNet block that con-
+Note, however, that such a design is not unique. In fact,                                                                                         nects to the output of block-m in ResNet. In practice, each
+our flexible architecture allows for a simple exploration of                                                                                      ResNet output is passed through one convolutional layer to
+different variants. For example, a RefineNet block can ac-                                                                                        adapt the dimensionality. Although all RefineNets share the
+cept input from multiple ResNet blocks. We will analyse                                                                                           same internal architecture, their parameters are not tied, al-
+                                                                                                                                                  lowing for a more flexible adaptation for individual levels
+of detail. Following the illustration in Fig. 2(c) bottom up,    inputs), and then up-samples all (smaller) feature maps to
+we start from the last block in ResNet, and connect the out-     the largest resolution of the inputs. Finally, all features
+put of ResNet block-4 to RefineNet-4. Here, there is only        maps are fused by summation. The input adaptation in this
+one input for RefineNet-4, and RefineNet-4 serves as an ex-      block also helps to re-scale the feature values appropriately
+tra set of convolutions which adapt the pre-trained ResNet       along different paths, which is important for the subsequent
+weights to the task at hand, in our case, semantic segmen-       sum-fusion. If there is only one input path (e.g., the case
+tation. In the next stage, the output of RefineNet-4 and the     of RefineNet-4 in Fig. 2(c)), the input path will directly go
+ResNet block-3 are fed to RefineNet-3 as 2-path inputs. The      through this block without changes.
+goal of RefineNet-3 is to use the high-resolution features
+                                                                 Chained residual pooling. The output feature map then
+from ResNet block-3 to refine the low-resolution feature
+                                                                 goes through the chained residual pooling block, schemat-
+map output by RefineNet-4 in the previous stage. Similarly,
+                                                                 ically depicted in Fig. 3(d). The proposed chained residual
+RefineNet-2 and RefineNet-1 repeat this stage-wise refine-
+                                                                 pooling aims to capture background context from a large
+ment by fusing high-level information from the later layers
+                                                                 image region. It is able to efficiently pool features with
+and high-resolution but low-level features from the earlier
+                                                                 multiple window sizes and fuse them together using learn-
+ones. As the last step, the final high-resolution feature maps
+                                                                 able weights. In particular, this component is built as a
+are fed to a dense soft-max layer to make the final predic-
+                                                                 chain of multiple pooling blocks, each consisting of one
+tion in the form of a dense score map. This score map is
+                                                                 max-pooling layer and one convolution layer. One pool-
+then up-sampled to match the original image using bilinear
+                                                                 ing block takes the output of the previous pooling block as
+interpolation.
+                                                                 input. Therefore, the current pooling block is able to re-use
+    The entire network can be efficiently trained end-to-end.    the result from the previous pooling operation and thus ac-
+It is important to note that we introduce long-range resid-      cess the features from a large region without using a large
+ual connections between the blocks in ResNet and the Re-         pooling window. If not further specified, we use two pool-
+fineNet modules. During the forward pass, these long-range       ing blocks each with stride 1 in our experiments.
+residual connections convey the low-level features that en-
+                                                                    The output feature maps of all pooling blocks are fused
+code visual details for refining the coarse high-level feature
+                                                                 together with the input feature map through summation of
+maps. In the training step, the long-range residual connec-
+                                                                 residual connections. Note that, our choice to employ resid-
+tions allow direct gradient propagation to early convolution
+                                                                 ual connections also persists in this building block, which
+layers, which helps effective end-to-end training.
+                                                                 once again facilitates gradient propagation during training.
+                                                                 In one pooling block, each pooling operation is followed by
+3.2. RefineNet
+                                                                 convolutions which serve as a weighting layer for the sum-
+   The architecture of one RefineNet block is illustrated in     mation fusion. It is expected that this convolution layer will
+Fig. 3(a). In the multi-path overview shown in Fig 2(c),         learn to accommodate the importance of the pooling block
+RefineNet-1 has one input path, while all other RefineNet        during the training process.
+blocks have two inputs. Note, however, that our architecture
+                                                                 Output convolutions. The final step of each RefineNet
+is generic and each Refine block can be easily modified to
+                                                                 block is another residual convolution unit (RCU). This re-
+accept an arbitrary number of feature maps with arbitrary
+                                                                 sults in a sequence of three RCUs between each block. To
+resolutions and depths.
+                                                                 reflect this behavior in the last RefineNet-1 block, we place
+Residual convolution unit. The first part of each Re-            two additional RCUs before the final softmax prediction
+fineNet block consists of an adaptive convolution set that       step. The goal here is to employ non-linearity operations
+mainly fine-tunes the pretrained ResNet weights for our          on the multi-path fused feature maps to generate features
+task. To that end, each input path is passed sequentially        for further processing or for final prediction. The feature
+through two residual convolution units (RCU), which is a         dimension remains the same after going through this block.
+simplified version of the convolution unit in the original
+ResNet [24], where the batch-normalization layers are re-        3.3. Identity Mappings in RefineNet
+moved (cf . Fig. 3(b)). The filter number for each input path
+                                                                    Note that all convolutional components of the RefineNet
+is set to 512 for RefineNet-4 and 256 for the remaining ones
+                                                                 have been carefully constructed inspired by the idea behind
+in our experiments.
+                                                                 residual connections and follow the rule of identity map-
+Multi-resolution fusion. All path inputs are then fused into     ping [25]. This enables effective backward propagation of
+a high-resolution feature map by the multi-resolution fusion     the gradient through RefineNet and facilitates end-to-end
+block, depicted in Fig. 3(c). This block first applies convo-    learning of cascaded multi-path refinement networks.
+lutions for input adaptation, which generate feature maps           Employing residual connections with identity mappings
+of the same feature dimension (the smallest one among the        allows the gradient to be directly propagated from one block
+to any other blocks, as was recently shown by [25]. This         Table 1. Object parsing results on the Person-Part dataset. Our
+                                                                 method achieves the best performance (bold).
+concept encourages to maintain a clean information path                                              method      IoU
+for shortcut connections, so that these connections are not                                     Attention [7]    56.4
+“blocked” by any non-linear layers or components. Instead,                                       HAZN [45]       57.5
+non-linear operations are placed on branches of the main                                      LG-LSTM [29]       58.0
+information path. We follow this guideline for developing                                  Graph-LSTM [28]       60.2
+                                                                                                DeepLab [5]      62.8
+the individual components in RefineNet, including all con-                           DeepLab-v2 (Res101) [6]     64.9
+volution units. It is this particular strategy that allows the                       RefineNet-Res101 (ours)     68.6
+multi-cascaded RefineNet to be trained effectively. Note
+that we include one non-linear activation layer (ReLU) in        Table 2. Ablation experiments on NYUDv2 and Person-Part.
+the chained residual pooling block. We observed that this          Initialization   Chained pool.   Msc Eva     NYUDv2   Person-Parts
+ReLU is important for the effectiveness of subsequent pool-         ResNet-50            no           no         40.4        64.1
+                                                                    ResNet-50           yes           no         42.5        65.7
+ing operations and it also makes the model less sensitive to        ResNet-50           yes           yes        43.8        67.1
+changes in the learning rate. We observed that one single           ResNet-101          yes           no         43.6        67.6
+ReLU in each RefineNet block does not noticeably reduce             ResNet-101          yes           yes         44.7       68.6
+                                                                    ResNet-152          yes           yes        46.5        68.8
+the effectiveness of gradient flow.
+    We have both short-range and long-range residual con-
+nections in RefineNet. Short-range residual connections re-      and the mean accuracy [36] over all classes. As commonly
+fer to local shot-cut connections in one RCU or the residual     done in the literature, we apply simple data augmentation
+pooling component, while long-range residual connections         during training. Specifically, we perform random scaling
+refer to the connection between RefineNet modules and the        (ranging from 0.7 to 1.3), random cropping and horizontal
+ResNet blocks. With long-range residual connections, the         flipping of the images. If not further specified, we apply
+gradient can be directly propagated to early convolution lay-    test-time multi-scale evaluation, which is a common prac-
+ers in ResNet and thus enables end-to-end training of all        tice in segmentation methods [10, 6]. For multi-scale evalu-
+network components.                                              ation, we average the predictions on the same image across
+    The fusion block fuses the information of multiple short-    different scales for the final prediction. We also present an
+cut paths, which can be considered as performing summa-          ablation experiment to inspect the impact of various com-
+tion fusion of multiple residual connections with necessary      ponents and an alternative 2-cascaded version of our model.
+dimension or resolution adaptation. In this aspect, the role     Our system is built on MatConvNet [44].
+of the multi-resolution fusion block here is analogous to
+the role of the “summation” fusion in a conventional resid-      4.1. Object Parsing
+ual convolution unit in ResNet. There are certain layers in
+RefineNet, and in particular within the fusion block, that           We first present our results on the task of object parsing,
+perform linear feature transformation operations, like linear    which consists of recognizing and segmenting object parts.
+feature dimension reduction or bilinear up-sampling. These       We carry out experiments on the Person-Part dataset [8, 7]
+layers are placed on the shortcut paths, which is similar to     which provides pixel-level labels for six person parts in-
+the case in ResNet [24]. As in in ResNet, when a shortcut        cluding Head, Torso, Upper/Lower Arms and Upper/Lower
+connection crosses two blocks, it will include a convolution     Legs. The rest of each image is considered background.
+layer in the shortcut path for linear feature dimension adap-    There are training 1717 images and 1818 test images. We
+tation, which ensures that the feature dimension matches the     use four pooling blocks in our chained residual pooling for
+subsequent summation in the next block. Since only linear        this dataset.
+transformation are employed in these layers, gradients still         We compare our results to a number of state-of-the-art
+can be propagated through these layers effectively.              methods, listed in Table 1. The results clearly demon-
+                                                                 strate the improvement over previous works. In particular,
+4. Experiments                                                   we significantly outperform the the recent DeepLab-v2 ap-
+                                                                 proach [6] which is based on dilated convolutions for high-
+   To show the effectiveness of our approach, we carry           resolution segmentation, using the same ResNet as initial-
+out comprehensive experiments on seven public datasets,          ization. In Table 2, we present an ablation experiment to
+which include six popular datasets for semantic segmenta-        quantify the influence of the following components: Net-
+tion on indoors and outdoors scenes (NYUDv2, PASCAL              work depth, chained residual pooling and multi-scale eval-
+VOC 2012, SUN-RGBD, PASCAL-Context, Cityscapes,                  uation (Msc Eva), as described earlier. This experiment
+ADE20K MIT), and one dataset for object parsing called           shows that each of these three factors can improve the over-
+Person-Part. The segmentation quality is measured by the         all performance. Qualitative examples of our object parsing
+intersection-over-union (IoU) score [16], the pixel accuracy     on this dataset are shown in Fig.4.
+                                                                     Table 3. Segmentation results on NYUDv2 (40 classes).
+                                                                              method     training data   pixel acc.     mean acc.   IoU
+                                                                     Gupta et al. [20]      RGB-D           60.3           -        28.6
+                                                                        FCN-32s [36]         RGB            60.0          42.2      29.2
+                                                                     FCN-HHA [36]           RGB-D           65.4          46.1      34.0
+                                                                         Context [30]        RGB            70.0          53.6      40.6
+                                                                   RefineNet-Res152          RGB            73.6          58.9      46.5
+
+                                                                 Table 4. Segmentation results on the Cityscapes test set. our
+                                                                 method achieves the best performance.
+                                                                                                   Method             IoU
+                                                                                             FCN-8s [36]              65.3
+                                                                                                 DPN [35]             66.8
+                                                                                           Dilation10 [46]            67.1
+                                                                                             Context [30]             71.6
+                                                                                             LRR-4x [17]              71.8
+                                                                                             DeepLab [5]              63.1
+                                                                                  DeepLab-v2(Res101) [6]              70.4
+                                                                                  RefineNet-Res101 (ours)             73.6
+
+
+                                                                 the performance as measured by IoU.
+                                                                 PASCAL VOC 2012 [16] is a well-known segmentation
+                                                                 dataset which includes 20 object categories and one back-
+                                                                 ground class. This dataset is split into a training set, a
+                                                                 validation set and a test set, with 1464, 1449 and 1456
+                                                                 images each. Since the test set labels are not publicly
+                                                                 available, all reported results have been obtained from the
+                                                                 VOC evaluation server. Following the common conven-
+                                                                 tion [5, 6, 47, 35], the training set is augmented by addi-
+                                                                 tional annotated VOC images provided in [21] as well as
+       (a) Test Image   (b) Ground Truth   (c) Prediction
+                                                                 with the training data from the MS COCO dataset [31]. We
+                                                                 compare our RefineNet on the PASCAL VOC 2012 test set
+   Figure 4. Our prediction examples on Person-Parts dataset.
+                                                                 with a number of competitive methods, showing superior
+                                                                 performance. We use dense CRF method in [27] for further
+                                                                 refinement for this dataset, which gives marginal improve-
+4.2. Semantic Segmentation
+                                                                 ment of 0.1% on the validation set. Since dense CRF only
+   We now describe our experiments on dense semantic             brings very minor improvement on our high-resolution pre-
+labeling on six public benchmarks and show that our Re-          diction, we do not apply it on other datasets.
+fineNet outperforms previous methods on all datasets.                The detailed results for each category and the mean IoU
+                                                                 scores are shown in Table 5. We achieve an IoU score of
+NYUDv2. The NYUDv2 dataset [41] consists of 1449                 83.4, which is the best reported result on this challenging
+RGB-D images showing interior scenes. We use the seg-            dataset to date.2 We outperform competing methods in al-
+mentation labels provided in [19], in which all labels are       most all categories. In particular, we significantly outper-
+mapped to 40 classes. We use the standard training/test split    form the method DeepLab-v2 [6] which is the currently
+with 795 and 654 images, respectively. We train our models       best known dilation convolution method and uses the same
+only on RGB images without using the depth information.          ResNet-101 network as initialization. Selected prediction
+Quantitative results are shown in Table 3. Our RefineNet         examples are shown in Fig. 5.
+achieves new state-of-the-art result on the NYUDv2 dataset.
+                                                                 Cityscapes [9] is a very recent dataset on street scene im-
+                                                                 ages from 50 different European cities. This dataset pro-
+   Similar to the object parsing task above, we also perform
+                                                                 vides fine-grained pixel-level annotations of roads, cars,
+ablation experiments on the NYUDv2 dataset to evaluate
+                                                                 pedestrians, bicycles, sky, etc. The provided training set
+the effect of different settings. The results are presented in
+                                                                 has 2975 images and the validation set has 500 images. In
+Table 2. Once again, this study demonstrates the benefits of
+adding the proposed chained residual pooling component             2 The result link to the VOC evaluation server: http://host.
+
+and deeper networks, both of which consistently improve          robots.ox.ac.uk:8080/anonymous/B3XPSK.html
+        Table 5. Results on the PASCAL VOC 2012 test set (IoU scores). Our RefineNet archives the best performance (IoU 83.4).
+                        aero     bike    bird    boat    bottle     bus   car      cat    chair   cow     table   dog     horse    mbike     person   potted   sheep    sofa     train    tv
+             Method                                                                                                                                                                             mean
+         FCN-8s [36]    76.8    34.2    68.9    49.4    60.3       75.3   74.7   77.6    21.4     62.5   46.8     71.8   63.9     76.5       73.9     45.2     72.4    37.4     70.9     55.1    62.2
+      DeconvNet [38]    89.9    39.3    79.7    63.9    68.2       87.4   81.2   86.1    28.5     77.0   62.0     79.0   80.3     83.6       80.2     58.8     83.4    54.3     80.7     65.0    72.5
+      CRF-RNN [47]      90.4    55.3    88.7    68.4    69.8       88.3   82.4   85.1    32.6     78.5   64.4     79.6   81.9     86.4       81.8     58.6     82.4    53.5     77.4     70.1    74.7
+        BoxSup [10]     89.8    38.0    89.2    68.9    68.0       89.6   83.0   87.7    34.4     83.6   67.1     81.5   83.7     85.2       83.5     58.6     84.9    55.8     81.2     70.7    75.2
+           DPN [35]     89.0    61.6    87.7    66.8    74.7       91.2   84.3   87.6    36.5     86.3   66.1     84.4   87.8     85.6       85.4     63.6     87.3    61.3     79.4     66.4    77.5
+         Context [30]   94.1    40.7    84.1    67.8    75.9       93.4   84.3   88.4    42.5     86.4   64.7     85.4   89.0     85.8       86.0     67.5     90.2    63.8     80.9     73.0    78.0
+         DeepLab [5]    89.1    38.3    88.1    63.3    69.7       87.1   83.1   85.0    29.3     76.5   56.5     79.8   77.9     85.8       82.4     57.4     84.3    54.9     80.5     64.1    72.7
+ DeepLab2-Res101 [6]    92.6    60.4    91.6    63.4    76.3       95.0   88.4   92.6    32.7     88.5   67.6     89.6   92.1     87.0       87.4     63.3     88.3    60.0     86.8     74.5    79.7
+ CSupelec-Res101 [4]    92.9    61.2    91.0    66.3    77.7       95.3   88.9   92.4    33.8     88.4   69.1     89.8   92.9     87.7       87.5     62.6     89.9    59.2     87.1     74.2    80.2
+   RefineNet-Res101     94.9    60.2    92.8    77.5    81.5       95.0   87.4   93.3    39.6     89.3   73.0     92.7   92.4     85.4       88.3     69.7     92.2    65.3     84.2     78.7    82.4
+   RefineNet-Res152     94.7    64.3    94.9    74.9    82.9       95.1   88.5   94.7    45.5     91.4   76.3     90.6   91.8     88.1       88.0     69.9     92.3    65.9     88.7     76.8    83.4
+
+
+
+
+                                                                                                         (a) Test Image                    (b) Ground Truth                    (c) Prediction
+
+                                                                                                         Figure 6. Our prediction examples on Cityscapes dataset.
+
+
+
+                                                                                                    PASCAL-Context. The PASCAL-Context [37] dataset
+                                                                                                    provides the segmentation labels of the whole scene for the
+                                                                                                    PASCAL VOC images. We use the segmentation labels
+                                                                                                    which contain 60 classes (59 object categories plus back-
+                                                                                                    ground) for evaluation as well as the provided training/test
+     (a) Test Image            (b) Ground Truth                   (c) Prediction                    splits. The training set contains 4998 images and the test
+                                                                                                    set has 5105 images. Results are shown in Table 6. Even
+    Figure 5. Our prediction examples on VOC 2012 dataset.
+                                                                                                    without additional training data and with the same underly-
+                                                                                                    ing ResNet architecture with 101 layers, we outperform the
+                                                                                                    previous state-of-the-art achieved by DeepLab.
+total, 19 classes are considered for training and evaluation.
+The test set ground-truth is withheld by the organizers, and                                        SUN-RGBD [43] is a segmentation dataset that contains
+we evaluate our method on the their evaluation server. The                                          around 10, 000 RGB-D indoor images and provides pixel
+test results are shown in Table 4. In this challenging set-                                         labeling masks for 37 classes. Results are shown in Table
+ting, our architecture again outperforms previous methods.                                          7. Our method outperforms all existing methods by a large
+A few test images along with ground truth and our predicted                                         margin across all evaluation metrics, even though we do not
+semantic maps are shown in Fig. 6.                                                                  make use of the depth information for training.
+Table 6. Segmentation results on PASCAL-Context dataset (60             4.3. Variants of cascaded RefineNet
+classes). Our method performs the best. We only use the VOC
+training images.                                                            As discussed earlier, our RefineNet is flexible in that it
+                         Method       Extra train data    IoU           can be cascaded in various manners for generating various
+                         O2P [3]              -           18.1          architectures. Here, we discuss several variants of our Re-
+                       CFM [11]               -           34.4
+                     FCN-8s [36]              -           35.1          fineNet. Specifically, we present the architectures of using a
+                     BoxSup [10]              -           40.5          single RefineNet, a 2-cascaded RefineNet and a 4-cascaded
+                     HO-CRF [1]               -           41.3          RefineNet with 2-scale ResNet. The architectures of all
+                     Context [30]             -           43.3
+          DeepLab-v2(Res101) [6]      COCO (∼100K)        45.7
+                                                                        three variants are illustrated in Fig. 7. The architecture of 4-
+          RefineNet-Res101 (ours)             -           47.1
+                                                                        cascaded RefineNet is already presented in Fig. 2(c). Please
+          RefineNet-Res152 (ours)             -           47.3          note that this 4-cascaded RefineNet model is the one used
+                                                                        in all other experiments.
+                                                                            The single RefineNet model is the simplest variant of
+Table 7. Segmentation results on SUN-RGBD dataset (37 classes).
+                                                                        our network. It consists of only one single RefineNet
+We compare to a number of recent methods. Our RefineNet sig-
+nificantly outperforms the existing methods.
+                                                                        block, which takes all four inputs from the four blocks of
+             Method      Train data   Pixel acc.    Mean acc.    IoU    ResNet and fuses all-resolution feature maps in a single pro-
+       Liu et al. [32]    RGB-D           −           10.0        −     cess. The 2-cascaded version is similar our main model (4-
+       Ren et al. [39]    RGB-D           −           36.3        −     cascaded) from Fig. 2(c), but employs only two RefineNet
+   Kendall et al. [26]     RGB          71.2          45.9       30.7   modules instead of four. The bottom one, RefineNet-2, has
+        Context [30]       RGB          78.4          53.4       42.3
+                                                                        two inputs from ResNet blocks 3 and 4, and the other one
+   RefineNet-Res101        RGB           80.4         57.8       45.7
+   RefineNet-Res152        RGB          80.6          58.5       45.9
+                                                                        has three inputs, two coming from the remaining ResNet
+                                                                        blocks and one from RefineNet-2. For the 2-scale model in
+                                                                        Fig. 7(c), we use 2 scales of the image as input and respec-
+Table 8. Segmentation results on the ADE20K dataset (150                tively 2 ResNets to generate feature maps; the input image
+classes) val set. our method achieves the best performance.             is scaled to a factor of 1.2 and 0.6 and fed into 2 independent
+                                  Method           IoU
+                                                                        ResNets.
+                              FCN-8s [36]          29.4
+                                                                            The evaluation results of these variants on the NYUD
+                                SegNet [2]         21.6
+                         DilatedNet [5, 46]        32.3                 dataset are shown in Table 9. This experiment demonstrates
+                     Cascaded-SegNet [48]          27.5                 that the 4-cascaded version yields better performance than
+                  Cascaded-DilatedNet [48]         34.9                 the 2-cascaded and 1-cascaded version, and using 2-scale
+                   RefineNet-Res101 (ours)         40.2                 image input with 2 ResNet is better than using 1-scale input.
+                   RefineNet-Res152 (ours)         40.7                 This is expected due to the larger capacity of the network.
+                                                                        However, it also results in longer training times. Hence, we
+Table 9. Evaluations of 4 variants of cascaded RefineNet: sin-
+                                                                        resort to using the single-scale 4-cascaded version as the
+gle RefineNet, 2-cascaded RefineNet, 4-cascaded RefineNet, 4-           standard architecture in all our experiments.
+cascaded RefineNet with 2-scale ResNet on the NYUDv2 dataset.
+We use the 4-cascaded version as our main architecture throughout       5. Conclusion
+all experiments in the paper because this turns out to be the best
+compromise between accuracy and efficiency.                                 We have presented RefineNet, a novel multi-path refine-
+                        Variant Initialization Msc Eva IoU              ment network for semantic segmentation and object pars-
+               single RefineNet   ResNet-50        no       40.3        ing. The cascaded architecture is able to effectively com-
+          2-cascaded RefineNet    ResNet-50        no       40.9        bine high-level semantics and low-level features to produce
+          4-cascaded RefineNet    ResNet-50        no       42.5        high-resolution segmentation maps. Our design choices
+  4-cascaded 2-scale RefineNet    ResNet-50        no       43.1        are inspired by the idea of identity mapping which facil-
+                                                                        itates gradient propagation across long-range connections
+                                                                        and thus enables effective end-to-end learning. We outper-
+ADE20K MIT [48] is a newly released dataset for scene                   form all previous works on seven public benchmarks, set-
+parsing which provides dense labels of 150 classes on more              ting a new mark for the state of the art in semantic labeling.
+than 20K scene images. The categories include a large
+variety of objects (e.g., person, car, etc.) and stuff (e.g.,           Acknowledgments This research was supported by the
+sky, road, etc.). The provided validation set consisting of             Australian Research Council through the Australian Cen-
+2000 images is used for quantitative evaluation. Results are            tre for Robotic Vision (CE140100016). C. Shen’s par-
+shown in Table 8. Our method clearly outperforms the base-              ticipation was supported by an ARC Future Fellowship
+line methods described in [48].                                         (FT120100969). I. Reid’s participation was supported by
+                   Single ReﬁneNet                                                                        2-cascaded ReﬁneNet
+
+                                                1                                                                                       1
+1/4                                                                              1/4
+                                          ReﬁneNet                                                                                ReﬁneNet
+
+                                                            1/4
+                                                                                                                                                    1/4
+1/8                                                                              1/8
+
+
+1/16                                                                             1/16                               2
+                                                                                                              ReﬁneNet
+                                                                                                                                1/16
+1/32                                                                             1/32
+                                                     Prediction                                                                                Prediction
+                                    (a)                                                                                  (b)
+
+
+
+                                                        4-cascaded 2-scale ReﬁneNet
+               1.2x input
+                                                                                                          1
+                                    1/4                                                           ReﬁneNet
+
+
+                                                                                                                          1/4
+                                                                                                                                       Prediction
+                                                                                              2
+                                    1/8                                            ReﬁneNet
+
+                                                                                                    1/8
+                                                                          3
+                                   1/16                             ReﬁneNet
+
+                                                              4                        1/16
+                                    1/32                ReﬁneNet
+                                                                   1/32
+
+                   0.6x input
+
+                                    1/8
+
+
+                                   1/16
+
+
+                                    1/32
+                                                                                 (c)
+Figure 7. Illustration of 3 variants of our network architecture: (a) single RefineNet, (b) 2-cascaded RefineNet and (c) 4-cascaded RefineNet
+with 2-scale ResNet. Note that our proposed RefineNet block can seamlessly handle different numbers of inputs of arbitrary resolutions
+and dimensions without any modification.
+
+
+an ARC Laureate Fellowship (FL130100102).                                           convolutional nets, atrous convolution, and fully connected
+                                                                                    CRFs. CoRR, abs/1606.00915, 2016.
+                                                                                [7] L.-C. Chen, Y. Yang, J. Wang, W. Xu, and A. L. Yuille. At-
+References                                                                          tention to scale: Scale-aware semantic image segmentation.
+                                                                                    arXiv preprint arXiv:1511.03339, 2015.
+ [1] A. Arnab, S. Jayasumana, S. Zheng, and P. H. Torr. Higher                  [8] X. Chen, R. Mottaghi, X. Liu, S. Fidler, R. Urtasun, and
+     order conditional random fields in deep neural networks. In                    A. Yuille. Detect what you can: Detecting and representing
+     European Conference on Computer Vision. Springer, 2016.                        objects using holistic models and body parts. In Proceed-
+ [2] V. Badrinarayanan, A. Kendall, and R. Cipolla. Segnet: A                       ings of the IEEE Conference on Computer Vision and Pattern
+     deep convolutional encoder-decoder architecture for image                      Recognition, pages 1971–1978, 2014.
+     segmentation. CoRR, 2015.                                                  [9] M. Cordts, M. Omran, S. Ramos, T. Rehfeld, M. Enzweiler,
+ [3] J. Carreira, R. Caseiro, J. Batista, and C. Sminchisescu. Se-                  R. Benenson, U. Franke, S. Roth, and B. Schiele. The
+     mantic segmentation with second-order pooling. In ECCV,                        cityscapes dataset for semantic urban scene understanding.
+     2012.                                                                          In CVPR, 2016.
+ [4] S. Chandra and I. Kokkinos. Fast, exact and multi-scale in-               [10] J. Dai, K. He, and J. Sun. BoxSup: Exploiting bounding
+     ference for semantic image segmentation with deep gaussian                     boxes to supervise convolutional networks for semantic seg-
+     crfs. In ECCV, 2016.                                                           mentation. In ICCV, 2015.
+ [5] L. Chen, G. Papandreou, I. Kokkinos, K. Murphy, and A. L.                 [11] J. Dai, K. He, and J. Sun. Convolutional feature masking for
+     Yuille. Semantic image segmentation with deep convolu-                         joint object and stuff segmentation. In CVPR, 2015.
+     tional nets and fully connected CRFs. In ICLR, 2015.                      [12] C. Dong, C. C. Loy, K. He, and X. Tang. Learning a deep
+ [6] L. Chen, G. Papandreou, I. Kokkinos, K. Murphy, and A. L.                      convolutional network for image super-resolution. In ECCV,
+     Yuille. DeepLab: Semantic image segmentation with deep
+     2014.                                                            [33] F. Liu, C. Shen, and G. Lin. Deep convolutional neural fields
+[13] D. Eigen and R. Fergus. Predicting depth, surface normals             for depth estimation from a single image. In CVPR, 2015.
+     and semantic labels with a common multi-scale convolu-           [34] F. Liu, C. Shen, G. Lin, and I. D. Reid. Learning depth
+     tional architecture. In ICCV, 2015.                                   from single monocular images using deep convolutional neu-
+[14] D. Eigen, D. Krishnan, and R. Fergus. Restoring an image              ral fields. CoRR, abs/1502.07411, 2015.
+     taken through a window covered with dirt or rain. In ICCV,       [35] Z. Liu, X. Li, P. Luo, C. C. Loy, and X. Tang. Semantic im-
+     2013.                                                                 age segmentation via deep parsing network. In ICCV, 2015.
+[15] D. Eigen, C. Puhrsch, and R. Fergus. Depth map prediction        [36] J. Long, E. Shelhamer, and T. Darrell. Fully convolutional
+     from a single image using a multi-scale deep network. In              networks for semantic segmentation. In CVPR, 2015.
+     NIPS, 2014.                                                      [37] R. Mottaghi, X. Chen, X. Liu, N.-G. Cho, S.-W. Lee, S. Fi-
+[16] M. Everingham, L. Van Gool, C. K. Williams, J. Winn, and              dler, R. Urtasun, et al. The role of context for object detection
+     A. Zisserman. The pascal visual object classes (voc) chal-            and semantic segmentation in the wild. In CVPR, 2014.
+     lenge. In IJCV, 2010.                                            [38] H. Noh, S. Hong, and B. Han. Learning deconvolution net-
+[17] G. Ghiasi and C. C. Fowlkes. Laplacian pyramid reconstruc-            work for semantic segmentation. In ICCV, 2015.
+     tion and refinement for semantic segmentation. In ECCV,          [39] X. Ren, L. Bo, and D. Fox. Rgb-(d) scene labeling: Features
+     2016.                                                                 and algorithms. In CVPR, 2012.
+[18] R. B. Girshick, J. Donahue, T. Darrell, and J. Malik. Rich       [40] O. Ronneberger, P. Fischer, and T. Brox. U-net: Convo-
+     feature hierarchies for accurate object detection and semantic        lutional networks for biomedical image segmentation. In
+     segmentation. In CVPR, 2014.                                          N. Navab, J. Hornegger, W. M. Wells, and A. F. Frangi, ed-
+[19] S. Gupta, P. Arbelaez, and J. Malik. Perceptual organiza-             itors, Medical Image Computing and Computer-Assisted In-
+     tion and recognition of indoor scenes from rgb-d images. In           tervention, pages 234–241, 2015.
+     CVPR, 2013.                                                      [41] N. Silberman, D. Hoiem, P. Kohli, and R. Fergus. Indoor
+[20] S. Gupta, R. Girshick, P. Arbeláez, and J. Malik. Learning           segmentation and support inference from rgbd images. In
+     rich features from RGB-D images for object detection and              ECCV, 2012.
+     segmentation. In ECCV, 2014.                                     [42] K. Simonyan and A. Zisserman. Very deep convolutional
+[21] B. Hariharan, P. Arbelaez, L. D. Bourdev, S. Maji, and J. Ma-         networks for large-scale image recognition. In ICLR, 2015.
+     lik. Semantic contours from inverse detectors. In ICCV,          [43] S. Song, S. P. Lichtenberg, and J. Xiao. Sun rgb-d: A rgb-d
+     2011.                                                                 scene understanding benchmark suite. In CVPR, 2015.
+[22] B. Hariharan, P. Arbeláez, R. Girshick, and J. Malik. Hyper-    [44] A. Vedaldi and K. Lenc. MatConvNet – convolutional neural
+     columns for object segmentation and fine-grained localiza-            networks for matlab, 2014.
+     tion. In CVPR, 2014.                                             [45] F. Xia, P. Wang, L.-C. Chen, and A. L. Yuille. Zoom better
+[23] B. Hariharan, P. Arbeláez, R. Girshick, and J. Malik. Simul-         to see clearer: Human and object parsing with hierarchical
+     taneous detection and segmentation. In ECCV, 2014.                    auto-zoom net. arXiv preprint arXiv:1511.06881, 2015.
+[24] K. He, X. Zhang, S. Ren, and J. Sun. Deep residual learning      [46] F. Yu and V. Koltun. Multi-scale context aggregation by di-
+     for image recognition. In CVPR 2016, 2016.                            lated convolutions. CoRR, 2015.
+[25] K. He, X. Zhang, S. Ren, and J. Sun. Identity mappings in        [47] S. Zheng, S. Jayasumana, B. Romera-Paredes, V. Vineet,
+     deep residual networks. arXiv preprint arXiv:1603.05027,              Z. Su, D. Du, C. Huang, and P. Torr. Conditional random
+     2016.                                                                 fields as recurrent neural networks. In ICCV, 2015.
+[26] A. Kendall, V. Badrinarayanan, and R. Cipolla. Bayesian          [48] B. Zhou, H. Zhao, X. Puig, S. Fidler, A. Barriuso, and
+     segnet: Model uncertainty in deep convolutional encoder-              A. Torralba. Semantic understanding of scenes through the
+     decoder architectures for scene understanding. CoRR,                  ADE20K dataset. CoRR, abs/1608.05442, 2016.
+     abs/1511.02680, 2015.
+[27] P. Krähenbühl and V. Koltun. Efficient inference in fully
+     connected CRFs with Gaussian edge potentials. In NIPS,
+     2012.
+[28] X. Liang, X. Shen, J. Feng, L. Lin, and S. Yan. Se-
+     mantic object parsing with graph lstm. arXiv preprint
+     arXiv:1603.07063, 2016.
+[29] X. Liang, X. Shen, D. Xiang, J. Feng, L. Lin, and S. Yan.
+     Semantic object parsing with local-global long short-term
+     memory. arXiv preprint arXiv:1511.04510, 2015.
+[30] G. Lin, C. Shen, A. van den Hengel, and I. Reid. Efficient
+     piecewise training of deep structured models for semantic
+     segmentation. In CVPR, 2016.
+[31] T.-Y. Lin, M. Maire, S. Belongie, J. Hays, P. Perona, D. Ra-
+     manan, P. Dollár, and C. L. Zitnick. Microsoft COCO: Com-
+     mon objects in context. In ECCV, 2014.
+[32] C. Liu, J. Yuen, and A. Torralba. Sift flow: Dense correspon-
+     dence across scenes and its applications. IEEE T. Pattern
+     Analysis & Machine Intelligence, 2011.
+

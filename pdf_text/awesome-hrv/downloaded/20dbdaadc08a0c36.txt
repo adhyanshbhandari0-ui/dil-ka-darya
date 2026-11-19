@@ -1,0 +1,723 @@
+                                                   Meta-AAD: Active Anomaly Detection with
+                                                         Deep Reinforcement Learning
+                                                                            Daochen Zha, Kwei-Herng Lai, Mingyang Wan, Xia Hu
+                                                                    Department of Computer Science and Engineering, Texas A&M University
+                                                                                {daochen.zha,khlai037,w1996,xiahu}@tamu.edu
+
+
+                                            Abstract—High false-positive rate is a long-standing challenge    asked to investigate the top instances from a ranked list of
+                                         for anomaly detection algorithms, especially in high-stake appli-    anomalies to identify as many true anomalies as she can
+                                         cations. To identify the true anomalies, in practice, analysts or
+
+
+
+
+arXiv:2009.07415v1 [cs.LG] 16 Sep 2020
+                                                                                                              until the time budget is used up. In practice, this human
+                                         domain experts will be employed to investigate the top instances
+                                         one by one in a ranked list of anomalies identified by an            feedback can be leveraged to help the analyst to identify more
+                                         anomaly detection system. This verification procedure generates      anomalies. We consider a scenario where the anomaly detector
+                                         informative labels that can be leveraged to re-rank the anomalies    selects one of the instances at a time to query the analyst. Then
+                                         so as to help the analyst to discover more true anomalies given a    it adjusts the decision functions by leveraging the label from
+                                         time budget. Some re-ranking strategies have been proposed to        the analyst. Figure 1 shows a toy example of how human
+                                         approximate the above sequential decision process. Specifically,
+                                         existing strategies have been focused on making the top instances    feedback is leveraged to improve the detector on the toy
+                                         more likely to be anomalous based on the feedback. Then they         data. We can see that human feedback can help the anomaly
+                                         greedily select the top-1 instance for query. However, these         detector to promote the instances of interest and discourage
+                                         greedy strategies could be sub-optimal since some low-ranked         the instances out of interest. As a result, the analyst will be
+                                         instances could be more helpful in the long-term. Motivated          presented with more true anomalies under a time budget.
+                                         by this, in this work, we study whether modeling long-term
+                                         performance can benefit active anomaly detection. This is a             Some re-ranking strategies have been proposed to approx-
+                                         challenging task because it is unclear how long-term performance     imate the above sequential decision process by greedily opti-
+                                         could be quantified. In addition, the query selection has a huge     mizing the immediate performance [4], [5], [6], [7]. Specifi-
+                                         decision space, which is difficult to model. To address these        cally, they adjust the anomaly scores based on the human feed-
+                                         challenges, we propose Active Anomaly Detection with Meta-           back, aiming to rank anomalous instances higher. Then they
+                                         Policy (Meta-AAD), a novel framework that learns a meta-
+                                         policy for query selection. Specifically, Meta-AAD leverages deep    greedily select the top-1 instance for the query, i.e., the one that
+                                         reinforcement learning to train the meta-policy to select the most   is most likely to be anomalous. This greedy choice may benefit
+                                         proper instance to explicitly optimize the number of discovered      the immediate performance; however, it can be sub-optimal in
+                                         anomalies throughout the querying process. Meta-AAD is easy to       the long-term. For example, some uncertain instances could
+                                         deploy since a trained meta-policy can be directly applied to any    be very helpful for correcting anomaly patterns [8]. Although
+                                         new datasets without further tuning. Extensive experiments on
+                                         24 benchmark datasets demonstrate that Meta-AAD significantly        these instances can be lower-ranked and harm the immediate
+                                         outperforms the state-of-the-art re-ranking strategies and the       performance, they may benefit the anomaly detector and help
+                                         unsupervised baseline. The empirical analysis shows that the         the analyst to discover more anomalies in future iterations.
+                                         trained meta-policy is transferable and inherently achieves a        Thus, we are motivated to study whether modeling long-term
+                                         balance between long-term and short-term rewards.                    performance can benefit active anomaly detection.
+                                            Keywords-Anomaly Detection, Active Learning, Deep Rein-              However, it is non-trivial to achieve this goal due to the fol-
+                                         forcement Learning, Meta-Learning, Human-in-the-Loop                 lowing challenges. First, it is unclear how we can quantify the
+                                                                                                              long-term performance. In the current iteration, we can only
+                                                               I. I NTRODUCTION                               predict the intermediate outcome, i.e., whether the instances
+                                            Anomaly detection aims to identify the data objects or be-        are likely to be anomalous or not, but are not clear about future
+                                         haviors that significantly deviate from the majority. Anomaly        benefits. Moreover, it is also difficult to balance long-term
+                                         detection has essential applications in various domains, such        and short-term performance in different scenarios. Second,
+                                         as fraud detection, cybersecurity attack detection, and med-         the decision space is very large since we need to examine
+                                         ical diagnosis [1]. Numerous anomaly detection algorithms            all the instances and select one of them for the query. This
+                                         have been proposed, but they are usually unsupervised with           makes it hard to design the selection strategy, particularly in
+                                         assumptions on the anomaly patterns [2], [3]. The discrepancy        large or high-dimensional data. Third, different datasets have
+                                         between the assumptions and the real-world scenarios can             various distributions of data and different sizes of decision
+                                         lead to high false-positive rates since users may have different     spaces. We need a simple and transferable selection strategy
+                                         interests and definitions of the anomalies.                          that can be adopted across different datasets, which brings
+                                            In this work, we consider an alternative approach to reduce       further challenges in designing the strategy.
+                                         false-positive rates by involving humans in the loop. In many           To address these challenges, we propose Active Anomaly
+                                         traditional anomaly detection scenarios, an analyst will be          Detection with Meta-Policy (Meta-AAD), which learns a
+                                                                                                                                           Probability
+                 Labeled Anom aly           Unlabeled Anom aly    Labeled Nor m ality         Unlabeled Nor m ality
+                                                                                                                          0.1       0.3         0.5        0.3    0.9
+ 8                                                           8                                                                  8
+
+ 6                                                           6                                                                  6
+
+ 4                                                           4                                                                  4
+
+ 2                                                           2                                                                  2
+
+ 0                                                           0                                                                  0
+
+−2                                                         −2                                                             −2
+
+−4                                                         −4                                                             −4
+  −4     −2      0      2           4   6          8         −4   −2         0          2      4        6         8         −4        −2          0        2     4      6   8
+
+                 (a) Initial state                                            (b) 15 queries                                                          (c) 30 queries
+Fig. 1: Evolution of the decision of Meta-AAD on toy data. Data in blue area are more likely to be presented to the analyst.
+In (a), the meta-policy prefers the instances that are far away from the majority, which is similar to an unsupervised anomaly
+detector. In (b) and (c), with more queries, the decision pattern evolves. The probability decreases in the regions around the
+normal instances (yellow). The probability increases for the regions around anomalies (red).
+
+
+meta-policy to explicitly optimize the number of discovered                                                 TABLE I: Main Symbols and definitions.
+anomalies. Specifically, we formulate active anomaly detection                                 Symbol                 Definition
+as a Markov decision process and leverage deep reinforcement
+                                                                                               n                      The number of instances.
+learning to train the meta-policy to select the most proper                                    d                      The feature dimension of each instance.
+instance in each iteration. The meta-policy is optimized to                                    l                      The dimension of transferable features.
+maximize the discounted cumulative reward, which combines                                      X ∈ Rn×d               A dataset with n instances and d features.
+                                                                                               G ∈ Rn×l               Transferable features with dimension l.
+short-term and long-term rewards. Extensive experiments                                        y ∈ Rn                 The n labels of dataset, where yi ∈ {−1, 1}.
+demonstrate the effectiveness of Meta-AAD, particularly in                                     ŷ ∈ Rn                The state vector, where ŷi ∈ {−1, 0, 1}.
+the long-term. Moreover, Meta-AAD can be easily deployed                                       c ∈ Rn                 The anomaly scores by an unsupervised detector.
+                                                                                               S                      The state space in Markov Decision Process (MDP).
+since the trained meta-policy can be directly applied to any                                   A                      The action space in MDP.
+new datasets without further tuning. The main contributions                                    R                      The reward function in MDP.
+of this work are as follows.                                                                   γ                      The discount factor in MDP.
+   • We identify the importance of optimizing long-term per-
+     formance for active anomaly detection.
+   • We propose Meta-AAD, a novel framework that leverages                                  A. Problem Formulation
+     deep reinforcement learning to train a meta-policy to
+                                                                                               We consider anomaly detection problems represented by a
+     inherently optimize long-term performance.
+                                                                                            set of instances X = {x1 , x2 , ..., xn } ∈ Rn×d , where n denotes
+   • To enable the training of the meta-policy, we propose a
+                                                                                            the number of instances, and d denotes the feature dimension.
+     practical solution that extracts transferable meta-features
+                                                                                            Each instance xi is an d-dimensional vector {xi,1 , xi,2 , ...xi,d }.
+     and optimizes the meta-policy on data streams.
+                                                                                            Feature Xi,j can be real-valued or categorical. Let y ∈ Rn
+   • We instantiate our framework with Proximal Policy Gra-
+                                                                                            be the ground-truths that correspond to the n instances in
+     dients (PPO) [9]. Extensive experiments on 24 benchmark
+                                                                                            the dataset, where yi ∈ {−1, 1}, −1 indicates that the
+     datasets demonstrate that Meta-AAD1 outperforms the
+                                                                                            instance is anomalous, and 1 indicates that the instance is
+     state-of-the-art alternatives and the unsupervised baseline.
+                                                                                            normal. Anomaly detection aims at partitioning the instances
+     Our empirical analysis shows that Meta-AAD can transfer
+                                                                                            into a anomaly set A = {x1 , x2 , ..., xa } and a normality
+     across various datasets and inherently achieve a balance
+                                                                                            set N = {x1 , x2 , ..., xb }, where a and b are the number of
+     between long-term and short-term rewards.
+                                                                                            anomalous and normal instances, respectively. Usually, the set
+                         II. P RELIMINARIES                                                 A accounts for minority of the data, i.e., a  b.
+   In this section, we formulate the problem of active de-                                     Conventional unsupervised anomaly detectors assign
+tection with meta-policy. We then provide a background of                                   anomaly scores c ∈ Rn to all the instances based on X, i.e.,
+Markov Decision Process (MDP) and Deep Reinforcement                                        learning a mapping f : X → c, such that the lower scores
+Learning (DRL). After that, we provide a naive approach to                                  indicate that the instances are more likely to be anomalous.
+training the meta-policy with DRL and discuss its limitations.                              Given the anomaly scores, we can obtain an anomaly ranking,
+The main symbols used in this work are summarized in Table I.                               where the anomalous instances are expected to be higher
+                                                                                            ranked than the normal instances. However, such ranking is
+  1 Code available at https://github.com/daochenzha/Meta-AAD                                usually not perfect since many of the higher-ranked instances
+                                                                                                  Labeled Anom aly                Unlabeled Anom aly
+                                             Quer y
+                                                                                                  Labeled Nor m ality             Unlabeled Nor m ality
+
+                                                                      Action
+                                                                                            Top 1
+                          Nor m al                                                                           3
+                                             Rew ar d
+
+                          Anom alous
+                                                                                                    Quer y
+                                                                                              1                             1                         3
+                        Label                                                                                                         After K
+                                                                                              2                  Feedback   2
+                                                                       State                                                          Quer ies
+                                                                                              3                                                       5
+                                                                                                                            3
+                                             Extr act featur es
+           ...   5       4    3      2   1                                                    4       An al yst             4
+
+                                                                  M et a-Pol i cy                                                                Det ect ed
+                                                                                              5                             5
+                 Dat a st r eam                                                                                                                 An om al i es
+
+                     Tr ai n i n g                                                       Appl yi n g t o u n l abel ed dat aset
+
+
+
+Fig. 2: An overview of Meta-AAD. In training, we shuffle the data and feed them to the meta-policy in a streaming manner.
+The meta-policy is rewarded based on the labels. The trained meta-policy can then be directly applied to a new unlabeled
+dataset. In each iteration, the meta-policy chooses one of the instances and queries an analyst (human).
+
+
+may be actually normal, and some lower ranked instances                             the short-term and long-term reward. At each timestep t, the
+could also turn out to be anomalous. Therefore, in practice,                        agent takes action at ∈ A according to the current state st ∈
+we usually require analyst (human) efforts to investigate the                       S, and observes the next state st+1 as well as a reward rt =
+higher-ranked instances and decide whether they are truly                           R(st+1 ). Our goal is to learn a policy π : S → APto maximize
+                                                                                                                                           ∞
+anomalous or not.                                                                   the expected discounted cumulative reward Eπ [ t=0 γ t rt ].
+    Based on the notations and intuitions above, we formally                           Deep reinforcement learning (DRL) describes a
+describe the problem of active anomaly detection with meta-                         family of algorithms for solving the MDP with
+policy as follows. Given a dataset X, at each step, a meta-                         deep neural networks [10]. Contemporary DRL
+policy will select one of the instances xi for query, and                           algorithms P    often learn a state value function V (st ) =
+                                                                                                     ∞
+a human will give a label indicating whether xi is truly                            Eat ,st+1 ,... [ l=0 γ t R(st+l) ] [11], [9]Por state-action value
+                                                                                                                                  ∞
+anomalous or not. Formally, let ŷ ∈ Rn be a state vector                           function Q(st , at ) = Est+1 ,at+1 ,... [ l=0 γ t R(st+l) ] [10],
+that corresponds to the n instances in the dataset. Here,                           [12] with deep neural networks to decide the most rewarding
+ŷi ∈ {−1, 0, 1}, where −1 indicates that the instance has been                     action at each state.
+selected for query and is indeed an anomaly, 1 indicates that
+the instance has been selected for query but it turns out to be                     C. Limitations of a Naive Approach
+normal, and 0 suggests that the instance has not been presented                        One may come up with a naive approach to train the
+to the analyst yet. The state vector ŷ is initialized with zeros                   meta-policy with deep reinforcement learning. Specifically, the
+for all the instances, i.e., no instance has been chosen for the                    active learning process could be naturally treated as an MDP
+query at the initial state. The state of the selected instance                      if we consider the state as the state vector and action as the
+will be updated to 1 or −1 at each query step based on the                          queried instance, i.e., S = {X × ŷ}, A = {1, 2, ..., n}. Then
+feedback of human. Given a budget of T queries, our goal                            by appropriately defining a reward function, we can directly
+is to learn a meta-policy (trained from some other labeled                          model the process as an MDP and train a policy to optimize
+datasets) to decide the instance to query at each step, i.e. a                      performance with deep reinforcement learning algorithms.
+mapping π : {X × ŷ} → {1, 2, ..., n}, such that the number                            However, this approach is infeasible because it has two
+of discovered true anomalies among the chosen instances is                          limitations. First, the state and action spaces are too large.
+maximized until budget T is used up.                                                The state dimension and action dimension are O(nd) and
+                                                                                    O(n), respectively, since at each iteration, we can observe the
+B. Markov Decision Process & Deep Reinforcement Learning
+                                                                                    information of all the n instances and need to select one of
+   Markov Decision Process (MDP) describes a framework for                          the n instances for query. However, the state-of-the-art deep
+sequential decision making process. An MDP is defined as                            reinforcement learning algorithms usually perform not well
+M = (S, A, PT , R, γ), where S denotes the set of states, A                         on large state and action spaces [13], [14]. In our preliminary
+denotes the set of actions, PT : S × A × S → R+ denotes the                         experiments, we also observe that the above naive method
+state transition function, R : S → R denotes the immediate                          fails to train an effective meta-policy. Second, even if we can
+reward function, and γ ∈ (0, 1) is a discount factor to balance                     train a meta-policy, it is difficult to transfer the meta-policy to
+another dataset since the state and action spaces are different     by using an ensemble of unsupervised anomalous detectors or
+in different datasets. The meta-policy will be of practical value   more fine-grained anomaly and normality features. To make
+only when it can be transferred. Therefore, this naive approach     our contribution focused, we adopt these simple features in
+can not be directly applied to our problem. In the following        all our experiments, which lead to reasonable performance
+sections, we discuss how we can address the above issues to         based on our empirical results. How we can better model the
+enable stable meta-policy training.                                 transferable information will be an interesting future work to
+                                                                    enhance the meta-policy.
+                     III. M ETHODOLOGY
+                                                                       By mapping the original features to the above transferable
+   In this section, we elaborate on the Active Anomaly              features, we will have the same feature dimension in different
+Detection with Meta-Policy (Meta-AAD). An overview of               datasets, i.e., l is the same. However, the new features are
+Meta-AAD is illustrated in Figure 2. In the training stage,         not ready to be used for training since different datasets
+we extract transferable features as states (Section III-A). We      have a different number of instances n. We will address this
+then shuffle the data and feed the data into meta-policy in         remaining issue in the next subsection.
+a streaming manner so that the state and action spaces can
+be significantly reduced (Section III-B). The meta-policy is
+trained with deep reinforcement learning based on some la-          B. Learning from Data Streams
+beled datasets (Section III-C). Finally, the trained meta-policy       The transferable features G ∈ Rn×g obtained in the pre-
+can be directly applied to any new unlabeled datasets for active    vious section and the action space A = {1, 2, ..., n} are still
+anomaly detection without further tuning (Section III-D).           too large for a learning algorithm. Moreover, the size of the
+A. Extracting Transferable Meta-Features                            spaces is proportional to the size of the dataset, which makes
+                                                                    the meta-policy impossible to transfer.
+   In this subsection, we aim to extract transferable meta-
+                                                                       To enable the training of transferable meta-policy, we pro-
+features that can be used across different datasets, i.e., we
+                                                                    pose to instead operate on data streams. Specifically, given
+aim at defining a mapping g : {X × ŷ} → G ∈ Rn×l , where
+                                                                    the transferable features of a training data Gtrain and its
+l is the dimension of extracted features, such that G is less
+                                                                    corresponding labels ytrain . In each episode, we randomly
+dependent on the dataset.
+                                                                    shuffle0 Gtrain and ytrain to obtain a perturbation, denoted as
+   Intuitively, there are three types of information that are                          0
+                                                                    Gtrain and ytrain . Instead of giving all the data to the meta-
+critical for deciding which instance to query. The first is
+                                                                    policy, we feed the meta-policy with one instance at a time.
+anomaly scores outputted by the anomaly detector. Anomaly
+                                                                    In the streaming setting, the state, action and reward of the
+scores can provide information about which instances are far
+                                                                    Markov Decision Process (MDP) are defined as follows.
+away from the majorities to help the meta-policy to discover
+more anomalous instances. Second, the labeled anomalous               • State S: The transferable
+                                                                                        0
+                                                                                                   features of the current observed
+instances are helpful. With several queries, we may be able             instance Gtrain
+                                                                                   i      ∈ Rl , where i is the instance index.
+to identify some anomalous instances. Properly promoting the          • Action A: Actions can be 1 or 0, where 1 suggests that
+instances that are similar to these known anomalous instances           the current instance should be selected, while 0 suggests
+will improve the performance. Third, labeled normal instances           that current instance should be ignored.
+are also useful. Similarly, discouraging the instances that are       • Reward R: If the meta-policy queries an instance, we
+similar to the known normal instancs may decrease the false             give a positive reward of 1 if the instance is indeed
+positives. Based on the intuitions above, we empirically extract        anomalous, and a small negative reward of −0.1 if the
+some features as follows, with a total of 6 features.                   instance is normal. We give 0 reward if the meta-policy
+   • Detector features: The anomaly scores c outputted                  ignores an instance. The reward function is critical to
+      by unsupervised anomaly detectors. Any off-the-shelf              describe the desired behaviors. We will empirically study
+      anomaly detection algorithms can serve as detectors.              the impact of different reward choices in the experi-
+   • Anomaly features: The features indicating the related-             ments (see the bottom of Figure 4).
+      ness to the labeled anomalous instances. In this work, we     The above MDP describes an active learning procedure in a
+      extract three features for this purpose. We standardize the   streaming setting. Intuitively, the meta-policy is encouraged
+      original features X and calculate the minimum and the         to take action 1 if the queried instance is anomalous and take
+      mean Euler distances to the labeled anomalous instances.      action 0 if the queried instance is normal. In this sense, the
+      In addition, we introduce a binary feature indicating         meta-policy will be taught to discover more anomalies under
+      whether there exists an anomalous instance in the k-          a budget. We note that the meta-policy trained in a streaming
+      nearest neighbors or not.                                     setting could be sub-optimal when applied to the batch setting
+   • Normality features: Similarly, we use the minimum and          since the two MDPs have different objectives. Nonetheless,
+      the mean Euler distances to the labeled normal instances      we find in practice that this concern is greatly outweighed by
+      as the normality features.                                    the benefits that the streaming setting brings. It significantly
+Note that our framework allows flexible choices of features.        reduces the state and action spaces to make the training of
+For example, we may be able to improve the performance              transferable meta-policy feasible.
+Algorithm 1 Training meta-policy with PPO                                 Algorithm 2 Application of trained meta-policy
+Input: A set of features {Xi }N i=1 and the corresponding labels          Input: Unlabeled dataset X ∈ Rn×d , trained meta-policy πθ
+    {yi }N
+         i=1 , rollout steps T                                            Output: The detected anomalies
+Output: The trained meta-policy                                            1: Initialize state vector ŷ = {0}ni=1 , anomalous list A = {}
+ 1: Initialize meta-policy πθ , θold ← θ                                   2: for iteration = 1, 2, ... until budget is used up do
+ 2: for iteration = 1, 2, ... until convergence do                         3:     Obtain transferable features G ∈ Rn×l from {X, ŷ}
+ 3:     if iteration = 1 or episode is over then                           4:     Compute π(a = 1|s) based on G as p ∈ Rn
+ 4:          Randomly sample {X0 , y0 } from {Xi }N         i N
+                                                    i=1 , {y }i=1          5:     Query the instance with the highest probability
+ 5:     end if                                                             6:     if the instance is anomalous then
+ 6:     Run πθold with {X0 , y0 } based on the MDP defined in              7:          Put the instance into A
+    Section III-A for T timesteps.                                         8:     end if
+ 7:     Compute advantages Â1 , ..., Ât based on Equation (1)            9:     Update ŷ based on human feedback
+ 8:     Update θ based on Equation (3)                                    10: end for
+ 9:     θold ← θ                                                          11: return A
+10: end for
+11: return πθ
+                                                                          where LVt F (θ) is a squared-error loss (Vθ (st ) − Vttarget )2 ,
+                                                                          Vttarget is estimated based on the collected data, entropy(·)
+C. Training Meta-Policy with Deep Reinforcement Learning                  is a term to encourage exploration, c1 and c2 are hyper-
+   Given the MDP defined in Section III-B, we can train                   parameters. The expectation in Equation (3) can be approx-
+the meta-policy with any deep reinforcement learning (DRL)                imated by sampling data from the environment.
+algorithms. In this work, we instantiate our framework with                  The training procedure of the meta-policy is summarized
+Proximal Policy Optimization (PPO) [9]. We note that there                in Algorithm 1. We assume the availability of several labeled
+are more advanced algorithms, such as [15], which we will                 datasets. In each episode, we randomly choose a dataset, shuf-
+explore in the future.                                                    fle the instances and traverse the dataset from the beginning
+   The meta-policy is described as a parametric policy                    in a streaming manner.
+Pθ (a|s), where s is an l dimensional feature, a ∈ {0, 1},
+π
+   a∈{0,1} π(a|s) = 1, and θ is the parameters of the network.            D. Application of Meta-Policy
+OurP  goal is to maximize the discounted cumulative reward
+       ∞                                                                     Once the meta-policy is trained, we can directly apply it to
+Eπ [ t=0 γ t rt ]. PPO is an actor-critic algorithm, where the
+                                                                          any new unlabeled datasets without further tuning. However,
+critic approximates the state values and the actor is the policy.
+                                                                          we note that there are some major differences between the
+Specifically, the critic of PPO trains a deep neural network to
+                                                                          application and the training. First, instead of feeding one
+approximate V (s) through interacting with the environment.
+                                                                          feature to the meta-policy at a time, we give all the features
+Then a generalized advantage estimator [16] is used:
+                                                                          to the meta-policy to compute the probabilities for all the
+                                −1+1
+                               TX
+                                              0                           instances. Specifically, when applying the meta-policy to an
+                  Ât = δt +            (γλ)t δt+t0 ,              (1)    unlabeled dataset X ∈ Rn×d , we first extract the transferable
+                                t0 =1                                     features G ∈ Rn×l according to X and the current state vector
+where δt = rt + γV (st+1 ) − V (st ), T is the total timesteps            ŷ ∈ Rn . Then we compute πθ (a = 1|Gi ), ∀i ∈ {1, 2, ..., n}
+in an episode, γ is the discount factor, and λ is a hyper-                and obtain the probabilities p ∈ Rn . Then we choose the
+parameter to control the bias-variance trade-off. Intuitively,            instance with highest probability for query, i.e., arg maxi pi .
+advantage values measure how much an action is better than                Intuitively, the instance that is very likely to be selected in the
+the other actions. Based on the estimated advantages, the actor           streaming setting is also very likely to be chosen in this batch
+is updated by a clipped surrogate objective:                              setting. The above procedure is summarized in Algorithm 2.
+ LCLIP   (θ) = Êt [min(rt (θ)Ât , clip(rt (θ), 1 − , 1 + )Ât )],        Note that πθ (a = 1|Gi ) is fundamentally different from the
+   t
+                                                                    (2)   adjusted anomaly scores. In previous methods [5], [4], [6], [7],
+where rt (θ) = πθπθ (a(at |st |st )t ) , πθold is the policy before the   the anomalous scores are adjusted to promote the anomalous
+                     old                                                  instances to the top. The main goal of the adjustment is to
+update, clip(rt (θ), 1 − , 1 + ) will clip rt (θ) into range
+                                                                          make the top-1 instance more likely to be anomalous so as
+[1 − , 1 + ], and  is a hyper-parameter to control the clip
+                                                                          to maximize the immediate performance. Whereas, the prob-
+range. The clipping objective makes sure that the new policy
+                                                                          ability of the meta-policy plays a significantly different role.
+will not deviate too much from the old policy, which enables
+                                                                          The probability is learned with the objective of maximizing
+stable policy improvement. In training, we use a combined
+                                                                          the discounted cumulative reward, which is a combination
+loss to simultaneously update the value loss:
+                                                                          of immediate and long-term rewards. That is, the long-term
+Lt (θ) = Êt [LCLIP
+               t    (θ) − c1 LVt F (θ) + c2 · entropy(πθ (·|st ))],       performance is inherently incorporated into the probabilities
+                                                               (3)        and the top-1 selection strategy.
+                           IV. E XPERIMENTS                                             TABLE II: Statistics of the datasets.
+  In this section, we conduct extensive experiments to eval-                 Dataset              Points   Dim.   Anomalies      Anomaly%
+uate Meta-AAD. We mainly focus on the following research                     Annthyroid            7200      6       534            7.4
+questions.                                                                   Arrhythmia            452     274        66           15.0
+                                                                             Breastw               683       9       239           35.0
+  • RQ1: How does the meta-policy select the query and how
+                                                                             Cardio                1831     21       176            9.6
+     will the decision of the meta-policy evolve in different                Glass                 214       9         9            4.2
+     stages (Section IV-B)?                                                  Ionosphere            351      33       126           36.0
+                                                                             Letter                1600     32       100            6.3
+  • RQ2: How does Meta-AAD compare with the state-
+                                                                             Lympho                148      18         6            4.1
+     of-the-art alternatives and unsupervised baseline (Sec-                 Mammography          11183      6       260            2.3
+     tion IV-C)?                                                             Mnist                 7603    100       700            9.2
+                                                                             Musk                  3062    166        97            3.2
+  • RQ3: How will Meta-AAD perform if using different
+                                                                             Optdigits             5216     64       150            3.0
+     features, the number of labeled datasets and reward                     Pendigits             6870     16       156            2.3
+     functions (Section IV-D)?                                               Pima                  768       8       268            35
+                                                                             Satellite             6435     36      2036           32.0
+  • RQ4: How many computational resources are needed to
+                                                                             Satimage-2            5803     36        71            1.2
+     train a meta-policy (Section IV-E)?                                     Shuttle              49097      9      3511            7.0
+  • RQ5: How does Meta-Policy balance long-term and                          Speech                3686    400        61            1.7
+                                                                             Thyroid               3772      6        93            2.5
+     short-term reward (Section IV-E)?                                       Vertebral             240       6        30           12.5
+                                                                             Vowels                1456     12        50            3.4
+A. Experimental Settings                                                     Wbc                   278      30        21            5.6
+   Datasets and evaluation metric. To demonstrate the gen-                   Wine                  129      13        10            7.7
+                                                                             Yeast                 1364      8        64            4.7
+erality of Meta-AAD, we select 24 datasets with various sizes,
+feature dimensions and anomaly ratios from ODDS2 . Table II
+summarizes the statistics of the datasets. We also use a toy
+dataset from [5] for better visualization. For the evaluation          function coefficient c1 = 0.5, λ = 0.95, clip range  = 0.2.
+metric, we use anomaly discovery curve [17], which plots the           Recall that γ is hyper-parameters to balance long-term and
+number of discovered anomalies with respect to the number              short-term rewards. We empirically set γ = 0.6. We train the
+of queries. A perfect result is a line with a slope 1, i.e., all the   meta-policy with the top 12 datasets (in alphabetical order) and
+queries are anomalous. The worst case is a line with a slope           apply it to the bottom 12 datasets in Table II. We do it reversely
+0, i.e., all the queries are normal. Following [6], we set the         to evaluate the top 12 datasets. The meta-policy is trained
+maximum budget to be 100 for all the datasets.                         with 2 × 105 timesteps with the same hyper-parameters across
+   Baselines. We compare Meta-AAD with the state-of-the-art            all the datasets. The episode length is set to 2, 000. For the
+methods as well as an unsupervised baseline as follows.                base detector of Isolation Forest, we use the implementation in
+                                                                       sklearn4 with the default hyper-parameters setting. We use the
+   • AAD. Active Anomaly Detection [5] is a state-of-the-art
+                                                                       original implementations of FIF5 , AAD6 and SSDO7 by their
+      method based on node re-weighting.
+                                                                       authors. For FIF, we try both linear and log-likelihood losses,
+   • FIF. Feedback-Guided Isolation Forest [6] is a recently
+                                                                       and report the best result. For SSDO, we find it beneficial
+      proposed active anomaly detector via online optimization.
+                                                                       to use Isolation Forest for the query at the beginning and
+   • SSDO. Semi-Supervised Detection of Outliers [18] is a
+                                                                       then switch to SSDO when we have hit at least one anomaly.
+      recent semi-supervised point-wise anomaly detector. We
+                                                                       We report the results with this strategy since we observe that
+      are interested in studying how semi-supervised methods
+                                                                       it outperforms randomly selecting instances at the beginning.
+      will perform in the active learning setting since they are
+                                                                       All the experiments are run 5 times. The average results and
+      also designed to leverage label information.
+                                                                       standard errors are reported.
+   • Unsupervised. We also include Isolation Forest (IF) [2]
+      as an unsupervised baseline.                                     B. A Case Study on the Toy Data
+While our Meta-AAD can be generally applied to any unsu-                  To study RQ1, we visualize the evolution of the decision of
+pervised anomaly detectors or an ensemble of detectors, for            Meta-AAD on a toy data [5] (see Figure 1), which is a small
+a fair comparison, we follow the previous work [5], [6] and            dataset with 2-dimensional features. We use the pre-trained
+use Isolation Forest (IF) [2] with the same hyper-parameters           meta-policy on the top 12 datasets in Table II. We visualize
+as in [5], [6]. For SSDO and the unsupervised baseline, we             the output of action 1 in the meta-policy, i.e., the probability of
+select the top-1 anomalous instance in each iteration.                 being selected for the query. Note that the probability is similar
+   Implementation details. For training the meta-policy, we            to the anomaly score, but it bases on a different objective. The
+use the PPO implementation in OpenAI baselines3 . Following            top instances are expected to not only have good immediate
+the default settings, we set rollout steps T = 128, entropy
+coefficient c2 = 0.01, learning rate to be 2.5 × 10−4 , value            4 https://scikit-learn.org/
+                                                                         5 https://github.com/siddiqmd/FeedbackIsolationForest
+  2 http://odds.cs.stonybrook.edu/                                       6 https://github.com/shubhomoydas/ad examples
+  3 https://github.com/hill-a/stable-baselines                           7 https://github.com/Vincent-Vercruyssen/anomatools
+                                                    M et a-AAD         FI F      AAD          SSDO      Un su per v i sed
+
+                              50                          100                   100                10
+        80                40                               80                    80                 8              80
+
+anomalies
+        60                30                               60                    60                 6              60
+        40                20                               40                    40                 4              40
+        20                                                 20                    20                 2              20
+                          10
+         0 20 40 60 80 100   20 40 60 80 100                     20 40 60 80 100    20 40 60 80 100 20 40 60 80 100   20 40 60 80 100
+               queries           queries                             queries            queries         queries           queries
+             (a) Annthyroid        (b) Arrhythmia                (c) Breastw             (d) Cardio              (e) Glass      (f) Ionosphere
+                          6.25                90                100                100                100
+        40                6.00                80
+                          5.75                70                 80                 80                 80
+        30                                    60
+anomalies
+                          5.50                                   60                 60                 60
+                          5.25                50
+        20                                    40                 40                                    40
+                          5.00                                                      40
+        10                4.75                30                                                       20
+                          4.50                20                 20                 20
+         0                4.25                10                                                        0
+           20 40 60 80 100     20 40 60 80 100   20 40 60 80 100    20 40 60 80 100    20 40 60 80 100    20 40 60 80 100
+               queries             queries           queries            queries            queries            queries
+               (g) Letter           (h) Lympho               (i) Mammography             (j) Mnist               (k) Musk        (l) Optdigits
+        100                                               100                   70                100
+                              70                                                60                                   8
+         80                   60                           80                                      80
+                              50                                                50                                   6
+anomalies
+         60                                                60                   40                 60
+                              40                                                                                     4
+         40                   30                           40                   30                 40
+         20                   20                                                20                                   2
+                                                           20                                      20
+          0                   10                                                10                                   0
+               20 40 60 80 100   20 40 60 80 100                 20 40 60 80 100   20 40 60 80 100    20 40 60 80 100 20 40 60 80 100
+                   queries           queries                         queries           queries            queries         queries
+             (m) Pendigits           (n) Pima                    (o) Satellite         (p) Satimage-2          (q) Shuttle        (r) Speech
+                             25                50                22              10
+        80                                                       20                              30
+        70                   20                40                18               8              25
+        60                                                       16
+anomalies
+        50                   15                30                                 6              20
+                                                                 14                              15
+        40                   10                20                12               4
+        30                                                       10                              10
+        20                    5                10                                 2
+        10                                                        8                               5
+                              0                                   6               0
+              20 40 60 80 100   20 40 60 80 100 0 20 40 60 80 100 20 40 60 80 100 20 40 60 80 100 20 40 60 80 100
+                  queries           queries           queries         queries         queries         queries
+              (s) Thyroid           (t) Vertebral                (u) Vowels               (v) Wbc               (w) Wine          (x) Yeast
+               Fig. 3: Performance comparison of Meta-AAD against the state-of-the-art alternatives and unsupervised baseline.
+
+
+  performance, i.e., it should be very likely to be anomalous,                    C. Performance on Benchmark Datasets
+  but also benefit the performance in the long-term.                                 To answer RQ2, we compare Meta-AAD against the base-
+     In the initial state, the meta-policy tends to choose the                    lines in the 24 real-world datasets. The anomaly discovery
+  instances that are far away from the majority, which is similar                 curves are illustrated in Figure 3. To better understand the
+  to the behavior of unsupervised anomaly detectors. We expect                    performance, we rank the discovered anomalies of the four
+  that the meta-policy have learned to give more weights to                       algorithms under 20, 40, 60, 80 and 100 queries, report the
+  detector features in the initial state when we do not have                      average rankings, and highlight the improvement of Meta-
+  labeled samples. We can also observe that, with more queries,                   AAD over the second-best method in Table III. We make the
+  the decision pattern evolves. On the one hand, the probability                  following observations.
+  decreases in the regions around the normal instances (the                          First, all the active anomaly detectors perform significantly
+  yellow instance on the bottom left corner). On the other hand,                  better than the unsupervised baseline and the semi-supervised
+  the probability increases for the regions around anomalies (the                 method. Specifically, Meta-AAD, FIF and AAD can discover
+  red triangles on the right-hand side). This behavior aligns with                more anomalies using the same number of queries in the 19 out
+  previous active anomaly detectors [5], [6]. Instead of adjusting                of 24 datasets and perform similarly in the other datasets. This
+  anomaly scores, the meta-policy is optimized to maximize                        is expected since labeled instances provide useful information
+  the discounted cumulative reward, which can better model the                    that can help us discover more anomalies. We observe that
+  long-term performance compared with the previous methods.                       SSDO performs slightly better than the unsupervised baseline
+TABLE III: Average rankings of the number of discovered                                    Al l         w /o det ect or                 w /o n or m al i t y                  w /o an om al y
+
+anomalies under different queries across 24 benchmarks, and                                                    80
+                                                                                80                                                                           60
+the improvement of Meta-AAD over the second best state-of-                                                     60
+                                                                    anomalies
+                                                                                60                                                                           40
+the-art method. The improvement improves with more queries.                     40                             40
+                                                                                                               20                                            20
+Meta-AAD delivers stronger performance in long-term. N                          20
+                                                                                                                0                                              0
+denotes the cases where Meta-AAD is significantly better than                         20     40 60 80 100                 20    40 60 80 100                       20    40 60 80 100
+                                                                                               queries                            queries                                  queries
+the baseline w.r.t. the Wilcoxon signed rank test (p < 0.01).                                                        12                 6                      1
+                                                                                                                                                             70
+ Method             20       40       60       80       100                     80                             80                                            60
+                                                                                                                                                             50
+                                                                    anomalies
+                                                                                60                             60
+ unsupervised [2]   4.188N   4.146N   4.167N   4.333N   4.375N                                                                                               40
+ SSDO [18]          3.312N   3.396N   3.500N   3.625N   3.438N                  40                             40                                            30
+                                                                                20                             20                                            20
+ AAD [5]            3.229N   3.208N   3.271N   3.167N   3.104N                                                                                               10
+ FIF [6]            2.208    2.333    2.312    2.396N   2.708N                        20     40 60 80 100                 20    40 60 80 100                       20    40 60 80 100
+ Meta-AAD           2.062    1.917    1.750    1.479    1.375                                  queries                            queries                                  queries
+                                                                                                    0               -0.1           -1                   -5              -10
+ Improvement        0.146    0.416    0.562    0.917    1.333                   100                           100                                            70
+                                                                                                                                                             60
+                                                                                 80                            80                                            50
+                                                                    anomalies
+                                                                                 60                            60                                            40
+                                                                                 40                            40                                            30
+but is far behind the active methods. A possible explanation                     20                            20                                            20
+                                                                                  0                                                                          10
+is that SSDO optimizes a different objective and thus has sub-                         20 40 60 80 100                     20   40 60 80 100                       20    40 60 80 100
+                                                                                           queries                                queries                                  queries
+optimal performance in the active learning setting.
+                                                                                     (a) Annthyroid                 (b) Mammography                                (c) Satimage-2
+   Second, Meta-AAD consistently delivers better performance
+than the state-of-the-art alternatives across all the datasets.      Fig. 4: Ablation study of Meta-AAD. We show the learn-
+With very few exceptions, Meta-AAD improves upon the                 ing curves on Annthyroid, Mammography, Satimage-2 by
+baselines. For example, Meta-AAD achieves more than 25%              dropping different features (top row), using different number
+improvement on Letter and Speech, and more than 10% on               of training datasets (mid row), and using different negative
+Arrhythmia, Ionosphere and Pima, compared with the best              rewards for a missed query.
+alternative. In the other tasks, Meta-AAD also achieves better
+or similar performance. Note that Meta-AAD achieve this
+performance without any training or tuning on the target             if we train the meta-policy with fewer data, we report the
+datasets, and thus it is easy to use in applications. The above      results with 6 and 1 training datasets (middle of Figure 4).
+results demonstrate the effectiveness of training a meta-policy      Specifically, we randomly drop some datasets and train the
+for active anomaly detection.                                        meta-policy on the resulting subset. We repeat the process 20
+   Third, Meta-Policy tends to be stronger in the long-term.         times and report the average performance. We observe that
+In Table III, we observe Meta-AAD is ranked higher and               although the performance using more training datasets tends
+higher with more queries. Specifically, with 20 queries, the         to be more robust, we can train a strong meta-policy even with
+average rank of Meta-AAD is 2.062, which only has minor              just one dataset. This suggests that the proposed features are
+improvement over FIF. Interestingly, with 100 queries, the           indeed transferable, and the proposed training strategy of the
+average ranking of Meta-AAD becomes 1.375. This suggests             meta-policy is effective.
+that Meta-AAD can better model long-term rewards. We                    Third, we are interested in how the reward will impact
+speculate that deep reinforcement learning inherently models         performance. Recall that we give a positive reward of 1 for
+and balances short-term and long-term performance, which             discovered anomalies, a negative reward of −0.1 for selecting
+benefits the anomaly detector in the long-term.                      a normal instance, and a reward of 0 if not querying. Here,
+                                                                     we vary the negative rewards with other rewards fixed (bottom
+D. Ablation Studies                                                  of Figure 4). Different negative rewards will lead to different
+   To better understand where the performance comes from, we         ratios between positive and negative rewards, which defines the
+answer RQ3 with ablation studies (see Figure 4). We focus            desired behaviors of the meta-policy. We argue that the choices
+on Annthyroid, Mammography, and Satimage-2.                          of the rewards should depend on the situations. For example, if
+   First, we study the impact of using different features. Recall    examining an instance requires lots of effort, a larger negative
+that we have three types of features, i.e., detector feature,        reward is preferred. On the contrary, if we do not need many
+anomaly features and normality features. We remove either of         efforts to check an instance, a small negative reward could
+them and plot the curves in the top of Figure 4. We obverse          be better. As for anomaly discovery curves, we observe that
+that each type of feature contributes to the final performance.      too large negative rewards will worsen the performance, and a
+Using all three types of features leads to the best performance.     small negative reward of −0.1 works well across the datasets.
+This suggests the proposed three types of features may be               To summarize, we find that the default choices of work well
+complementary for training a good meta-policy.                       across different datasets, delivering good performance even
+   Second, we investigate the impact of using different number       with few training data, which suggests that Meta-AAD could
+of datasets. To study whether the performance will drop              be a general framework for various scenarios.
+                                            Per f or m an ce w i t h 100 qu er i es
+                                                                                                              learning by using a few anomalous instances. [32] incorpo-
+                                                                                                              rates label information with support vector data description.
+            60                                                   65.0
+                                                                                                              AI2 [33] ensembles unsupervised and supervised anomaly
+            55                                                   64.5
+anomalies                                            anomalies
+                                                                                                              detectors. AutoML methods use a set of labeled instances
+            50                                                   64.0                                         to perform automated algorithm selection and neural archi-
+            45                                                                                                tecture search [34], [35]. More recently, [36] proposes a
+                                                                 63.5
+            40
+                                                                                                              semi-supervised anomaly detection approach for deep neural
+                 0   5000   10000   15000    20000                      0.0   0.2     0.4   0.6   0.8   1.0   networks. However, these methods are designed for batch
+                            steps                                                       gamma
+                                                                                                              setting, which could be sub-optimal in the active learning.
+   Fig. 5: The average discovered anomalies across all the
+                                                                                                                 Active anomaly detection. Active learning in anomaly
+   datasets given 100 queries with respect to the number of
+                                                                                                              detection is much more challenging than traditional active
+   training steps (left) and different γ values (right).
+                                                                                                              learning [37], [38] because of the imbalanced data. Instead
+                                                                                                              of assuming a batch of labeled data, active anomaly detection
+                                                                                                              interacts with humans and recomputes the anomaly scores
+   E. Analysis of the Meta-Policy
+                                                                                                              based on the feedback [4], [5], [39], [40]. These methods
+      We study RQ4 by plotting the average performance with                                                   usually define an optimization problem based on the hu-
+   100 queries across the 24 datasets with respect to the number                                              man feedback and re-weight the instances at each iteration.
+   of training steps of the meta-policy in the left-hand side of                                              [41] proposes to adaptively adjust the ensemble for active
+   Figure 5. We observe that the policy converges very fast. We                                               anomaly detection. [6] proposes to incorporate feedback by
+   note that in a personal computer, it usually takes less than 30                                            leveraging online convex optimization to improve efficiency
+   seconds to train 20, 000 steps with one process. Therefore, the                                            and simplicity. [17] proposes to use contextual multi-armed
+   training of the meta-policy is computationally efficient.                                                  bandit and clustering techniques to identify the anomalies in
+      We investigate RQ5 by showing the average performance                                                   attributed networks in an interactive manner. OJRANK [7]
+   with 100 queries using different γ in the right-hand side of                                               re-ranks the instances in each iteration based on the top-
+   Figure 5. Recall that γ is a hyper-parameter to balance short-                                             1 feedback. While these prior methods incorporate humans
+   term and long-term performance. In extreme cases, 0 suggests                                               in the loop, they all adopt a greedy strategy to select the
+   that we only care short-term performance, and 1 suggests                                                   top-1 anomalous instance in each iteration, which fails to
+   that long-term performance matters (γ can not be larger than                                               model long-term performance. Whereas, our Meta-AAD builds
+   1 due to the nature of reinforcement learning algorithms).                                                 upon deep reinforcement learning, which inherently models
+   We can observe that giving too much preferences for long-                                                  and optimizes long-term performance. Moreover, the previous
+   term or short-term rewards will both harm the performance.                                                 methods require complicated optimization to re-weight the
+   We suggest that γ should be specified based on our needs,                                                  instances in each iteration. On the contrary, the trained meta-
+   i.e., whether we care more about long-term or short-term                                                   policy of meta-AAD is easy to use since it can be directly
+   performance. In the conducted experiments, we set γ = 0.6                                                  applied to different datasets without further training or tuning.
+   across all the datasets.                                                                                      Learning meta-policy. Deep reinforcement learning algo-
+                                                                                                              rithms have shown promise in various domains [10], [42]
+                                     V. R ELATED W ORK                                                        The idea of meta-policy learning is to train a reinforcement
+      Anomaly detection. Anomaly detection has been exten-                                                    learning agent to make decisions with the objective of op-
+   sively studied in the past decades, e.g., density-based ap-                                                timizing the overall performance of the task. Some recent
+   proach [3], distance-based approach [19], [20], and ensem-                                                 studies about deep reinforcement learning have demonstrated
+   bles [2], [21], [22]. Anomaly detection algorithms have also                                               the effectiveness of the meta-policy [43], [44], [45]. Some
+   been developed for various types of data, such as categorical                                              related studies in graph neural networks [46] and natural
+   data [23], multi-dimensional data [2], time-series data [24] and                                           language processing [47] also show the effectiveness of meta-
+   graph data [25]. Most of these algorithms are unsupervised,                                                policy learning. In addition to the difference of objectives,
+   with strong assumptions about the anomaly patterns [26].                                                   these studies are limited to the same or parallel datasets.
+   However, these algorithms may not work well when the                                                       Whereas, we demonstrate that the meta-policy in Meta-AAD
+   assumptions do not hold. On the contrary, our Meta-AAD                                                     can be generally transferred across various datasets.
+   rarely relies on the assumptions. It instead aligns anomaly
+   patterns with human interests by leveraging human feedback                                                           VI. C ONCLUSIONS AND F UTURE W ORK
+      Semi-supervised anomaly detection. Semi-supervised                                                         In this work, we propose Meta-AAD, a framework for
+   learning methods [27], [28] have been studied in the con-                                                  incorporating human feedback into anomaly detection. The
+   text of anomaly detection. Semi-supervised anomaly detection                                               meta-policy in Meta-AAD is trained with deep reinforcement
+   assumes that a small set of labeled instances can be used                                                  learning to optimize long-term performance. We instantiate
+   to improve the performance [29]. In [30], a small set of                                                   our framework with PPO and evaluate it upon 24 benchmark
+   anomalous instances are leveraged to re-weight the anomaly                                                 datasets. The empirical results demonstrate that Meta-AAD
+   scores with belief propagation. [31] improves representation                                               outperforms state-of-the-art alternatives. We further conduct
+an extensive analysis of our framework. We find that a single                    [19] S. Ramaswamy, R. Rastogi, and K. Shim, “Efficient algorithms for
+configuration performs well across different datasets, and                            mining outliers from large data sets,” in SIGMOD, 2000.
+                                                                                 [20] F. Angiulli and C. Pizzuti, “Fast outlier detection in high dimensional
+Meta-AAD can inherently balance long-term and short-term                              spaces,” in ECML PKDD, 2002.
+rewards, which suggests that Meta-AAD could be a general                         [21] J. Chen, S. Sathe, C. Aggarwal, and D. Turaga, “Outlier detection with
+framework for active anomaly detection.                                               autoencoder ensembles,” in SDM, 2017.
+                                                                                 [22] G. Pang, L. Cao, L. Chen, D. Lian, and H. Liu, “Sparse modeling-
+   For future work, we would like to conduct more studies on                          based sequential ensemble learning for effective outlier detection in
+how we can better extract transferable meta-features. In this                         high-dimensional numeric data,” in AAAI, 2018.
+work, we empirically choose 6 features. We are interested in                     [23] L. Akoglu, H. Tong, J. Vreeken, and C. Faloutsos, “Fast and reliable
+                                                                                      anomaly detection in categorical data,” in CIKM, 2012.
+exploring more features to improve Meta-ADD or make the                          [24] M. Gupta, J. Gao, C. C. Aggarwal, and J. Han, “Outlier detection for
+performance more robust. We would also like to try other deep                         temporal data: A survey,” IEEE Transactions on Knowledge and Data
+reinforcement learning algorithms. Finally, we will explore the                       Engineering, vol. 26, no. 9, pp. 2250–2267, 2013.
+                                                                                 [25] L. Akoglu, H. Tong, and D. Koutra, “Graph based anomaly detection and
+possibility of applying Meta-AAD on other tasks, such as time                         description: a survey,” Data mining and knowledge discovery, vol. 29,
+series, graphs, and images.                                                           no. 3, pp. 626–688, 2015.
+                                                                                 [26] Y. Zhao, Z. Nasrullah, and Z. Li, “Pyod: A python toolbox for scalable
+                        ACKNOWLEDGEMENT                                               outlier detection,” arXiv preprint arXiv:1901.01588, 2019.
+                                                                                 [27] X. J. Zhu, “Semi-supervised learning literature survey,” University of
+  The work is, in part, supported by NSF (IIS-1750074, CNS-                           Wisconsin-Madison Department of Computer Sciences, Tech. Rep.,
+1816497, IIS-1718840). The views and conclusions in this                              2005.
+paper are those of the authors and should not be interpreted                     [28] D. Zha and C. Li, “Multi-label dataless text classification with topic
+                                                                                      modeling,” Knowledge and Information Systems, vol. 61, no. 1, pp. 137–
+as representing any funding agencies.                                                 160, 2019.
+                                                                                 [29] Y. Zhao and M. K. Hryniewicki, “Xgbod: improving supervised outlier
+                              R EFERENCES                                             detection with unsupervised representation learning,” in IJCNN, 2018.
+ [1] V. Chandola, A. Banerjee, and V. Kumar, “Anomaly detection: A survey,”      [30] A. Tamersoy, K. Roundy, and D. H. Chau, “Guilt by association: large
+     ACM computing surveys (CSUR), vol. 41, no. 3, pp. 1–58, 2009.                    scale malware detection by mining file-relation graphs,” in KDD, 2014.
+ [2] F. T. Liu, K. M. Ting, and Z.-H. Zhou, “Isolation forest,” in ICDM,         [31] G. Pang, L. Cao, L. Chen, and H. Liu, “Learning representations of
+     2008.                                                                            ultrahigh-dimensional data for random distance-based outlier detection,”
+ [3] M. M. Breunig, H.-P. Kriegel, R. T. Ng, and J. Sander, “Lof: identifying         in KDD, 2018.
+     density-based local outliers,” in SIGMOD, 2000.                             [32] N. Görnitz, M. Kloft, K. Rieck, and U. Brefeld, “Toward supervised
+ [4] S. Das, W.-K. Wong, T. Dietterich, A. Fern, and A. Emmott, “Incorpo-             anomaly detection,” Journal of Artificial Intelligence Research, vol. 46,
+     rating expert feedback into active anomaly discovery,” in ICDM, 2016.            pp. 235–262, 2013.
+ [5] S. Das, W.-K. Wong, A. Fern, T. G. Dietterich, and M. A. Siddiqui, “In-     [33] K. Veeramachaneni, I. Arnaldo, V. Korrapati, C. Bassias, and K. Li, “Aiˆ
+     corporating feedback into tree-based anomaly detection,” arXiv preprint          2: training a big data machine to defend,” in BigDataSecurity, 2016.
+     arXiv:1708.09441, 2017.                                                     [34] Y. Li, D. Zha, P. Venugopal, N. Zou, and X. Hu, “Pyodds: An end-to-end
+ [6] M. A. Siddiqui, A. Fern, T. G. Dietterich, R. Wright, A. Theriault,              outlier detection system with automated machine learning,” in WWW,
+     and D. W. Archer, “Feedback-guided anomaly discovery via online                  2020.
+     optimization,” in KDD, 2018.                                                [35] Y. Li, Z. Chen, D. Zha, K. Zhou, H. Jin, H. Chen, and X. Hu,
+ [7] H. Lamba and L. Akoglu, “Learning on-the-job to re-rank anomalies                “Autood: Automated outlier detection via curiosity-guided search and
+     from top-1 feedback,” in SDM, 2019.                                              self-imitation learning,” arXiv preprint arXiv:2006.11321, 2020.
+ [8] B. Settles, “Active learning literature survey,” University of Wisconsin-   [36] L. Ruff, R. A. Vandermeulen, N. Görnitz, A. Binder, E. Müller, K.-R.
+     Madison Department of Computer Sciences, Tech. Rep., 2009.                       Müller, and M. Kloft, “Deep semi-supervised anomaly detection,” arXiv
+ [9] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov, “Prox-           preprint arXiv:1906.02694, 2019.
+     imal policy optimization algorithms,” arXiv preprint arXiv:1707.06347,      [37] D. A. Cohn, Z. Ghahramani, and M. I. Jordan, “Active learning with
+     2017.                                                                            statistical models,” Journal of artificial intelligence research, vol. 4, pp.
+[10] V. Mnih, K. Kavukcuoglu, D. Silver, A. A. Rusu, J. Veness, M. G.                 129–145, 1996.
+     Bellemare, A. Graves, M. Riedmiller, A. K. Fidjeland, G. Ostrovski          [38] H. T. Nguyen and A. Smeulders, “Active learning using pre-clustering,”
+     et al., “Human-level control through deep reinforcement learning,”               in ICML, 2004.
+     Nature, vol. 518, no. 7540, pp. 529–533, 2015.                              [39] J. He and J. G. Carbonell, “Nearest-neighbor-based active learning for
+[11] J. Schulman, S. Levine, P. Abbeel, M. Jordan, and P. Moritz, “Trust              rare category detection,” in NeurIPS, 2008.
+     region policy optimization,” in ICML, 2015.                                 [40] D. Zhou, J. He, H. Yang, and W. Fan, “Sparc: Self-paced network
+[12] T. P. Lillicrap, J. J. Hunt, A. Pritzel, N. Heess, T. Erez, Y. Tassa,            representation for few-shot rare category characterization,” in KDD,
+     D. Silver, and D. Wierstra, “Continuous control with deep reinforcement          2018.
+     learning,” in ICLR, 2016.                                                   [41] S. Das, M. R. Islam, N. K. Jayakodi, and J. R. Doppa, “Active anomaly
+[13] G. Dulac-Arnold, R. Evans, H. van Hasselt, P. Sunehag, T. Lillicrap,             detection via ensembles,” arXiv preprint arXiv:1809.06477, 2018.
+     J. Hunt, T. Mann, T. Weber, T. Degris, and B. Coppin, “Deep re-             [42] D. Zha, K.-H. Lai, Y. Cao, S. Huang, R. Wei, J. Guo, and X. Hu,
+     inforcement learning in large discrete action spaces,” arXiv preprint            “Rlcard: A toolkit for reinforcement learning in card games,” arXiv
+     arXiv:1512.07679, 2015.                                                          preprint arXiv:1910.04376, 2019.
+[14] R. S. Sutton and A. G. Barto, Reinforcement learning: An introduction.      [43] D. Zha, K.-H. Lai, K. Zhou, and X. Hu, “Experience replay optimiza-
+     MIT press, 2018.                                                                 tion,” in IJCAI, 2019.
+[15] T. Haarnoja, A. Zhou, P. Abbeel, and S. Levine, “Soft actor-critic: Off-    [44] Z. Xu, H. P. van Hasselt, and D. Silver, “Meta-gradient reinforcement
+     policy maximum entropy deep reinforcement learning with a stochastic             learning,” in NeurIPS, 2018.
+     actor,” in ICML, 2018.                                                      [45] K.-H. Lai, D. Zha, Y. Li, and X. Hu, “Dual policy distillation,” in IJCAI,
+[16] J. Schulman, P. Moritz, S. Levine, M. Jordan, and P. Abbeel, “High-              2020.
+     dimensional continuous control using generalized advantage estimation,”     [46] K.-H. Lai, D. Zha, K. Zhou, and X. Hu, “Policy-gnn: Aggregation
+     arXiv preprint arXiv:1506.02438, 2015.                                           optimization for graph neural networks,” in KDD, 2020.
+[17] K. Ding, J. Li, and H. Liu, “Interactive anomaly detection on attributed    [47] L. Duong, H. Afshar, D. Estival, G. Pink, P. Cohen, and M. Johnson,
+     networks,” in WSDM, 2019.                                                        “Active learning for deep semantic parsing,” in ACL, 2018.
+[18] V. Vercruyssen, M. Wannes, V. Gust, M. Koen, B. Ruben, and D. Jesse,
+     “Semi-supervised anomaly detection with an application to water ana-
+     lytics,” in ICDM, 2018.
+

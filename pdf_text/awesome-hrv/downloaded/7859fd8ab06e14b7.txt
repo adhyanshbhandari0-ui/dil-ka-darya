@@ -1,0 +1,1057 @@
+NETS: Extremely Fast Outlier Detection from a Data Stream
+               via Set-Based Processing
+
+                                                                  ∗
+                   Susik Yoon and Jae-Gil Lee                                                      Byung Suk Lee
+                Graduate School of Knowledge Service                                     Department of Computer Science,
+                         Engineering, KAIST                                                   University of Vermont
+                    Daejeon 34141, South Korea                                              Burlington, VT 05405, USA
+                  {susikyoon, jaegil}@kaist.ac.kr                                                 bslee@uvm.edu
+
+ABSTRACT                                                                           stream, especially in real-time, is drawing much attention
+This paper addresses the problem of eﬃciently detecting                            as many applications need to detect anomalies as soon as
+outliers from a data stream as old data points expire from                         they occur [2, 4, 14, 15, 21, 22, 23, 24]. The applications
+and new data points enter the window incrementally. The                            range from fraud detection in ﬁnance to defect detection in
+proposed method is based on a newly discovered character-                          manufacturing to abnormal vital sign detection in health-
+istic of a data stream that the change in the locations of                         care to unusual pattern detection in marketing [3, 10]. All
+data points in the data space is typically very insigniﬁcant.                      these applications would beneﬁt from identifying those crit-
+This observation has led to the ﬁnding that the existing                           ical events in real-time.
+distance-based outlier detection algorithms perform exces-                            Example 1. Real-time cardiac monitoring is crucial to re-
+sive unnecessary computations that are repetitive and/or                           ducing the morbidity and mortality of patients through early
+canceling out the eﬀects. Thus, in this paper, we propose a                        detection and alert of anomalies in heartbeats. Usually, the
+novel set-based approach to detecting outliers, whereby data                       medical information of a patient is collected from implanted
+points at similar locations are grouped and the detection of                       or wearable sensors and transmitted to a server for real-time
+outliers or inliers is handled at the group level. Speciﬁcally,                    diagnostics [12]. Outlier detection is evidently a key compo-
+a new algorithm NETS is proposed to achieve a remark-                              nent of this technology [16], and achieving a low latency is
+able performance improvement by realizing set-based early                          of prime importance to identifying emergency cases like car-
+identiﬁcation of outliers or inliers and taking advantage of                       diac arrests as quickly as possible.                        
+the “net eﬀect” between expired and new data points. Ad-                              For a data stream inherently unbounded, outlier detection
+ditionally, NETS is capable of achieving the same eﬃciency                         is done over a sliding window which conﬁnes the extent of
+even for a high-dimensional data stream through two-level                          data within the most recent context. A slide is a sequence
+dimensional ﬁltering. Comprehensive experiments using six                          of data points evicted from or added to a window when it
+real-world data streams show 5 to 25 times faster process-                         moves forward. In the distance-based outlier detection mech-
+ing time than state-of-the-art algorithms with comparable                          anism [2, 4, 14, 22, 23] widely adopted for a data stream, an
+memory consumption. We assert that NETS opens a new                                outlier is deﬁned as a data point that does not have enough
+possibility to real-time data stream outlier detection.                            other data points in the vicinity within the current window.
+PVLDB Reference Format:                                                            Accordingly, as a window slides, expired data points may
+Susik Yoon, Jae-Gil Lee, Byung Suk Lee. NETS: Extremely Fast                       cause nearby data points to become outliers, and new data
+Outlier Detection from a Data Stream via Set-Based Processing.                     points may cause nearby data points to become inliers.
+PVLDB, 12(11): 1303-1315, 2019.
+DOI: https://doi.org/10.14778/3342263.3342269                                         Thus, in most existing algorithms three steps are com-
+                                                                                   monly taken whenever a window slides: (1) expired data
+                                                                                   points are removed from the window, (2) new data points are
+1.    INTRODUCTION                                                                 added to the window, and (3) outliers are detected from the
+                                                                                   window. These algorithms maintain an index data structure
+1.1     Background and Motivation                                                  (e.g., indexed stream buﬀer [2] and micro-cluster [14]) that
+  Outlier detection is a task to ﬁnd unusual data points in                        supports eﬃcient range search in the window and/or reduces
+a given data space [5, 11]. Detecting outliers from a data                         the number of potential outliers. The individual data points
+∗Jae-Gil Lee is the corresponding author.                                          that have expired or newly arrived are separately handled
+                                                                                   using the index [2, 4, 14, 22, 23].
+                                                                                      The state-of-the-art algorithms practicing such separate
+This work is licensed under the Creative Commons Attribution-                      handling of individual data points are missing out a big
+NonCommercial-NoDerivatives 4.0 International License. To view a copy              opportunity to improve the performance of distance-based
+of this license, visit http://creativecommons.org/licenses/by-nc-nd/4.0/. For      outlier detection. The opportunity stems from an inherent
+any use beyond those covered by this license, obtain permission by emailing        characteristic of data points that they do not vary signiﬁ-
+info@vldb.org. Copyright is held by the owner/author(s). Publication rights        cantly in their locations in the data space; this characteristic
+licensed to the VLDB Endowment.                                                    is clearer in a data stream monitored for outlier detection,
+Proceedings of the VLDB Endowment, Vol. 12, No. 11
+ISSN 2150-8097.                                                                    as by deﬁnition outliers occur rarely. In other words, data
+DOI: https://doi.org/10.14778/3342263.3342269                                      points in a data stream are likely to be concentrated in a
+
+
+
+                                                                                1303
+Table 1: Concentration ratio of real-world stream data sets. Here, the size refers to                          Expired       New
+the number of data points, and the concentration ratio is explained in Deﬁnition 1.                             slide Window slide
+                                                                                                       Value
+ Name              Description                   Size   Full (Sub)-dim   Concentration ratio                            x4 x5
+                                                                                                               x1 x2 x3       x6 x
+                                                                                                                                   7
+ STK        Stock trading records [19]          1.1M                1                     0.64
+ TAO       Oceanographic sensors [18]           0.6M                3                     0.87                          Inter-slide Intra-slide
+                                                                                                                        proximity proximity
+ HPC     Electric power consumption [9]         1.0M                7                     0.97
+                                                                                                       t0 t1 t2 t3 t4 t5 t6 t7 Time
+ GAS        Household gas sensors [9]           0.9M               10                     0.88
+                                                                                                   Figure 1: Motivation of using the net
+  EM           Gas sensor array [9]             1.0M            16 (4)              0.42 (0.90)
+                                                                                                   eﬀect: x1 and x2 are oﬀset (i.e., re-
+  FC          Forest cover types [9]            1.0M            55 (3)              0.44 (0.66)    placed) by x6 and x7 .
+
+                                           Individual effect                      Individual effect                    Net effect in a set
+                                       from expired data points                 from new data points
+                                                                                                                േͲ                     ൅1         െͳ
+
+        Outlier
+                                  ?      ?               ?
+                                             Potential outlier                 Real outlier                                Real outlier
+   (a) Previous window.                                    (b) Point-based update.                                   (c) Set-based update.
+Figure 2: The two window-update approaches: point-based (b) versus set-based (c). One-dimensional data space is considered
+for ease of exposition.
+
+set of small regions in the data space. Table 1 conﬁrms the                avoiding repetitive and useless update operations when the
+characteristic observed from six real-world stream data sets               window slides. Reiterating this idea from the perspective of
+frequently cited in the literature [22]. All of them show a                the algorithmic procedure, when a window slides, the exist-
+very high “concentration ratio” (see Deﬁnition 1) in their                 ing algorithms process the expired and new slides separately
+full- or sub-dimensional spaces.                                           and sequentially 1 , whereas our approach processes the two
+   Deﬁnition 1. (Concentration ratio) The concentra-                       slides together and concurrently. To highlight the diﬀerence
+tion ratio of a data set is an indicator of how concentrated               from our set-based update approach, we call the existing
+the data points are in the data space partitioned into hyper-              approach the point-based update approach.
+cubes, called cells, of the same size, and is calculated as the               Key idea: Figure 2 illustrates how the set-based update
+ratio of the total number of data points in the top quarter                approach is diﬀerent from the point-based update approach.
+of most populated cells to the number of data points in the                Consider the previous window in Figure 2a that has just
+entire data space. (This deﬁnition has been adapted from                   slid, where there is a single outlier (indicated in yellow).
+the same term used in the ﬁeld of economics [17].)                        The point-based update in Figure 2b performs update sepa-
+   When the concentration ratio is high, as illustrated in Fig-            rately and sequentially as the individual expired data points
+ure 1, data points in the same slide (either expired or new)               are removed from the current window, as indicated with
+tend to be close to one another, and likewise, data points in              the upward arrows. Three data points lose their neighbors
+the expired slide are close to data points in the new slide.               and thus become potential outliers. Immediately following
+We call the former the intra-slide proximity and the latter                it, however, the point-based update performs another up-
+the inter-slide proximity. The existing algorithms do not                  date separately and sequentially as the individual new data
+recognize the intra-slide proximity and, therefore, repeat-                points are added to the current window, as indicated with
+edly perform similar updates of an index for expired or new                the downward arrows. The three potential outliers obtain
+data points, consequently wasting much computing time and                  enough neighbors and thus become inliers. Note that there
+memory. Even worse, many data points removed from the                      is no change of outliers after the window slides. In contrast,
+expired slide are likely to be oﬀset (i.e., replaced) by data              the set-based update in Figure 2c ﬁrst compares close data
+points added to the new slide as the data points in the two                points in the expired and new slides and handles them to-
+slides are close to each other. The existing algorithms do                 gether and concurrently as sets, as indicated with the small
+not recognize the inter-slide proximity, either, and therefore             rectangles. Then, it calculates the net eﬀect in each set (i.e.,
+unnecessarily perform updates for the expired slide, only to               ±0 for no change, +1 for one net new data point, or −1 for
+be countered by updates for the new slide.                                 one net expired data point) as reﬂected in the current win-
+                                                                           dow. As a result of this set-based update, (1) the number
+1.2     Main Contributions and Summary                                     of updates performed is much smaller, and (2) no potential
+   In this paper, we propose an innovative approach based                  outlier is generated unnecessarily, i.e., only to be canceled
+on set-based update to make distance-based outlier detec-                  out immediately when new data points are looked at.
+tion from data streams extremely fast by fully taking ad-                     Algorithm: We propose a novel algorithm, called
+vantage of both intra-slide and inter-slide proximity. Close               NET-eﬀect-based Stream outlier detection (NETS),
+data points in a slide are grouped into a set to avoid rep-                that performs distance-based outlier detection from a data
+etition for the individual data points. Moreover, this set-                stream while fully capitalizing on the key idea discussed
+based processing makes it possible to extract the net change
+                                                                            1
+between expired and new data points in each set, thereby                        The order of processing the two slides is immaterial.
+
+
+
+                                                                     1304
+above. To the best of our knowledge, this algorithm is                      Table 2: Summary of the notations in the paper.
+the ﬁrst and foremost in realizing the set-based update and              Notation            Description
+combining updates from both expired and new slides. Con-
+cretely, the following two techniques are employed.                        Dd                a d-dimensional domain space
+                                                                          Df ull             the set of full-dimensions in D d
+• Grid index: For the set-based update, it is very impor-                 Dsub               a set of sub-dimensions in D d
+  tant to eﬃciently group close data points in a slide. To                  x                a data point
+  this end, NETS uses a single-level grid index where all                  W                 a window
+                                                                          Snew               a new slide of a window
+  grid cells have the same size. Each cell is essentially                 Sexp               an expired slide of a window
+  the implementation of a set. The size of a cell is deter-                 c                a cell
+  mined by a parameter typical of distance-based outlier                    O                a set of outliers
+  detection. The set (i.e., cell) to which a data point be-                θW                the size of a window
+  longs is identiﬁed very quickly using the grid index, and                θS                the size of a window slide
+  thus the cardinality of a set is maintained easily and eﬃ-               θR                the threshold on the distance of a neighborhood
+                                                                           θK                the threshold on the number of neighbors
+  ciently. Moreover, the net eﬀect of changes from the two
+  slides (i.e., expired and new) is calculated at a small cost
+  equivalent to that of matrix addition.                                                         θS=2                 θW=5
+
+                                                                                Value
+• Two-level dimensional ﬁltering: The concentration ratio                                       W1          W2
+  is usually low in the full-dimensional space of a high-                                                              x5         x7
+  dimensional data stream, as shown in Table 1. So, to sup-                                                 θR x4            x6
+  port high dimensionality as eﬃciently as low dimension-                                                  x3
+  ality, NETS ﬁrst selects a subset of dimensions, such that                                        x2
+                                                                                               x1           θR                     θK=3
+  the concentration ratio is suﬃciently high, in order to de-
+                                                                                    x0
+  tect outliers early on (i.e., at the cell level). Then, only
+  the data points of which the outlier-ness cannot be deter-
+  mined in the sub-dimensional space are processed further                              t0     t1   t2     t3    t4    t5    t6   t7 Time
+  in the full-dimensional space. Consequently, only a small
+  portion of the full-dimensional data space is looked at.           Figure 3: Example of DODDS. A data point x3 was an inlier
+  We have developed a heuristic algorithm that can select            in W1 , but it becomes an outlier in W2 .
+  an “optimal” subset of dimensions to maximize the ben-
+                                                                        Then, a data stream and a related window concept are
+  eﬁt of the two-level dimensional ﬁltering.
+                                                                     given in Deﬁnitions 4 and 5.
+   Performance improvement: The key idea of NETS is                     Deﬁnition 4. (Data stream) A data stream is an inﬁnite
+fairly straightforward, and yet its impact on the performance        sequence of data points, . . . , xi−2 , xi−1 , xi , xi+1 , xi+2 , . . ., ar-
+improvement is outstanding. We show it through compre-               riving in an increasing order of the timestamp.                           
+hensive experiments done using one synthetic data set and               As new data points arrive continuously, data streams are
+six real-world data sets commonly cited in the literature.           usually processed using a sliding window containing the set
+MCOD [14] has been known to be the best performer among              of most recent data points. In this paper, a sliding window
+the existing algorithms [22]. As will be shown in Section 6,         is formalized as the count-based window of Deﬁnition 5, as
+NETS outperforms MCOD by 5–150 times while consuming                 in a majority of other studies [2, 4, 14, 22, 23]. Hereafter, a
+only comparable memory space.                                        count-based window is referred simply by a window.
+   The rest of the paper is organized as follows. Section 2             Deﬁnition 5. (Count-based window) A count-based
+deﬁnes the problem formally. Section 3 reviews the state-            window W of size θW at a data point xi is the set of data
+of-the-art related work. Section 4 discusses the NETS algo-          points, {xi−θW +1 , xi−θW +2 , . . . , xi }.                              
+rithm in detail. Section 5 elaborates on the two-level dimen-
+                                                                        A window moves by θS data points at once; thus, each
+sional ﬁltering. Section 6 presents the results of experiments.
+                                                                     time a window moves, θS old data points are removed, and
+Section 7 concludes the paper.
+                                                                     θS new data points are added. The removed portion is called
+                                                                     an expired slide, and the added portion is called a new slide.
+2.   PRELIMINARY (PROBLEM SETTING)                                      Finally, the framework of the paper—DODDS —is formu-
+   This section provides the formal deﬁnition of the prob-           lated by Deﬁnition 6.
+lem of Distance-based Outlier Detection in Data Streams                 Deﬁnition 6. (DODDS) Distance-based outlier detection
+(DODDS). The notations used throughout this paper are                in data streams (DODDS) is a problem of ﬁnding a set of
+summarized in Table 2.                                               outliers according to Deﬁnition 3 in every window of size
+   First, distance-based outliers for static data are deﬁned in      θW sliding at the increment of θS , provided with a neighbor
+Deﬁnitions 2 and 3.                                                  count threshold θK and a distance threshold θR .                          
+   Deﬁnition 2. (Neighbor) Given a distance threshold θR ,              Example 2. Figure 3 illustrates an example scenario of
+a data point xi is a neighbor of another data point xj (xi =        DODDS. Suppose that θW = 5, θS = 2, and θK = 3. In W1 ,
+xj ) if the distance between xi and xj is no more than θR .         a data point x3 has three neighbors, x1 , x2 , and x4 , within
+   Deﬁnition 3. (Distance-based outlier/inlier) Given                θR and hence is regarded as an inlier. However, in W2 , x3
+a set X of data points, a neighbor count threshold θK , and          becomes an outlier as it loses two old neighbors, x1 and x2 ,
+a distance threshold θR , a data point x in X is a distance-         and acquires only one new neighbor, x6 .                    
+based outlier if x has fewer than θK neighbors in X and,               Hereafter, we omit “distance-based” in this paper when
+otherwise, a distance-based inlier.                                 discussing outlier detection.
+
+
+
+                                                                  1305
+     Table 3: Categorization of the DODDS algorithms.                 either join the closest micro-cluster or form a new one, and
+                                   Maintain window by                 if both attempts fail, then the data points are entered into
+                                                                      the event queue; (3) identifying outliers, where data points
+                              Existing index    Custom index          that are not in any micro-cluster and have fewer than θK
+                                                Exact/approx-         neighbors become outliers.
+              Neighbor list   Abstract-C [23]
+                                                  Storm [2]              LEAP [4] suggests a minimal probing principle to ﬁnd only
+  Identify     Potential        DUE [14]                              the minimum number of neighbors prioritized by their arriv-
+                                                 MCOD [14]
+ outlier by     outlier         LEAP [4]                              ing time, using indexes built per slide. It uses a trigger list
+               Net eﬀect                           NETS               to manage the data points aﬀected by expired data points.
+                                                                      In every window, the update works as follows: (1) process-
+                                                                      ing a new slide, where (i) neighbors of new data points are
+3.    RELATED WORK                                                    searched by probing the new slide and then the preceding
+                                                                      slides in reverse chronological order until ﬁnding θK neigh-
+   Existing DODDS algorithms are discussed in this sec-
+                                                                      bors, and (ii) the new data points are added to the trigger
+tion. The recent survey by Tran et al. [22] provides a
+                                                                      list of each probed slide; (2) processing an expired slide,
+comprehensive summary and comparison of six representa-
+                                                                      where (i) the data points in the trigger list of the expired
+tive algorithms: exact-Storm [2], Abstract-C [23], DUE [14],
+                                                                      slide are re-evaluated by checking the number of neighbors
+MCOD [14], LEAP [4], and approx-Storm [2]. Given the typ-
+                                                                      found, and (ii) if each data point has fewer than θK neigh-
+ically high-speed streaming nature of data streams, all these
+                                                                      bors, more neighbors are searched from the succeeding slides
+algorithms update outliers incrementally every time the win-
+                                                                      in chronological order; (3) identifying outliers, where data
+dow slides by (1) removing old data points in an expired
+                                                                      points having fewer than θK neighbors become outliers.
+slide, (2) adding new data points in a new slide, and (3) ﬁnd-
+                                                                         The superiority of MCOD and LEAP over exact-Storm,
+ing outliers from the “active” data points. To this end, their
+                                                                      Abstact-C, and DUE is mainly due to the reduction in the
+focus has been on eﬃciently maintaining the current window
+                                                                      frequency of range searches for ﬁnding neighbors because of
+and/or eﬃciently identifying outliers. The techniques used
+                                                                      micro-clusters (MCOD) and slide-based indexes (LEAP).
+for the former include existing indexes such as M-tree [7] or
+                                                                         Limitations of the existing algorithms: Unlike
+custom indexes; those for the latter include neighbor lists or
+                                                                      NETS, these algorithms do not exploit the net eﬀect between
+potential outliers. The existing algorithms and NETS can
+                                                                      expired and new data points and, consequently, are not able
+be categorized by their design, as shown in Table 3.
+                                                                      to avoid redundant updates when a window slides. More-
+   In exact-Storm [2], each data point x is associated with a
+                                                                      over, many potential outliers identiﬁed because of expired
+list of up to θK preceding neighbors (i.e., expired before x)
+                                                                      neighbors quickly revert to inliers because of new neighbors.
+and a number of succeeding neighbors (i.e., not expired be-
+fore x). This neighbor information is enough to determine
+whether each data point is an outlier. Abstract-C [23] main-          4.    THE ALGORITHM “NETS”
+tains a summary of the neighbor information in a diﬀerent
+way, which manages the lifetime neighbor count of each data           4.1    Overview
+point in every window that it belongs to. Because a new                  The overall procedure of the NETS algorithm is outlined
+neighbor will remain in a constant (i.e., θW /θS ) number of          in Algorithm 1 and illustrated in Figure 4. As preprocessing,
+windows, the maximum length of the list is θW /θS . Outliers          NETS ﬁnds the optimal set of dimensions that minimizes the
+can be identiﬁed by simply referring to the current window’s          outlier detection cost estimated based on the concentration
+neighbor count of each data point. While exact-Storm and              ratio observed in a sample of the data (Line 1). This optimal
+Abstract-C try to optimize neighbor lists, DUE [14] focuses           set may include the entire set of dimensions, especially for
+on managing potential outliers, which are likely to become            a low-dimensional data stream. As the data stream arrives
+outliers by losing expired neighbors. The inliers are stored          continuously, for each window on the stream, outliers are de-
+in a data structure, called an event queue, in the increasing         tected from the current window through cell-level detection
+order of the earliest expiration time of their neighbors. In          and then point-level detection (Lines 2–25).
+every window, the event queue is used to re-evaluate only                Cell-level detection (Lines 5–21): If all data points in
+the inliers whose neighbors have just expired.                        a speciﬁc cell have the same outlier status (either all outliers
+   State-of-the-art algorithms: MCOD and LEAP con-                    or all inliers), they can be identiﬁed as outliers or inliers
+sistently outperformed the other algorithms [22], and so let          early at this level. This cell-level detection is done through
+us discuss the two algorithms in detail.                              two-level dimensional ﬁltering, i.e., sub-dimensional (Lines
+   MCOD [14] uses an index structure called a micro-cluster           6–13) followed by full-dimensional (Lines 14–21), provided
+to eﬃciently prune out unqualiﬁed outlier candidates. If              that the optimal set of dimensions (Dsub ) is a proper subset
+there are more than θK data points inside a circle with a             of the set of all dimensions (Df ull ). The ﬁltering proce-
+radius of θR /2, a micro-cluster is formed to guarantee that          dure is the same between the sub-dimensional ﬁltering and
+all members are inliers. Some inliers not in a micro-cluster          the full-dimensional ﬁltering. Only those cells that do not
+are managed in an event queue similarly to DUE. In every              qualify for early detection in the sub-dimensional space are
+window, the update works in three steps: (1) processing an            deferred to the full-dimensional ﬁltering, and it eﬀectively
+expired slide, where (i) if the size of a micro-cluster contain-      reduces the full-dimensional search space.
+ing expired data points falls below θK + 1, its members are              NETS maintains a cardinality grid (Gsub and Gf ull ),
+regarded as new data points, and (ii) the data points which           where the cardinality of data points is stored in each grid
+had the expired data points as neighbors are retrieved from           cell. The cardinality values calculated from the previous
+the event queue and checked for their outlier status; (2) pro-        window are retrieved for update (Lines 8, 15). Next, NETS
+cessing a new slide, where new data points are attempted to           calculates the net eﬀect (Δsub and Δf ull ) between expired
+
+
+
+                                                                   1306
+                                    ∆|cij|
+                                                  In   Non
+                                                                                                             Outlier
+                                Net-changes       In
+
+                                                              In Non
+
+       W1        W2                                    Out    In    In
+                                 Time                                                                         Outlier
+       (a) Slide net eﬀect calculation.       (b) Cell-level detection.     (c) Point-level detection.           (d) Final outliers.
+
+                      Figure 4: Overall procedure of our proposed algorithm NETS (when Dsub = Df ull ).
+
+Algorithm 1 The Overall Procedure of NETS                                the cardinality of a D-cell c, which is denoted as card(c), in-
+Input: a data stream S, a set Df ull of dimensions;                      dicates the number of data points within c. The cardinality
+Output: a set O of outliers for each sliding window;                     grid stores the cardinality for each D-cell.
+ 1: Dsub ← GetOptDimensions(S); /* preprocessing */                         NETS limits the diagonal length of every D-cell to θR (i.e.,
+ 2: for each window W from S do                                          side length to θR / |D|), thereby enforcing the distance be-
+ 3:   Let Sexp be the expired slide and Snew be the new                  tween any two data points in a D-cell to be no longer than
+      slide;                                                             θR . This speciﬁcation leads to Lemma 1.
+ 4:   O ← ∅; /* outliers in the current window */                           Lemma 1. All data points in a D-cell are neighbors with
+ 5:   /* Cell-Level Detection */                                         one another in the data space D.
+ 6:   if Dsub ⊂ Df ull then                                                 Proof. Since the maximum distance possible between
+ 7:      /* Sub-Dimensional Filtering */                                 two points in a D-cell is θR , any two data points xi and
+ 8:      Gsub ← cardinality grid in Dsub ;                               xj in a D-cell are neighbors by Deﬁnition 2.
+ 9:      Δsub ← CalcNetEﬀect(Sexp , Snew , Dsub );
+10:      Gsub ← Gsub + Δsub ;                                               We further deﬁne the neighbor condition between D-cells
+                      , Cnon                                             in Deﬁnition 7.
+11:      (∅, Coutlier
+              sub        sub ) ← CategorizeCells(Gsub );
+12:      O ← O ∪ {x | x ∈ Coutlier        };                                Deﬁnition 7. (Neighbor cell) Two diﬀerent D-cells are
+                                   sub
+         Gf ull ← cardinality grid in Df ull ∩ Cnon                      said to be neighbors in D if the distance between the centers
+13:                                                    sub ;
+14:   else                                                               of the two D-cells is no longer than 2θR .                    
+15:      Gf ull ← cardinality grid in Df ull ;                              Lemma 2. Let us consider two data points xi and xj in
+16:   end if                                                             two diﬀerent D-cells ci and cj , respectively. The centers of ci
+17:   /* Full-Dimensional Filtering */                                   and cj are denoted as ci .ctr and cj .ctr. If dist(xi , xj ) ≤ θR ,
+18:   Δf ull ← CalcNetEﬀect(Sexp , Snew , Df ull );                      then dist(ci .ctr, cj .ctr) ≤ 2θR , where dist(·, ·) is the Eu-
+19:   Gf ull ← Gf ull + Δf ull ;                                         clidean distance.
+          ull , Cf ull
+      (Cfinlier            , Cfnon
+                                ull ) ← CategorizeCells(Gf ull );
+                   outlier
+20:                                                                         Proof. The center of a D-cell is at the center of its diag-
+21:   O ← O ∪ {x | x ∈ Cfoutlier ull   };                                onal line whose length is θR , so the distance between a data
+22:   /* Point-Level Detection */                                        point and the center is at most θR /2. Then, by the triangle
+23:   O ← O ∪ FindOutlierPoints(Cfnon        ull , Gf ull );             inequality, dist(ci .ctr, cj .ctr) ≤ dist(ci .ctr, xi )+dist(xi , xj )+
+24:   return O;                                                          dist(xj , cj .ctr) ≤ θR /2 + θR + θR /2 = 2θR .
+25: end for
+                                                                            Let N (c) denote the set of all neighbors of a D-cell c.
+                                                                         Then, the implication of Lemma 2 is that, for any data point
+and new data points (Lines 9, 18) (see Figure 4a) and then
+                                                                         x in c, the set of data points in N (c) is a superset of the
+applies the net eﬀect to the cardinality grid and detects out-
+                                                                         neighbors of x that are located outside c.
+liers at the cell level using the updated cardinality values
+(Lines 10–12, 19–21) (see Figure 4b). This way, each non-                4.3    Step 1: Slide Net-Effect Calculation
+empty cell is categorized into one of outlier, inlier, and non-
+                                                                           NETS calculates the net eﬀect of expired and new slides
+determined cells, as shown in Figure 4b.
+                                                                         using the cell-based cardinality grid data structure. By
+   Point-level detection (Lines 22–23): NETS inspects                    Lemma 1, the net change in the number of neighbors within
+the data points in non-determined cells further at the point             a D-cell applies equally to all data points in the D-cell. This
+level (Line 23) (see Figure 4c). Then, the outliers detected             property enables NETS to quickly identify outliers in both
+at both cell- and point-levels are returned as the ﬁnal output           the cell-level and point-level detection steps.
+(see Figure 4d).                                                           Algorithm 2 outlines the procedure. Each data point in
+                                                                         the expired slide is added to the cardinality grid of expired
+4.2    Cardinality Grid                                                  data points (Gexp ) in the D-cell containing the coordinate
+  NETS uses a cardinality grid GD , a cell-                              of the data point (Lines 1–3), and likewise each data point
+based structure in a multi-dimensional space                             in the new slide is added to that of new data points (Gnew )
+D, to maintain the net eﬀect in each cell. The               θR          (Lines 4–6). Here, the grid cell for a data point can be
+data space D is partitioned into hypercubes,                             easily calculated (in constant time) by dividing the coordi-
+called “D-cells.” For a given window or slide,                           nate value of the data point in each dimension by the side
+
+
+
+                                                                    1307
+Algorithm 2 CalcNetEﬀect()                                           Algorithm 3 CategorizeCells()
+Input: Sexp , Snew , and D;                                          Input: a cardinality grid G;
+Output: Net eﬀect Δ in each cell of data space D;                    Output: Cinlier , Coutlier , and Cnon ;
+ 1: for each data point x in Sexp do                                  1: Cinlier , Coutlier , Cnon ← ∅;
+ 2: Add x to the Gexp cell containing the coordinate of x;            2: for each cell c ∈ G do
+ 3: end for                                                           3:   if L(c) ≥ θK then
+ 4: for each data point x in Snew do                                  4:      Cinlier ← Cinlier ∪ {c}; /* Theorem 1 */
+ 5: Add x to the Gnew cell containing the coordinate of x;            5:   else if U (c) < θK then
+ 6: end for                                                           6:      Coutlier ← Coutlier ∪ {c}; /* Theorem 2 */
+ 7: Δ ← Gnew − Gexp ; /* net eﬀect */                                 7:   else
+ 8: return Δ;                                                         8:      Cnon ← Cnon ∪ {c};
+                                                                      9:   end if
+length of the D-cell. After processing all data points in the        10: end for
+two slides, the net eﬀect Δ is calculated by subtracting the         11: return Cinlier , Coutlier , Cnon ;
+cardinality of expired data points from the cardinality of
+new data points in each D-cell (Line 7). This operation was             Proof. For every data point x in the D-cell c, x is
+implemented using matrix addition, which is computed in              an inlier because the number N (x) of neighbors satisﬁes
+linear time with the number of non-empty cells.                      N (x) ≥ L(c) ≥ θK . Therefore, by Deﬁnition 8, the D-cell c
+                                                                     is an inlier cell.
+4.4    Step 2: Cell-Level Outlier Detection                             Theorem 2. A D-cell c that satisﬁes U (c) < θK is an
+   NETS tries to detect outliers and inliers early at the cell-      outlier cell.
+level by ﬁnding D-cells whose data points are either all out-           Proof. For every data point x in the D-cell c, x is
+liers or all inliers. To this end, we can derive lower- and          an outlier because the number N (x) of neighbors satisﬁes
+upper-bounds on the number of neighbors of a data point in           N (x) ≤ U (c) < θK . Therefore, by Deﬁnition 9, the D-cell c
+a D-cell as stated in Lemmas 3 and 4.                                is an outlier cell.
+                                                                        Algorithm 3 outlines the procedure of cell-level outlier de-
+   Lemma 3. For a given D-cell c, the lower-bound L(c)
+                                                                     tection. For each D-cell in the given cardinality grid G, the
+in Df ull on the number of neighbors for any data point x
+                                                                     algorithm calculates the lower- and upper-bounds and deter-
+in c is equal to card(c) − 1 if D = Df ull , and unknown if
+                                                                     mines the type of the D-cell according to its bounds (Lines
+D ⊂ Df ull .
+                                                                     3–9). The algorithm returns the three types of sets: Cinlier
+  Proof. The number of neighbors of x inside c is exactly            for inlier cells, Coutlier for outlier cells, and Cnon for non-
+card(c) − 1 (excluding x) by Lemma 1. This count is the              determined cells (Line 11), while only Cnon is passed to the
+lower bound L(c) in Df ull . On the other hand, it does not          next step—point-level outlier detection.
+hold if D ⊂ Df ull since not all neighbors in Dsub are also
+neighbors in Df ull .                                                4.5    Step 3: Point-Level Outlier Detection
+                                                                        NETS detects outliers at the point level by inspecting
+   Lemma 4. For a given D-cell c, the upper-bound U (c)              each data point in non-determined cells. NETS attempts
+in Df ull on the
+               number of neighbors for any data point x in          to exploit the cell-level information in this step as well to
+c is equal to c ∈N (c) card(c ) + card(c) − 1, where N (c) is      the extent possible. Interestingly, still some data points in
+the set of neighbor cells of c.                                      non-determined cells can be quickly identiﬁed as inliers by
+   Proof. The number of neighbors of x inside c is exactly           using the cardinality grid and the number of neighbors al-
+card(c) − 1 (excluding
+                      x) by Lemma 1, and that of x outside          ready known from the previous window. To make it possible,
+c is at most c ∈N (c) card(c ) by Lemma 2. Thus, the sum           NETS distinguishes the neighbors of a data point as stated
+of these two counts becomes the upper bound U (c). This              in Deﬁnition 11 depending on whether they are located in
+bound holds even when D ⊂ Df ull since neighbors in Dsub             the same D-cell as the data point or not.
+include all neighbors in Df ull .                                       Deﬁnition 11. (Inner or outer neighbors) Given a
+                                                                     data point x in a D-cell c, the inner neighbors of x are
+  Given these two bounds, a D-cell is categorized into one
+                                                                     the neighbors inside c, and the outer neighbors of x are the
+of three types: an inlier cell, an outlier cell, and a non-
+                                                                     neighbors outside c. Their counts are denoted as N in (x)
+determined cell as deﬁned in Deﬁnitions 8 through 10.
+                                                                     and N out (x), respectively.                               
+   Deﬁnition 8. (Inlier cell) A D-cell is called an inlier              These two types of neighbor counts are implemented as
+cell if all data points in the D-cell are inliers.                  follows. For a data point x, while N in (x) can be obtained
+                                                                     exactly from the cardinality grid of the current window,
+   Deﬁnition 9. (Outlier cell) A D-cell is called an outlier
+                                                                     N out (x) requires examining individual data points in all
+cell if all data points in the D-cell are outliers.       
+                                                                     neighbor cells. NETS reduces this cost by counting outer
+  Deﬁnition 10. (Non-determined cell) A D-cell is                    neighbors conservatively. Speciﬁcally, as NETS examines
+called a non-determined cell if it is neither an inlier cell         each slide in a window, it stores the counts of outer neigh-
+nor an outlier cell.                                                bors per slide until the cumulative count reaches θK (as done
+                                                                     by LEAP [4]). Then, in the next window, the sum of those
+  Theorems 1 and 2 state the criteria used to determine the          counts over the slides except the expired one is used as a
+correct cell type.                                                   conservative count of outer neighbors. The data point x is
+   Theorem 1. A D-cell c that satisﬁes L(c) ≥ θK is an               guaranteed to be an inlier in the new window provided with
+inlier cell.                                                         the condition in Theorem 3, as illustrated in Example 3.
+
+
+
+                                                                  1308
+Algorithm 4 FindOutlierPoints()                                          4.6    Complexity Analysis
+Input: Cnon and G;                                                           The worst-case time and space complexities of NETS are
+Output: a set O of outliers;                                             given by Theorems 4 and 5 respectively.
+ 1: O ← ∅;                                                                   Theorem 4. Given the number NC of non-empty D-cells
+ 2: for each cell c ∈ Cnon do                                            in a window, the time complexity of NETS is O(θS +NC θW ).
+ 3:   for each data point x ∈ c do                                           Proof. The time complexity of calculating the net ef-
+ 4:      N in (x) ← card(c) in G; /* exact count */                      fect is O(θS + NC ). The time complexity of cell-level de-
+ 5:      N out (x) ← conservative count from the previous                tection is O(NC ). The time complexity of point-level de-
+         window (not including the new slide);                           tection is O(NC θW θK ) because the number of data points
+ 6:      if N in (x) + N out (x) < θK then                               in non-determined cells is at most NC θK , and the number
+ 7:         /* Find more neighbors at the point level */                 of their neighbor candidates is at most θW . In practice,
+ 8:         do range search in N (c) to update N out (x)                 because θK /θW is almost 0, O(NC θW θK ) can be approxi-
+               until N out (x) ≥ θK − N in (x);                          mated as O(NC θW ) [13]. Thus, the overall time complexity
+ 9:         if N out (x) < θK − N in (x) then                            is O(θS + NC + NC θW ) = O(θS + NC θW ).
+10:            O ← O ∪ {x}; /* not enough neighbors */
+                                                                             When a data stream has a high concentration ratio,
+11:         end if
+                                                                         the number of non-empty D-cells becomes very small, and
+12:      end if
+                                                                         the time complexity of NETS can be further reduced to
+13:   end for
+                                                                         O(θS + θW ). According to the survey by Tran et al. [22],
+14: end for
+                                                                         the time complexity of MCOD is O((1 − c)θW log((1 −
+15: return O;
+                                                                         c)θW ) + θK θW log θK ), where c is the proportion of the data
+                                                                         points in micro-clusters, and the time complexity of LEAP is
+   Theorem 3. Given the exact N in (x) and the conser-                   O(θW  2
+                                                                                 log θW /θS ). Therefore, NETS has a lower time com-
+vative N out (x), a data point x is an inlier if N in (x) +              plexity than MCOD and LEAP.
+N out (x) ≥ θK .
+                                                                             Theorem 5. Given the number NC of non-empty D-cells
+   Proof. Since N out (x) is a conservative count of outer               in a window, the space complexity of NETS is O(NC +
+neighbors, there may be other outer neighbors in the unex-               θW2
+                                                                              /θS ).
+amined slides (including the new slide), and thus the exact                  Proof. The space complexity of managing D-cells is
+number of neighbors N (x) ≥ N in (x) + N out (x). So, x is an            O(NC ), and that of keeping neighbor counts is O(θW     2
+                                                                                                                                   /θS )
+inlier because N (x) ≥ θK by transitivity.                               because each of θW data points stores the count for each
+   Example 3. Consider a window W1 composed of four                      of θW /θS slides [4]. Thus, the space complexity of NETS is
+                                                                                      2
+slides S1 , S2 , S3 , and S4 , shown in Figure 5. Let θK be 5.           O(NC + θW      /θS ).
+Suppose that a data point x in S2 has N in (x) = 2 in W1                     According to the survey [22] again, the space complexity
+and that NETS ﬁnds one outer neighbor of x in S1 and two                 of MCOD is O(cθW + (1 − c)θK θW ), and that of LEAP is
+outer neighbors of x in S2 . Then, N out (x) = 3. Since the              O(θW  2
+                                                                                 /θS ). Thus, NETS has the same space complexity as
+total number of neighbors found is 5 (= 2 + 3) ≥ θK , NETS               LEAP and also has similar complexity to MCOD in practice
+stops examining the other slides and classiﬁes x as an inlier.           because typically θW /θS is constant.
+Now consider the next window W2 , composed of S2 , S3 , S4 ,
+and S5 , and suppose N in (x) = 3. The conservative N out (x)            5.    HIGH DIMENSIONALITY SUPPORT
+in W2 is reduced to 2 as the count from S1 is subtracted.
+Nevertheless, the total number of neighbors found is still               5.1    Sub-Dimensional Filtering
+5 (= 3 + 2) ≥ θK , and, therefore, x is still identiﬁed as an
+inlier without examining the rest of the window.                           Data points in a high-dimensional data set are usually
+                                                                         sparsely distributed, commonly known as “the curse of high
+                                                                         dimensionality.” To NETS, it means that there are fewer
+   N in(x)          W1: 2                           W2: 3                data points in Df ull -cells, which diminishes the performance
+                                                                         advantage of set-based processing. To overcome this issue,
++ N out(x) S1: 1 S2: 2 S3: ? S4: ?   S1: 1 S2: 2 S 3: ? S4: ? S5: ?
+                                                                         NETS ﬁrst processes Dsub -cells to discover outliers and in-
+    N (x) ≥ θK      x is an inlier   N (x) ≥ θK     x is an inlier       liers in a sub-dimensional space that does not suﬀer from the
+                                                                         data sparsity and then processes the remaining Dsub -cells
+                                                                         further in a full-dimensional space. This two-level dimen-
+Figure 5: An illustration of Example 3 for a data point x
+                                                                         sional ﬁltering is justiﬁed by the downward closure property
+located in the slide S2 .
+                                                                         in Lemma 5.2
+                                                                            Lemma 5. (Downward closure property of neigh-
+   Algorithm 4 outlines the procedure of point-level outlier
+                                                                         bors) Data points neighboring in a full-dimensional space
+detection. For each data point in each non-determined cell,
+                                                                         Df ull are neighbors in any sub-dimensional space Dsub ⊆
+N in (x) is updated using the cardinality grid G (Line 4), and
+                                                                         Df ull as well.
+N out (x) is estimated from the result of the previous window
+(Line 5). If such a data point is not guaranteed to be an                   Proof. The Euclidean distance between two data points
+inlier, the algorithm updates N out (x) further by probing               in Df ull must be greater than or equal to that in Dsub by
+each of the neighbor cells N (c) in the unexamined slides                deﬁnition. Therefore, the neighbors in Dsub is always inclu-
+(Lines 6–8). If there are still fewer than θK neighbors, the             sive of those in Df ull .
+data point is classiﬁed as an outlier (Lines 9–10). Finally,             2
+                                                                           This property has been ﬁrst introduced in frequent pattern
+NETS returns the set of outliers (Line 15).                              mining [1] and is also used in subspace clustering [6, 20].
+
+
+
+                                                                      1309
+                               0.75                                                       0.65
+
+
+
+
+         Concentration ratio
+                                                                                                                Algorithm 5 GetOptDimensions()
+                                0.7                                                       0.55
+
+
+                                                                                                 Precision
+                               0.65                                                       0.45                  Input: a data stream S
+                                0.6                                                       0.35                  Output: optimal sub-dimensions D
+                               0.55                     Precision                         0.25                   1: X ← sample data points from S;
+                                0.5                     Concentration ratio               0.15
+                               0.45                                                       0.05
+                                                                                                                 2: Calculate VMR of each dimension in full dimensional
+                                          1        2    3    4   5    6    7    8    9                              space Df ull and sort the dimensions in increasing order
+                                              Number of sub-dimensions                                              of VMR;
+Figure 6: Concentration ratio and precision for varying sub-                                                     3: Calculate the cost CDf ull of detecting outliers from X
+dimensionality (tested on a 10-dimensional synthetic data                                                           in Df ull (using Eq. (1) for Dsub = Df ull );
+set generated from a Gaussian mixture model).                                                                    4: Dsub ← ∅;
+                                80                                                                               5: repeat
+                                                                           Dim #1
+                                                                                                                 6:    Add to Dsub a new dimension in Df ull that maximizes
+                                60                                         VMR = 0.5
+                                                                                                                       the reduction in the outlier detection cost CDsub (cal-
+                    Count
+                                40                                                                                     culated using Eq. (1));
+                                                                                Dim #2
+                                20                                              VMR = 8                          7: until CDsub is not decreased;
+                                 0
+                                                                                                                 8: if CDsub < CDf ull then
+                                      0       10       20   30   40   50   60   70   80   90                     9:    return Dsub ;
+                           Bins                                                                                 10: else
+Figure 7: VMRs of two selected dimensions from the data                                                         11:    return Df ull ;
+set in Figure 6.                                                                                                12: end if
+   By Lemma 5, data points in a neighboring Dsub -cell con-                                                       Outlier detection cost via two-level dimensional
+tain all data points in neighboring Df ull -cells that are re-                                                  ﬁltering: We now perform a ballpark analysis on the cost
+duced to the Dsub -cell. Thus, by examining Dsub -cells that                                                    of identifying outliers. The cost model is to estimate the
+have a high concentration ratio, NETS can identify outlier                                                      number of D-cells or data points accessed in the middle of
+Dsub -cells earlier in the cell-level detection step and, addi-                                                 outlier detection, because it is heavily related to the perfor-
+tionally, reduce the search space of non-determined Df ull -                                                    mance according to our experience. Also, we assume that
+cells in the point-level detection step. A high concentration                                                   data points are uniformly distributed in a domain space,
+ratio, on the other hand, is not always beneﬁcial, since the                                                    because it is impractical to know data distribution.
+converse of Lemma 5 is not always true. That is, a higher                                                         Let us consider a set X of data points, and let Csub be the
+concentration ratio in Dsub is likely to cause more neigh-                                                      set of Dsub -cells that contain X and Cf ull be the set of Df ull -
+bors that later prove to be false neighbors in Df ull . This                                                    cells that contain X. Then, the cost for detecting outliers
+situation lowers the precision, i.e., the ratio of true neigh-                                                  via ﬁltering in a sub-dimensional space Dsub is modeled as
+bors in Df ull over all neighbors identiﬁed in Dsub . Having to                                                                                         Step 2
+purge out these false positive neighbors in Df ull may incur a                                                                  Step 1                                  
+                                                                                                                                 
+nontrivial overhead. Since concentration ratio is negatively                                                                                   c∈Csub |N (c)|     |Cf ull |
+correlated with sparsity and sparsity is positively correlated                                                          Cost = |Csub | + (                    ×             )+
+                                                                                                                                                 |Csub |          |Csub |
+with the dimensionality of Dsub , there exists a trade-oﬀ be-                                                                                                                   (1)
+tween concentration ratio and precision depending on the                                                                            c∈Csub |N (c)|       |X|
+                                                                                                                               (                    ×          ).
+sub-dimensionality, as shown in Figure 6.                                                                                              |Csub |         |Csub |
+                                                                                                                                                            
+                                                                                                                                             Step 3
+5.2    Optimal Sub-Dimensionality Selection
+                                                                                                                   Following the order of presentation in Section 4, the ﬁrst
+   The exponential number of possible sub-dimensional                                                           term estimates the number of Dsub -cells accessed in Step 1,
+spaces warrants an eﬃcient mechanism to ﬁnd an optimal                                                          the second term estimates the number of Df ull -cells accessed
+sub-dimensional space balancing the trade-oﬀ between con-                                                       in Step 2, and the third term estimates the number of data
+centration ratio and precision. NETS uses a systematic ap-                                                      points accessed in Step 3.
+proach based on a prioritization of individual dimensions                                                          Selection of optimal sub-dimensions: Algorithm 5
+and the associated cost of detecting outliers.                                                                  outlines the procedure for selecting optimal sub-dimensions.
+   Priority of a dimension: The well-known index                                                                It ﬁrst takes a set of sample data points from the input
+of dispersion in time series data, variance-to-mean ratio                                                       stream (Line 1), and then calculates the VMR of each di-
+(VMR) [8] in Deﬁnition 12, is used as the priority.                                                             mension and sorts the dimensions in an increasing order of
+   Deﬁnition 12. [8] (Variance-to-mean ratio) Given a                                                           VMR (Line 2). The estimated cost of outlier detection in the
+set of data points, its variance-to-mean ratio in the k-th                                                      full-dimensional space is computed upfront by Eq. (1) (Line
+dimension, VMRk , is deﬁned as σk2 /μk , where σk2 and μk are,                                                  3). Then, it performs forward selection of dimensions un-
+respectively, the variance and the mean of the distribution                                                     til the estimated cost, Eq. (1), is not decreased (Lines 4–7).
+of the data points in the k-th dimension.                                                                      Note that the algorithm does not necessarily have to inspect
+   A dimension with a lower VMR is less dispersed in the                                                        all dimensions because the cost starts increasing when the
+data distribution and shows a higher concentration ra-                                                          number of sub-dimensions exceeds a certain balancing point,
+tio; therefore, it is given a higher priority in the sub-                                                       as a result of the trade-oﬀ shown in Figure 6. Once opti-
+dimensionality selection. For an illustration using Figure                                                      mal sub-dimensions are determined, the cost estimated for
+7, the ﬁrst dimension (Dim #1) with the lower VMR is less                                                       the sub-dimensions is compared with the cost estimated for
+dispersed than the second dimension (Dim #2) and, there-                                                        the full-dimensions, and the set of the dimensions with the
+fore, has the higher priority.                                                                                  smaller cost is returned (Lines 8–12).
+
+
+
+                                                                                                             1310
+                                     NETS      MCOD      LEAP        exact-Storm      Abstract-C      DUE
+                  1000
+
+
+CPU time(s)
+                    10
+                    0.1
+                  0.001
+                           GAU           STK      TAO                HPC              GAS             EM                FC
+                                                            (a) CPU time.
+
+
+
+
+Peak memory(MB)
+                   256
+
+                    16
+
+                     1
+                           GAU           STK      TAO                HPC              GAS              EM               FC
+                                                          (b) Peak memory.
+Figure 8: Overall performance for all data sets with the default parameter values. NETS outperforms MCOD by 5 times (TAO)
+to 150 times (GAU) while consuming only comparable memory space.
+
+6.                  EXPERIMENTS                                             Table 4: Data sets and default parameter values.
+  Thorough experiments have been conducted to evaluate                     Data set   Dim    Size      θW       θS      θR     θK
+the performance of NETS. As a result, the following advan-                 GAU [22]     1    1.0M    100,000   5,000   0.028   50
+tages have been conﬁrmed.                                                  STK [19]     1    1.1M    100,000   5,000    0.45   50
+                                                                           TAO [18]     3    0.6M     10,000    500     1.9    50
+• NETS is much faster than state-of-the-art algorithms and                 HPC [9]      7    1.0M    100,000   5,000    6.5    50
+  requires only comparable memory space (Section 6.2).                     GAS [9]     10    0.9M    100,000   5,000    2.75   50
+• NETS is robust to the variation of performance parame-                    EM [9]     16    1.0M    100,000   5,000    115    50
+  ters such as the window size (θW ), the slide size (θS ), the             FC [9]     55    0.6M     10,000    500     525    50
+  distance threshold (θR ), and the neighbor count thresh-
+  old (θK ) (Section 6.3).                                               Performance metrics: In an outlier detection applica-
+• NETS beneﬁts signiﬁcantly from the set-based update                 tion, it is critical to reducing latency in updating outlier
+  and the two-level dimensional ﬁltering for its high per-            information. Additionally, memory consumption should be
+  formance (Section 6.4).                                             small enough to work reliably in a commodity machine. We
+                                                                      measured the average CPU time and the maximum memory
+6.1                   Experiment Setup                                consumed (or peak memory) to update outlier information
+   Data sets: We used the six real-world data sets in Ta-             in every window. We used JAVA ThreadMXBean interface
+ble 1 and a synthetic data set. Dimensionality of the data            to measure CPU time and a separate thread to measure peak
+sets ranges from 1 to 55. GAU, STK, and TAO are low-                  memory, which is the same way as used in the survey [22].
+dimensional (1 to 3), where GAU [22] is generated by a Gaus-             Computing platform: We conducted experiments on an
+sian mixture model with three distributions, STK [19] con-            Amazon AWS c5d.xlarge instance with four vCPUs (3GHz),
+tains stock trading records, and TAO [18] contains oceano-            8GB of RAM, and 100GB of SSD. Ubuntu 18.04.1 LTS and
+graphic data provided by the Tropical Atmosphere Ocean                JDK 1.8.0 191 are installed in the instance.
+project. HPC and GAS are mid-dimensional (7 to 10),
+where HPC [9] contains electric power consumption data                6.2     Highlight of the Results
+and GAS [9] contains household gas sensor data. EM [9] and               We compare the overall performance of the six algorithms
+FC [9] are high-dimensional (16 to 55), where EM contains             for all data sets with the parameter values set to the defaults
+chemical sensor data and FC contains forest cover type data.          shown in Table 4. Figure 8 shows the CPU time and peak
+Note that the relatively low concentration ratios of these            memory of the six algorithms. Note the logarithmic scale of
+two data sets (see Table 1) drives NETS to kick oﬀ the sub-           the performance numbers. Evidently, NETS was by far the
+dimensional ﬁltering option. All data sets except GAS are             fastest for all data sets, outperforming MCOD by 10 times,
+also used in other researches [2, 4, 14, 22].                         LEAP by 24 times, exact-Storm by 4,727 times, Abstract-
+   Parameters: The main control parameters in DODDS                   C by 4,680 times, and DUE by 3,826 times when averaged
+are θW (window size), θS (slide size), θR (distance thresh-           over all real-world data sets. The three existing algorithms,
+old), and θK (number of neighbors threshold). As suggested            exact-Storm, Abstract-C, and DUE, were shown to be infe-
+in the survey by Tran et al. [22], the default values of the pa-      rior to the top two state-of-the-art algorithms, MCOD and
+rameters for each data set is set to make the ratio of outliers       LEAP. Thus, the subsequent evaluation focuses on compari-
+to be approximately 1%. Table 4 summarizes the data sets              son with only MCOD and LEAP. Especially for GAU, where
+and corresponding default parameter values.                           both MCOD and LEAP took longer than 1.0s to detect out-
+   Algorithms: We chose ﬁve algorithms, MCOD [14],                    liers, NETS took only 0.01s, more than 100 times faster.
+LEAP [4], exact-Storm [2], Abstract-C [23], and DUE [14],             Even for TAO, where both MCOD and LEAP took only
+for comparison with NETS. The ﬁve algorithms have been                10ms to 40ms, the least among all data sets, NETS took
+re-implemented in JAVA by Tran et al. [22], and the source            only 2.6ms, still 4 to 15 times faster. Moreover, the peak
+codes are available at http://infolab.usc.edu/Luan/Outlier.           memory of NETS was similar to that of MCOD and LEAP,
+NETS was also implemented in JAVA, and the source code                speciﬁcally the smallest in TAO and no more than 1.4 times
+is available at https://github.com/kaist-dmlab/NETS.                  larger when averaged over the other data sets. This remark-
+
+
+
+                                                                   1311
+                                                                                                    NETS             MCOD                             LEAP
+                    10                                                         0.1                                                       10                                                           1
+
+
+
+CPU time(s)                                                 CPU time(s)                                              CPU time(s)                                                  CPU time(s)
+                     1
+                                                                                                                                          1
+                   0.1                                                        0.01                                                                                                                   0.1
+                                                                                                                                        0.1
+                  0.01
+              0.001                                                       0.001                                                        0.01                                                         0.01
+                           10k   50k   100k   150k   200k                              1k   5k    10k   15k   20k                               10k   50k    100k   150k   200k                             1k   5k    10k   15k   20k
+
+                         (a) STK - CPU time.                                         (b) TAO - CPU time.                                      (c) GAS - CPU time.                                          (d) FC - CPU time.
+                  256                                                          64                                                       256                                                          64
+
+
+
+
+Peak memory(MB)                                             Peak memory(MB)                                          Peak memory(MB)                                              Peak memory(MB)
+                   64                                                          16                                                        64                                                          16
+
+                   16                                                           4                                                        16                                                           4
+
+                    4                                                           1                                                         4                                                           1
+                           10k   50k   100k   150k   200k                              1k   5k    10k   15k   20k                               10k   50k    100k   150k   200k                             1k   5k    10k   15k   20k
+
+                    (e) STK - Peak memory.                                      (f) TAO - Peak memory.                                   (g) GAS - Peak memory.                                        (h) FC - Peak memory.
+                                                                                             Figure 9: Varying window size θW .
+                  1000                                                         10                                                      1000                                                          10
+
+
+
+CPU time(s)                                                 CPU time(s)                                              CPU time(s)                                                  CPU time(s)
+                                                                                1                                                       100
+                   10                                                                                                                                                                                 1
+                                                                               0.1                                                       10
+                   0.1                                                                                                                                                                               0.1
+                                                                              0.01                                                        1
+              0.001                                                       0.001                                                         0.1                                                         0.01
+                           5%    10%   20%    50%    100%                              5%   10%   20%   50%   100%                              5%    10%    20%    50%    100%                             5%   10%   20%   50%   100%
+
+                         (a) STK - CPU time.                                         (b) TAO - CPU time.                                      (c) GAS - CPU time.                                          (d) FC - CPU time.
+                   128                                                                                                                  256                                                         512
+
+
+
+
+                                                            Peak memory(MB)                                          Peak memory(MB)                                              Peak memory(MB)
+                                                                               16
+
+
+
+
+Peak memory(MB)
+                    64                                                                                                                  128                                                         128
+                                                                                8
+                    32                                                                                                                   64                                                          32
+
+                    16                                                          4                                                        32                                                           8
+                           5%    10%   20%    50%    100%                              5%   10%   20%   50%   100%                              5%    10%    20%    50%    100%                             5%   10%   20%   50%   100%
+
+                    (e) STK - Peak memory.                                      (f) TAO - Peak memory.                                   (g) GAS - Peak memory.                                        (h) FC - Peak memory.
+                                                       Figure 10: Varying slide size θS (percentage of the default θW value).
+  able performance of NETS demonstrates the merits of set-                                                                              window increases. It is impressive that the peak memory of
+  based updates and net eﬀect and additionally the two-level                                                                            NETS is no larger than and even smaller than MCOD and
+  dimensional ﬁltering for EM and FC.                                                                                                   LEAP for most data sets. FC (Figure 9h) is an exception,
+                                                                                                                                        where NETS has higher peak memory than both MCOD
+  6.3                     Effects of Parameters on Performance                                                                          and LEAP, although still less than 64MB at the maximum.
+     We verify the robustness of performance when the param-                                                                            The reason lies in FC being high-dimensional and therefore
+  eter values are varying attuned to individual data sets. We                                                                           needing to keep Dsub -cells in memory for sub-dimensional
+  present the results for the selected data sets, STK, TAO,                                                                             ﬁltering. Note that, in return, NETS runs 4.2 times faster
+  GAS, and FC, owing to the lack of space. The results from                                                                             than LEAP and 4.9 times faster than MCOD on average
+  the other data sets showed similar patterns. In all ﬁgures of                                                                         over all θW values.
+  this section, the default parameter value is underlined.                                                                                 Varying the slide size θS (see Figure 10): θS deter-
+     Varying the window size θW (see Figure 9): θW is the                                                                               mines the number of expired and new data points in each
+  number of data points in a window and indicates roughly                                                                               update. In this experiment, θS was varied from 5% to 100%
+  the amount of workload on the algorithms. In this experi-                                                                             of the default θW value for each data set. The CPU time
+  ment, θW was varied from 10K to 200K for STK and GAS                                                                                  of all algorithms clearly increased with θS . It happened
+  and from 1K to 20K for TAO and FC. While CPU time in-                                                                                 because, when θS is larger, a larger portion of data points
+  creased with θW for all algorithms most of the time, the in-                                                                          in a window is aﬀected by expired or new neighbors and,
+  crease in CPU time for NETS is primarily due to an increase                                                                           therefore, the algorithms spend more time updating neigh-
+  in the number of data points in a D-cell, which results in                                                                            bors and identifying outliers. Here again, NETS achieved
+  an increase in the number of data points in non-determined                                                                            by far the smallest CPU time among all three algorithms
+  cells. Regardless, NETS was deﬁnitely faster than MCOD                                                                                for all data sets in the entire range of parameter values. It
+  and LEAP by several orders of magnitude in the entire range                                                                           demonstrates the beneﬁt of considering the net eﬀect for
+  of θW . This demonstrates that the performance advantage                                                                              updates, thus removing redundant updates. Additionally,
+  of net eﬀect accompanied by set-based update holds up con-                                                                            NETS showed the slowest growth rate of CPU time. For
+  sistently regardless of varying θW . Interestingly, CPU time                                                                          instance, in the case of GAS (Figure 10c), the CPU time
+  of NETS for STK (Figure 9a) decreased as θW increased.                                                                                increased 6.1 times (from 0.11s to 0.64s) in NETS whereas
+  Given that STK has only one dimension, we believe that it                                                                             8.8 times (from 0.76s to 6.7s) in MCOD and 243 times (from
+  happened because an increase in the number of data points                                                                             0.64s to 154s) in LEAP. The peak memory of NETS always
+  in a window directly causes an increase in the number of                                                                              increased with θS , because a larger θS makes NETS use
+  inlier cells and a decrease in the number of non-determined                                                                           more memory to derive the net eﬀect between the expired
+  cells, thus increasing the beneﬁt of early detection. Like                                                                            slide and the new slide. One plausible observation is that for
+  CPU time, peak memory also increases with θW for all al-                                                                              most data sets NETS used more memory than MCOD and
+  gorithms, which is obvious as the number of data points in a                                                                          LEAP when θS was more than 50% (of the window size).
+
+
+
+                                                                                                                    1312
+                                                                                                       NETS          MCOD                             LEAP
+                  1000                                                      100                                                        1000                                                         10
+
+
+
+CPU time(s)                                               CPU time(s)                                                CPU time(s)                                                 CPU time(s)
+                                                                                                                                         10                                                          1
+                    10                                                        1
+                                                                                                                                                                                                    0.1
+                   0.1                                                      0.01                                                        0.1
+                                                                                                                                                                                                   0.01
+              0.001                                              0.0001                                                            0.001                                                       0.001
+                          10%   50%   100%   500% 1000%                              10%   50%   100%   500% 1000%                             10%    50%    100%   500% 1000%                             10%   50%   100%   500% 1000%
+
+                         (a) STK - CPU time.                                       (b) TAO - CPU time.                                        (c) GAS - CPU time.                                         (d) FC - CPU time.
+                                                                                                                                       512                                                         256
+
+
+
+
+Peak memory(MB)                                           Peak memory(MB)                                            Peak memory(MB)                                             Peak memory(MB)
+                  512                                                       128
+
+                  128                                                        32                                                        128                                                          64
+
+                   32                                                         8                                                         32                                                          16
+
+                    8                                                         2                                                          8                                                           4
+                          10%   50%   100%   500% 1000%                              10%   50%   100%   500% 1000%                             10%    50%    100%   500% 1000%                             10%   50%   100%   500% 1000%
+
+                    (e) STK - Peak memory.                                    (f) TAO - Peak memory.                                     (g) GAS - Peak memory.                                       (h) FC - Peak memory.
+                                               Figure 11: Varying distance threshold θR (percentage of the default θR value).
+                    10                                                       0.1                                                        10                                                           1
+
+
+
+CPU time(s)                                               CPU time(s)                                                CPU time(s)                                                 CPU time(s)
+                     1
+                                                                                                                                         1
+                   0.1                                                      0.01                                                                                                                    0.1
+                  0.01                                                                                                                  0.1
+
+              0.001                                                     0.001                                                          0.01                                                        0.01
+                           10   30     50     70   100                               10    30     50     70   100                               10     30     50     70   100                              10    30     50     70   100
+
+                         (a) STK - CPU time.                                       (b) TAO - CPU time.                                        (c) GAS - CPU time.                                         (d) FC - CPU time.
+                   64                                                        16                                                        256                                                          64
+
+
+
+
+Peak memory(MB)                                           Peak memory(MB)                                            Peak memory(MB)                                             Peak memory(MB)
+                   32                                                                                                                  128                                                          32
+                                                                              8
+                   16                                                                                                                   64                                                          16
+
+                    8                                                         4                                                         32                                                           8
+                           10   30     50     70   100                               10    30     50     70   100                               10     30     50     70   100                              10    30     50     70   100
+
+                    (e) STK - Peak memory.                                    (f) TAO - Peak memory.                                     (g) GAS - Peak memory.                                       (h) FC - Peak memory.
+                                                                              Figure 12: Varying number of neighbors threshold θK .
+     Varying the distance threshold θR (see Figure 11):                                                                                 from 10 to 100 for all data sets. Here again, NETS was deﬁ-
+  θR determines the area of neighborhood so that a higher θR                                                                            nitely the fastest algorithm in the entire range of parameter
+  includes more data points as neighbors. In this experiment,                                                                           values for all data sets, while consuming lower or similar
+  θR was varied from 10% to 1000% of the default θR value                                                                               memory compared with MCOD and LEAP except in FC.
+  for each data set. Both CPU time and peak memory de-                                                                                  The CPU time of NETS increases with θK because a higher
+  creased in general for all three algorithms as θR increased.                                                                          θK makes more D-cells have fewer than θK data points,
+  Since a larger θR makes data points keep more neighbors in                                                                            which results in fewer inlier cells and more non-determined
+  a window, inliers are less likely to become outliers even if                                                                          cells. Interestingly, peak memory of NETS was almost con-
+  they lose some of their neighbors. So, with fewer outliers                                                                            stant for varying θK . This is because θK aﬀects neither the
+  to be detected, the CPU time naturally decreases. The de-                                                                             number of D-cells updated in a window (as θW or θS does)
+  crease in peak memory is attributed to the decrease in the                                                                            nor the number of D-cells (as θR does). Thus, NETS uses
+  number of D-cells to manage in NETS and in the number of                                                                              constant memory space to manage a window for varying θK .
+  potential outliers (hence the size of the trigger list and the
+  event queue) in MCOD and LEAP. NETS achieved much                                                                                     6.4          Efﬁcacy of Set-Based Update and Two-
+  smaller CPU time than MCOD and LEAP in almost the                                                                                                  Level Dimensional Filtering
+  entire range of parameter values (e.g., > 10%). This perfor-
+  mance advantage, however, was diminished when the value                                                                                  Set-based update: This technique enables NETS to eﬃ-
+  of θR was very small (i.e., 10% of the default value) for most                                                                        ciently ﬁlter out inlier cells and outlier cells by only updating
+  data sets except STK, because a smaller θR leads to a smaller                                                                         the net eﬀect, the net-change in D-cell cardinality. More-
+  D-cell size and hence a smaller number of data points in a                                                                            over, the net eﬀect in turn enables NETS to identify inlier
+  D-cell. Therefore, the beneﬁt of set-based update and net                                                                             data points from non-determined cells. Consequently, only
+  eﬀect are diminished when θR is very small. In the opposite                                                                           a small portion of data points are required to ﬁnd additional
+  case, however, when θR was very large (i.e., 1000% of the                                                                             neighbors. Table 5 shows for each data set the ratio of each
+  default value), NETS beneﬁted from a very high concentra-                                                                             of the three types (i.e., inlier, outlier, and non-determined)
+  tion ratio. As a result, in the case of TAO (Figures 11b and                                                                          of data points, averaged over all windows based on the de-
+  11f) for instance, NETS outperformed LEAP and MCOD                                                                                    fault parameter values.
+  in CPU time up to 68 times and 10 times, respectively, and                                                                               Note that, in the case of low- to mid-dimensional data sets
+  NETS consumed only 4.5MB peak memory, which was only                                                                                  (i.e., GAU, STK, TAO, HPC, and GAS), more than 98%
+  76% of 5.9MB in LEAP and 71% of 6.4MB in MCOD.                                                                                        of data points were identiﬁed early as inliers or outliers by
+                                                                                                                                        only updating the net eﬀect. Even for the high-dimensional
+    Varying the number of neighbors threshold θK (see                                                                                   data sets (i.e., EM and FC), the ratio was around 90%. By
+  Figure 12): Since θK is the minimum number of neighbors                                                                               exploiting the net eﬀect, NETS needed to inspect only a few
+  required for a data point to be an inlier, a higher θK makes                                                                          data points further to ﬁnd additional neighbors in order to
+  more data points outliers. In this experiment, θK was varied                                                                          identify outliers.
+
+
+
+                                                                                                                    1313
+Table 5: Average ratio(%) of each type of data points in a                                                                                     Step3: point-level outlier detection
+window. Xin , Xout , and Xnon indicate inlier, outlier, and                                                                                    Step2: cell-level outlier detection
+                                                                                                                                               Step1: slide net effect calculation
+non-determined data points, respectively.                                                                                          1.00
+                                                                                                                                                             0.11 0.06
+  Type                    GAU        STK          TAO              HPC             GAS    EM      FC                               0.80   0.43 0.34 0.47
+
+
+                                                                                                                      Proportion
+  Xin                     98.7       99.5         98.7              98.4           98.7   94.1   89.2                              0.60        0.08                         0.81 0.78
+  Xout                    0.80       0.37         0.40              0.20           0.80   0.30   0.40                              0.40   0.35               0.88 0.93
+                                                                                                                                                      0.33
+  Xnon                    0.50       0.13         0.90              1.40           0.50   5.60   10.4                                          0.58
+                                                                                                                                   0.20
+                                                                                                                                          0.23        0.21 0.01             0.18 0.20
+                                                                                                                                   0.00                             0.01 0.01 0.02
+           500000                                                                                                                         GAU STK TAO HPC GAS             EM     FC
+                                                                                                 EM
+
+
+
+
+ Estimated cost
+                  50000
+                                                                                                                    Figure 15: The breakdown of NETS CPU time.
+                                                                                   GAS                FC
+                                                           HPC                                     ≈          which indicates that the optimally selected sub-dimensions
+                   5000                                                                                       balanced out the trade-oﬀ better than the randomly selected
+                                                                                                              sub-dimensions.
+                                         TAO
+                    500                                                                                          The breakdown of NETS: Figure 15 shows the break-
+                            1    2   3    4   5    6   7          8           9 10 11 12 13 14 15 16 55       down of the CPU time of NETS into the three steps dis-
+                                              Number of sub-dimensions                                        cussed in Section 4. It shows an interesting contrast in the
+                                                                                                              proportion of the steps depending on the dimensionality of
+Figure 13: Estimated cost against the number of sub-
+                                                                                                              a data set. For the low-dimensional ones (i.e., GAU, STK,
+dimensions. (The lowest point for each data set is marked
+                                                                                                              and TAO), the three steps seem to be relatively balanced.
+with a triangle.)
+                                                                                                              (Step 2 of STK seems a bit exceptional, taking a signiﬁ-
+                                                                                                              cantly lower portion than the other steps, which indicates
+                                         NETS-A          NETS-R                    NETS-O
+               100                                                           256                              a smaller number of D-cells in the window.) For the mid-
+
+
+
+
+                                                           Peak memory(MB)
+ CPU time(s)
+                  10                                                         64
+                                                                                                              dimensional ones (i.e., HPC and GAS), Step 2 has a domi-
+                                                                                                              nant proportion, indicating that the cell-level outlier detec-
+                   1                                                         16
+                                                                                                              tion is the biggest source of the performance gain achieved
+                  0.1                                                         4
+                                                                                                              by NETS. For the high-dimensional ones (i.e., EM and FC),
+          0.01                                                                1                               Step 3 has a dominant proportion, which indicates that the
+                          EM         FC        GAS                                 EM     FC     GAS
+                                                                                                              high dimensionality still has a lingering eﬀect toward defer-
+                          (a) CPU time.                                            (b) Peak memory.           ring outlier detection to the costly point-level detection step.
+                    Figure 14: The eﬀect of optimal sub-dimensions.                                           (Note that, still, only approximately 10% of all data points
+                                                                                                              were inspected in Step 3, as shown in Table 5.)
+  Two-level dimensional ﬁltering: We did two kinds of
+analysis. First, to show how optimal sub-dimensions are                                                       7.   CONCLUSION
+selected (see Section 5.2), we plotted the cost calculated
+using Eq. (1) against the number of sub-dimensions. Figure                                                       In this paper, we proposed NETS, a very fast novel
+13 shows the results for all data sets that have two or more                                                  distance-based outlier detection algorithm for data streams.
+dimensions. For EM and FC, the optimal sub-dimensions                                                         By verifying that the eﬀects of expired and new data points
+that give the lowest cost were, respectively, the top three                                                   can be aggregated or canceled-out in data streams, we pro-
+and top four prioritized dimensions. Attributed to the trade-                                                 posed the set-based update to exploit such net eﬀect. NETS
+oﬀ discussed in Section 5.1, the cost decreased initially as                                                  calculates the net eﬀect of changed data points by grouping
+the number of sub-dimensions increased and then increased                                                     them as cells. Most data points can be quickly identiﬁed
+after the optimal point. For the other data sets, the full                                                    as outliers or inliers by only using the net eﬀect at the cell
+dimensions resulted in the lowest cost because they already                                                   level. To eﬃciently update outliers even from a sparsely
+had a high concentration ratio in full dimensions.                                                            distributed data stream, two-level dimensional ﬁltering was
+  Second, to examine the eﬀectiveness of sub-dimensional                                                      adopted to exploit a higher concentration ratio inside sys-
+ﬁltering in the selected optimal sub-dimensions, we designed                                                  tematically chosen sub-dimensions. NETS outperformed
+three variations of NETS: NETS-A, NETS-R, and NETS-O.                                                         state-of-the-art algorithms by several orders of magnitude
+NETS-A is the baseline algorithm that does not use sub-                                                       in CPU time for most real-world data sets while consuming
+dimensional ﬁltering at all. NETS-R and NETS-O perform                                                        only comparable memory space. We believe that the pro-
+sub-dimensional ﬁltering in random sub-dimensions and op-                                                     posed approach makes it possible to detect outliers much
+timal sub-dimensions, respectively. For NETS-R, we report                                                     faster in real-time and also opens a new research direction
+the average from ten repeated executions. Figure 14 shows                                                     for outlier detection from data streams.
+the performances of the three variations of NETS for GAS,
+EM, and FC. Adopting sub-dimensional ﬁltering (NETS-R                                                         8.   ACKNOWLEDGMENTS
+and NETS-O) was especially useful when the original con-                                                         This work was partly supported by the MOLIT (The Min-
+centration ratio was low, as in EM and FC whose concen-                                                       istry of Land, Infrastructure and Transport), Korea, under
+tration ratios are 0.42 and 0.44. The CPU time in EM and                                                      the national spatial information research program super-
+FC was signiﬁcantly reduced in exchange for a little more or                                                  vised by the KAIA (Korea Agency for Infrastructure Tech-
+similar amount of memory space. However, there was almost                                                     nology Advancement) (19NSIP-B081011-06) and the Na-
+no improvement for GAS since it already had a high con-                                                       tional Research Foundation of Korea (NRF) grant funded by
+centration ratio (i.e., 0.88) even in full dimensions. Further-                                               the Korea government (Ministry of Science and ICT) (No.
+more, NETS-O outperformed NETS-R for both EM and FC,                                                          2017R1E1A1A01075927).
+
+
+
+                                                                                                           1314
+9.   REFERENCES                                                   [13] E. M. Knorr and R. T. Ng. Algorithms for mining
+ [1] R. Agrawal and R. Srikant. Fast algorithms for mining             distance-based outliers in large datasets. In
+     association rules. In Proceedings of 20th International           Proceedings of 24th International Conference on Very
+     Conference on Very Large Data Bases, pages 487–499,               Large Data Bases, pages 392–403, 1998.
+     1994.                                                        [14] M. Kontaki, A. Gounaris, A. N. Papadopoulos,
+ [2] F. Angiulli and F. Fassetti. Detecting distance-based             K. Tsichlas, and Y. Manolopoulos. Continuous
+     outliers in streams of data. In Proceedings of 16th               monitoring of distance-based outliers over data
+     ACM Conference on Conference on Information and                   streams. In Proceedings of 2011 IEEE 27th
+     Knowledge Management, pages 811–820, 2007.                        International Conference on Data Engineering, pages
+ [3] L. Cao, Q. Wang, and E. A. Rundensteiner.                         135–146, 2011.
+     Interactive outlier exploration in big data streams.         [15] J.-G. Lee and M. Kang. Geospatial big data:
+     PVLDB, 7(13):1621–1624, 2014.                                     Challenges and opportunities. Big Data Research,
+ [4] L. Cao, D. Yang, Q. Wang, Y. Yu, J. Wang, and E. A.               2(2):74–81, 2015.
+     Rundensteiner. Scalable distance-based outlier               [16] Y. Lin, B. S. Lee, and D. Lustgarten. Continuous
+     detection over high-volume data streams. In                       detection of abnormal heartbeats from ECG using
+     Proceedings of 2014 IEEE 30th International                       online outlier detection. In Proceedings of 2018
+     Conference on Data Engineering, pages 76–87, 2014.                International Symposium on Information Management
+ [5] V. Chandola, A. Banerjee, and V. Kumar. Anomaly                   and Big Data, pages 349–366, 2018.
+     detection: A survey. ACM Computing Surveys,                  [17] N. G. Mankiw. Principles of Economics. Cengage
+     41(3):15:1–15:72, 2009.                                           Learning, 2014.
+ [6] C.-H. Cheng, A. W. Fu, and Y. Zhang. Entropy-based           [18] NOAA. Tropical atmosphere ocean project.
+     subspace clustering for mining numerical data. In                 https://www.pmel.noaa.gov, 2019. Accessed:
+     Proceedings of 5th ACM SIGKDD International                       2019-03-01.
+     Conference on Knowledge Discovery and Data Mining,           [19] U. of Pennsylvania. Wharton research data services.
+     pages 84–93, 1999.                                                https://wrds-web.wharton.upenn.edu/wrds/, 2019.
+ [7] P. Ciaccia, M. Patella, and P. Zezula. M-tree: An                 Accessed: 2019-03-01.
+     eﬃcient access method for similarity search in metric        [20] L. Parsons, E. Haque, and H. Liu. Subspace clustering
+     spaces. In Proceedings of 23rd International                      for high dimensional data: A review. ACM SIGKDD
+     Conference on Very Large Data Bases, pages 426–435,               Explorations Newsletter, (1):90–105, 2004.
+     1997.                                                        [21] S. Sadik, L. Gruenwald, and E. Leal. Wadjet: Finding
+ [8] D. Cox and P. Lewis. The statistical analysis of series           outliers in multiple multi-dimensional heterogeneous
+     of events. John Wiley and Sons, 1966.                             data streams. In Proceedings of 2018 IEEE 34th
+ [9] D. Dua and C. Graﬀ. UCI machine learning                          International Conference on Data Engineering, pages
+     repository. http://archive.ics.uci.edu/ml, 2019.                  1232–1235, 2018.
+[10] D. Georgiadis, M. Kontaki, A. Gounaris, A. N.                [22] L. Tran, L. Fan, and C. Shahabi. Distance-based
+     Papadopoulos, K. Tsichlas, and Y. Manolopoulos.                   outlier detection in data streams. PVLDB,
+     Continuous outlier detection in data streams: An                  9(12):1089–1100, 2016.
+     extensible framework and state-of-the-art algorithms.        [23] D. Yang, E. A. Rundensteiner, and M. O. Ward.
+     In Proceedings of 2013 ACM SIGMOD International                   Neighbor-based pattern detection for windows over
+     Conference on Management of Data, pages 1061–1064,                streaming data. In Proceedings of 12th International
+     2013.                                                             Conference on Extending Database Technology:
+[11] J. Han, J. Pei, and M. Kamber. Data Mining:                       Advances in Database Technology, pages 529–540,
+     Concepts and Techniques. Elsevier, 2011.                          2009.
+[12] P. Kakria, N. K. Tripathi, and P. Kitipawang. A              [24] I. Yi, J.-G. Lee, and K.-Y. Whang. APAM: Adaptive
+     real-time health monitoring system for remote cardiac             eager-lazy hybrid evaluation of event patterns for low
+     patients using smartphone and wearable sensors.                   latency. In Proceedings of 25th ACM Conference on
+     International Journal of Telemedicine and                         Conference on Information and Knowledge
+     Applications, 2015:1–11, 2015.                                    Management, pages 2275–2280, 2016.
+
+
+
+
+                                                               1315
+

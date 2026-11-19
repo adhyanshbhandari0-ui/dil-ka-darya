@@ -1,0 +1,672 @@
+Automated Characterization of Stenosis in Invasive Coronary Angiography Images with Convolutional
+                                          Neural Networks
+
+   Benjamin Au MS​1​, Uri Shaham PhD1​ ​, Sanket Dhruva MD1​ ​, Georgios Bouras PhD2​ ​, Ecaterina Cristea MD​2​, Alexandra
+        Lansky MD PhD2​ ​, Andreas Coppi PhD1​ ​, Fred Warner PhD1​ ​, Shu-Xia Li PhD​1​, Harlan Krumholz MD SM1​
+
+                                                                           Abstract
+
+The determination of a coronary stenosis and its severity in current clinical workflow is typically accomplished manually
+via physician visual assessment (PVA) during invasive coronary angiography. While PVA has shown large inter-rater
+variability, the more reliable and accurate alternative of Quantitative Coronary Angiography (QCA) is challenging to
+perform in real-time due to the busy workflow in cardiac catheterization laboratories. We propose a deep learning
+approach based on Convolutional Neural Networks (CNN) that automatically characterizes and analyzes coronary
+stenoses in real-time by automating clinical tasks performed during QCA. Our deep learning methods for localization,
+segmentation and classification of stenosis in still-frame invasive coronary angiography (ICA) images of the right coronary
+artery (RCA) achieve performance of 72.7% localization accuracy, 0.704 dice coefficient and 0.825 C-statistic in each
+respective task. Integrated in an end-to-end approach, our model's performance shows statistically significant
+improvement in false discovery rate over the current standard in real-time clinical stenosis assessment, PVA. To the best
+of the authors' knowledge, this is the first time an automated machine learning system has been developed that can
+implement tasks performed in QCA, and the first time an automated machine learning system has demonstrated
+significant improvement over the current clinical standard for rapid RCA stenosis analysis.
+
+
+
+                                                                                    1. Introduction
+
+                                                                                    Coronary artery disease (CAD), a leading cause of death
+                                                                                    worldwide and a target for coronary revascularization,
+                                                                                    involves narrowing (i.e. stenosis) of at least one of the
+                                                                                    large arteries supplying the heart. One method of
+                                                                                    determining the presence and severity of coronary
+                                                                                    stenosis is invasive coronary angiography (ICA), which
+                                                                                    involves continuous X-ray (i.e. fluoroscopy) with
+                                                                                    simultaneous injection of radiopaque contrast into the
+                                                                                    coronary arteries. A diagnosis of stenosis severity of
+                                                                                    ≥50% by diameter is generally considered the minimum
+                                                                                    standard for considering the decision to pursue coronary
+                                                                                    revascularization of the three large epicardial arteries, left
+                                                                                    anterior descending (LAD), left circumflex (LCx) and right
+                                                                                    coronary arteries (RCA), when accompanied by functional
+                                                                                    assessment. Without functional assessment, ≥70%
+Figure 1. Overview of Experimental Method.​ Module 1:
+                                                                                    diameter stenosis is generally considered an indicator in
+Localize a 192x192 bounding box around the stenosis lesion in
+                                                                                    identifying clinically significant lesions ​[1]​. Stenosis
+the 512x512 image. Module 2: Segment the diseased lesion in
+the localized image. Module 3: Classify the combined image and                      severity is typically determined in clinical practice by
+segmentation input binarily via 70% stenosis threshold.                             physician visual assessment (PVA). This approach, while
+                                                                                    considered as clinical standard, has known limitations,
+                                                                                    such as significant intra- and inter-rater variability, as well
+                                                                                    as high positive prediction bias, implicitly leading to
+                                                                                    overutilization of clinical services ​[2]​. A more reliable and
+                                                                                    accurate determination of stenosis severity is quantitative
+                                                                                    coronary angiography (QCA) ​[2,3]​.
+
+1, Yale Center for Outcomes Resesarch and Evaluation; 2. Yale Cardiovascular Research Group
+QCA is a computer-assisted procedure widely considered             Motivated by the opportunity to improve clinical care by
+as a gold standard for measuring stenosis percentage. It is        offering a more accurate and rapid way to quantify
+typically performed either ‘online’ immediately after              coronary stenoses, we apply deep learning CNN
+coronary angiography for clinical decision making or               techniques to develop improved methods for
+‘offline’ by angiographic core laboratory experts (for clinical    characterizing stenosis by replicating the QCA analytical
+trials) and involves visually annotating diseased coronary         process in a three-step analytical pipeline. Our methods
+arterial segments and the area surrounding each stenosis           seek to automate key tasks of the QCA workflow, solve the
+to determine the percent diameter stenosis. Standard               issues of poor inter-rater agreement, and can be run in
+workflow for QCA consists of a multi-step analytical               real-time, all while providing high-quality annotations and
+pipeline. Single-frame images that best demonstrate the            stenosis characterization at each step (see Figure 1). To
+stenosis are selected by the analyst. Images are then              the authors’ knowledge, this is the first attempt to
+manually annotated by segmenting a portion of the lesion           automatically characterize and analyze the intensity of
+(i.e. stenosis) of interest, consisting of the lesion as well as   stenosis from invasive coronary angiography with deep
+the surrounding healthy vessel. Finally, annotated lesions         learning methods.
+are analyzed for percent diameter stenosis relative to the
+reference vessel diameter of the lesion of interest ​[4,5]​.       Our contributions are as follows: We propose three CNN
+                                                                   models to solve the problems of localization, segmentation
+While the QCA measurement process involves certain                 and classification with strong performance. We then
+subjective decision-making components and may be                   integrate these models and develop an end-to-end deep
+challenging in measuring complex lesions (such as with             learning pipeline for characterizing stenosis in right
+thrombus and calcification), it currently offers the most          coronary artery ICA images. Finally, we compare model
+accurate and reproducible measurements of anatomical               performance relative to the current clinical standard of
+coronary stenosis severity and thus is considered the              PVA, using performance measures reported in ​[2]​.
+clinical gold standard for measuring coronary stenosis.
+However, despite these improvements over PVA, QCA                  2. Related Work
+has not been widely implemented into the busy workflow of
+cardiac catheterization laboratories, due to it being a            CNN methods have been widely applied to medical
+manual, human resource-intensive procedure ​[3]​.                  imaging in cardiology across several imaging modalities,
+                                                                   including left ventricle and structure segmentation in MRI
+These clinical challenges motivate the development of              [15–20]​, heart chamber segmentation ​[21]​, calcium scoring
+automated tools for rapidly, accurately and reliably               [22]​, and stenosis detection ​[23]​ in CT imaging, as well as
+analyzing coronary stenoses. In recent years,                      vessel extraction ​[24]​ in invasive coronary angiography.
+Convolutional neural networks (CNN) methods have                   Much of previous work using deep learning methods
+demonstrated highly accurate and reliable performance              applied to medical imaging in cardiology is focused on
+across a variety of computer-vision related tasks, including       segmentation-related tasks.
+image classification ​[6–8]​, object detection ​[9–11]​, and
+semantic segmentation ​[12–14]​. In spite of their great           The authors of ​[23]​ focus on the clinical problem of
+success in other imaging domains, gold-standard CNN’s              identifying functionally relevant stenoses in the coronary
+such as VGG16 ​[6]​ and ResNet50 ​[8]​ simply fail to learn        vasculature, and also utilize deep learning methods, e.g.
+‘off-the-shelf’ when attempting to directly classify stenosis      CNNs, to build a localization-segmentation-classification
+from raw ICA images, according to baseline experiments.            analytical framework similar to ours, all while obtaining
+This is influenced in part by the technically challenging          promising results. However, there are a few key
+aspects of ICA imaging: ICA images contain significant             differences between our respective work. The authors in
+image noise, at time including non-anatomical artifacts            [23]​ characterize the left ventricle to obtain functional data,
+such defibrillator wires, and have limited image contrast.         while we focus directly on the right coronary artery to
+Furthermore, diseased lesions in ICA images represent a            obtain anatomic measurements. Furthermore, ​[23]​ utilize
+fraction (~0.25% in our dataset) of the overall image,             image volumes captured from Coronary CT angiography
+adding a non-trivial search component to the image                 (CCTA), while we use data from invasive coronary
+analysis problem.                                                  angiography. CCTA images can be viewed as three
+dimensional volumes, while invasive coronary angiography
+images are 2D, thus motivating separate deep learning
+methods for image analysis. In particular,
+localization-segmentation subtasks are performed in ​[23]
+by pixel-wise classification via three CNN’s, analyzing
+image slice contexts across each of the three axial views
+in tandem, whereas we perform segmentation and
+localization tasks using separate CNN’s in a single pass.
+Finally, invasive coronary angiography and CCTA both               Figure 2. ICA image with stenosis annotations. ​Left: Invasive
+serve distinct and important roles in the clinical setting.        coronary angiography image with data augmentation. Right:
+Invasive coronary angiography allows patients to receive           Image with lesion of interest mask (white) and stenosis
+percutaneous coronary intervention (PCI), whereas CCTA             coordinate (encircled in red) overlaid. Stenosis for this example
+is a non-invasive imaging modality to evaluate patients for        is 78%.
+coronary artery disease. In summary, the work in ​[23]​,
+while similar, is distinct and complementary in imaging            The data for each participant consists of the following: 1)
+modality, deep learning methodology, and clinical                  de-identified single-frame image extracted from invasive
+applicability, relative to our work.                               coronary angiography 2) lesion segmentation annotations
+                                                                   (LSA) corresponding to each image 3) coordinate location
+Automatic detection in coronary stenosis has also been             of stenosis and 4) QCA stenosis measurement, 5)
+performed through other methods in invasive coronary               normalized lesion silhouette annotation (see Figure 5). For
+angiography such as deformable splines ​[25]​ and                  a visual example of data, see Figure 2. Across the full
+spatio-temporal tracking ​[26]​. Specifically, the work in ​[26]   dataset, the basic statistical properties for the set of
+develops end-to-end characterization of the presence of            stenosis measurements are as follows: mean: 74.3%,
+stenosis in right coronary artery with high sensitivity (90%)      standard deviation: 18.8%, min: 4.3%, max: 100%.
+and specificity (86%). However, ​[26]​ develops methods to
+distinguish stenosis from non-stenosis, whereas our goal           3.1 Preprocessing
+is to distinguish anatomically relevant stenosis for PCI
+from non-anatomically relevant stenosis. The latter is more        We preprocess the dataset in a few steps to standardize
+clinically relevant in cardiology because of its relevance to      certain heterogeneous data components. First, images
+determining need for revascularization. In addition, the           that contained more than one annotated stenosis lesion or
+algorithms in ​[26]​ do not learn from data, and algorithmic       no annotated stenosis lesion were excluded. This
+performance on unseen test data is not stated.                     exclusion criterion retained 90% of the original dataset.
+                                                                   Second, angiography images and segmentation
+3. Cohort                                                          annotations were contrast standardized, i.e. minimum and
+                                                                   maximum pixel range were set to 0 and 1, respectively.
+The dataset for this work consists of ICA imaging data of          Finally, image sizes were standardized to 512 × 512
+the RCA of 1024 study participants. Participant data were          pixels.
+retrospectively aggregated by the Yale Cardiovascular
+Research Group, and de-identified and obtained for use             4. Methods
+with IRB Exemption without need for participant consent.
+Subjects were selected from a range of prospective trials          To identify participants with anatomically significant
+evaluating interventional coronary devices in adult patients       stenosis, we first localize the invasive coronary
+aged 18 and older, with stable coronary disease or acute           angiography image by learning to place a bounding box
+coronary syndromes (ST Elevation Myocardial Infarction             around the stenosis and consequently reduce the size of
+were excluded). All angiograms were acquired with a                the image. We then perform segmentation on the localized
+prespecified acquisition protocol for optimal angiographic         image. Finally, we classify the stenosis based on the
+quality.                                                           combined invasive coronary angiography image and
+                                                                   segmentation annotation, both of which are localized.
+                                                                   Each task is performed by a separate CNN. The pipeline is
+                                                                   visualized in Figure 1.
+                                                                                     U-net is structured as an encoder, which consists of five
+4.1 Localization                                                                     convolutional blocks, followed by a decoder, which
+                                                                                     consists of five deconvolutional blocks, with skip
+We build a CNN for the localization task inspired YOLONet                            connections between the respective encoder-decoder
+[11]​, which has demonstrated near state-of-the-art                                  blocks. In our proposed approach, we use average pooling
+real-time object detection and localization on the PASCAL                            instead of max pooling, which provides a slight
+VOC 2007 dataset ​[27]​. The CNN contains 22                                         performance boost. The network uses single channel
+convolutional layers and 5 max pooling layers, along with                             192 × 192 localized input and outputs a binary 192 × 192
+residual skip connections. We simplify the CNN output                                array U = {uij : i, j = 1, ..., 192} . We train the net using dice
+layer so that for each image input, the network produces a                           coefficient loss (see Equation 2), which is a measure of
+ k × k array of confidence scores                                                    segmentation fidelity and has previously been used in
+ O = {oij : i, j = 1, ..., k } ; 0 ≤ oij ≤ 1 , which are used to                     other biomedical image segmentation tasks such as ​[28]
+predict the presence of stenosis ​within 64 × 64 ​ regions of
+the image, tiled ​with a 32 pixel stride in each direction. The                                                                    −2        ∑        [uij * v ij ]
+                                                                                                                                        i,j=1,...,192
+net is trained on weighted sigmoid cross-entropy loss on                                        dice_loss(U , V ) =                                                           (2)
+                                                                                                                                  ∑       [uij ] +           ∑      [v ij ]
+each cell output logit                                                                                                       i,j=1,...,192              i,j=1,...,192
+
+
+loss(O, Y ) = −       ∑ [w * y ij log(σ(oij )) + (1 − y ij )log(1 − σ (oij ))] (1)
+                  i,j=1,...,k                                                        where V corresponds to the ground truth obtained from
+where σ (x) = 1+e1 −x is the sigmoid function and y ij = 1 if the                    the lesion segmentation annotations from the QCA. A
+(i, j ) region contains the stenosis and y ij = 0 otherwise.                         visualization of the input, output and predicted
+The positive weight coefficient w ​ ​is defined as k 2 to offset                     segmentation of the segmentation CNN is shown in Figure
+class imbalance in each image.                                                       4.
+
+
+Once the CNN is trained, we obtain a 192 × 192 ​ pixel
+bounding box prediction using the following procedure:
+The output grid is transformed into a non-overlapping
+16 × 16 grid, where each cell is associated with a score
+pij = max(oij, oi(j−1) , o(i−1)j , o(i−1)(j−1) ) . Then, the 192 × 192
+bounding box is selected by choosing the region with                                 Figure 4. Visualization of Segmentation. ​Left: Input localized
+                                                                  i+5 j+5            ICA image. Middle: Ground truth stenosis lesion annotation.
+maximum sum component score R = argmaxi,j [ ∑ ∑ pmn ] .                              Right: Predicted annotation.
+                                                                  m=i n=j
+Visualization of grid and final localization can be seen in
+                                                                                     In addition, we develop a morphologically-weighted
+Figure 5.
+                                                                                     sigmoid cross entropy (MWCE) loss designed to generate
+                                                                                     sharp edge segmentation predictions around the diseased
+                                                                                     lesion. The loss function is designed follows. We
+                                                                                     generate k × k array of confidence scores
+                                                                                      O = {oij : i, j = 1, ..., k } ; 0 ≤ oij ≤ 1 , where k is the number
+                                                                                     of pixels in a single image axis (in this case 192),
+                                                                                     representing a prediction of the presence of the lesion in
+Figure 3. Visualization of Localization Process.​ Left: input                        the given pixel. The net is trained on a MWCE loss
+invasive coronary angiography image. Middle: 16 × 16                                 summed over each pixel output logit (see Equation 3).
+non-overlapping grid obtained from CNN output. Right: Image
+with 192x192 bounding box and stenosis coordinates overlaid.                         M W CE = −        ∑          wij [y ij log(σ(oij )) + (1 − y ij )log(1 − σ (oij ))] (3)
+                                                                                                    i,j=1,...,k
+                                                                                                                  wij = αoij + bij mij (4)
+4.2 Segmentation
+                                                                                                     bij = β y ij + γ z ij + (1 − y ij − z ij ) (5)
+                                                                                                                                      (c0 −i)2 +(c1 −j)2
+For the segmentation task, we build a CNN based on                                                  mij = 1 + δ * exp(−                                          ) (6)
+                                                                                                                                                 σ2
+U-net ​[13]​, motivated by the model’s state-of-the-art
+performance in other biomedical segmentation tasks.
+In words, the morphological weighting is a pixel-wise                to obtaining output. Image features are globally pooled
+weighting scheme that promotes precise segmentation of               prior to being connected to a final fully-connected layer.
+stenosis lesion, particularly near the point of stenosis,            See Figure 5 for a visualization of the model architecture.
+while regularizing for false positives. It consists of false         Training is performed using mean squared error
+positive regularization term αoij , (where α is a                    regression on stenosis percentage, which is a richer data
+hyperparameter) as well as the core weighting component              format relative to binary classification at the 70% stenosis
+bij mij that promotes accurate segmentation of the lesion            threshold indicator for revascularization.
+and its silhouette near the point of stenosis. This latter
+component consists of a base subcomponent bij that is
+weighted more heavily if the pixel is part of the lesion
+segment y ij ( y ij = 1 if the (i, j ) pixel is part of the lesion
+                                                                     Figure 5. Diagram of Proposed CNN Architecture for
+and y ij = 0 otherwise), as well as if the pixel is part of the
+                                                                     Classification Task.​ Skip connections are concatenated as in
+normalized silhouette surrounding the lesion z ij ( z ij = 1 if      DenseNet ​[29]​. Network is trained via regression on ordinal
+the (i, j ) pixel is part of the normalized silhouette (see          stenosis values and evaluated via binary classification at the 70%
+Figure 5) and z ij = 0 otherwise), with large                        stenosis threshold.
+hyperparameter values chosen for β , γ (see Equation 5).
+                                                                     4.4 Data Augmentation
+For visualization of the normalized silhouette annotation,
+see Figure 5. The multiplier subcomponent mij further
+                                                                     Data augmentation techniques are applied during the
+promotes accurate segmentation near the point of stenosis
+                                                                     training phase of each CNN. The techniques include
+by augmenting the base subcomponent weighting with a
+                                                                     random shift, random rotation, random shear (see
+Gaussian multiplier centered around the point of stenosis
+                                                                     Appendix A for details). Random flip and elastic
+(c0 , c1 ) , with hyperparameters for peak intensity δ and bell
+                                                                     deformation augmentation techniques were considered
+width σ (see Equation 6).
+                                                                     and ultimately not used as they were non-improvements in
+                                                                     training speed and performance. Flips were excluded due
+                                                                     as flipped images are never observed due to image
+                                                                     acquisition protocol. Elastic deformation were excluded,
+                                                                     since artery warping directly impacts the degree of
+                                                                     stenosis.
+
+                                                                     5. Results
+
+                                                                     In the localization task, we predict the location of a pixel
+                                                                     subregion from the original image. This subregion size is
+                                                                     designed to be small enough to gain performance on
+                                                                     segmentation and large enough to gain performance on
+Figure 5. Visualization of stenosis silhouette component.            classification. In the segmentation task, we train a CNN to
+Left: The standard lesion segmentation annotation (LSA) in
+                                                                     generate a high-fidelity stenosis lesion annotation, as is
+segmentation consists of diseased and healthy components,
+                                                                     done during QCA, from a localized ICA image input. In the
+colored in sky blue and tan respectively. Right: Normalized
+                                                                     classification task, we classify the stenosis based on
+Silhouette Annotation. This corresponds to the rose-colored
+                                                                     whether the stenosis is ≥70%, which is considered an
+region in the left image. We use this for calculating
+morphologically-weighted sigmoid cross entropy loss (see             indicator for clinical validation in determining need for
+Equation 3).                                                         revascularization. Here, we use the localized ICA image
+                                                                     and lesion annotation as inputs. Finally, we run the deep
+4.3 Classification                                                   learning pipeline end-to-end, training a network to classify
+                                                                     stenosis solely on ICA images while producing stenosis
+For the classification task, we train a small CNN,                   lesion annotations. We split our dataset via stratified
+containing five convolutional layers, and a single global            random sampling based on stenosis degree into 70:15:15,
+max pooling layer with a single fully-connected layer prior          train, validation, and test sets. Hyperparameters are
+explored with the training and validation sets and final             accuracy of 55.% and 72.7%​ for 128 × 128 ​and 192 × 192
+performance is reported from a separate test set (see                bounding box sizes, respectively.
+Appendix A for technical details and hyperparameter
+specification).                                                      5.3 Segmentation
+
+5.1 Evaluation                                                       For the segmentation task, we seek to generate
+                                                                     high-fidelity segmentation of the lesion of interest given a
+We evaluate the localization task with localization                  pre-localized ICA image input. ​Table 2 shows the
+accuracy, defined as the frequency at which the proposed             segmentation performance of our proposed approach
+localization region contains the stenosis. We evaluate the           based on ​[13]​, which we compare to a fully-convolutional
+segmentation task using dice coefficient, which measures             DenseNet (DenseNet FCN) ​[31]​, as well as a CNN
+general fidelity of segmentation. We measure the                     employing atrous convolutions of multiple rates,
+classification and end-to-end task using C-statistic, i.e.           DeepLabv3 ​[32]​. Both of these CNN baselines have
+area under the Receiver Operating Characteristic curve,              achieved state-of-the-art in semantic segmentation tasks.
+by binarizing the stenosis at the 70% threshold. Additional          We find that our experimental model performs comparable
+metrics for comparing our end-to-end model to PVA as                 to the DenseNetFCN at 0.704 dice coefficient, and
+reported in ​[2]​ are false discovery rate, defined by               performs significantly better than DeepLabV3.
+       F alseP os
+ F alseP os + T rueP os , and assessment bias, i.e. the difference
+between ground truth and prediction. Standard deviation
+measures are obtained by evaluating model performance                                  Segmentation Results
+across 5 runs with distinct random seeds.
+                                                                          Net                             Dice Coefficient
+5.2 Localization                                                          Proposed CNN (Dice)               0.704 +/- 0.017
+                                                                          Proposed CNN (MWCE)               0.660 +/- 0.026
+                    Localization Accuracy                                 DenseNet FCN                      0.699 +/- 0.014
+
+   Net                      Localization Region Size                      DeepLabV3                         0.657 +/- 0.016
+
+                                 128x128              192x192
+                                                                     Table 2. Segmentation Results. ​ Our experimental approach
+   Proposed CNN 55.6% (+/- 3.2%) 72.7% (+/- 2.9%)                    based on U-Net performs comparably to the DenseNet FCN
+   ResNet50                                                          baseline and outperforms the DeepLabV3 baseline, using Dice
+   (Coordinate                                                       Coefficient as the evaluation metric. Proposed CNN using
+   Regression)         42.6% (+/- 3.7%) 66.7% (+/- 3.0%)             MWCE loss performs significantly worse when evaluated using
+                                                                     Dice Coefficient, but improves end-to-end performance (see
+Table 1: Localization Accuracy Results. ​Results show the            Section 5.5). Values are presented as ​mean +/- standard
+percentage of times in which the point of stenosis lies within the   deviation​.
+predicted localization region of the given size. Values are
+presented as ​mean +/- standard deviation​.                          We also run segmentation experiments using the
+                                                                     morphologically-weighted cross entropy (MWCE) loss in
+For the localization task, we seek to predict a square               Equation 3. We find that the Proposed CNN achieves a
+localization region that contains the point of stenosis.             significantly lower dice coefficient than when optimized
+Table 1 shows the localization performance of our                    using dice loss at 0.660, segmentation using MWCE is
+proposed approach, where we display the percentage of                significantly improved during end-to-end experiments (see
+localization regions that contain the stenosis for two region        Section 5.5). This is because, MWCE loss is designed to
+sizes: 128 × 128 ​and 192 × 192 ​. As a baseline comparison,         obtain more precise segmentation near the point of
+we add corresponding results obtained by a ResNet50                  stenosis with reduced segmentation accuracy in regions
+[30]​, which​ performs localization by mean squared error            further from stenosis, in contrast to dice loss, which is
+regression to explicitly predict coordinates of stenosis​. We        designed for overall segmentation accuracy. Visual
+find that our proposed approach achieves significant                 analysis confirms that this is indeed true (see Figure 6).
+improvement in localization over baseline with localization
+                                                                                           End-to-End Results
+                                                                           Net                                        C-Statistic
+                                                                           MWCE-End-to-End Pipeline               0.578 +/- 0.021
+                                                                           MWCE-Pre-localized
+                                                                           Segmentation-Classification            0.703 +/- 0.033
+                                                                           Dice-End-to-End Pipeline               0.530 +/- 0.021
+
+Figure 6.​ Visual Evaluation of Segmentation Using                         Dice-Pre-localized
+Morphologically Weighted Cross Entropy (MWCE) vs. Dice Loss.               Segmentation-Classification            0.591 +/- 0.045
+Two rows show two example image segmentation instances.
+Col1 shows input image; Col2 shows ground truth segmentation;          Table 4. End-to-End Results.​ End-to-end pipeline achieves a
+Col3 shows segmentation via MWCE loss; Col 4 shows                     modest boost above baseline approaches, using C-statistic as an
+segmentation via dice loss. MWCE predictions shows improved            evaluation metric. Each model is trained via mean squared error
+segmentation near the point of stenosis (circled in red), leading to   regression for its classification module, binarizing predicted
+improved ability to measure stenosis intensity.                        output at the 70% stenosis threshold for C-statistic evaluation.
+                                                                       Dice-models use dice coefficient loss in their segmentation
+5.4 Classification                                                     modules, while MWCE-models use morphologically-weighted
+                                                                       cross entropy loss (see Equation 3). Values are presented as
+                                                                       mean +/- standard deviation​.
+                    Classification Results
+                                                                       Finally, we combine the individual tasks to form an
+      Net                                       C-Statistic            end-to-end deep learning pipeline (see Figure 1),
+      Proposed CNN                         0.825 +/- 0.059             classifying stenosis based solely on the full still-frame
+                                                                       invasive coronary angiography image input. The
+      ResNet50                             0.629 +/- 0.059
+                                                                       end-to-end pipeline is pre-trained with weights from the
+                                                                       individual tasks, with localization and segmentation
+Table 3. Classification Results.​ C-statistic, i.e. AUROC, is used
+                                                                       modules frozen to prevent overfitting. We run end-to-end
+as evaluation metric. The experimental CNN achieves high
+                                                                       experiments using two model types, with Dice-models and
+classification performance, significantly above the ResNet50
+                                                                       MWCE-models, using dice coefficient loss and MWCE loss
+baseline. Both are trained via mean squared error regression.
+                                                                       in their respective segmentation modules. Localization
+Values are presented as ​mean +/- standard deviation​.
+                                                                       modules output localization regions of size 192 × 192 ,
+                                                                       chosen based on overall end-to-end performance. Table 4
+For the classification task, we seek to determine whether
+                                                                       shows the classification results of our proposed end-to-end
+image inputs meet the clinical criterion for
+                                                                       deep learning method.
+revascularization, i.e. ≥70% stenosis, provided
+pre-localized invasive coronary angiography images and
+                                                                       As mentioned in Section 1, simple baseline CNN’s such as
+segmentation annotation two-channel input. Table 3 shows
+                                                                       ResNet and our Proposed CNN from Section 5.4 fail to
+the classification performance of our Proposed CNN,
+                                                                       train when attempting to classify stenosis directly from the
+described in Section 4.3, relative to a baseline of
+                                                                       full ICA still-frame image as a single-channel input. In
+ResNet50 ​[30]​ utilizing global max pooling of feature
+                                                                       contrast, our end-to-end pipeline model achieve modest
+outputs with network weights pre-trained on ImageNet. For
+                                                                       performance boost above baseline, with
+each CNN model, we train via run regression on ordinal
+                                                                       MWCE-End-to-End achieving a C-Statistic of 0.578. We
+stenosis values and evaluate the model via C-statistic over
+                                                                       also show results of Segmentation-Classification models
+the binarizing stenosis values at the 70% threshold. The
+                                                                       using images pre-localized with a localization oracle and
+Proposed CNN model significantly outperforms the
+                                                                       show that, as expected, the MWCE-model gains a
+ResNet50 regression baseline, achieving C-statistic of
+                                                                       performance boost from the localization oracle. In
+0.825.
+                                                                       addition, the MWCE-model again performs better than its
+                                                                       Dice-model counterpart.
+5.5 End-to-End
+We compare the MWCE-End-to-End model to Physician                   when compared with training via binary classification using
+Visual Assessment vis-a-vis metrics of false discovery rate         the 70% stenosis threshold value.
+and mean prediction bias reported by ​[2]​. Relative to the
+current clinical standard for real-time RCA stenosis                The morphologically-weighted pixel-wise cross entropy
+analysis, our methodology demonstrates a statistically              loss was inspired by the work of ​[13]​, which used a
+significant improvement of 36.1% in false discovery rate at         pixel-specific weighting scheme in its cross entropy loss.
+the 70% stenosis binarization threshold and and a                   Our weighting scheme was motivated by the realization
+non-significant improvement of -0.1% ins assessment bias            that dice coefficient did not promote precise segmentation
+(see Table 5).                                                      around stenosis lesion edges, potentially causing drops in
+                                                                    classification performance downstream, even if dice
+                                                                    coefficient loss showed strong segmentation performance
+      Predicting Stenosis (AI vs. Physician Visual                  in isolation. Thus, we designed a the MWCE
+                     Assessment)                                    pixel-weighting scheme that placed importance on
+                                                                    correctly classifying both diseased lesions pixels as well as
+                                    False
+                                                                    their silhouette negative counterparts, with particular
+                               Discovery        Assessment
+                                                                    weighting emphasis on pixels nearest the point of stenosis,
+ Evaluator                   Rate (@70%)              Bias
+                                                                    and all while discouraging false positive prediction. The
+ End-to-End Deep                                     -0.1% +/-      result was a slight worsening in segmentation performance
+ Learning Pipeline         36.8% +/- 2.1%               17.0%       as measured by dice coefficient, but significantly improved
+                                                                    classification performance in end-to-end modeling.
+ Physician Visual                                   16.0% +/-
+ Assessment ​[2]                     50.6%             11.5%
+                                                                    While anatomic measurement of stenosis severity for a
+                                                                    single lesion seems relatively straightforward, i.e.
+Table 5. Comparison between AI and Physician Visual
+                                                                    calculation is based on visual narrowing of the lesion,
+Assessment.​ End-to-end pipeline achieves
+                                                                    identifying clinically relevant lesions and accurately
+statistically-significant improvement over physician visual
+                                                                    determining stenosis percentage requires significant
+assessment, according to false discovery rate at 70% stenosis
+threshold and non-significant improvement in assessment bias.       clinical sophistication in a number of ways. First, coronary
+Physician Visual Assessment metrics are reported by ​[2]​. Values   artery reference diameter, both proximally and distally, is
+are presented as ​mean +/- standard deviation​.                     an important factor for determining the percentage of
+                                                                    stenosis in QCA. In addition, some coronary arteries will
+6. Discussion                                                       have multiple stenoses, often of varying degrees of
+                                                                    severity. In some cases, the most diseased lesion by
+Our experimental approach for the classification task was           percent diameter stenosis is not always the most clinically
+inspired by the finding that localized segmentation                 significant lesion, as other factors such as functional
+annotations enabled high performance in stenosis                    assessment (through fractional flow reserve), non-invasive
+classification when included as a second channel to image           imaging, and clinical history can inform the decision to
+input. In addition, we found that CNN’s with fewer layers           perform revascularization ​[33]​. Functional assessment, in
+performed better than gold standard CNN’s architected               particular, is important for stenoses of 40% and 70%
+based on the ImageNet task, such as ResNet. In                      severity, in which American College of
+particular, our final best-in-class classification architecture     Cardiology/American Heart Association Appropriate Use
+contained only five total convolutional layers with a single        Criteria define clinical significance for stenoses with a
+global max-pooling layer, suggesting that stenosis                  fractional flow reserve <0.80 ​[1]​. Identifying clinically
+characterization relies mainly on low-level visual features,        significant lesions, as well as correctly measuring percent
+which may be obfuscated by deeper CNN’s with multiple               diameter stenosis and guiding functional assessment then,
+pooling layers. This is reasonable since stenosis is                is not just a vision problem, but one that also requires
+typically determined by analyzing the narrowing of arterial         substantial clinical knowledge and sophisticated clinical
+lesions, which can be reduced to analyzing curve-like               validation techniques as well.
+image features. Additionally, we found that training via
+mean squared error regression generally captured greater            Recent research has shown that physician visual
+informatic value and led to superior model performance,             assessment (PVA), the current clinical standard for
+assessing coronary stenosis, does in fact have high intra-        as our model’s intrinsic high intra-rater reliability and
+and inter-rater variability, consistently high prediction bias,   real-time inference speed, make our approach well suited
+and high false discovery rate ​[2]​. In fact, our end-to-end      for adoption in the clinical setting. To our knowledge, this
+methodology demonstrates statistically significantly              is the first time deep learning has been applied to replicate
+improvement over PVA in false discovery rate, and                 the QCA protocol, and the first time a fully-automated
+non-significant improvement in assessment bias, the two           learning system has demonstrated significantly improved
+key metrics reported in ​[2]​ (see Table 5). Furthermore, our     performance in analyzing coronary stenosis relative to
+proposed methodology has several intrinsic benefits               PVA, the current clinical standard for real-time stenosis
+relevant in the clinical setting. First, our methods can          analysis.
+provide real-time inference, due to our single-pass
+inference approach. In addition, our automated method is          8. References
+intrinsically deterministic during inference and thus has
+zero intra-rater variance, allowing for more reliable             1.   ​Patel MR, Calhoon JH, Dehmer GJ, Grantham JA,
+stenosis estimation. While our end-to-end methodology                   Maddox TM, Maron DJ, et al.
+                                                                        ACC/AATS/AHA/ASE/ASNC/SCAI/SCCT/STS 2017
+still has room for improvement, its superior performance
+                                                                        Appropriate Use Criteria for Coronary
+over PVA, as well as high inference speed and high
+                                                                        Revascularization in Patients With Stable Ischemic
+intra-rater reliability make it well suited for adoption in the         Heart Disease: A Report of the American College of
+clinical setting.                                                       Cardiology Appropriate Use Criteria Task Force,
+                                                                        American Association for Thoracic Surgery, American
+Our current work focuses on still-frame image analysis of               Heart Association, American Society of
+the RCA. One direction of future work would be to extend                Echocardiography, American Society of Nuclear
+our approach to the other main coronary arteries, such as               Cardiology, Society for Cardiovascular Angiography
+                                                                        and Interventions, Society of Cardiovascular
+LAD and LCx. Here, the technical challenge is greater, as
+                                                                        Computed Tomography, and Society of Thoracic
+overlapping arterial segments adds additional challenges
+                                                                        Surgeons. J Am Coll Cardiol. 2017;69: 2212–2241.
+to the tasks of stenosis localization, segmentation, and
+classification. Additionally, our current work focused only       2.   ​Zhang H, Mu L, Hu S, Nallamothu BK, Lansky AJ, Xu
+on still-frame images. These still-frames are typically                 B, et al. Comparison of Physician Visual Assessment
+selected by a skilled QCA analyst to obtain the greatest                With Quantitative Coronary Angiography in
+image contrast at end-diastole with the least                           Assessment of Stenosis Severity in China. JAMA
+foreshortening and least amount of arterial overlap.                    Intern Med. 2018;178: 239–247.
+Another direction of future work would be to identify and
+                                                                  3.   ​Nallamothu BK, Spertus JA, Lansky AJ, Cohen DJ,
+determine stenoses directly from multi-frame fluoroscopic               Jones PG, Kureshi F, et al. Comparison of clinical
+imaging, including integrating imaging from multiple                    interpretation with visual assessment and quantitative
+fluoroscopic views.                                                     coronary angiography in patients undergoing
+                                                                        percutaneous coronary intervention in contemporary
+7. Conclusion                                                           practice: the Assessing Angiography (A2) project.
+                                                                        Circulation. 2013;127: 1793–1800.
+We establish a deep learning framework that characterizes
+                                                                  4.   ​de Feyter PJ, Serruys PW, Davies MJ, Richardson P,
+the intensity of stenosis in still-frame invasive coronary              Lubsen J, Oliver MF. Quantitative coronary
+angiography images of the right coronary artery. This                   angiography to measure progression and regression
+framework involves a three-step process of localization,                of coronary atherosclerosis. Value, limitations, and
+segmentation and classification. At each step, we design a              implications for clinical trials. Circulation. 1991;84:
+CNN model that obtains high performance for the specific                412–423.
+task. In addition, we develop an end-to-end deep learning
+                                                                  5.   ​Serruys PW, Foley DP, de Feyter PJ. Quantitative
+method that integrates all three tasks in an automated
+                                                                        Coronary Angiography in Clinical Practice. Springer
+pipeline, which demonstrates statistically significant
+                                                                        Science & Business Media; 2013.
+performance improvement in false detection rate
+compared to physician visual assessment (PVA), the                6.   ​Simonyan K, Zisserman A. Very Deep Convolutional
+current standard for real-time coronary stenosis analysis in            Networks for Large-Scale Image Recognition
+the clinical setting. This improvement over PVA, as well                [Internet]. 2014. Available:
+     http://arxiv.org/abs/1409.1556                               sequences. Med Image Anal. 2017;39: 78–86.
+
+7.   ​Szegedy C, Vanhoucke V, Ioffe S, Shlens J, Wojna Z.     18. ​Li Z, Lin A, Yang X, Wu J. Left ventricle segmentation
+      Rethinking the Inception Architecture for Computer           by combining convolution neural network with active
+      Vision. 2016 IEEE Conference on Computer Vision              contour model and tensor voting in short-axis MRI.
+      and Pattern Recognition (CVPR). 2016.                        2017 IEEE International Conference on
+      doi:​10.1109/cvpr.2016.308                                   Bioinformatics and Biomedicine (BIBM). 2017.
+                                                                   doi:​10.1109/bibm.2017.8217746
+8.   ​He K, Zhang X, Ren S, Sun J. Deep Residual
+      Learning for Image Recognition. 2016 IEEE               19. ​Poudel RPK, Lamata P, Montana G. Recurrent Fully
+      Conference on Computer Vision and Pattern                    Convolutional Neural Networks for Multi-slice MRI
+      Recognition (CVPR). 2016. doi:​10.1109/cvpr.2016.90          Cardiac Segmentation. Lecture Notes in Computer
+                                                                   Science. 2017. pp. 83–94.
+9.   ​Girshick R, Donahue J, Darrell T, Malik J. Rich
+      Feature Hierarchies for Accurate Object Detection       20. ​Zreik M, Leiner T, de Vos BD, van Hamersvelt RW,
+      and Semantic Segmentation. 2014 IEEE Conference              Viergever MA, Isgum I. Automatic segmentation of
+      on Computer Vision and Pattern Recognition. 2014.            the left ventricle in cardiac CT angiography using
+      doi:​10.1109/cvpr.2014.81                                    convolutional neural networks. 2016 IEEE 13th
+                                                                   International Symposium on Biomedical Imaging
+10. ​Girshick R. Fast R-CNN [Internet]. 2015. Available:           (ISBI). 2016. doi:​10.1109/isbi.2016.7493206
+     http://arxiv.org/abs/1504.08083
+                                                              21. ​Dormer JD, Fei B, Halicek M, Ma L, Reilly CM,
+11. ​Redmon J, Divvala S, Girshick R, Farhadi A. You               Schreibmann E. Heart chamber segmentation from
+     Only Look Once: Unified, Real-Time Object Detection           CT using convolutional neural networks. Medical
+     [Internet]. 2015. Available:                                  Imaging 2018: Biomedical Applications in Molecular,
+     http://arxiv.org/abs/1506.02640                               Structural, and Functional Imaging. 2018.
+                                                                   doi:​10.1117/12.2293554
+12. ​Milletari F, Navab N, Ahmadi S-A. V-Net: Fully
+     Convolutional Neural Networks for Volumetric Medical     22. ​Wolterink JM, Leiner T, de Vos BD, van Hamersvelt
+     Image Segmentation. 2016 Fourth International                 RW, Viergever MA, Išgum I. Automatic coronary
+     Conference on 3D Vision (3DV). 2016.                          artery calcium scoring in cardiac CT angiography
+     doi:​10.1109/3dv.2016.79                                      using paired convolutional neural networks. Med
+                                                                   Image Anal. 2016;34: 123–136.
+13. ​Ronneberger O, Fischer P, Brox T. U-Net:
+     Convolutional Networks for Biomedical Image              23. ​Zreik M, Lessmann N, van Hamersvelt RW, Wolterink
+     Segmentation. Lecture Notes in Computer Science.              JM, Voskuil M, Viergever MA, et al. Deep learning
+     2015. pp. 234–241.                                            analysis of the myocardium in coronary CT
+                                                                   angiography for identification of patients with
+14. ​Chen L-C, Papandreou G, Kokkinos I, Murphy K,                 functionally significant coronary artery stenosis. Med
+     Yuille AL. DeepLab: Semantic Image Segmentation               Image Anal. 2018;44: 72–85.
+     with Deep Convolutional Nets, Atrous Convolution,
+     and Fully Connected CRFs. IEEE Trans Pattern Anal        24. ​Nasr-Esfahani E, Samavi S, Karimi N, Soroushmehr
+     Mach Intell. 2018;40: 834–848.                                SMR, Ward K, Jafari MH, et al. Vessel extraction in
+                                                                   X-ray angiograms using deep learning. Conf Proc
+15. ​Avendi MR, Kheradvar A, Jafarkhani H. A combined              IEEE Eng Med Biol Soc. 2016;2016: 643–646.
+     deep-learning and deformable-model approach to
+     fully automatic segmentation of the left ventricle in    25. ​Brieva J, Galvez M, Toumoulin C. Coronary extraction
+     cardiac MRI. Med Image Anal. 2016;30: 108–119.                and stenosis quantification in X-ray angiographic
+                                                                   imaging. Conf Proc IEEE Eng Med Biol Soc. 2004;3:
+16. ​Website [Internet]. [cited 9 Apr 2018]. Available:            1714–1717.
+     https://arxiv.org/abs/1607.05074 Rupprecht Huaroc
+     arxiv Deep active contours                               26. ​Compas CB, Syeda-Mahmood T, McNeillie P,
+                                                                   Beymer D. Automatic detection of coronary stenosis
+17. ​Tan LK, Liew YM, Lim E, McLaughlin RA.                        in X-ray angiography through spatio-temporal
+     Convolutional neural network regression for short-axis        tracking. 2014 IEEE 11th International Symposium on
+     left ventricle segmentation in cardiac cine MR                Biomedical Imaging (ISBI). 2014.
+    doi:​10.1109/isbi.2014.6868115
+
+27. ​Everingham M, Ali Eslami SM, Van Gool L, Williams
+     CKI, Winn J, Zisserman A. The Pascal Visual Object
+     Classes Challenge: A Retrospective. Int J Comput
+     Vis. 2014;111: 98–136.
+
+28. ​Wu B, Zhou Z, Wang J, Wang Y. Joint Learning for
+     Pulmonary Nodule Segmentation, Attributes and
+     Malignancy Prediction [Internet]. 2018. Available:
+     http://arxiv.org/abs/1802.03584
+
+29. ​Huang G, Liu Z, van der Maaten L, Weinberger KQ.
+     Densely Connected Convolutional Networks. 2017
+     IEEE Conference on Computer Vision and Pattern
+     Recognition (CVPR). 2017.
+     doi:​10.1109/cvpr.2017.243
+
+30. ​Lim B, Lee KM. Deep recurrent resnet for video
+     super-resolution. 2017 Asia-Pacific Signal and
+     Information Processing Association Annual Summit
+     and Conference (APSIPA ASC). 2017.
+     doi:​10.1109/apsipa.2017.8282261
+
+31. ​Jegou S, Drozdzal M, Vazquez D, Romero A, Bengio
+     Y. The One Hundred Layers Tiramisu: Fully
+     Convolutional DenseNets for Semantic Segmentation.
+     2017 IEEE Conference on Computer Vision and
+     Pattern Recognition Workshops (CVPRW). 2017.
+     doi:​10.1109/cvprw.2017.156
+
+32. ​Chen L-C, Papandreou G, Schroff F, Adam H.
+     Rethinking Atrous Convolution for Semantic Image
+     Segmentation [Internet]. 2017. Available:
+     http://arxiv.org/abs/1706.05587
+
+33. ​Tonino PAL, De Bruyne B, Pijls NHJ, Siebert U, Ikeno
+     F, van `t Veer M, et al. Fractional Flow Reserve
+     versus Angiography for Guiding Percutaneous
+     Coronary Intervention. N Engl J Med. 2009;360:
+     213–224.
+Appendix CNN Hyperparameter and Training Details                          ○ σ = 15
+                                                                   ●   Proposed CNN
+A.1 General Training                                                      ○ Pooling layer: average
+                                                                          ○ Number of blocks: 5
+   ●   Epochs trained: 100                                                ○ Filters per block: 32/64/128/256/512
+   ●   Early stopping if no improvement in validation set                 ○ All other hyperparameters and model
+       across 20 epochs                                                       details used based on ​[13]
+   ●   5x learning rate reduction if no improvement in             ●   DenseNet FCN
+       validation set across 5 epochs                                     ○ All hyperparameters and model details
+   ●   Batch size: 2                                                          used based on ​[31]
+   ●   Dataset split ratio 70:15:15 for train:validation:test      ●   DeepLabV3 (Atrous convolutions)
+            ○ Stratified random sampling strata                           ○ CNN backbone: ResNet50
+                thresholds (based on stenosis degree):                    ○ Upsampling type: Bilinear
+                    ■ 0%; 30%; 55%; 70%; 85%; 100%                        ○ All other hyperparameters and model
+   ●   Dropout 0%                                                             details used based on ​[11,32]
+   ●   Batch normalization used
+   ●   Data augmentation used during train phase                A.5 Classification Details
+
+A.2 Data Augmentation                                              ●   Input Dimension: 192x192
+                                                                   ●   Evaluation via classification: Binary (+/- 70%
+   ●   Random rotation: +/- 7 degrees                                  stenosis)
+   ●   Random shear: +/- 7 degrees                                 ●   Training loss function: Mean squared error i.e.
+   ●   Random shift: +/- 0.04 of image in both axes                    ordinal regression
+   ●   Elastic transformation: alpha=70; sigma=7                   ●   Proposed CNN Details
+       (ultimately unused)                                                 ○ Model architecture (see Figure 5)
+   ●   Uniform distribution used in all cases                              ○ Final layer activation: Linear
+                                                                   ●   ResNet50
+A.3 Localization CNN Details                                               ○ Aggregation layer: Global max pooling
+                                                                           ○ Final activation layer: Linear
+   ●   Input Dimension: 512x512                                            ○ All other hyperparameters and model
+   ●   Proposed CNN                                                             details used based on ​[8]
+           ○ Activation: Leaky RELU
+           ○ Final activation: sigmoid                          A.6 End-to-End Details
+           ○ Final output dimension: 15 × 15
+           ○ Loss: Weighted grid-based sigmoid cross               ●   Pipeline consists of proposed CNN from each of
+               entropy (see Equation 1)                                three tasks integrated end to end (see Figure 1)
+           ○ All other hyperparameters based on                    ●   Each model is pre-trained from individual tasks
+               implementation in ​[11]                             ●   Final end-to-end has frozen layers for localization
+   ●   ResNet50 (Regression-based localization)                        and segmentation modules.
+           ○ Feature aggregation layer: Global max                 ●   Pre-localized segmentation-classification model
+               pooling                                                     ○ Integrates segmentation and classification
+           ○ Final activation: Linear                                          proposed CNNs
+           ○ Final output dimension: 2                                     ○ Segmentation and classification CNN
+           ○ Loss function: Mean squared error                                 weights pretrained from individual tasks
+           ○ All other hyperparameters and model                           ○ Segmentation module frozen in final
+               details used based on ​[8,30]                                   model
+                                                                           ○ Input is pre-localized 192x192 image input
+A.4 Segmentation Details                                                       using localization oracle
+
+   ●   Input Dimension: 192x192 pixels
+   ●   Output Dimension: 192x192 pixels
+   ●   Morphologically-Weighted Cross Entropy
+       Hyperparameters
+           ○ α=3
+           ○ β = 64
+           ○ γ = 128
+           ○ δ = 10
+

@@ -1,0 +1,611 @@
+                                               D EEP F ILTER : AN ECG BASELINE WANDER REMOVAL FILTER
+                                                                         USING DEEP LEARNING TECHNIQUES
+
+                                                                                                      A P REPRINT
+
+
+                                                                    Francisco P. Romero                                        David C. Piñol
+                                                             Department of Electrical Engineering                    Department of Electrical, Electronics
+
+
+
+
+arXiv:2101.03423v2 [eess.SP] 12 Jan 2021
+                                                                   Polytechnique Montreal                             and Communication Engineering
+                                                                 fperdigon88@gmail.com                                 Friedrich-Alexander-Universität
+                                                                                 ∗
+                                                                                                                          Erlangen-Nürnberg (FAU)
+                                                                                                                           david.pinol@fau.de
+
+                                                                                            Carlos R. Vázquez-Seisdedos
+                                                                                     Center of Neuroscience and Signal Processing
+                                                                                                Universidad de Oriente
+                                                                                                 cvazquez@uo.edu.cu
+
+
+                                                                                                    January 13, 2021
+
+                                                                                                     A BSTRACT
+                                                        According to the World Health Organization, around 36% of the annual deaths are associated with
+                                                        cardiovascular diseases and 90% of heart attacks are preventable. Electrocardiogram signal analysis
+                                                        in ambulatory electrocardiography, during an exercise stress test, and in resting conditions allows
+                                                        cardiovascular disease diagnosis. However, during the acquisition, there is a variety of noises that may
+                                                        damage the signal quality thereby compromising their diagnostic potential. The baseline wander is
+                                                        one of the most undesirable noises. In this work, we propose a novel algorithm for BLW noise filtering
+                                                        using deep learning techniques. The model performance was validated using the QT Database and the
+                                                        MIT-BIH Noise Stress Test Database from Physionet. In addition, several comparative experiments
+                                                        were performed against state-of-the-art methods using traditional filtering procedures as well as deep
+                                                        learning techniques. The proposed approach yields the best results on four similarity metrics: the
+                                                        sum of squared distance, maximum absolute square, percentage of root distance, and cosine similarity
+                                                        with 4.29 ± 6.35 au, 0.34 ± 0.25 au, 45.35 ± 29.69 au and, 91.46 ± 8.61 au, respectively. The source
+                                                        code of this work, containing our method and related implementations, is freely available on Github.
+
+                                           Keywords ECG · Baseline wander · deep learning · noise filtering
+
+                                           1       Introduction
+                                           For many years, cardiovascular diseases (CVDs) has remained as the main leading cause of sudden cardiac death
+                                           worldwide. The World Health Organization (WHO) estimate that 17.9 million deaths every year are attributed to CVDs,
+                                           which represents 31% of the global deaths [1]. Heart attack and strokes constitute 85% of these deaths. Nonetheless,
+                                           recent studies have shown that 90% of heart attacks could be preventable [2]. Early and effective diagnosis is essential
+                                           to prevent cardiac attacks. The electrocardiogram (ECG) is a well-established technique for the diagnostic of heart
+                                           diseases. It consists of acquiring the electrical activity of the heart captured over time by an external electrode attached
+                                           to the skin.The ECG can estimate the physical heart condition and detect a wide variety of abnormalities such as
+                                           arrhythmias, coronary artery block, among others. t can be acquired under different conditions: resting, ambulatory
+                                           electrocardiography, and during an exercise stress test [3]. The last two allow a better diagnosis but are strongly affected
+                                               ∗
+                                                   Thanks to Liset Vazquez Romaguera for fruitful discussions and document review.
+                                                                                     A PREPRINT - JANUARY 13, 2021
+
+
+by different noise sources namely: 60/50 Hz power line noise, contact noise, patient-electrode motion artifacts, EMG
+noise and baseline drift [4]. The ambulatory electrocardiography (also known as Holter Monitoring or Ambulatory
+ECG) is presented when the electrical activity of the heart is recorded during daily activities. It usually takes 24 hours
+to record or more. The likelihood of encountering heart events is higher than the rest recording conditions. The exercise
+stress test (also known as Treadmill Test, Exercise Test, Exercise Cardiac Stress Test, and ECST) records the heart
+function (usually between 5 - 15 minutes) while the subject walks in place, performs an effort in a bicycle or on an
+electric treadmill. Many aspects of the heart function can be checked including heart rate, breathing, blood pressure,
+and how tired the patient becomes when exercising. Despite the increased probability of a better heart event detection
+in ECG long-term recording, new challenges come across. For instance, the ambulatory or stress test ECG are prone to
+be highly contaminated with noise given their acquisition conditions [5]. Amongst the variety of noises, the baseline
+wander (BLW) is one of the most challenging and is a serious limitation during stress tests and ambulatory ECG.
+The baseline wander, also known as baseline drift, is a low-frequency noise constituted by frequencies components
+ranging between 0.05 Hz and 3 Hz [5]. The time base axis of the ECG signal seems to ‘wander’ and down instead of
+be straight. The visual effect consists in a movement of the whole signal from its normal base. The BLW is caused
+by misplaced electrodes (electrode-skin impedance), bad skin preparation, patient’s movement and breathing, scarce
+contact between electrode cables, and a combination of the aforementioned factors. It negatively affects the heart
+events detection in automatic diagnosis algorithms, yielding a useless outcome in the majority of cases. Consequently,
+removing this noise is crucial to guarantee a proper clinical assessment using ECG recording.
+Several solutions have been proposed to mitigate the BLW. Different authors have proposed a wide variety of techniques
+such as classical digital filters [6], Wavelet transforms [7], empirical mode decomposition [8], among others. Romero et
+al. [9] presented a comparative study between many of these approaches. While some methods obtained acceptable
+results, the morphological deformation in the ECG signal is still an outstanding problem. Despite BLW noise filtering
+being a research topic widely studied as previously stated, it is still an open problem that we consider is worth it to
+revisit with a renewed vision. This will allow seeking better BLW filters by looking at state-of-the-art techniques such
+as artificial intelligence driven filters.
+In this paper is proposed a novel algorithm that filters the baseline wander noise using deep learning techniques. It
+was used the QT Database and the MIT-BIH Noise Stress Test Database from Physionet and several experiments
+were performed, an ablation of different models was made in order to determine the importance of linear non-linear
+activations, and the of advantages of using dilated convolutions. The rationale of using deep learning for BLW removal
+is that we hypothesize that it is possible to learn “smart filters” that know what is the desired output (the ECG signal)
+and the undesired result (noise). Several deep filters will learn how to properly filter small sections of the input signal
+while conserving the ECG signal morphology by the use of a similarity loss function. This paper is composed of several
+sections. Section II provides information regarding the databases used. In section III is written the pre-processing
+techniques and the deep learning models developed. Results and discussion can be depicted in section IV and conclusion
+in section V. In order to maximize reproducibility the source code of this work will be freely available in GitHub
+[https://github.com/fperdigon/DeepFilter]. Also for educational purposes this work can be run on Google Colab where
+free GPU interactive sessions using jupyter notebooks can be accessed [Colab link].
+
+
+
+
+2   Related works
+
+
+BLW noise removal has a wide range of literature research behind and different techniques have emerged as alternatives
+to this problem. The works presented in [10] and [9] gather a collection of prevalent BLW noise removal techniques.
+State-of-the-art techniques cover methods such as Adaptive filtering, Wavelet adaptive filtering, Moving average, Finite
+and Infinite impulse filter response, cubic spline, Independent components analysis, among others. Most of these
+traditional methods have shown good performance. However, the comparative study in [9] showed that Finite Impulse
+Response (FIR) and Infinitive Impulse Response (IIR) filters poses the best results in BLW noise mitigation according
+to different signal distortion metrics. Furthermore, as long as deep learning techniques take place in a variety of signal
+processing applications, it begins to appear remarkable works inside ECG denoising applications. The work presented
+in [11] uses a transfer learning technique by pre-training the network with synthetic data and fine-tuning with real data.
+In addition, it is also notorious the work of [12], in which their proposal consists of a denoising autoencoder (DAE)
+based on a fully convolutional network (FCN) which yields interesting results to be taken into account. Similarly,
+another approach that also uses a DAE to enhance the ECG signal is presented in [13].
+
+
+                                                            2
+                                                                                    A PREPRINT - JANUARY 13, 2021
+
+
+3   Materials
+All the experiments performed in this paper used the QT Database [14] from Physionet [15]. This dataset contains real
+ECG records that represent a wide range of QRS and ST-T morphologies in all the possible variability. It is composed
+of 105 ECG signals with 15-min and two channels each one sampled at 250 Hz. The experiments performed in this
+paper used all the records available in this dataset. In order to add real baseline drifts to the QT database, real BLW
+signals from the MIT-BIH Noise Stress Test Database (NSTDB)[4] were used. The database contains 30 minutes of
+12 ECG recordings and 3 recordings of typical noise in stress tests at 360 Hz sampling frequency. These noises are
+baseline wander produced by the patient’s breathing, muscle artifact and electrode motion artifact. The ECG records
+are randomly corrupted with the noise present in the three noise channels. The noise records were recorded during
+physical stress tests, with electrodes placed on the limbs in positions where ECG cannot be acquired. In this paper, it
+was only used records with BLW noise generated by respiration and electrode motion artifacts.
+
+4   Methods
+In this section we present our deep learning BLW filtering solution (DeepFilter). The proposed model is a fully
+convolutional architecture based on multipath modules where the input is the ECG contaminated with BLW and the
+output is the ECG without noise. Fully convolutional networks (FCN) are widely used for tasks where the output
+dimensions have to be the same as the input dimension. As application examples of FCN we can mention U-net for
+semantic segmentation [16], VoxelMorph for deformable medical image registration [17], and black and white image
+colorization [18] for images restoration to mention some.
+Our approach uses multipath modules, which place different convolutional layers at the same level and let the
+backpropagation algorithm choose not only the weights but also the best path for the signal to pass through. Figure 1
+shows the proposed Multi Kernel Linear And Non-Linear Filter Module (MKLANL Filter Module) which is inspired
+by the Inception module first introduced by Szagedy and collaborators in [19]. In deep learning models one of the
+hyperparameters that are hard to set is kernel size. To find the best value at each layer it is common to perform several
+experiments. A better way is to use multipath modules like Inception (or ours). Then for each level the best kernel will
+be learned.
+
+
+
+
+                       Figure 1: Proposed Multi Kernel Linear And Non-Linear Filter Module.
+
+The proposed MKLANL Filter Module is composed by two internal groups, the Linear group, and the Non-Linear
+group. Each internal group contains four types of convolutional layers with kernels equal to (3, 5, 9, and 15) followed
+
+
+                                                           3
+                                                                                     A PREPRINT - JANUARY 13, 2021
+
+
+whether by a linear activation or rectified linear unit (ReLU) , depending on the group. The number of convolutional
+filters for each type is N/8, where N is the hyperparameter that controls the total amount of filters per multipath module.
+Generally, N is referred as the amount of extracted features since the result of each convolution operation has associated
+a transformed output signal. The rationale behind having convolution with linear and non-linear activations is the same
+as having different convolutional kernels: let the model choose during training which path is better and how much each
+of them will contribute to the output.
+The effect of low-frequency signals is better appreciated when a large amount of consecutive samples is under analysis.
+That is the main reason why good low frequency filters have large windows. The analog procedure in convolutional
+networks will be increasing the kernel size, however, this also increments the computational load. Dilated convolutions
+are a smart and elegant solution to this problem, by using non-consecutive kernels [20]. This solution allows to increase
+the kernels receptive field while the computational load remains the same (see Figure 2).
+
+
+
+
+Figure 2: Dilated convolution. A is a dilated convolution with dilation rate r = 0, equivalent to the standard convolution.
+B has dilation rate r = 1 and C a dilation rate r = 2. All dilated convolution have a, equal kernel size of 3, the same
+number of parameters, and the same computational cost.
+
+For a one dimensional signal x[i], the output y[i] of a dilated convolution operation with a dilation rate r and a filter
+mask w[s] is defined by the following formula:
+
+                                                        S
+                                                        X
+                                              y [i] =         x [i + r · s] w [s]                                      (1)
+                                                        s=1
+
+
+Figure 3 illustrates the proposed deep learning architecture. It is composed by six MKLANL Filter Modules arranged
+in a sequence. The first two MKLANL Filter Modules (b) and (c) have a total of 64 convolutional filters internally
+arranged as shown in Figure 1. In the second multipath module (c) the convolutional operations were set with a dilation
+rate r = 3 enabling dilated convolution. This same dilation rate is also set on the fourth and sixth modules. The number
+of extracted features decreases along the network starting with 64 on modules one and two, then 32 features on modules
+three and four, ending with 16 features for modules five and six. The final step is one convolutional filter with kernel =
+9 which conforms the output signal. Since ECG are bipolar signals, linear activation was used for this final step thereby
+allowing the output to have either positive or negative values.
+The model’s input signals (See box (a) 3) are ECG signals contaminated with the BLW noise from the NSTDB. The
+used ground truths are the same ECG signals used as input but without BLW noise contamination. In this way the
+model will learn through the iterative back propagation process the filters kernels values for BLW removal with a low
+distortion.
+For the optimization process we used as a surrogate loss function (Lf iltering ) a combination of two metrics: the Sum of
+Squared Distance (SSD) and the Maximum Absolute Distance (MAD). We consider them to represent better the task
+we want to perform. The SSD term (Equation 2 left term) describes the signals difference along sample dimension and
+does not minimize the effect of outlier values as averaged metrics such as Mean Squared Error (MSE) or the Signal to
+Noise Ratio (SNR). The MAD term (Equation 2 right term) calculates the signals difference maximum value. This
+term enforces the model to minimize the difference with the original signal point wise while the SSD term analyses the
+whole signal. Since both losses have a different values range we used a balance term (λ). We empirically found λ=50 to
+be a value that works well in our current deep learning setup.
+
+
+                                                                4
+                                                                                    A PREPRINT - JANUARY 13, 2021
+
+
+
+
+                                              Figure 3: DeepFilter model.
+
+
+                               r
+                               X                                                                    r
+               Lf iltering =       (ytrue (m) − ypred (m))2 + λ × max (ytrue (m) − ypred (m))2 m=1                   (2)
+                               m=1
+
+where:
+ytrue : Original signal (ECG without noise)
+ypred : Model predicted signal (ECG filtered by the model)
+λ: Balance term
+m: Sample variable
+r: Maximum signal size
+
+
+5     Experiments and Results
+5.1    Experiments design
+
+For our experiments we designed an BLW removal benchmark where different methods can be evaluated using the
+same test set under the same conditions. See 4 for the data preprocessing pipeline.
+For all the 105 signals on the QT Database were over-sampled from 250 Hz to 360 Hz in order to match the NSTDB
+sampling frequency. Heartbeats were extracted using the specialist’s annotations. We detected a small number of wrong
+annotations regarding the beat start/end. This causes two consecutive beats to be considered as one. To mitigate this
+error we discard beats bigger than 512 samples (1422.22 ms).
+We separated the heartbeats belonging to 14 signals (see Table 1) to be used as a test set representing the 13% percent
+of the total signals amount. Two signals from each of the seven datasets used to create the QT Database. This will
+ensure we have different pathologies on the test set giving a better idea of the generalization capability of the methods
+under evaluation.
+
+                  Table 1: Signals used for test set representing all internal data on the QT dataset.
+                                     MIT-BIH              MIT-BIH                                          MIT-BIH
+  MIT-BIH        MIT-BIH ST                                               European ‘Sudden death’
+                                Supraventricular           Normal                                         Long-Term
+ Arrhythmia        Change                                                    ST-T        patients from
+                                    Arrhythmia          Sinus Rhythm                                         ECG
+  Database        Database                                                 Database           BIH
+                                     Database             Database                                         Database
+      sel123        sel302            sel820               sel16420        sele0106          sel32         sel14046
+      sel233        sel307            sel853               sel16795        sele0121          sel49         sel15814
+
+Noise from NSTDB containing BLW due to breathing and electrode movement (signal named em on the database) was
+used to contaminate the ECG signals. The em record was split to match the beat samples length. Channels 1 and 2 were
+
+
+                                                           5
+                                                                                      A PREPRINT - JANUARY 13, 2021
+
+
+concatenated after saving the 13% of each channel signal length to contaminate the signals previously designated for
+the test set.
+Having a separate signal test set will ensure the reliability of the results when using learning algorithms. This also will
+avoid learning algorithms having any sort of advantage when comparing with other classical methods.
+For injecting the noise we followed the same approach used by the NSTDB in [4] where the noise is randomly injected
+with values from 0.2 up to 2 times the ECG signal maximum peak value.
+
+
+
+
+                                         Figure 4: Data preprocessing pipeline.
+
+
+5.2   Implementation of comparative methods
+
+We implemented state-of-the-art approaches to compare their performance with the proposed method. As representation
+of non-learnable approaches a FIR and IIR filters were used in our experiments. These classical filters obtained best
+results on a comparative study performed by Romero and collaborators in [9]. Also, we implemented two deep learning
+state of the art methods for ECG denoising. The first one based on Deep Recurrent Neural Networks (DRNN) [11] and
+the second one based on Fully Convolutional Denoising Auto-Encoder (FCN-DAE) [12]. Finally, with the objective to
+show the relevance of non-linear activations in deep learning models, the advantages of using multi branch architectures
+and the importance of dilated convolutions, we implemented three models for an ablation study.
+FIR filter: One of the methods that has reported high accuracy in removing the BWL is a classical high-pass FIR
+digital filter presented in [21]. It has been depicted in a comparative study as a strong candidate in removing BWL
+(Romero et al., 2019). The authors calculated this filter with 28 length Kaiser window and 51 coefficients. Nevertheless,
+in this work, this filter was redesigned taking into account more computational resources and these are restrictions we
+used for our implementation: the width transition from stop band to pass band 0.07 and an attenuation in the stop band
+of 30.5 dB. As a result, the design parameters were an order of 8079 and a beta of 2.18. In addition, it is important to
+highlight that the chosen cutoff frequency was 0.67Hz, which has been proven a proper high-pass frequency for BWL
+removal according to the AHA [22] .
+IIR filter: Another remarkable classical filter that has stood out in state of the art literature and experiments (Romero
+et al., 2019) is an IIR high pass filter proposed in (Kumar et al., 2015). The main advantage of this IIR filter is that it
+requires less computational resources and at the same time it is able to attain high accuracy as its FIR filter counterpart.
+The design is composed by an order of 4 and a Butterworth type filter. Moreover, in order to avoid the common phase
+delay in the signal output, it is crucial to notice that, bi-directional filters are used in both filters [23]. These filters
+achieve a zero-phase distortion by evaluating the input signal in both the forward and reverse directions.
+Deep recurrent neural network (DRNN): The method based on recurrent networks proposed by Antczak [11] was
+implemented. As described on the paper we used a LSTM module with 64 units, the return_sequence parameter was set
+to True since this allows to return the full sequence (this means that the output tensor will have the same shape as the
+
+
+                                                             6
+                                                                                     A PREPRINT - JANUARY 13, 2021
+
+
+input tensor). The LSTM is followed by two fully connected layers (also called Dense layers) of 64 neurons each, the
+used activation was relu. The final layer is composed of a Dense layer with one neuron using a linear activation. The
+used loss function is the MSE as the original paper [11].
+FCN-DAE: Denoising autoencoders allows learning architectures to automatically extract the most relevant features
+for the further reconstruction in presence of noise at the input by exploiting the generative capabilities of auto encoder
+models [24]. Chiang and collaborators [12] used a fully convolutional denoising auto encoder, a convolutional based
+architecture that follows the same principles as original autoencoders. The authors included batch normalization for
+better gradient flow and used the MSE as a loss function.
+Ablation study: To assess the influence of different architecture variations we implemented three different models. Al
+models share the same number of convolutional filters at the same level of providing a similar architectural root. All
+models were tested using the proposed loss and the training protocol which will be explained in the next section. Table
+2 shows the used architecture for the aforementioned models. The Vanilla FCN Linear model used linear activation
+after all the convolutional filters. However the Vanilla FCN Non-Linear uses ReLU a non-linear activation in all its
+internal filters but the last one. Finally, the Multibranch model uses the MKLANL filter module introduced in this work
+but dilation rate is 0 (no dilation).
+
+                                         Table 2: Models for the ablation study
+                  Vanilla FCN Linear       Vanilla FCN Non-Linear                Multibranch
+                  64 Conv, k=9, linear        64 Conv, k=9, ReLU         64 MKLANL Filter Module
+                  64 Conv, k=9, linear        64 Conv, k=9, ReLU         64 MKLANL Filter Module
+                  32 Conv, k=9, linear        32 Conv, k=9, ReLU         32 MKLANL Filter Module
+                  32 Conv, k=9, linear        32 Conv, k=9, ReLU         32 MKLANL Filter Module
+                  16 Conv, k=9, linear        16 Conv, k=9, ReLU         16 MKLANL Filter Module
+                  16 Conv, k=9, linear        16 Conv, k=9, ReLU         16 MKLANL Filter Module
+                   1 Conv, k=9, linear         1 Conv, k=9, linear            1 Conv, k=9, linear
+
+
+5.3   Training Protocol
+
+The training protocol explained in this section was applied to all deep learning based methods.
+Train/Validation/Test split: As previously explained we separated the heartbeats belonging to 14 signals to be used
+as a test set (two from each dataset used to conform the QT Database) . This represents the 13% percent of the total
+signals amount. The heart beats from the remaining 91 signals were randomly shuffled and splited to be used as a train
+set (70%) and validation set (30%).
+Batch size: A batch size of 32 signals was used for training. This brings the advantage of the speed-up of matrix-matrix
+products making the training faster [25]. Optimization and Learning Rate Scheduling: Adam optimization algorithm
+[26] was used with an initial learning rate of 10−3 . This learning rate was reduced by a factor of 2 after 2 epochs
+without improvements in the validation set SSD metric. The allowed minimum learning rate was 10−10 .
+Iterations: The initial number of epochs was 105 . Due to the early stopping criterion that was implemented the final
+number of epochs is automatically determined during training. For early stopping, the validation set SSD metric was
+monitored, and stopped after 10 epochs if no improvements were detected.
+
+5.4   Evaluation Metrics
+
+According to studies published in [27, 28], distance-based metrics are the most suitable for the evaluation of signal
+similarity. In order to evaluate the performance of methods in removing the BLW minimizing the distortion on the ECG
+signal morphology we used: Absolute maximum distance (MAD), sum of the square of the distances (SSD), percentage
+root-mean-square difference (PRD),Cosine Similarity. The following paragraphs selected metrics are explined.
+Maximum absolute distance (MAD): This metric was used in [28] in a compression context in ECG signals. It has
+been considered a well-known similarity metric to quantify the ECG quality after being processed. It measures the
+maximum absolute distance between the original and filtered signal. The formula is given by:
+
+                                 M AD(s1 , s2 ) = max |s1 (n) − s2 (n)|     1≤n≤N                                     (3)
+
+
+                                                            7
+                                                                                             A PREPRINT - JANUARY 13, 2021
+
+
+Where s1 and s2 are the original signal and the filtered one to be compared, n is the index of the current sample and
+N is the length of the signals. Both signals must have the same length. The same applies to Sum of the square of the
+distances and Percentage root-mean-square difference formulas.
+Sum of the square of the distances (SSD): This is another popular similarity metric [28], which measures the sum of
+squared distances between the original and the filtered signal. It provides an idea of how similar the signals are along
+their entire duration. The formula is given by:
+
+                                                    N
+                                                    X
+                                  SSD(s1 , s2 ) =         (s2 (n) − s1 (n))2        1≤n≤N                              (4)
+                                                    n=1
+
+
+Percentage root-mean-square difference (PRD): This is a common similarity metric based on distance and its value
+is given in percentage. The objective is to obtain a smaller value, and consequently, the filtered signal is considered the
+best approximation of the original. The formula is the following:
+
+                                           v
+                                           u PN
+                                                                     2
+                                              n=1 (s2 (n) − s1 (n))
+                                           u
+                          P RD(s1 , s2 ) = t P  N
+                                                                       ∗ 100%              1≤n≤N                       (5)
+                                                                   2
+                                                n=1 (s2 (n) − s1 )
+
+
+Cosine similarity: This is a measure of similarity between two vectors. It is a normalized bounded inner product by
+L2 norms. The cosine similarity comes because the normalized dot product by the Euclidean L2 normalization is the
+cosine of the angle between the points denoted by the vectors in the unit sphere [29]. The formula is given by:
+
+                                               PN
+                                                  n=1 s1 (n)s2 (n)                   hs1 , s2 i
+                   CosSim(s1 , s2 ) = qP                   qP                   =                 1≤n≤N                (6)
+                                              N    2          N         2           ks1 k ks2 k
+                                              n=1 s1 (n)           n=1 s2 (n)
+
+
+Where s1 and s2 are the original signal and the filtered one to be compared, n is the index of the current sample and N
+is the length of the signals. It is not necessary that both signals feature the same length, however in our particular use
+case signals length is always the same.
+It is important to notice that as closer the cosine similarity is from 1, therefore more similar are the two vectors or, in
+our case, the two signals.
+
+5.5   Results and discussion
+
+We now present a comparison between the proposed method, state-of-the-art and two classical approaches that yielded
+good results on previous baseline wander comparison studies. As explained in Section 5.2, FIR and IIR filters were
+implemented inspired by Van Alste et al. [21] and Kumar et al. [6] papers, respectively. Also we implemented two
+recently proposed deep learning based methods, the first using DRNN [11], the second based on denoising auto encoder
+architectures [12].
+Our experiments are aimed at investigating three main aspects: (1) find the model that introduces less signal deformation,
+(2) determine the influence of linear and non-linear on the model’s final performance, and (3) determine the influence
+of dilated convolutions. We leverage the signal deformation using the following similarity metrics: Sum of Squared
+Distance (SSD), Maximum Absolute Distance, Percent of root-mean-square Distance (PRD), and Cosine Similarity.
+Statistical significance was calculated by applying a Wincoxon signed-rank test using the Scipy library implementation.
+P < 0.01 was considered to indicate statistical significant difference.
+Table 3 lists the average values and the standard deviation (between parenthesis) yielded by the different methods /
+models (rows) on the respective metric (columns). When comparing results we can observe that the proposed method
+obtained better results on all used metrics closely followed by the DRNN [11] model. Despite the DRNN model
+showcased close results to the proposed model, the difference is statistically significant (p < 0.01).
+When facing a fully linear deep learning model (Vanilla L) against a model that includes non-linear activations (Vanilla
+NL), we can observe that the model including non-linearities outperforms the fully linear model. Our intuition behind
+these results is that since models that feature nonlinearities are able to learn more complex functions [30] the non-linear
+model is capable not only of performing a very strong filtering but signal reconstruction as well.
+
+
+                                                               8
+                                                                                    A PREPRINT - JANUARY 13, 2021
+
+
+
+                                        Table 3: Methods’s performance result
+   Method/Model                              SSD (au)       MAD (au)      PRD (%)            Cosine Sim ×100 (%)
+   FIR Filter                              44.97 ±85.03 0.69 ±0.58 65.77 ±21.81                  69.70 ±21.01
+   IIR Filter                              35.63 ±69.77 0.62 ±0.55 61.62 ±22.63                  73.39 ±20.38
+   DRNN [11]                                5.85 ±8.93     0.44 ±0.30 49.91 ±26.92               89.48 ±10.28
+   FCN-DAE [12]                             6.79 ±8.29     0.48 ±0.31 62.18 ±34.54               83.27 ±16.58
+   Vanilla L                              13.565 ±15.71 0.54 ±0.28 88.47 ±33.28                  71.46 ±14.38
+   Vanilla NL                               6.90 ±9.34     0.41 ±0.27 63.55 ±38.36               85.58 ±11.06
+   Multibranch LANL                         5.362 ±7.09    0.39 ±0.27 55.59 ±32.49                89.07 ±9.23
+   Multibranch LANLD (proposed)             4.29 ±6.35     0.34 ±0.25 45.35 ±29.69                91.46 ±8.61
+
+
+
+As hypothesized the model featuring dilated convolutions outperforms his counterpart.. As explained previously, dilated
+convolutions inclearses the filter’s field of view (which is similar to featuring a bigger kernel) allowing the model to
+better filter low frequency noise.
+In Figure 5 qualitative and quantitative results for our deep learning approach are shown. On the top an ECG beat from
+signal sele0106 of the QT Database (in green) . The second signal in black is the same signal + BLW from the NSTDB
+is shown. The third signal is the ECG signal recovered by our approach is shown in blue line. Finally, on the button the
+recovered signal by the IIR filter is shown for comparison purposes. Despite the differences between the original signal
+and the estimated signal by our approach, it can be observed that the signal morphology is highly preserved even when
+the signal was strongly contaminated by noise.
+Another aspect that should be mentioned is the processing speed. Sometimes deep learning approaches tend to be
+discarded due to high processing time using CPU during deployment. If it is true that for model training using CPU
+will take several hours or even days. For final deployment on CPU using the model’s weights obtained during training,
+the processing time is minimum due to the fact that our model is based on a fully convolutional scheme and also
+optimizations madel such as dilated convolution. For instance, our model takes 48 milliseconds to process one ECG
+beat while the implemented FIR filter takes 343 milliseconds on the same CPU (Intel(R) Core(TM) i5-7300HQ CPU
+@ 2.50GHz). Also the proposed approach allows hardware implementation on an application-specific integrated circuit
+(ASIC) or a field-programmable gate array (FPGA) using a hardware description language (HDL) since convolutional
+filter modules can be easily parallelizable [31]. This will boost performance allowing the use on real-time applications
+such as professional ECG monitors.
+
+
+
+Conclusion
+
+In this work a novel deep learning model for ECG baseline wander removal was presented. The model was compared
+with other state-of-the-art methods and others classical filtering approaches using similarity metrics. An ablation study
+to determine the importance of linear and non-linear activations and the use of dilated convolutions was performed.
+The experimental results showed that the combination of linear and non-linear activation and dilated convolutions
+on a multi kernel approach proved to be the best solution outperforming state of the art deep learning solutions and
+classical approaches. In order to maximize reproducibility the source code of this work will be freely available in
+GitHub [https://github.com/fperdigon/DeepFilter]. Also for educational purposes this work can be run on Google Colab
+where free GPU interactive sessions using jupyter notebooks can be accessed [Google Colab link]. Since it is open
+source future research can use our benchmark to test their own approaches and easily compare with all the models
+presented in this work (including our implementation of other authors’ approaches).
+
+
+
+Supplementary material
+
+Code hosted in Github: [https://github.com/fperdigon/DeepFilter]
+Run the codes using GPUs at Google Colab: [Google Colab link]
+
+
+                                                           9
+                                                                                A PREPRINT - JANUARY 13, 2021
+
+
+
+
+Figure 5: (First) The figure shows a portion of sele0106 ECG signal. (Second) Original ECG + BLW noise from the
+NSTDB. (Third) The blue line is the ECG filtered using our approach. (Fourth) The brown signal is the ECG recovered
+using the IIR filter, this image was included for visual comparison purposes. Metric values are also included.
+
+
+Credit authorship contribution statement
+
+Francisco Perdigon Romero: Conceptualization, Methodology, Software, Formal analysis, Investigation, Visualiza-
+tion, Data curation, Writing - review & editing.
+
+
+                                                        10
+                                                                                  A PREPRINT - JANUARY 13, 2021
+
+
+David Castro Piñol: Data curation, Writing - review & editing, Software, Validation.
+Carlos R. Vazquez Seisdedos: Formal analysis, Writing - review & editing.
+
+Declaration of Competing Interest
+The authors declare that they have no known competing financial interests or personal relationships that could have
+appeared to influence the work reported in this paper.
+
+References
+ [1] Cardiovascular diseases (cvds).       https://www.who.int/news-room/fact-sheets/detail/
+     cardiovascular-diseases-(cvds). Accessed: 2020-10-20.
+ [2] Iftikhar J Kullo, Hayan Jouni, Erin E Austin, Sherry-Ann Brown, Teresa M Kruisselbrink, Iyad N Isseh, Raad A
+     Haddad, Tariq S Marroush, Khader Shameer, Janet E Olson, et al. Incorporating a genetic risk score into coronary
+     heart disease risk estimates: effect on low-density lipoprotein cholesterol levels (the mi-genes clinical trial).
+     Circulation, 133(12):1181–1188, 2016.
+ [3] Non-invasive  tests and   procedures   |    american    heart association.                            https://
+     www.heart.org/en/health-topics/heart-attack/diagnosing-a-heart-attack/
+     noninvasive-tests-and-procedures. Accessed: 2020-10-20.
+ [4] George B Moody, W Muldrow, and Roger G Mark. A noise stress test for arrhythmia detectors. Computers in
+     cardiology, 11(3):381–384, 1984.
+ [5] Leif Sörnmo and Pablo Laguna. Bioelectrical signal processing in cardiac and neurological applications, volume 8.
+     Academic Press, 2005.
+ [6] K Sravan Kumar, Babak Yazdanpanah, and P Rajesh Kumar. Removal of noise from electrocardiogram using
+     digital fir and iir filters with various methods. In 2015 International Conference on Communications and Signal
+     Processing (ICCSP), pages 0157–0162. IEEE, 2015.
+ [7] Behzad Mozaffary Mohammad A Tinati et al. Ecg baseline wander elimination using wavelet packets. World
+     academy of science, Engineering and technology, 3(2005):14–16, 2005.
+ [8] Manuel Blanco-Velasco, Binwei Weng, and Kenneth E Barner. Ecg signal denoising and baseline wander
+     correction based on the empirical mode decomposition. Computers in biology and medicine, 38(1):1–13, 2008.
+ [9] Francisco Perdigón Romero, Liset Vázquez Romaguera, Carlos Román Vázquez-Seisdedos, Marly Guimarães Fer-
+     nandes Costa, João Evangelista Neto, et al. Baseline wander removal methods for ecg signals: A comparative
+     study. arXiv preprint arXiv:1807.11359, 2018.
+[10] P Sonali. Different techniques of baseline wandering removal-a review. Int. J. Enhanced Research Sci. Techno. &
+     Eng, 2(5):37–43, 2013.
+[11] Karol Antczak. Deep recurrent neural networks for ecg signal denoising. arXiv preprint arXiv:1807.11551, 2018.
+[12] Hsin-Tien Chiang, Yi-Yen Hsieh, Szu-Wei Fu, Kuo-Hsuan Hung, Yu Tsao, and Shao-Yi Chien. Noise reduction in
+     ecg signals using fully convolutional denoising autoencoders. IEEE Access, 7:60806–60813, 2019.
+[13] Peng Xiong, Hongrui Wang, Ming Liu, and Xiuling Liu. Denoising autoencoder for eletrocardiogram signal
+     enhancement. Journal of Medical Imaging and Health Informatics, 5(8):1804–1810, 2015.
+[14] Pablo Laguna, Roger G Mark, A Goldberg, and George B Moody. A database for evaluation of algorithms for
+     measurement of qt and other waveform intervals in the ecg. In Computers in cardiology 1997, pages 673–676.
+     IEEE, 1997.
+[15] Ary L Goldberger, Luis AN Amaral, Leon Glass, Jeffrey M Hausdorff, Plamen Ch Ivanov, Roger G Mark, Joseph E
+     Mietus, George B Moody, Chung-Kang Peng, and H Eugene Stanley. Physiobank, physiotoolkit, and physionet:
+     components of a new research resource for complex physiologic signals. circulation, 101(23):e215–e220, 2000.
+[16] Olaf Ronneberger, Philipp Fischer, and Thomas Brox. U-net: Convolutional networks for biomedical image
+     segmentation. In International Conference on Medical image computing and computer-assisted intervention,
+     pages 234–241. Springer, 2015.
+[17] Guha Balakrishnan, Amy Zhao, Mert R Sabuncu, John Guttag, and Adrian V Dalca. Voxelmorph: a learning
+     framework for deformable medical image registration. IEEE transactions on medical imaging, 38(8):1788–1800,
+     2019.
+
+
+                                                         11
+                                                                                  A PREPRINT - JANUARY 13, 2021
+
+
+[18] Richard Zhang, Phillip Isola, and Alexei A Efros. Colorful image colorization. In European conference on
+     computer vision, pages 649–666. Springer, 2016.
+[19] Christian Szegedy, Wei Liu, Yangqing Jia, Pierre Sermanet, Scott Reed, Dragomir Anguelov, Dumitru Erhan,
+     Vincent Vanhoucke, and Andrew Rabinovich. Going deeper with convolutions. In Proceedings of the IEEE
+     conference on computer vision and pattern recognition, pages 1–9, 2015.
+[20] Fisher Yu and Vladlen Koltun. Multi-scale context aggregation by dilated convolutions. arXiv preprint
+     arXiv:1511.07122, 2015.
+[21] Jan A Van Alste and TS Schilder. Removal of base-line wander and power-line interference from the ecg by an
+     efficient fir filter with a reduced number of taps. IEEE transactions on biomedical engineering, 1(12):1052–1060,
+     1985.
+[22] P Klingfield, LS Gettes, JJ Bailey, et al. Recommendations for the standardization and interpretation of the
+     electrocardiogram: part 1. Circulation, 115:1306–24, 2007.
+[23] Alan V Oppenheim. Discrete-time signal processing. Pearson Education India, 1999.
+[24] Pascal Vincent, Hugo Larochelle, Yoshua Bengio, and Pierre-Antoine Manzagol. Extracting and composing robust
+     features with denoising autoencoders. In Proceedings of the 25th international conference on Machine learning,
+     pages 1096–1103, 2008.
+[25] Yoshua Bengio. Practical recommendations for gradient-based training of deep architectures. In Neural networks:
+     Tricks of the trade, pages 437–478. Springer, 2012.
+[26] Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980,
+     2014.
+[27] M Sabarimalai Manikandan and Samarendra Dandapat. Ecg distortion measures and their effectiveness. In 2008
+     First International Conference on Emerging Trends in Engineering and Technology, pages 705–710. IEEE, 2008.
+[28] Ranveig Nygaard, Gerry Melnikov, and Aggelos K Katsaggelos. A rate distortion optimal ecg coding algorithm.
+     IEEE Transactions on biomedical engineering, 48(1):28–40, 2001.
+[29] Hinrich Schütze, Christopher D Manning, and Prabhakar Raghavan. Introduction to information retrieval,
+     volume 39. Cambridge University Press Cambridge, 2008.
+[30] Ian Goodfellow, Yoshua Bengio, and Aaron Courville. Deep learning. MIT press, 2016.
+[31] Alireza Ghaffari and Yvon Savaria. Cnn2gate: Toward designing a general framework for implementation of
+     convolutional neural networks on fpga. arXiv preprint arXiv:2004.04641, 2020.
+
+
+
+
+                                                         12
+

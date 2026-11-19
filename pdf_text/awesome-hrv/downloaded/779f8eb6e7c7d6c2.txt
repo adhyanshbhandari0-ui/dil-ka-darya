@@ -1,0 +1,890 @@
+                     Beyond Outlier Detection: Outlier Interpretation
+                     by Attention-Guided Triplet Deviation Network
+                    Hongzuo Xu                                              Yijie Wang∗                                    Songlei Jian∗
+     Science and Technology on Parallel                      Science and Technology on Parallel                 College of Computer, National
+         and Distributed Processing                              and Distributed Processing                    University of Defense Technology
+                 Laboratory                                              Laboratory                                    Changsha, China
+       College of Computer, National                           College of Computer, National                       jiansonglei@nudt.edu.cn
+      University of Defense Technology                        University of Defense Technology
+              Changsha, China                                         Changsha, China
+         xuhongzuo13@nudt.edu.cn                                  wangyijie@nudt.edu.cn
+
+                 Zhenyu Huang                                            Yongjun Wang                                         Ning Liu
+       College of Computer, National                           College of Computer, National                    College of Computer, National
+      University of Defense Technology                        University of Defense Technology                 University of Defense Technology
+              Changsha, China                                         Changsha, China                                  Changsha, China
+       huangzhenyu15@foxmail.com                                wangyongjun@nudt.edu.cn                            liuning17a@nudt.edu.cn
+
+                                                                                 Fei Li
+                                                              Alibaba Cloud Computing Co. Ltd.
+                                                                        Beijing, China
+                                                                  renlei.lf@alibaba-inc.com
+ABSTRACT                                                                              distills a subspace of original features from the embedding module
+Outlier detection is an important task in many domains and is                         and the attention coefficient. With the good generality, ATON can
+intensively studied in the past decade. Further, how to explain                       be employed as an additional step of any black-box outlier detector.
+outliers, i.e., outlier interpretation, is more significant, which can                A comprehensive suite of experiments is conducted to evaluate the
+provide valuable insights for analysts to better understand, solve,                   effectiveness and efficiency of ATON. The proposed ATON signifi-
+and prevent these detected outliers. However, only limited studies                    cantly outperforms state-of-the-art competitors on 12 real-world
+consider this problem. Most of the existing methods are based on                      datasets and obtains good scalability w.r.t. both data dimensionality
+the score-and-search manner. They select a feature subspace as                        and data size.
+interpretation per queried outlier by estimating outlying scores of
+the outlier in searched subspaces. Due to the tremendous searching                    CCS CONCEPTS
+space, they have to utilize pruning strategies and set a maximum                      • Information systems → Data mining; • Computing method-
+subspace length, often resulting in suboptimal interpretation results.                ologies → Anomaly detection.
+Accordingly, this paper proposes a novel Attention-guided Triplet
+deviation network for Outlier interpretatioN (ATON). Instead of                       KEYWORDS
+searching a subspace, ATON directly learns an embedding space                         Outlier interpretation, Feature embedding, Self-attention, Triplet
+and learns how to attach attention to each embedding dimension                        deviation
+(i.e., capturing the contribution of each dimension to the outlierness
+                                                                                      ACM Reference Format:
+of the queried outlier). Specifically, ATON consists of a feature em-                 Hongzuo Xu, Yijie Wang, Songlei Jian, Zhenyu Huang, Yongjun Wang, Ning
+bedding module and a customized self-attention learning module,                       Liu, and Fei Li. 2021. Beyond Outlier Detection: Outlier Interpretation by
+which are optimized by a triplet deviation-based loss function. We                    Attention-Guided Triplet Deviation Network. In Proceedings of the Web
+obtain an optimal attention-guided embedding space with expanded                      Conference 2021 (WWW ’21), April 19–23, 2021, Ljubljana, Slovenia. ACM,
+high-level information and rich semantics, and thus outlying be-                      New York, NY, USA, 12 pages. https://doi.org/10.1145/3442381.3449868
+haviors of the queried outlier can be better unfolded. ATON finally
+∗ Corresponding authors: Yijie Wang and Songlei Jian.
+                                                                                      1    INTRODUCTION
+                                                                                      Outlier detection is an important research field in data science,
+This paper is published under the Creative Commons Attribution 4.0 International      which identifies uncommon data objects that deviate significantly
+(CC-BY 4.0) license. Authors reserve their rights to disseminate the work on their
+personal and corporate Web sites with the appropriate attribution.                    from the majority [23]. Data is often generated to reflect activities
+WWW ’21, April 19–23, 2021, Ljubljana, Slovenia                                       in the system or observations of the entities [1], and the appearance
+© 2021 IW3C2 (International World Wide Web Conference Committee), published           of outliers indicates unusual data generating process or even severe
+under Creative Commons CC-BY 4.0 License.
+ACM ISBN 978-1-4503-8312-7/21/04.                                                     faults and potential threats (e.g., abnormal web traffic might be
+https://doi.org/10.1145/3442381.3449868                                               network attacks, illegal operations in the stock market can cause
+WWW ’21, April 19–23, 2021, Ljubljana, Slovenia                                                                                                                                                                              Xu et al.
+
+
+                                                                                      (a) Ground-Truth                                   (b) Prior Art                                       (c) ATON
+serious economic damage, and a glitch in industrial control systems
+may trigger big disasters). Outlier detection algorithms are suc-                                                      f1     f3        f1          f2                                              f1          f3
+cessfully applied to these real-world scenarios, preventing various
+                                                                                             f1        f2        f3                                           f1        f2   f3              f1          f2          f3
+kinds of risks without expensive human surveillance.
+   However, outlier detection is a half-done problem. The interpre-                                                                      f1         f2        f2        f3
+                                                                                 f1    f2         f2        f3         f1     f3                                                       f1   f 2        f 3        f 4    f 5
+tation of detected outliers is an essential complementary task. It is                                                              Pruning                          Pruning
+                                                                                                                                                                                                              Self-Attention
+hard for analysts to understand why a data object has been consid-                      f1             f2             f3                  f1             f2             f3             f1   f 2        f 3        f 4    f 5
+
+ered to be an outlier by solely utilizing detection results (predict                                                                                                                                                        Embedding
+label or outlier score) but without any clues. To perceive one outlier,                      f1        f2        f3                            f1        f2        f3                        f1          f2          f3
+
+analysts need to examine its behavior in every individual feature or                   Queried Outlier                                  Queried Outlier                                  Queried Outlier
+even every possible feature combination, which is a laborious work,
+                                                                               Legend：                                      Feature Space/Subspace                       f   Feature
+especially in high-dimensional data. Hence, it is more important to
+investigate what distinguishes the queried outlier from the given
+dataset and how to characterize the queried outlier, namely outlier          Figure 1: Ground-Truth Interpretation and Comparison Be-
+interpretation. This task is also referred to as outlier explanation [13],   tween Prior Art and the Proposed ATON. Line width of each
+outlier aspect mining/discovering [6, 28], outlier property detection        feature represents the contribution to the outlierness of the
+[2], and outlier description [14]. Given interpretations of detected         queried outlier. (a) Ground-truth interpretation is obtained
+outliers, analysts can better understand these outliers and further          by selecting the best subspace from the power set of the fea-
+choose to trust or ignore them. Downstream troubleshooting and               ture space. (b) Prior art is based on subspace searching, which
+decision-making will be more efficient. Mechanisms (systems, reg-            may neglect the accurate interpretation subspace because of
+ulations, or policies) can also be optimized to prevent such outliers        applied pruning methods. (c) The proposed ATON learns an
+better. This task has broad real-world application in failure diagno-        optimal attention-guided embedding space.
+sis of cloud service systems. Further, JointCloud [32] is an emerging
+architecture that empowers the cooperation among multiple clouds
+to provide efficient cross-cloud services. This architecture naturally       can only yield a suboptimal feature subspace {𝑓1, 𝑓2 }, failing to
+contains complicated topology and service-calling dependencies.              retrieve the best subspace {𝑓1, 𝑓3 }.
+Outlier detection and interpretation form an important “regula-                   In light of this limitation, this paper proposes a novel Attention-
+tory” module in JointCloud architecture to ensure the reliability of         guided Triplet deviation network for Outlier interpretatioN (ATON
+cross-cloud services. Intelligent failure diagnosis technologies are         for short). Compared with conventional subspace searching-based
+urgently required in JointCloud systems to automatically provide             approaches, ATON directly learns an embedding space and learns
+analysts with deeper and clearer insight of outliers.                        how to attach attention to new dimensions. We illustrate the basic
+   Following [17, 20], this paper also formally defines an interpre-         insight of ATON in Figure 1 (c). ATON first constructs a feature
+tation of the queried outlier as a tailored feature subspace where           embedding module to convert original feature space ({𝑓1, 𝑓2, 𝑓3 }) to
+the outlierness of this outlier is well exhibited. We can also cast          a new embedding space ({𝑓1′, 𝑓2′, 𝑓3′, 𝑓4′, 𝑓5′ }). Note that these new
+outlier interpretation as a problem of computing the contribution            dimensions can be embedded with expanded high-level feature
+of each feature to the outlierness of the queried outlier. Feature           patterns and rich semantics, and thus it is easier to capture and
+subspace can be further obtained by incorporating a threshold set-           analyze outlying behaviors of the queried outlier in this embedding
+ting approach. Therefore, the ground-truth interpretation of the             space. We then propose a customized self-attention learning mod-
+queried outlier can be obtained by selecting the best subspace from          ule to attach attention to each new embedding dimension (feature
+the power set of the original feature space. The queried outlier can         𝑓1′ , 𝑓3′ , and 𝑓5′ are with higher attention coefficient). This module
+be easily identified in this subspace by human analysts or outlier           learns the contribution of each dimension to the outlierness of the
+detectors. As shown in Figure 1 (a), the queried outlier is initially        queried outlier. In ATON, the queried outlier is combined with
+described by three features 𝑓1 , 𝑓2 , and 𝑓3 , and the interpretation is     heuristically sampled informative normal data to generate a group
+feature subspace {𝑓1, 𝑓2 }.                                                  of triplets. We propose a triplet deviation-based loss function, which
+   Although we have had a long list of various kinds of outlier              estimates the separability of the queried outlier and its normal coun-
+detectors, comparably sparse literature considers the problem of             terparts within the triplets. The feature embedding module and
+explaining outliers detected by any outlier detector. The mainstream         the self-attention module can then be constantly optimized to find
+of prior art is based on the score-and-search manner [6, 12, 28, 31],        an optimal embedding space with attached attention. It is note-
+which generally only leads to suboptimal results. These methods              worthy that ATON has a continuous solution space. By contrast,
+search possible feature subspaces and compute the outlying degree            the solution space is generally discretized (each feature is either
+of the queried outlier in each subspace. However, they have to               retained or removed) in prior art. Arguably, it is a superiority be-
+employ searching strategies, impose pruning methods, and set a               cause fine-grained optimization procedures can generally produce
+maximum subspace length to handle tremendous searching space                 better results. Feature weights of original space can be finally dis-
+(the number of possible subspaces increases exponentially with the           tilled from the embedding module and the learned feature attention
+growth of data dimensionality). Therefore, they may fail to obtain           coefficient (original feature 𝑓1 and 𝑓3 have higher weight). Inter-
+the optimal interpretation subspace. As shown in Figure 1 (b), 𝑓1 and        pretation subspace {𝑓1, 𝑓3 } can then be derived by incorporating a
+𝑓3 are pruned in the first level, and thus this interpretation method        proposed threshold setting approach.
+Beyond Outlier Detection: Outlier Interpretation
+by Attention-Guided Triplet Deviation Network                                                                          WWW ’21, April 19–23, 2021, Ljubljana, Slovenia
+
+
+   Overall, our main contributions are summarized as follows:                            subspace searching-based methods might fail to obtain an accurate
+    • We propose an outlier interpretation method ATON hav-                              interpretation subspace because of the applied searching strate-
+       ing good generality. ATON is model-agnostic, i.e., it can be                      gies and pruning methods. They also need to restrict a maximum
+       employed as an additional step to explain outliers detected                       subspace length in practical usage.
+       by any black-box outlier detection algorithm. ATON is also                            Some methods attempt to obtain more efficient interpretation
+       domain-agnostic, i.e., it suits for data from various domains.                    by employing feature selection techniques and sparse classifiers.
+    • ATON transforms the original feature space to an embed-                            COIN [17] maps the interpretation task to a classification problem.
+       ding space with expanded high-level information and rich                          It trains a set of ℓ1 -norm classifiers that separate augmented outlier
+       semantics by harnessing the representation power of neural                        data from clusters of nearby normal data. The linear weights in
+       networks. In this converted embedding space, the contribu-                        classifiers are used to explain the queried outlier. The work in [20]
+       tion of each dimension to the outlierness of the queried out-                     employs feature selection techniques and classifiers to separate the
+       lier is automatically learned by the customized self-attention                    queried outlier and its surroundings. However, these two methods
+       learning module.                                                                  might still fail to obtain sufficient performance because: (i) They
+    • ATON obtains good scalability since it avoids time-consuming                       augment the queried outlier to form a hypothetical class so that
+       subspace searching process. Besides, ATON generates triplets                      the classifier can work properly, which means the quality of data
+       by only sampling limited informative normal data. As a re-                        augmentation largely determines the effectiveness of interpretation;
+       sult, ATON has linear time complexity w.r.t. data size (in                        and (ii) A powerful classifier can still yield good classification results
+       datasets with fixed ratios of queried outliers).                                  even if in a low-quality feature subspace.
+    • ATON is evaluated by a comprehensive suite of experiments                              There are some approaches producing some new forms of expla-
+       with good reproducibility1 . To the best of our knowledge, it                     nation, e.g., focus plot (2-d scatter plot) in [9], packs (hyper-ellipsoid
+       is the first work that releases the ground-truth outlier inter-                   in a feature subspace) in [19], and feature sequences in [30]. Besides,
+       pretation annotations of real-world datasets, which fosters                       decision tree has intrinsic explanation ability, which is employed
+       further research on this practical problem.                                       to extract explanation rules in [13, 25]. There are also some model-
+   Extensive experiments show that ATON achieves impressive                              specific or domain-specific outlier interpretation methods. The
+performance leap over the state-of-the-art competitors. We also use                      method in [11] is tailored for one-class SVMs, which “neuralizes”
+case studies to visually demonstrate interpretation quality. Ablation                    the predictions and uses deep Taylor decomposition to obtain ex-
+study validates the significance of each key design of ATON. We                          planations. The outliers detected by GRU-based autoencoder are
+then investigate the effect of hyper-parameters and give recom-                          explained in [7]. An outlier contribution explainer is proposed in
+mended settings. ATON obtains good scalability w.r.t. both data                          [36] especially for cyber-security applications.
+dimensionality and data size in scale-up test.                                               Interpretable machine learning is a related field, which studies
+                                                                                         possible explanations for the predictions generated by machine
+2    RELATED WORK                                                                        learning algorithms. LIME [27] is a well-known explainer for arbi-
+                                                                                         trary classifier prediction. LIME learns a local interpretable model
+Outlier detection is intensively studied by the community in the past
+                                                                                         around the prediction to infer the explanations. A more advanced
+decade. There are various kinds of outlier detection algorithms, e.g.,
+                                                                                         approach SHAP is proposed in [18]. SHAP is a game theoretic ap-
+probability-based methods [15], ensemble-based methods [16, 35],
+                                                                                         proach to learn the optimal Shapley values (the contribution of
+and deep learning-based methods [22, 24]. Note that some detectors,
+                                                                                         each feature) as explanations.
+e.g., [4, 5], also consider the interpretability of the detected outliers,
+and some categorical-data-oriented outlier detectors [10, 33, 34]
+have intrinsic interpretable results. However, they cannot explain
+the detection results produced by any black-box detectors.                               3    PROBLEM STATEMENT
+   By contrast, limited studies consider model-agnostic outlier inter-
+                                                                                         Let X = {𝒙 1, 𝒙 2, · · · , 𝒙 𝑁 } be an input dataset containing a set of
+pretation. Prior art generally utilizes score-and-search manner. The
+                                                                                         data objects, where |X| = 𝑁 . Each data object 𝒙 ∈ X is a real-
+methods in this research line search a subspace where the queried
+                                                                                         valued feature vector described by 𝐷 features, i.e., 𝒙 ∈ R𝐷 . The
+outlier obtains the highest outlier score. They propose new efficient
+                                                                                         feature set is denoted as F = {𝑓1, 𝑓2, · · · , 𝑓𝐷 }. The data objects in a
+outlying scoring functions combining with some searching strate-
+                                                                                         small subset of dataset X𝑜 ⊂ X are outliers, where |X𝑜 | = 𝑁𝑜 and
+gies. For example, Duan et al. [6] introduce OAMiner that employs
+                                                                                         𝑁𝑜 ≪ 𝑁 .
+kernel density estimation as scoring function and uses a pruning
+                                                                                            Outlier interpretation is to explain why a data object is an out-
+method based on anti-monotonicity properties. The work of [31]
+                                                                                         lier. Inspired by the taxonomy of interpretable machine learning
+proposes two outlying scoring functions (density Z-score and isola-
+                                                                                         [21], this problem can also be divided into model-agnostic and
+tion path length) and employs beam search. Keller et al. [12] use the
+                                                                                         model-specific interpretation based on whether the queried outlier
+adaptive subspace searching based on random subspace sampling.
+                                                                                         is detected by a specific outlier detection model. This paper aims to
+A very recent method, SiNNE [28], computes isolation score using
+                                                                                         address the model-agnostic outlier interpretation problem because
+the nearest neighbor ensemble and also uses beam search. Kuo
+                                                                                         the approaches in this category have better generality and can be
+and Davidson [14] introduce a constraint programming approach,
+                                                                                         incorporated with any existing outlier detector.
+which can also be deemed as a subspace searching process. These
+                                                                                            Following [17, 20, 28], We formally define the outlier interpreta-
+1 Our source code is available at https://github.com/xuhongzuo/outlier-interpretation.   tion task as follows:
+WWW ’21, April 19–23, 2021, Ljubljana, Slovenia                                                                                                                         Xu et al.
+
+
+   Definition 3.1 (Outlier interpretation). Given a dataset X                   Distill original feature weight
+
+and a queried outlier set X𝑜 ⊂ X, outlier interpretation 𝑂𝐼 is to find                                                                                            ATON
+a tailored explanatory subspace E ⊆ F for each outlier in query                                             Triplet Deviation-Based Loss
+set 𝒐 ∈ X𝑜 . The outlierness of the queried outlier 𝒐 can be explicitly              Triplets T a                                                         Triplets Ta
+unfolded in this feature subspace E such that human analysts or
+outlier detection algorithms 𝑂𝐷 can easily and accurately predict the
+queried outlier. This procedure is formally represented as:                            Reversely Mask             Attention Coefficient a        Mask
+
+                           E = 𝑂𝐼 (𝒐|X), 𝒐 ∈ X𝑜                     (1)
+                                                                                                                                              
+                                                                                                    Customized Self-Attention Learning Module S
+s.t.
+                     𝑂𝐷 (𝒐 E |XE ) = 𝑜𝑢𝑡𝑙𝑖𝑒𝑟                        (2)
+where XE and 𝒐 E denote data object(s) described in the interpretation                                                                      Triplets Te
+
+feature subspace E .                                                                                       Feature Embedding Module 
+                                                                                                                                    P
+
+   Generally, features of real-world tabular datasets have real se-
+                                                                                                         Triplets T
+mantics. For example, in the field of AI for IT operations (AIOps),
+the data records in distributed tracing systems are response times
+of different services. Also, in the medical diagnosis area, the fea-                                               Triplet Generator
+tures in the Breast Cancer dataset are computed from a digitized                        Queried Outlier o                                                  Dataset X
+image of a breast mass to describe characteristics of the cell nuclei.
+Therefore, given the behavior (feature value) in selected features,
+the human analysts can locate the root cause of an outlier, thereby                      Figure 2: Network Architecture of ATON
+explain this outlier.
+   Interpretation methods can also output feature weight as an
+explanation apart from directly producing explanatory subspace.                   triplets T𝑒 = {⟨𝜙 (𝒐), 𝜙 (𝒎), 𝜙 (𝒏)⟩}. High-level information
+The feature weight is seen as the contribution of each feature to the             and rich semantics are expected to be expanded and directly
+outlierness. These methods can further yield explainable feature                  demonstrated in this embedding space.
+subspace when combining with a threshold setting approach. It is                • ATON constructs a customized self-attention learning mod-
+similar to the problem setting of outlier detection, i.e., some outlier           ule 𝜓 : ⟨R𝑑 , R𝑑 , R𝑑 ⟩ → R𝑑 afterward. Attention coeffi-
+detectors output outlier scores for data objects while the other                  cient vector 𝒂 ∈ R𝑑 is derived from the embedded triplets
+detectors directly differentiate whether a data object is an outlier.             𝒂 = 𝜓 (T𝑒 ). 𝒂 is a real-valued vector that measures the contri-
+                                                                                  bution of each embedding dimension to the outlierness of the
+4      OUTLIER INTERPRETATION NETWORK                                             queried outlier. ATON masks each element in triplets using
+In this section, we first introduce the network architecture of ATON,             attention coefficient  vector 𝒂 and outputs a set of attention-
+then present the specific methodology, and finally give the pseudo                guided triplets T𝑎 = ⟨𝒐 attn, 𝒎 attn, 𝒏attn ⟩ . We also obtain
+                                                                                                                 
+code of our algorithm.                                                            another set of triplets T̄𝑎 = ⟨𝒐 r-attn, 𝒎 r-attn, 𝒏r-attn ⟩ that is
+                                                                                  reversely masked by the attention coefficient.
+4.1     Network Architecture                                                    • ATON then calculates triplet deviation-based loss to assess
+Based on the problem definition of outlier interpretation, we aim                 triplet separability in masked data T𝑎 and reversely masked
+to learn a feature subspace to interpret each queried outlier, where              data T̄𝑎 . Parameters in previous steps are constantly opti-
+the target outlier can be easily separated from normal data. We in-               mized using this loss function.
+troduce an Attention-guided Triplet deviation network for Outlier
+interpretatioN (ATON for short). ATON uses the proposed triplet           4.2      Specific Model Design
+deviation-based loss to optimize the feature embedding module and
+the customized self-attention learning module. In embedding space         In this section, we introduce the specific model design of ATON.
+with attached attention, ATON attempts to differentiate the queried       Four main components of the network are presented in turn.
+outlier and its normal counterparts of each generated triplets. The       4.2.1 Triplet Generator. A set of triplets T is first generated as
+interpretable feature subspace of this queried outlier is finally dis-    training data. These triplets are utilized to learn the separability
+tilled from the optimized feature embedding module and the learned        of the queried outlier from the normality. Thus, the first triplet
+self-attention coefficient. The network structure of ATON is shown        position is fixed as the queried outlier 𝒐, and the rest two positions
+in Figure 2, which consists of four main components:                      should well represent the normal data. We simultaneously consider
+     • Given a queried outlier 𝒐 and the dataset X, we first select       two factors, namely general normality of the dataset and the local
+         normal data objects from dataset X to generate a set of          normality of the queried outlier. Two candidate sets are formed for
+         triplets T as training data, i.e., T = {⟨𝒐, 𝒎, 𝒏⟩}, 𝒎, 𝒏 ∈ X.    the rest two positions. Xrandom denotes a candidate set of normal
+     • Subsequently, the data objects in the generated triplets are       data objects randomly sampled from the full dataset, representing
+         converted to a new embedding space by the feature em-            the general normality. In terms of the local normality, the nearest
+         bedding module 𝜙 : R𝐷 → R𝑑 . We get a set of embedded            neighbor normal data objects of the queried outlier 𝒐 are gathered
+Beyond Outlier Detection: Outlier Interpretation
+by Attention-Guided Triplet Deviation Network                                                                            WWW ’21, April 19–23, 2021, Ljubljana, Slovenia
+
+
+in a candidate set Xneighbor . We use Euclidean distance to define the             module finally uses a column-wise min-max normalization function
+distance of two data objects when searching the nearest neighbors.                 𝛿 to scale the attention coefficient to [0, 1].
+The set of generated triplets T is denoted as follows:                                Before entering the self-attention module, all the triplets are first
+                                                                                  flattened to vectors. Triplet ⟨𝜙 (𝒐), 𝜙 (𝒎𝑖 ), 𝜙 (𝒏 𝑗 )⟩ in T𝑒 is converted
+       T = 𝛾 𝛾 = ⟨𝒐, 𝒎, 𝒏⟩, ∀𝒎 ∈ Xrandom, ∀𝒏 ∈ Xneighbor .          (3)
+                                                                                   to an individual vector 𝒖 ∈ R3𝑑 as:
+For simplicity, two candidate sets (Xrandom and Xneighbor ) are re-
+                                                                                                             𝒖 = [𝜙 (𝒐)∥𝜙 (𝒎𝑖 )∥𝜙 (𝒏 𝑗 )]                             (6)
+stricted to be with the same cardinality. We use 𝑟 to denote this
+sampling size, which is a parameter of ATON. Thus, the size of gen-                where [·∥ · ∥·] represents vector concatenation. We obtain a set of
+erated triplet set T is 𝑟 2 . Abundant training data normally brings                                                                           2
+                                                                                   flattened vectors with size |T𝑒 | = 𝑟 2 . A matrix U ∈ R3𝑑×𝑟 is used
+better performance, but too large 𝑟 also results in low efficiency.                to contain all the vectors derived from the triplet set.
+We conduct a parameter test in Section 5.5 to investigate the effect                  Fully expanded out, the network first produces an attention
+of this parameter empirically.                                                                       2
+                                                                                   matrix A ∈ R𝑑×𝑟 as follows:
+4.2.2 Feature Embedding Module. Feature embedding is to convert                                          A = 𝜓 (T𝑒 ) = (𝑓1 ◦ 𝑓2 )(T𝑒 )
+the original features to a new feature space by a mapping function                                                                                                 (7)
+𝜙. ATON further attaches attention to each embedding dimension.                                                      = 𝛿 W𝑎′ 𝜎 (W𝑎 U) .
+Thus, We need to transform the attention coefficients of these
+embedding dimensions back to the original features by following                    The attention coefficient vector 𝒂 ∈ R𝑑 is the average of the columns
+some rules. This requirement should be considered when specifying                  of matrix A:
+                                                                                                                      𝑟2
+this component.                                                                                                   1 ∑︁
+                                                                                                             𝒂= 2        A(·, 𝑖)                      (8)
+   ATON uses one learnable linear layer as feature mapping func-                                                 𝑟 𝑖=1
+tion 𝜙, parameterized by a weight matrix W ∈ R𝑑×𝐷 , to obtain a
+new embedding space with powerful representation ability. Simple                   where A(·, 𝑖) is the 𝑖-th column of matrix A indicating the attention
+linear transformation can also ensure the scalability of ATON.                     coefficient of one triplet.
+   Data object 𝒙 is transferred to a new embedding space via feature                   Attention weight is directly derived from the triplets. Hierar-
+mapping function 𝜙 as:                                                             chical complex interactions and relationships of intra-object and
+                                                                                   inter-object dimensions are modeled during the attention learning
+           W(1, 1)𝒙 (1) + W(1, 2)𝒙 (2) + · · · + W(1, 𝐷)𝒙 (𝐷)                    process thanks to the connectivity property of neural network.
+                                                              
+           W(2, 1)𝒙 (1) + W(2, 2)𝒙 (2) + · · · + W(2, 𝐷)𝒙 (𝐷)                        After getting attention coefficient vector 𝒂, the data objects in
+  𝜙 (𝒙) = 
+                                                                          (4)
+                                 ...                          
+                                                                                  triplets can be masked to create an attention-guided space. Note
+          W(𝑑, 1)𝒙 (1) + W(𝑑, 2)𝒙 (2) + · · · + W(𝑑, 𝐷)𝒙 (𝐷)                     that we also use attention coefficient vector 𝒂 to reversely mask the
+                                                              
+                                                                                   triplets. ATON yields attention-guided triplet set T𝑎 and reverse-
+where W(𝑖, 𝑗) indicates the element in the 𝑖-th row and the 𝑗-th
+                                                                                   attention-guided triplet set T̄𝑎 as follows.
+column of matrix W, and 𝒙 (𝑖) denotes the 𝑖-th element of vector
+                                                                                   T𝑎 = 𝛾 ′′ 𝛾 ′′ = ⟨𝒂 ⊗ 𝜙 (𝒐), 𝒂 ⊗ 𝜙 (𝒎𝑖 ), 𝒂 ⊗ 𝜙 (𝒏 𝑗 )⟩, 𝑖, 𝑗 ∈ {1, 2, · · · , 𝑟 }
+                                                                                         
+𝒙. Each dimension can be seen as a linear pattern (combination) of
+the original feature space.
+                                                                                   T̄𝑎 = 𝛾¯ ′′ 𝛾¯ ′′ = ⟨𝒂¯ ⊗ 𝜙 (𝒐), 𝒂¯ ⊗ 𝜙 (𝒎𝑖 ), 𝒂¯ ⊗ 𝜙 (𝒏 𝑗 )⟩, 𝑖, 𝑗 ∈ {1, 2, · · · , 𝑟 }
+                                                                                         
+   All the data objects in generated triplets are embedded into this
+                                                                                                                                                                      (9)
+new feature space to derive an embedded triplet set T𝑒 as:
+                                                                                   where ⊗ denotes element-wise product and 𝒂¯ = 1 − 𝒂 denotes
+      T𝑒 = 𝛾 ′ 𝛾 ′ = ⟨𝜙 (𝒐), 𝜙 (𝒎𝑖 ), 𝜙 (𝒏 𝑗 )⟩, 𝑖, 𝑗 ∈ {1, 2, · · · , 𝑟 } . (5)
+            
+                                                                                   reverse attention.
+   The dimensionality of the embedding space 𝑑 is a parameter of                      Attention-guided triplets are obtained by highlighting important
+ATON. The network can generate plentiful linear combinations                       dimensions. Reverse attention handles the triplets in an opposite
+of original features when giving a larger 𝑑. An empirical study of                 manner, which sheds light on these unimportant dimensions. We
+parameter 𝑑 is also included in Section 5.5.                                       use reverse attention to check these neglected dimensions and
+                                                                                   render the attention module to find important dimensions as com-
+4.2.3 Customized Self-Attention Learning Module. A customized                      prehensive as possible.
+self-attention learning module 𝜓 is constructed in this step, which
+aims to measure the contribution of each new embedding dimen-                      4.2.4 Triplet Deviation-Based Loss Function. The previous compo-
+sion to the outlierness of the queried outlier. Attention mechanism                nents are learnable after setting an objective. The queried outlier
+has been a de facto standard in many sequence-based tasks, e.g.,                   and its normal counterparts in triplets are expected to be sepa-
+language modeling and machine translation, to focus on the most                    rated clearly in the embedding space with attached attention. Data
+relevant part of the input to make decisions [3].                                  objects reversely masked by attention coefficient should be indis-
+   We construct a single-hidden-layer feedforward neural network                   tinguishable. Parameters in the ATON network are optimized to
+as the customized self-attention learning module 𝜓 in ATON. Hid-                   achieve these two targets. We define the loss of transferred triplet
+den layer 𝑓1 is with ℎ 1 hidden units, which is parameterized by                   𝛾 ′′ as follows:
+weight matrix W𝑎 ∈ Rℎ1 ×3𝑑 and ReLU activation function 𝜎. We                                                ∑︁                              ∑︁
+directly set ℎ 1 = ⌊1.5𝑑⌋ for simplicity. The weight matrix of out-                                 𝐿=𝛼               𝜆(𝛾 ′′ ) + (1 − 𝛼)                ¯ 𝛾¯ ′′ )
+                                                                                                                                                        𝜆(           (10)
+put layer 𝑓2 is denoted as W𝑎′ ∈ R𝑑×ℎ1 . This self-attention learning                                      𝛾 ′′ ∈T𝑎                        𝛾¯′′ ∈ T̄𝑎
+WWW ’21, April 19–23, 2021, Ljubljana, Slovenia                                                                                                             Xu et al.
+
+
+where 𝜆(𝛾 ′′ ) is the loss term of the triplet masked by attention                      where W∗⊤ represents the transpose of the optimized weight ma-
+coefficient, while 𝜆(¯ 𝛾¯ ′′ ) represents the loss term of the reversely                trix in the feature embedding module, 𝒂 ∗ is the optimized attention
+masked triplet.                                                                         coefficient vector, and | · | denotes that each element is transformed
+   The concept of triplet loss [29] is employed to calculate the loss                   to absolute value in a given matrix. Note that the coefficients in W∗
+term 𝜆(𝛾 ′′ ):                                                                          can be positive or negative values which indicate the impacts of
+                                                                                        original features to embedding dimensions from different directions.
+     𝜆(𝛾 ′′ ) = 𝜆 ⟨𝒐 attn, 𝒎𝑖attn, 𝒏attn
+                                         
+                                     𝑗 ⟩                                                And the absolute values of elements in W∗ represent the scale of
+                                                                   (11)
+              = max 𝑑 (𝒎𝑖attn, 𝒏attn           attn attn
+                                    𝑗 ) − 𝑑 (𝒎𝑖 , 𝒐      ) + 𝑒, 0                       impacts. Therefore, we use absolute value to measure their impact.
+                                                                                        If the absolute value of transformation coefficient of one feature is
+where ⟨𝒐 attn, 𝒎𝑖attn, 𝒏attn
+                           𝑗 ⟩ = ⟨𝒂 ⊗ 𝜙 (𝒐), 𝒂 ⊗ 𝜙 (𝒎𝑖 ), 𝒂 ⊗ 𝜙 (𝒏 𝑗 )⟩, 𝑑 (·, ·)       large (this coefficient is either positive or negative), a little change
+represents the Euclidean distance, and 𝑒 is the margin.                                 of the value of this feature will lead to a great change in embedding
+   This loss term is minimized to push 𝑑 (𝒎𝑖attn, 𝒏𝑖attn ) to be smaller                space. After getting attention value 𝒂 ∗ (importance of embedding
+and 𝑑 (𝒎𝑖attn, 𝒐 attn ) to be larger than 𝑑 (𝒎𝑖attn, 𝒏𝑖attn )+𝑒, which means            features) and the absolute value of embedding transformation ma-
+attention-guided embedding space is optimized to make the queried                       trix |W∗ | (impact of original features to embedding space), Equation
+outlier be isolated from the normal data. It is noteworthy that this                    13 is to transfer attention weights of the embedding space back to
+triplet loss term uses a relative concept of separability rather than an                the original space.
+absolute manner. It provides a referenced distance between normal                           We use ATON ′ to represent ATON combined with a proposed
+data, which can help ATON judges whether the queried outlier is                         threshold setting approach. ATON ′ yields a feature subspace E as
+effectively distinguished from normal data more accurately.                             outlier interpretation result. We choose a feature subspace with the
+   The loss term of reverse-attention-guided triplet ¯          𝜆(𝛾¯𝑖′′ ) is defined    smallest size but the weight summation is larger than a threshold,
+as follows:                                                                             which is represented as:
+           𝜆(𝛾¯ ′′ ) = 𝜆¯ ⟨𝒐 r-attn, 𝒎𝑖r-attn, 𝒏r-attn
+            ¯                                            
+                                                       ⟩
+                                                𝑗
+                                                                                 (12)                              E=       argÍmin                 |E |       (14)
+                     = 𝑑 (𝒎𝑖r-attn, 𝒏r-attn  ) − 𝑑 (𝒎𝑖r-attn, 𝒐 r-attn )                                                E ⊂ F,          𝒑 (𝑓 ) >𝑡
+                                       𝑗                                                                                         𝑓 ∈E
+                                                                                                    √︃
+where ⟨𝒐 r-attn, 𝒎𝑖r-attn, 𝒏r-attn
+                            𝑗      ⟩ = ⟨𝒂¯ ⊗ 𝜙 (𝒐), 𝒂¯ ⊗ 𝜙 (𝒎𝑖 ), 𝒂¯ ⊗ 𝜙 (𝒏 𝑗 )⟩.       where 𝑡 =        2 Í
+                                                                                                               𝑓 ∈ F 𝒑(𝑓 ) is the threshold, and |E | is the size of
+                                                                                                         𝐷
+   This loss term is optimized to narrow the difference between                                                          √︃
+distances of outlier-normal and normal-normal data objects within                       the feature subspace. We use 𝐷2 as the threshold ratio, which is
+reverse-attention-guided triplets. We use this loss term to guaran-                     negatively correlated with the original space dimensionality. All
+tee that the dimensions receiving less attention in the customized                      the features will be retained if the full dimension is 2. The threshold
+self-attention learning module are unimportant indeed. These di-                        ratio decreases with the increasing of the original dimensional-
+mensions should have very limited contributions to the separability                     ity. Fixed threshold ratio will result in a huge feature subspace if
+of the queried outlier. In other words, the self-attention learning                     the original data is in high-dimensional space, and thus we use
+module can be forced to capture important dimensions as compre-                         the fraction 𝐷2 to obtain a decreasing curve. We still maintain a
+hensive as possible.                                                                    relatively higher weight summation of interpretation subspace in
+   The coefficient of the loss function, i.e., 𝛼, is a hyper-parameter                  high-dimensional data by employing a square root function.
+of ATON to adjust the weight on these two terms. We normally
+set 𝛼 larger than 0.5 because the main objective is to learn a new                      4.3    Algorithm of ATON
+space that can effectively separate the target outlier from its normal                  Algorithm 1 presents the procedure of ATON. For simplicity, we
+counterparts. In an extreme case, if 𝛼 is 0, ATON will give all the                     do not explicitly present batch training process. In practical usage,
+dimensions with full attention to decrease the loss term ¯   𝜆(𝛾¯ ′′ ). We              ATON can be trained by setting proper epoch number and batch
+further detailedly examine the effect of 𝛼 in Section 5.5.                              size. Steps (1-3) sample data into two candidate sets and generate a
+   ATON is optimized by Adam optimizer by adjusting parameters                          set of triplets T . The network is trained in Steps (4-12). Step (6) con-
+in layers of the feature embedding module and the customized self-                      verts the original features to a new space by linear transformation
+attention learning module to minimize the loss function. Epoch                          (parameterized by matrix W). Customized self-attention learning
+number and batch size of the learning process are hyper-parameters                      module (parameterized by W𝑎 and W𝑎′ ) is in Step(7-9), which learns
+of ATON, which are tested in Section 5.5. We can finally obtain an                      attention coefficient vector 𝒂 and obtains attention-guided triplets
+attention-guided embedding space that the queried outlier can be                        T𝑎 and reverse-attention-guided triplets T̄𝑎 . Step (10-11) compute
+clearly separated from the normality.                                                   loss 𝐿 and optimizes the network. The feature weight vector is dis-
+                                                                                        tilled from the network in Step (13). A feature subspace is further
+4.2.5 Distilling Interpretation from ATON. To achieve the goal of                       obtained in Step (14). ATON finally returns 𝒑 and E in Step (15).
+outlier interpretation, we further distill the importance of origi-                         We then analyze time complexity of some key steps. The calcu-
+nal features from the embedding module and the customized self-                         lation of finding the neighbor data in Step (1) incurs 𝑂 (𝑁 × 𝐷 × 𝑟 ).
+attention learning module.                                                              Triplet set is with 𝑟 2 cardinality. Step (6) takes 𝑂 (𝑛_𝑒𝑝𝑜𝑐ℎ𝑠 ×𝑟 2 ×𝐷 ×
+   The weight vector of the original feature space 𝒑 ∈ R𝐷 is com-                       𝑑). Attention module takes 𝑂 (𝑛_𝑒𝑝𝑜𝑐ℎ𝑠 ×𝑟 2 × (3𝑑ℎ 1 +ℎ 1𝑑)) in Step
+puted as:                                                                               (8). The complexity of loss function in Step (10) is 𝑂 (𝑛_𝑒𝑝𝑜𝑐ℎ𝑠 ×
+                                  𝒑 = |W∗⊤ |𝒂 ∗                                 (13)    𝑟 2 × 𝑑). Hyper-parameter 𝑟 is normally set below 50, and 𝑑 is 64
+Beyond Outlier Detection: Outlier Interpretation
+by Attention-Guided Triplet Deviation Network                                                       WWW ’21, April 19–23, 2021, Ljubljana, Slovenia
+
+
+Algorithm 1 ATON(X, 𝒐)                                                 ATON and ATON ′ are compared with two types of outlier interpre-
+Input: X - data set, 𝒐 - queried outlier                               tation methods (Type-I: feature weight as output; Type-II: feature
+Output: 𝒑 - interpretation feature weight vector, E - interpretation   subspace as output) respectively. We choose five competitors, in-
+     feature subspace                                                  cluding both outlier interpretation methods and general classifier
+  1: Select neighbor 𝑟 data objects of 𝒐 into Xneighbor                explanation methods, which are introduced as follows:
+  2: Randomly sample 𝑟 data objects into Xrandom
+                                                                          • COIN and COIN ′ [17]: COIN is a state-of-the-art outlier
+  3: T ← 𝛾 = ⟨𝒐, 𝒎, 𝒏⟩|∀𝒎 ∈ Xrandom , ∀𝒏 ∈ Xneighbor                         interpretation method that outputs a sparse feature weight
+  4: Initialize W ∈ R𝑑×𝐷 , W𝑎 ∈ Rℎ 1 ×3𝑑 , W𝑎′ ∈ R𝑑×ℎ 1                      vector indicating the abnormality of each feature. We further
+  5: repeat                                                                  obtain feature subspace by only retaining features with pos-
+        T𝑒 ← 𝛾 ′ = ⟨W𝒐, W𝒎𝑖 , W𝒏 𝑗 ⟩|𝑖, 𝑗 ∈ {1, 2, · · · , 𝑟 }
+               
+  6:                                                                         itive weight and filtering features with zero weight, which
+  7:                             matrix U by Equation (6)
+        Flatten triplets to get                                            is denoted as COIN ′ .
+  8:    A ← 𝛿 W𝑎′ 𝜎 (W𝑎 U)                                                 • SiNNE [28]: SiNNE is the newest state-of-the-art outlier
+        𝒂 ← 𝑟12 𝑑𝑖=1 A(·, 𝑖)
+                 Í                                                           interpretation method utilizing score-and-search manner. It
+  9:
+ 10:    Generate T𝑎 and T̄𝑎 by Equation (9)                                  directly outputs feature subspace for each queried outlier.
+ 11:    𝐿 ← 𝛼 𝛾𝑖′′ ∈ T𝑎 𝜆(𝛾𝑖′′ ) + (1 − 𝛼) 𝛾¯′′ ∈ T̄𝑎 ¯
+                Í                         Í
+                                                      𝜆(𝛾¯𝑖′′ )            • SHAP [18] and LIME [27]: SHAP and LIME are classifier
+                                             𝑖                               explanation methods that are commonly used in the field of
+ 12:    Optimize network parameters by loss function 𝐿
+                                                                             interpretable machine learning. They explain a prediction by
+ 13: until Reach maximum epoch number 𝑛_𝑒𝑝𝑜𝑐ℎ𝑠
+                                                                             assigning each feature an importance value. They are used
+ 14: 𝒑 ← |W∗⊤ |𝒂 ∗
+                                                                             as Type-I competitors.
+ 15: Convert 𝒑 to E by Equation (14)
+ 16: return 𝒑, E
+                                                                       5.1.3 Parameter Settings and Implementations. ATON is performed
+                                                                       by using sampling number 𝑟 = 30, coefficient of loss function
+                                                                       𝛼 = 0.8, and embedding space dimension 𝑑 = 64. The network is
+or ⌊1.5𝐷⌋. Thus, ATON has quadratic time complexity w.r.t. data        trained by 10 epochs and 64 triplets per batch. The hidden layer in
+dimensionality and linear time complexity w.r.t. data size.            the attention net has 1.5𝑑 hidden units. We use Adam optimizer with
+                                                                       the 0.1 learning rate and apply a early stopping mechanism during
+5     EXPERIMENTS                                                      the network training process. COIN uses default recommended
+In this section, we conduct experiments to answer the following        parameters. In terms of SiNNE, the width of the beam search is set
+questions:                                                             as 10, the ensemble number is 100, and the sampling number is 8.
+                                                                       As for SHAP and LIME, we use SVM with RBF kernel as classifier.
+      • Effectiveness: How accurate are the outlier interpretation
+                                                                          All the outlier interpretation methods are implemented in Python.
+        results computed by ATON and its contenders on real-world
+                                                                       The source code of COIN is released by its original authors. We
+        datasets?
+                                                                       reimplement SiNNE. The classifier explanation methods SHAP and
+      • Case Studies: Can ATON produce meaningful interpretation
+                                                                       LIME are publicly-available Python packages.
+        results in typical cases?
+      • Ablation Study: Do key designs of ATON contribute to better    5.1.4 Ground-Truth Annotations. Evaluating outlier interpretation
+        interpretation results?                                        task requires benchmark datasets with ground-truth annotations
+      • Parameter Test: How do the hyper-parameters influence the      (ideal interpretation feature subspace for each outlier). To the best
+        interpretation performance of ATON?                            of our knowledge, there is no public-available real-world dataset
+      • Scalability Test: Does ATON have good scalability compared     with such annotations. To address this gap, we propose a new la-
+        to its competitors w.r.t. dimensionality and data size?        beling method and release the ground-truth annotations. For a
+We first introduce the experimental setup before detailing our em-     real-world dataset, we employ three different kinds of representa-
+pirical findings.                                                      tive outlier detection methods (i.e., ensemble-based method iForest
+                                                                       [16], probability-based method COPOD [15], and distance-based
+5.1     Experimental Setup                                             method HBOS [8]) to evaluate outlying degree of real outliers given
+5.1.1 Datasets. Twelve real-world outlier detection datasets are       every possible subspace. As defined in Section 3, a good explanation
+used in the experiments. Datasets WineR and WineW are short for        for an outlier should be a high-contrast subspace that the outlier
+Wine Quality (red) and Wine Quality (white). These two datasets are    explicitly demonstrates its outlierness, and outlier detectors can
+from Kaggle platform (https://www.kaggle.com/). Other datasets         easily and certainly predict it as an outlier in this subspace. There-
+are publicly-available at ODDS [26] (an outlier detection dataset      fore, the ground-truth interpretation for each outlier is defined
+library). All of these datasets are with real outliers or semantic     as the subspace that the outlier obtains the highest outlier score
+outliers. We skip the detection process and perform model-agnostic     among all the possible subspaces. Thus, we finally get three lists
+outlier interpretation methods to explain each real outlier.           of ground truth annotations according to three selected outlier de-
+                                                                       tectors. Note that the original dimensionality of some datasets is
+5.1.2 Competitors. ATON outputs a feature weight vector per            high. Such a brute-force searching process has exponential time
+queried outlier as explanation, and ATON ′ further yields interpre-    complexity. The number of possible subsets increases to 32,768
+tation feature subspace by the proposed threshold setting approach.    when a dataset has 15 dimensions, which means outlier detectors
+WWW ’21, April 19–23, 2021, Ljubljana, Slovenia                                                                                                    Xu et al.
+
+
+Table 1: Outlier Interpretation Performance of Type-I Methods. Three rows of each dataset represent interpretation performance
+using the ground-truth annotations generated by different outlier detectors (iForest, COPOD, and HBOS), respectively.
+
+        DATA                     Precision                        Jaccard Index                      AUPR                           AUROC
+                     ATON      COIN     SHAP      LIME    ATON    COIN    SHAP    LIME    ATON    COIN    SHAP    LIME    ATON    COIN    SHAP    LIME
+                      0.705    0.510    0.442     0.432   0.604   0.399   0.327   0.319   0.793   0.601   0.532   0.525   0.836   0.702   0.597   0.597
+         Pima         0.666    0.466    0.508     0.502   0.560   0.362   0.397   0.387   0.763   0.543   0.586   0.587   0.788   0.633   0.653   0.657
+                      0.600    0.246    0.489     0.421   0.537   0.198   0.430   0.351   0.680   0.348   0.571   0.520   0.782   0.572   0.715   0.693
+                      0.692    0.499    0.389     0.392   0.655   0.411   0.318   0.324   0.767   0.556   0.435   0.469   0.814   0.597   0.654   0.649
+      Vertebral       0.741    0.379    0.528     0.583   0.676   0.301   0.458   0.512   0.802   0.517   0.538   0.601   0.873   0.537   0.644   0.666
+                      0.507    0.270    0.083     0.177   0.493   0.253   0.078   0.173   0.597   0.341   0.240   0.318   0.732   0.451   0.507   0.527
+                      0.665    0.528    0.384     0.304   0.561   0.422   0.273   0.213   0.757   0.608   0.361   0.374   0.872   0.726   0.614   0.564
+        WineR         0.648    0.466    0.436     0.388   0.535   0.337   0.312   0.271   0.741   0.558   0.398   0.428   0.851   0.680   0.661   0.632
+                      0.496    0.446    0.348     0.389   0.428   0.378   0.277   0.326   0.599   0.503   0.379   0.428   0.764   0.714   0.707   0.651
+                      0.667    0.485    0.473     0.348   0.576   0.395   0.377   0.262   0.743   0.551   0.534   0.421   0.853   0.731   0.658   0.622
+       WineW          0.631    0.546    0.456     0.373   0.505   0.422   0.324   0.259   0.718   0.616   0.511   0.404   0.799   0.696   0.609   0.552
+                      0.525    0.291    0.473     0.388   0.467   0.233   0.412   0.325   0.612   0.385   0.545   0.466   0.800   0.646   0.642   0.612
+                      0.846    0.753    0.669     0.634   0.778   0.676   0.580   0.554   0.899   0.797   0.739   0.704   0.901   0.836   0.695   0.676
+        Heart         0.809    0.699    0.432     0.412   0.736   0.628   0.294   0.290   0.841   0.757   0.528   0.509   0.878   0.798   0.542   0.535
+                      0.784    0.724    0.554     0.546   0.725   0.653   0.489   0.479   0.834   0.780   0.602   0.577   0.872   0.825   0.611   0.608
+                      0.637    0.458    0.425     0.299   0.533   0.354   0.312   0.213   0.746   0.589   0.497   0.400   0.836   0.734   0.674   0.558
+     Ionosphere       0.682    0.568    0.554     0.495   0.558   0.427   0.424   0.368   0.767   0.635   0.635   0.578   0.835   0.681   0.735   0.718
+                      0.648    0.546    0.482     0.351   0.561   0.456   0.389   0.267   0.706   0.657   0.579   0.422   0.846   0.778   0.747   0.631
+                      0.687    0.539    0.619     0.492   0.563   0.405   0.495   0.379   0.769   0.589   0.653   0.550   0.794   0.687   0.704   0.591
+         letter       0.688    0.490    0.579     0.507   0.560   0.347   0.435   0.372   0.768   0.500   0.549   0.483   0.816   0.642   0.671   0.592
+                      0.636    0.433    0.606     0.415   0.570   0.363   0.536   0.349   0.703   0.529   0.657   0.484   0.802   0.762   0.773   0.619
+                      0.741    0.179    0.651     0.401   0.673   0.122   0.566   0.303   0.817   0.256   0.738   0.460   0.916   0.451   0.853   0.728
+     Arrhythmia       0.567    0.207    0.514     0.440   0.478   0.144   0.417   0.337   0.664   0.297   0.599   0.492   0.828   0.464   0.731   0.722
+                      0.692    0.119    0.659     0.364   0.655   0.093   0.634   0.323   0.756   0.206   0.705   0.447   0.919   0.459   0.865   0.768
+                      0.695    0.529    0.502     0.352   0.597   0.430   0.408   0.263   0.734   0.602   0.566   0.419   0.869   0.717   0.715   0.655
+        WBC           0.569    0.356    0.425     0.389   0.480   0.257   0.321   0.294   0.671   0.508   0.530   0.498   0.830   0.634   0.691   0.684
+                      0.614    0.564    0.548     0.558   0.526   0.495   0.468   0.470   0.700   0.635   0.631   0.586   0.882   0.780   0.822   0.770
+                      0.637    0.541    0.636     0.488   0.515   0.424   0.512   0.374   0.674   0.610   0.686   0.567   0.772   0.705   0.799   0.672
+      Satimage        0.691    0.531    0.545     0.483   0.554   0.398   0.405   0.351   0.727   0.610   0.643   0.576   0.834   0.674   0.717   0.631
+                      0.792    0.730    0.792     0.685   0.764   0.706   0.761   0.658   0.836   0.776   0.807   0.723   0.943   0.901   0.887   0.834
+                      0.724    0.513    0.668     0.552   0.615   0.407   0.552   0.417   0.813   0.580   0.771   0.650   0.851   0.714   0.776   0.660
+        Speech        0.672    0.579    0.653     0.581   0.545   0.448   0.516   0.434   0.776   0.624   0.777   0.695   0.814   0.730   0.783   0.666
+                      0.731    0.368    0.645     0.470   0.691   0.318   0.600   0.410   0.794   0.468   0.712   0.557   0.927   0.765   0.817   0.697
+                      0.699    0.631    0.686     0.677   0.568   0.488   0.555   0.544   0.816   0.690   0.814   0.787   0.807   0.741   0.809   0.768
+      Optdigits       0.708    0.605    0.634     0.669   0.575   0.461   0.488   0.538   0.825   0.647   0.767   0.766   0.795   0.719   0.727   0.729
+                      0.817    0.452    0.869     0.795   0.772   0.414   0.834   0.748   0.863   0.580   0.910   0.850   0.913   0.886   0.942   0.903
+      Average         0.675    0.479    0.538     0.465   0.589   0.390   0.444   0.374   0.752   0.557   0.603   0.537   0.840   0.688   0.715   0.662
+    Improvement         -      40.9%    25.5%     45.2%     -     51.0%   32.7%   57.5%     -     35.0%   24.7%   40.0%     -     22.1%   17.5%   26.9%
+
+
+need to perform 32,768 times on a single dataset. Therefore, we                       In terms of the comparison between Type-I methods that output
+employ PCA on datasets with over 15 features to extract 10 features.               feature weight, we need to transfer the computed weight vector to
+The labeling procedure and subsequent experiments are conducted                    interpretation feature subspace by gathering top-ranked features
+on these processed datasets.                                                       with large weight into a subset. For simplicity, the subset size is
+                                                                                   the same as the real length of the ground-truth subspace. It is a fair
+                                                                                   competition because all the Type-I interpretation methods are incor-
+5.1.5 Performance Evaluation Metrics. After getting the ground
+                                                                                   porated with this transformation process. We employ precision and
+truth explanation, we can quantitatively measure the performance
+                                                                                   Jaccard index to evaluate the transferred subspace. Note that recall
+of different outlier interpretation methods.
+                                                                                   is equal to precision if we assume the ground-truth subspace and
+   Type-II interpretation methods directly output feature subspace
+                                                                                   the predicted subspace are with the same size, and thus we only use
+for each queried outlier, they can be compared without any further
+                                                                                   precision here. Jaccard index is frequently utilized to evaluate the
+processing. We utilize three evaluation metrics, i.e., precision, recall,
+                                                                                   similarity of two sets, which is calculated as |G ∩ P |/|G ∪ P |. Type-I
+and 𝐹 1 score to evaluate the quality of interpretation subspaces.
+                                                                                   interpretation methods can yield a feature ranking according to the
+Let the ground-truth subspace as G and the predicted subspace
+                                                                                   computed weight vector. Hence, to directly and impartially evaluate
+as P, precision is defined as |G ∩ P |/|P |, recall is |G ∩ P |/|G|,
+                                                                                   the ranking quality without determining the size of explanation
+and 𝐹 1 score is harmonic mean of precision and recall, i.e., 𝐹 1 =
+2(precision × recall)/(precision + recall).
+Beyond Outlier Detection: Outlier Interpretation
+by Attention-Guided Triplet Deviation Network                                                                        WWW ’21, April 19–23, 2021, Ljubljana, Slovenia
+
+
+subspace, we further employ the Area under the Precision-Recall                         5.2.2 Results and Analysis. Table 1 and Table 2 show the interpreta-
+curve (AUPR) and the Area under the ROC curve (AUROC).                                  tion performance of Type-I and Type-II methods, respectively. The
+   All of these metrics are computed to evaluate the interpretation                     best performance on each dataset is highlighted in bold. ATON is
+subspace of each queried outlier, and we report the average interpre-                   the best performer on nine out of twelve datasets according to four
+tation performance of all the outliers in each dataset. These metrics                   evaluation metrics and the ground-truth annotations generated by
+range from 0 to 1, and higher values indicate better performance.                       three outlier detectors. 𝐹 1 score of ATON ′ is higher than all of its
+                                                                                        contenders on seven datasets. Averagely, ATON and ATON ′ pro-
+                                                                                        duce significant performance leap over the state-of-the-art outlier
+Table 2: Outlier Interpretation Performance of Type-II Meth-                            interpretation methods and classifier explanation methods.
+ods. Three rows of each dataset denote interpretation per-                                  ATON can generate more accurate interpretation results on real-
+formance using different ground-truth annotations. Imp. is                              world datasets, i.e., outliers can be better identified by different
+short for average improvement rate of 𝐹 1 score.                                        kinds of outlier detectors when using corresponding interpretation
+                                                                                        subspaces. State-of-the-art outlier interpretation method COIN and
+      DATA                        𝐹 1 score (Precision / Recall)                        COIN ′ [17] fail to obtain sufficient results. COIN ′ tends to produce
+                      ATON ′                  SiNNE                   COIN ′            very large interpretation subspaces and obtain a high recall, but
+             0.673 (0.627 / 0.727)      0.588 (0.546 / 0.637)   0.553 (0.384 / 0.985)   the generated subspace is mixed with many irrelevant features,
+     Pima    0.650 (0.618 / 0.687)      0.557 (0.530 / 0.588)   0.586 (0.417 / 0.986)   i.e., its precision is very low. The overall performance 𝐹 1 of COIN ′
+             0.531 (0.420 / 0.721)      0.441 (0.347 / 0.604)   0.415 (0.262 / 0.995)
+                                                                                        is still inferior compared to the proposed ATON. Note that the
+             0.628 (0.520 / 0.793)      0.597 (0.512 / 0.716)   0.468 (0.307 / 0.987)
+   Vertebral 0.703 (0.593 / 0.864)      0.565 (0.492 / 0.662)   0.524 (0.355 / 0.998)   original work of COIN [17] conducts experiments by first appending
+             0.406 (0.283 / 0.720)      0.389 (0.280 / 0.637)   0.329 (0.197 / 0.997)   multiple noise features and simply assuming all the original features
+             0.661 (0.582 / 0.765)      0.505 (0.443 / 0.588)   0.429 (0.297 / 0.777)   as correct interpretation results, which is different from our settings.
+    WineR    0.652 (0.606 / 0.706)      0.493 (0.459 / 0.533)   0.450 (0.323 / 0.741)
+             0.481 (0.379 / 0.655)      0.361 (0.294 / 0.466)   0.408 (0.265 / 0.895)
+                                                                                        This experiment setting is somewhat reasonable when the ground-
+             0.619 (0.534 / 0.737)      0.531 (0.444 / 0.660)   0.436 (0.287 / 0.903)   truth interpretation subspace is unavailable. Arguably, these noise
+    WineW    0.605 (0.609 / 0.601)      0.528 (0.518 / 0.538)   0.497 (0.357 / 0.819)   features can be easily identified because they do not have any
+             0.479 (0.369 / 0.684)      0.388 (0.292 / 0.579)   0.380 (0.236 / 0.977)   correlation with the original features. Thus, COIN is ineffective
+             0.730 (0.659 / 0.817)      0.738 (0.694 / 0.787)   0.619 (0.510 / 0.787)
+             0.770 (0.763 / 0.778)      0.578 (0.597 / 0.561)   0.664 (0.592 / 0.757)   in these practical situations. We also analyze its possible flaws in
+     Heart
+             0.656 (0.563 / 0.786)      0.630 (0.556 / 0.726)   0.576 (0.452 / 0.792)   Section 2. SiNNE employs score-and-search manner, which means it
+             0.622 (0.520 / 0.775)      0.482 (0.457 / 0.512)   0.629 (0.613 / 0.646)   can only produce suboptimal results. It is surprising to find that the
+  Ionosphere 0.671 (0.644 / 0.700)      0.454 (0.523 / 0.401)   0.573 (0.643 / 0.517)   classifier explanation method SHAP can obtain comparably good
+             0.618 (0.507 / 0.793)      0.433 (0.414 / 0.455)   0.647 (0.610 / 0.690)
+             0.665 (0.668 / 0.663)      0.668 (0.698 / 0.641)   0.562 (0.398 / 0.960)   performance. It might be due to the similar nature between classifier
+    Letter   0.664 (0.672 / 0.656)      0.614 (0.649 / 0.583)   0.554 (0.390 / 0.951)   explanation and outlier interpretation (i.e., both of them investigate
+             0.545 (0.446 / 0.698)      0.616 (0.513 / 0.771)   0.403 (0.254 / 0.977)   the effect of features to separate the queried outlier with other
+             0.676 (0.551 / 0.875)      0.564 (0.448 / 0.763)   0.367 (0.225 / 1.000)
+                                                                                        normal data). SHAP is a very powerful and well-known method
+  Arrhythmia 0.596 (0.507 / 0.724)      0.499 (0.417 / 0.621)   0.398 (0.249 / 0.999)
+             0.557 (0.401 / 0.910)      0.473 (0.333 / 0.814)   0.273 (0.158 / 1.000)   to explain the classifier predictions. Nevertheless, our method still
+             0.604 (0.482 / 0.807)      0.570 (0.464 / 0.740)   0.560 (0.532 / 0.591)   has advantages to handle outlier interpretation task.
+     WBC     0.601 (0.516 / 0.719)      0.449 (0.390 / 0.531)   0.461 (0.494 / 0.432)       It is noteworthy that all the outlier interpretation methods cannot
+             0.579 (0.445 / 0.829)      0.502 (0.393 / 0.695)   0.639 (0.580 / 0.710)
+             0.585 (0.520 / 0.669)      0.429 (0.463 / 0.400)   0.429 (0.273 / 1.000)
+                                                                                        yield very accurate performance (e.g., over 0.9 precision or Jaccard
+   Satimage  0.644 (0.659 / 0.629)      0.410 (0.534 / 0.332)   0.539 (0.369 / 1.000)   index). It is mainly due to two reasons: (i) Outlier interpretation is a
+             0.541 (0.379 / 0.945)      0.442 (0.348 / 0.606)   0.247 (0.141 / 1.000)   non-trivial task. It is very challenging to capture completely correct
+             0.693 (0.690 / 0.697)      0.718 (0.707 / 0.730)   0.525 (0.356 / 1.000)   feature subspace, especially in complex real-world datasets. The
+    Speech   0.653 (0.695 / 0.615)      0.654 (0.683 / 0.628)   0.549 (0.378 / 1.000)
+             0.615 (0.476 / 0.871)      0.626 (0.486 / 0.879)   0.342 (0.206 / 1.000)   ground-truth subspace normally has no more than five features, i.e.,
+             0.671 (0.759 / 0.601)      0.654 (0.732 / 0.591)   0.607 (0.437 / 0.995)   the precision decreases to only 0.6 when interpretation approaches
+   Optdigits 0.672 (0.749 / 0.610)      0.662 (0.727 / 0.607)   0.593 (0.423 / 0.992)   incorrectly retrieve two features; and (ii) We use three outlier detec-
+             0.557 (0.409 / 0.873)      0.580 (0.430 / 0.892)   0.298 (0.175 / 1.000)
+                                                                                        tors to imitate human analysts. Different outlier detectors may favor
+    Average     0.619 (0.551 / 0.742)   0.539 (0.495 / 0.624)   0.487 (0.365 / 0.885)
+                                                                                        inconsistent feature subspace as interpretation. The ground-truth
+     Imp.                 -                    14.8%                   27.1%
+                                                                                        annotations generated by outlier detectors might still be unable to
+                                                                                        fully represent the real interpretations in practical scenarios. These
+                                                                                        datasets are from various domains, i.e., proper domain knowledge
+                                                                                        should be considered when interpreting outliers.
+5.2     Effectiveness of Interpretation
+5.2.1 Settings. Seven outlier interpretation methods (i.e., ATON,
+ATON ′ , COIN, COIN ′ , SiNNE, SHAP, and LIME) are performed on                         5.3    Case Studies
+twelve real-world datasets. As introduced in Section 5.1.5, Type-I                      5.3.1 Settings: This experiment aims to visualize the effect of dif-
+methods are evaluated using four metrics (precision, Jaccard index,                     ferent outlier interpretation methods and further illustrates the ef-
+AUPR, and AUROC), while Type-II methods are estimated by preci-                         fectiveness of ATON through some case studies. We employ MNIST
+sion, recall, and 𝐹 1 score. We independently execute these methods                     dataset in this experiment. MNIST is a popular image dataset con-
+ten times on each dataset and report the average performance.                           taining handwritten digits in 28×28 pixels. We first flatten the
+WWW ’21, April 19–23, 2021, Ljubljana, Slovenia                                                                                                                                           Xu et al.
+
+
+                                                                                                              Precision                                          Jaccard Index
+                                                                                                              Optdigits                                              Optdigits
+                                                                                                       Pima       0.8 Speech                                Pima         0.8 Speech
+                                                                                                                  0.7                                                    0.7
+                                                                                              Vertebral           0.6      Satimage                 Vertebral            0.6      Satimage
+                      ATON       ATON′                             ATON       ATON′                               0.5                                                    0.5
+                                                                                                                  0.4                                                    0.4
+                                                                                             WineR                             WBC              WineR                                 WBC
+
+
+  Normal   Queried     COIN       SiNNE       Normal   Queried     COIN       SiNNE            WineW                          Arrhythmia            WineW                           Arrhythmia
+   Data    Outlier                             Data    Outlier
+                                                                                                      Heart                Letter                           Heart                Letter
+                                                                                                              Ionosphere                                            Ionosphere
+
+                                                                                                               AUPR                                                  AUROC
+                      SHAP        LIME                             SHAP       LIME
+                                                                                                              Optdigits                                              Optdigits
+                     Interpretation Results                      Interpretation Results                Pima       0.85 Speech                               Pima         0.90 Speech
+                                                                                                                  0.75                                                   0.85
+                                                                                              Vertebral                         Satimage            Vertebral            0.80      Satimage
+                                                                                                                  0.65
+                                                                                                                                                                         0.75
+Figure 3: Interpretation Results of Two Outlier Images (Num-                                                      0.55                                                   0.70
+ber 5 and 6) from MNIST Dataset. Results of Type-I out-                                      WineR                                  WBC         WineR                                  WBC
+
+lier interpretation methods are shown in white background.
+                                                                                               WineW                          Arrhythmia            WineW                           Arrhythmia
+Darker red pixels indicate higher interpretation feature
+weight. Type-II interpretation results are in blue background.                                        Heart                Letter                           Heart                Letter
+                                                                                                              Ionosphere                                            Ionosphere
+The interpretation subspace is highlighted in red.                                                                   ATON            Abla-I   Abla-II           Abla-III
+
+
+
+                                                                                          Figure 4: Ablation Study Results. Outlier interpretation per-
+images and obtain vectors with 784 dimensions. It is then prepro-
+                                                                                          formance (precision, Jaccard Index, AUPR, and AUROC) of
+cessed by setting one class as normal data and sampling 20 images
+                                                                                          ATON and its three ablated versions on twelve datasets.
+from the other class as anomalies. Two imbalanced datasets are
+then generated by choosing relatively similar numbers as normal
+and anomaly data, i.e., 3 vs. 5 and 0 vs. 6. In this experiment, ATON                     Table 3: Average Performance of Ablation Study and Improve-
+is performed by setting the hyper-parameter 𝑑 (dimension of the                           ment Rates of ATON over its Ablated Versions
+embedding space) as 512 because these cases are with relatively
+high original dimensions. Other hyper-parameters are kept the                                Method           Precision             Jaccard Index           AUPR                   AUROC
+same as reported configurations in the experimental setup section.                            ATON            0.675                     0.589               0.752                0.840
+                                                                                              Abla-I       0.653 (3.4%)              0.563 (4.4%)        0.731 (2.9%)         0.824 (1.9%)
+5.3.2 Results and Analysis. Figure 3 shows the interpretation re-                             Abla-II     0.621 (8.7%)              0.529 (11.2%)       0.701 (7.3%)          0.799 (5.1%)
+sults on MNIST. We also present the normal pattern image (average                             Abla-III    0.541 (24.8%)             0.453 (29.8%)       0.622 (20.9%)        0.751 (11.91%)
+value of all the normal data) and the queried outlier image using a
+black background. The results of COIN ′ are omitted because they
+can be directly obtained by using a single red color to tint on the                       ATON directly learns attention of the original space. This ablated
+dark red pixels in the image of COIN. ATON successfully high-                             version is denoted as Abla-II. Besides, the triplet deviation-based
+lights all the pixels that the outlier behaves differently compared                       loss function is replaced with a multi-layer perceptron classifier
+to the normal pattern. The most different part, e.g., the right-most                      and cross-entropy loss in ablated version Abla-III. We use Abla-
+part of number 5, is given the highest weight, as shown in the                            III to investigate the contribution of triplet deviation loss. Other
+interpretation image of ATON ′ . Note that the red color in digit 3’s                     components of these variants stay the same with ATON.
+left-hand positions in ATON’s result indicates that the outlier digit                     5.4.2 Results and Analysis. The interpretation performance of ATON
+does not pass these pixels but these positions should have trace in                       and its three ablated versions is shown in Figure 4. Each method cor-
+the normal condition, which means these pixels are also important                         responds to one circle in Figure 4, indicating the average value over
+to distinguish digit 5 and digit 3. LIME and COIN can also find the                       the results evaluated by three annotation lists on twelve datasets.
+correct part, but SHAP cannot produce meaningful results. SiNNE                           A summary of the average performance is presented in Table 3. We
+is also ineffective and inefficient in high-dimensional data. It only                     report the average performance of all the datasets and the improve-
+reports two pixels.                                                                       ment rate of ATON over its three ablated variants. ATON prevails
+                                                                                          Abla-I on almost all the twelve datasets, which obtains noteworthy
+5.4     Ablation Study                                                                    improvement. ATON outperforms Abla-II and Abla-III on all the
+5.4.1 Settings. This section is to validate the significance of three                     datasets and achieves more significant performance improvement.
+key components of ATON. ATON uses the customized self-attention                              This experiment validates that each component in ATON does
+learning module to learn contributions of embedding dimensions.                           contribute to better interpretation performance. It is surprising to
+We remove this component and only use triplet deviation to opti-                          find that Abla-I can achieve very good results by only using fea-
+mize the feature embedding module. This variant is to corroborate                         ture embedding module and triplet deviation-based loss function.
+whether the attention module brings better interpretation results,                        This also indicates that the feature embedding module is impor-
+which is denoted as Abla-I. To test the effect of the feature embed-                      tant for outlier interpretation. Higher-level feature patterns and
+ding module, the first linear transformation layer is removed, and                        richer semantics can be explicitly unfolded in this embedding space,
+Beyond Outlier Detection: Outlier Interpretation
+by Attention-Guided Triplet Deviation Network                                                            WWW ’21, April 19–23, 2021, Ljubljana, Slovenia
+
+                                                                                  Precision      Jaccard Index         AUPR               AUROC
+and thus the outlying behaviors of the queried outlier can be di-
+rectly seized. The results of Abla-II also quantitatively validate the
+significance of the feature embedding module. Note that Abla-I
+has comparably or slightly better performance on two exceptions
+(datasets Arrhythmia and Optdigits) compared to ATON. It is be-
+cause ATON might suffer from overfitting problem on these two
+datasets. Parameters of the attention module, e.g., hidden layer num-
+ber and hidden unit number per layer, can be further adjusted to
+obtain more satisfactory performance in practical scenarios. Abla-I
+might have slight advantages on a few datasets thanks to its plain
+structure. However, ATON is still superior on most of the datasets,
+and the attention module is also proved to be an effective compo-
+nent. Triplet deviation-based loss function plays a fundamental role
+in the learning process of ATON. A powerful classifier can still well
+separate the queried outlier and the normality in a poor subspace,
+and thus Abla-III only obtains very inferior performance.
+
+
+5.5     Parameter Test
+5.5.1 Settings. We investigate the influence of different hyper-
+parameter settings of ATON to its interpretation performance.
+There are five hyper-parameters in ATON, i.e., sampling number 𝑟 ,
+coefficient 𝛼 in the loss function, dimensions of embedding space
+𝑑, network training batch size, and training epoch number.
+
+
+5.5.2 Results and Analysis. Parameter test results are shown in
+Figure 5. We report results on six representative datasets and the
+average performance over all the twelve datasets.
+    Generally, interpretation performance improves when sampling            Figure 5: Parameter Test Results. Outlier interpretation per-
+number 𝑟 and embedding dimension 𝑑 increase. Higher sampling                formance (precision, Jaccard Index, AUPR, and AUROC) of
+number 𝑟 directly leads to more abundant training data for the              ATON with different hyper-parameters (𝑟 , 𝛼, 𝑑, batch size,
+network. Rich normal samples can better represent the normality.            and epoch number).
+Higher dimension means the new embedding space is with richer
+semantics. Each dimension can be seen as a pattern indicating one
+combination of the original features. ATON can accordingly gener-           5.6    Scalability Test
+ate more reliable interpretation with the help of a large number of
+                                                                            5.6.1 Settings. We create a group of synthetic datasets to evalu-
+patterns. Nevertheless, the improvement of interpretation quality
+                                                                            ate the scalability of different outlier interpretation methods w.r.t.
+is limited when 𝑟 reaches 30 and 𝑑 reaches 64. Improving normal
+                                                                            data dimensionality and data size. Five datasets are generated with
+samples and embedding dimension can only bring bounded gain.
+                                                                            varying data dimensions ({8, 32, 128, 512, 2,048}) and fixed data size
+The normality might be fully represented with 30 sampling number.
+                                                                            (1,000). Another five datasets are with different data size ({1,000,
+64-dimension linear layer is powerful enough as these processed
+                                                                            4,000, 16,000, 64,000, 256,000}) and the same data dimensionality
+datasets are with only less than 15 features.
+                                                                            (32). In these datasets, outliers account for 0.5% of the whole dataset.
+    As for coefficient 𝛼 in the loss function, different datasets have
+inconsistent situations when changing 𝛼, whereas ATON is nor-               5.6.2 Results and Analysis. Figure 6 shows the scalability test re-
+mally robust to this parameter (the fluctuation is only within 0.05).       sults w.r.t. data dimensionality and data size. ATON presents out-
+It is recommended to set 𝛼 as 0.8 for most of the datasets. The loss        standing scalability compared to other outlier interpretation meth-
+function can consider both attention-guided triple-wise distance            ods. Our method runs approximate two magnitudes faster than
+and the behavior of triplets with opposite attention. It is better to       SHAP and LIME on high-dimensional datasets. Neural network
+attach more importance to the attention-guided element but totally          can efficiently handle high-dimensional data with the help of the
+ignoring the opposite attention is still inferior on some datasets.         development of GPU. The competitor COIN has comparably fast
+    In terms of the batch size and the epoch number, ATON performs          execution speed w.r.t. data dimensionality, but SiNNE runs out of
+stably w.r.t. different configurations. The training data is 900 triplets   memory on the dataset with 2,048 dimensions. In terms of the scale-
+when the sampling number is 30. It is better to choose a larger batch       up test w.r.t. data size, ATON, SHAP, and LIME have linear time
+size, say 512, to guide the network to reach the global optima. Em-         complexity. ATON needs the shortest execution time because it
+pirically, ATON can be well trained by 10 epochs. The performance           utilizes sampling in the triplet generator. COIN fail to return a result
+is stable because we adopt the early stopping mechanism in ATON.            within two days on the dataset containing 64,000 data objects.
+WWW ’21, April 19–23, 2021, Ljubljana, Slovenia                                                                                                                                                                             Xu et al.
+
+
+                               105                                                                  105                                         [9] Nikhil Gupta, Dhivya Eswaran, Neil Shah, Leman Akoglu, and Christos Faloutsos.
+                                         ATON                                                               ATON
+
+
+
+
+ Execution Time (in seconds)                                          Execution Time (in seconds)
+                                         COIN                                                               COIN                                    2018. Beyond outlier detection: Lookout for pictorial explanation. In ECML PKDD.
+                                 4                                                                    4     SiNNE
+                               10        SiNNE                                                      10                                              Springer, 122–138.
+                                         SHAP                                                               SHAP
+                                                                                                            LIME
+                                                                                                                                               [10] Songlei Jian, Guansong Pang, Longbing Cao, Kai Lu, and Hang Gao. 2018. Cure:
+                                         LIME                                                                                                       Flexible categorical data representation by hierarchical coupling learning. IEEE
+                               103                                                                  103
+                                                                                                                                                    Transactions on Knowledge and Data Engineering 31, 5 (2018), 853–866.
+                                                                                                                                               [11] Jacob Kauffmann, Klaus-Robert Müller, and Grégoire Montavon. 2020. Towards
+                               102
+                                                                                                    102                                             explaining anomalies: a deep Taylor decomposition of one-class models. Pattern
+                                                                                                                                                    Recognition 101 (2020), 107198.
+                               101                                                                                                             [12] Fabian Keller, Emmanuel Müller, Andreas Wixler, and Klemens Böhm. 2013.
+                                                                                                    101
+                                                                                                                                                    Flexible and adaptive subspace search for outlier analysis. In CIKM. 1381–1390.
+                                     8    32     128    512    2048                                  1000   4000     16000      64000 256000   [13] Martin Kopp, Tomáš Pevnỳ, and Martin Holeňa. 2020. Anomaly explanation with
+                                         Data Dimensionality                                                        Data Size                       random forests. Expert Systems with Applications 149 (2020), 113187.
+                                                                                                                                               [14] Chia-Tung Kuo and Ian Davidson. 2016. A framework for outlier description
+                                                                                                                                                    using constraint programming. In AAAI. 1237–1243.
+Figure 6: Scalability Test Results w.r.t. Data Dimensionality                                                                                  [15] Zheng Li, Yue Zhao, Nicola Botta, Cezar Ionescu, and Xiyang Hu. 2020. COPOD:
+and Data Size. SiNNE runs out of memory on the dataset with                                                                                         Copula-Based Outlier Detection. In ICDM. IEEE.
+                                                                                                                                               [16] Fei Tony Liu, Kai Ming Ting, and Zhi-Hua Zhou. 2012. Isolation-Based Anomaly
+2,048 dimensions. COIN cannot output a result within two                                                                                            Detection. ACM Transactions on Knowledge Discovery from Data 6, 1, Article 3
+days on the dataset with 64,000 data objects.                                                                                                       (2012), 39 pages.
+                                                                                                                                               [17] Ninghao Liu, Donghwa Shin, and Xia Hu. 2018. Contextual outlier interpretation.
+                                                                                                                                                    In IJCAI. 2461–2467.
+                                                                                                                                               [18] Scott M Lundberg and Su-In Lee. 2017. A unified approach to interpreting model
+6                                CONCLUSION AND FUTURE WORK                                                                                         predictions. In NeuraIPS. 4765–4774.
+                                                                                                                                               [19] Meghanath Macha and Leman Akoglu. 2018. Explaining anomalies in groups
+This paper addresses the problem of how to explain outliers de-                                                                                     with characterizing subspace rules. Data Mining and Knowledge Discovery 32, 5
+tected by any black-box outlier detector. We introduce ATON, a                                                                                      (2018), 1444–1480.
+novel attention-guided triplet deviation network, which is model-                                                                              [20] Barbora Micenková, Raymond T Ng, Xuan-Hong Dang, and Ira Assent. 2013.
+                                                                                                                                                    Explaining outliers by subspace separability. In ICDM. IEEE, 518–527.
+agnostic and domain-agnostic. Instead of following the popular                                                                                 [21] Christoph Molnar. 2020. Interpretable Machine Learning. Lulu. com.
+subspace searching manner, ATON directly learns an optimal em-                                                                                 [22] Guansong Pang, Longbing Cao, Ling Chen, and Huan Liu. 2018. Learning rep-
+                                                                                                                                                    resentations of ultrahigh-dimensional data for random distance-based outlier
+bedding space with attached attention to better seize the outlierness                                                                               detection. In SIGKDD. 2041–2050.
+of the queried outlier, leading to more accurate interpretation re-                                                                            [23] Guansong Pang, Chunhua Shen, Longbing Cao, and Anton van den Hengel. 2020.
+sults. Extensive experiments show that ATON achieves significant                                                                                    Deep learning for anomaly detection: A review. arXiv preprint arXiv:2007.02500
+                                                                                                                                                    (2020).
+performance improvement over the state-of-the-art outlier inter-                                                                               [24] Guansong Pang, Chunhua Shen, and Anton van den Hengel. 2019. Deep anomaly
+pretation methods and the general classifier explanation methods                                                                                    detection with deviation networks. In SIGKDD. 353–362.
+on real-world datasets. ATON can give meaningful interpretation                                                                                [25] Tomáš Pevnỳ and Martin Kopp. 2014. Explaining anomalies with sapling random
+                                                                                                                                                    forests. In Information Technologies-Applications and Theory Workshops, Posters,
+results in visualized cases. ATON also obtains outstanding scala-                                                                                   and Tutorials.
+bility compared to its competitors. In the future, we plan to apply                                                                            [26] Shebuti Rayana. 2016. ODDS Library. http://odds.cs.stonybrook.edu
+                                                                                                                                               [27] Marco Tulio Ribeiro, Sameer Singh, and Carlos Guestrin. 2016. "Why should I
+ATON to failure diagnosis of JointCloud service systems [32].                                                                                       trust you?" Explaining the predictions of any classifier. In SIGKDD. ACM, 1135–
+                                                                                                                                                    1144.
+ACKNOWLEDGMENTS                                                                                                                                [28] Durgesh Samariya, Kai Ming Ting, and Sunil Aryal. 2020. A new effective and
+                                                                                                                                                    efficient measure for outlying aspect mining. arXiv preprint arXiv:2004.13550
+This work is supported by the National Key Research and Devel-                                                                                      (2020).
+opment Program of China (2016YFB1000101), the National Natu-                                                                                   [29] Florian Schroff, Dmitry Kalenichenko, and James Philbin. 2015. Facenet: A unified
+                                                                                                                                                    embedding for face recognition and clustering. In CVPR. 815–823.
+ral Science Foundation of China (No. 62002371, No.61379052, and                                                                                [30] Md Amran Siddiqui, Alan Fern, Thomas G Dietterich, and Weng-Keen Wong.
+No.61472439), the Science Foundation of Ministry of Education of                                                                                    2019. Sequential feature explanations for anomaly detection. ACM Transactions
+                                                                                                                                                    on Knowledge Discovery from Data 13, 1 (2019), 1–22.
+China (No.2018A02002), and the Natural Science Foundation for                                                                                  [31] Nguyen Xuan Vinh, Jeffrey Chan, Simone Romano, James Bailey, Christopher
+Distinguished Young Scholars of Hunan Province (No.14JJ1026).                                                                                       Leckie, Kotagiri Ramamohanarao, and Jian Pei. 2016. Discovering outlying aspects
+                                                                                                                                                    in large datasets. Data Mining and Knowledge Discovery 30, 6 (2016), 1520–1555.
+                                                                                                                                               [32] Huaimin Wang, Peichang Shi, and Yiming Zhang. 2017. JointCloud: A Cross-
+REFERENCES                                                                                                                                          Cloud Cooperation Architecture for Integrated Internet Service Customization.
+  [1] Charu C Aggarwal. 2017. Outlier analysis. Springer. https://doi.org/10.1007/978-                                                              In ICDCS. IEEE, 1846–1855.
+      1-4614-6396-2                                                                                                                            [33] Hongzuo Xu, Yongjun Wang, Li Cheng, Yijie Wang, and Xingkong Ma. 2018.
+  [2] Fabrizio Angiulli, Fabio Fassetti, Giuseppe Manco, and Luigi Palopoli. 2017. Out-                                                             Exploring a High-quality Outlying Feature Value Set for Noise-Resilient Outlier
+      lying property detection with numerical attributes. Data mining and knowledge                                                                 Detection in Categorical Data. In CIKM. ACM, 17–26.
+      discovery 31, 1 (2017), 134–163.                                                                                                         [34] Hongzuo Xu, Yongjun Wang, Zhiyue Wu, and Yijie Wang. 2019. Embedding-based
+  [3] Dzmitry Bahdanau, Kyunghyun Cho, and Yoshua Bengio. 2015. Neural machine                                                                      Complex Feature Value Coupling Learning for Detecting Outliers in Non-IID
+      translation by jointly learning to align and translate. In ICLR.                                                                              Categorical Data. In AAAI. AAAI Press, 5541–5548.
+  [4] Xuan Hong Dang, Ira Assent, Raymond T Ng, Arthur Zimek, and Erich Schubert.                                                              [35] Hongzuo Xu, Yijie Wang, Zhiyue Wu, and Yongjun Wang. 2019. MIX: A Joint
+      2014. Discriminative features for identifying and interpreting outliers. In ICDE.                                                             Learning Framework for Detecting Both Clustered and Scattered Outliers in
+      IEEE, 88–99.                                                                                                                                  Mixed-Type Data. In ICDM. IEEE, 1408–1413.
+  [5] Xuan Hong Dang, Barbora Micenková, Ira Assent, and Raymond T Ng. 2013.                                                                   [36] Xiao Zhang, Manish Marwah, I-ta Lee, Martin Arlitt, and Dan Goldwasser. 2019.
+      Local outlier detection with interpretation. In ECML PKDD. Springer, 304–320.                                                                 ACE–An Anomaly Contribution Explainer for Cyber-Security Applications. In
+  [6] Lei Duan, Guanting Tang, Jian Pei, James Bailey, Akiko Campbell, and Changjie                                                                 International Conference on Big Data (Big Data). IEEE, 1991–2000.
+      Tang. 2015. Mining outlying aspects on numeric data. Data Mining and Knowledge
+      Discovery 29, 5 (2015), 1116–1151.
+  [7] Ioana Giurgiu and Anika Schumann. 2019. Additive Explanations for Anomalies
+      Detected from Multivariate Temporal Data. In CIKM. 2245–2248.
+  [8] Markus Goldstein and Andreas Dengel. 2012. Histogram-based outlier score
+      (hbos): A fast unsupervised anomaly detection algorithm. KI-2012: Poster and
+      Demo Track (2012), 59–63.
+

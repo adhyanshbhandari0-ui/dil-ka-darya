@@ -1,0 +1,1032 @@
+                                                                                                                                                                                     1
+
+
+
+
+                                                     Unsupervised and Semi-supervised Anomaly
+                                                       Detection with LSTM Neural Networks
+                                                                    Tolga Ergen, Ali H. Mirza, and Suleyman S. Kozat Senior Member, IEEE
+
+
+
+                                              Abstract—We investigate anomaly detection in an unsupervised            that defines the model of normality [1]. In this approach, one
+                                           framework and introduce Long Short Term Memory (LSTM)                      first defines a certain decision function and then optimizes
+                                           neural network based algorithms. In particular, given variable             the parameters of this function with respect to a prede-
+                                           length data sequences, we first pass these sequences through our
+                                           LSTM based structure and obtain fixed length sequences. We                 fined objective criterion, e.g., the One Class Support Vector
+
+
+
+
+arXiv:1710.09207v1 [eess.SP] 25 Oct 2017
+                                           then find a decision function for our anomaly detectors based on           Machines (OC-SVM) and Support Vector Data Description
+                                           the One Class Support Vector Machines (OC-SVM) and Support                 (SVDD) algorithms [6], [7]. However, algorithms based on
+                                           Vector Data Description (SVDD) algorithms. As the first time in            this approach examine time series data over a sufficiently
+                                           the literature, we jointly train and optimize the parameters of            long time window to achieve an acceptable performance [1],
+                                           the LSTM architecture and the OC-SVM (or SVDD) algorithm
+                                           using highly effective gradient and quadratic programming                  [8], [9]. Thus, their performances significantly depend on the
+                                           based training methods. To apply the gradient based training               length of this time window so that this approach requires
+                                           method, we modify the original objective criteria of the OC-               careful selection for the length of time window to provide a
+                                           SVM and SVDD algorithms, where we prove the convergence of                 satisfactory performance [8], [10]. To enhance performance for
+                                           the modified objective criteria to the original criteria. We also          time series data, neural networks, especially Recurrent Neural
+                                           provide extensions of our unsupervised formulation to the semi-
+                                           supervised and fully supervised frameworks. Thus, we obtain                Networks (RNNs), based approaches are introduced thanks to
+                                           anomaly detection algorithms that can process variable length              their inherent memory structure that can store “time” or “state”
+                                           data sequences while providing high performance, especially for            information [1], [11]. However, since the basic RNN archi-
+                                           time series data. Our approach is generic so that we also apply            tecture does not have control structures (gates) to regulate the
+                                           this approach to the Gated Recurrent Unit (GRU) architecture               amount of information to be stored [12], [13], a more advanced
+                                           by directly replacing our LSTM based structure with the GRU
+                                           based structure. In our experiments, we illustrate significant             RNN architecture with several control structures, i.e., the Long
+                                           performance gains achieved by our algorithms with respect to               Short Term Memory (LSTM) network, is introduced [13], [14].
+                                           the conventional methods.                                                  However, neural networks based approaches do not directly
+                                             Index Terms—Anomaly detection, Support Vector Machines,                  optimize an objective criterion for anomaly detection [1], [15].
+                                           Support Vector Data Description, LSTM, GRU.                                Instead, they first predict a sequence from its past samples
+                                                                                                                      and then determine whether the sequence is an anomaly or
+                                                                 I. I NTRODUCTION                                     not based on the prediction error, i.e., an anomaly is an event,
+                                                                                                                      which cannot be predicted from the past nominal data [1].
+                                           A. Preliminaries
+                                                                                                                      Thus, they require a probabilistic model for the prediction
+                                              Anomaly detection [1] has attracted significant interest in             error and a threshold on the probabilistic model to detect
+                                           the contemporary learning literature due its applications in a             anomalies, which results in challenging optimization problems
+                                           wide range of engineering problems, e.g., sensor failure [2],              and restricts their performance accordingly [1], [15], [16].
+                                           network monitoring [3], cybersecurity [4] and surveillance [5].            Furthermore, both the common and neural networks based
+                                           In this paper, we study the variable length anomaly detection              approaches can process only fixed length vector sequences,
+                                           problem in an unsupervised framework, where we seek to find                which significantly limits their usage in real life applications
+                                           a function to decide whether each unlabeled variable length                [1].
+                                           sequence in a given dataset is anomalous or not. Note that                    In order to circumvent these issues, we introduce novel
+                                           although this problem is extensively studied in the literature             LSTM based anomaly detection algorithms for variable length
+                                           and there exist different methods, e.g., supervised (or semi-              data sequences. In particular, we first pass variable length
+                                           supervised) methods, that require the knowledge of data labels,            data sequences through an LSTM based structure to obtain
+                                           we employ an unsupervised method due to the high cost of                   fixed length representations. We then apply our OC-SVM
+                                           obtaining accurate labels in most real life applications [1]               [6] and SVDD [7] based algorithms for detecting anomalies
+                                           such as in cybersecurity [4] and surveillance [5]. However, we             in the extracted fixed length vectors as illustrated in Fig.
+                                           also extend our derivations to the semi-supervised and fully               1. Unlike the previous approaches in the literature [1], we
+                                           supervised frameworks for completeness.                                    jointly train the parameters of the LSTM architecture and the
+                                              In the current literature, a common and widely used ap-                 OC-SVM (or SVDD) formulation to maximize the detection
+                                           proach for anomaly detection is to find a decision function                performance. For this joint optimization, we propose two
+                                             This work is supported in part by Outstanding Researcher Programme       different training methods, i.e., a quadratic programming based
+                                           Turkish Academy of Sciences and TUBITAK Contract No 117E153.               and a gradient based algorithms, where the merits of each
+                                             The authors are with the Department of Electrical and Electronics En-    different approach are detailed in the paper. For our gradient
+                                           gineering, Bilkent University, Bilkent, Ankara 06800, Turkey, Tel: +90
+                                           (312) 290-2336, Fax: +90 (312) 290-1223, (contact e-mail: {ergen, mirza,   based training method, we modify the original OC-SVM and
+                                           kozat}@ee.bilkent.edu.tr).                                                 SVDD formulations and then provide the convergence results
+                                                                                                                                                       2
+
+
+
+                                            Jointly Optimize                          based approaches require careful selection of several additional
+                            Recurrent Information                                     parameters, which significantly degrades their performance
+                                                                                      in real life [1], [10]. Furthermore, both the OC-SVM (or
+                            LSTM                               OC-SVM or
+                                                                                      SVDD) and LSTM based methods are able to process only
+            ...                 ...                                        Decision
+                                                                 SVDD                 fixed length sequences [6], [7], [10]. To circumvent these
+                                                                                      issues, we introduce generic LSTM based anomaly detectors
+Arbitrary Length Sequence                     Fixed Length
+                            Stacked LSTMs                                             for variable length data sequences, where we jointly train
+                                                                                      the parameters of the LSTM architecture and the OC-SVM
+Fig. 1: Overall structure of our anomaly detection approach.
+                                                                                      (or SVDD) formulation via a predefined objective function.
+of the modified formulations to the original ones. Thus, instead                      Therefore, we not only obtain high performance for time series
+of following the prediction based approaches [1], [15], [16] in                       data but also enjoy joint and effective optimization of the
+the current literature, we define proper objective functions for                      parameters with respect to a well defined objective function.
+anomaly detection using the LSTM architecture and optimize
+the parameters of the LSTM architecture via these well defined
+objective functions. Hence, our anomaly detection algorithms                          C. Contributions
+are able to process variable length sequences and provide
+                                                                                        Our main contributions are as follows:
+high performance for time series data. Furthermore, since
+we introduce a generic approach in the sense that it can be                             • We introduce LSTM based anomaly detection algorithms
+applied to any RNN architecture, we also apply our approach                               in an unsupervised framework, where we also extend our
+to the Gated Recurrent Unit (GRU) architecture [17], i.e.,                                derivations to the semi-supervised and fully supervised
+an advanced RNN architecture as the LSTM architecture, in                                 frameworks.
+our simulations. Through extensive set of experiments, we                               • As the first time in the literature, we jointly train the pa-
+demonstrate significant performance gains with respect to the                             rameters of the LSTM architecture and the OC-SVM (or
+conventional methods [6], [7].                                                            SVDD) formulation via a well defined objective function,
+                                                                                          where we introduce two different joint optimization meth-
+                                                                                          ods. For our gradient based joint optimization method, we
+B. Prior Art and Comparisons                                                              modify the OC-SVM and SVDD formulations and then
+   Several different methods have been introduced for the                                 prove the convergence of the modified formulations to
+anomaly detection problem [1]. Among these methods, the                                   the original ones.
+OC-SVM [6] and SVDD [7] algorithms are generally em-                                    • Thanks to our LSTM based structure, the introduced
+ployed due their high performance in real life applications                               methods are able to process variable length data se-
+[18]. However, these algorithms provide inadequate perfor-                                quences. Additionally, unlike the conventional methods
+mance for time series data due to their inability to capture time                         [6], [7], our methods effectively detect anomalies in time
+dependencies [8], [9]. In order to improve the performances                               series data without requiring any preprocessing.
+of these algorithms for time series data, in [9], the authors                           • Through extensive set of experiments involving real and
+convert time series data into a set of vectors by replicating each                        simulated data, we illustrate significant performance im-
+sample so that they obtain two dimensional vector sequences.                              provements achieved by our algorithms with respect to
+However, even though they obtain two dimensional vector                                   the conventional methods [6], [7]. Moreover, since our
+sequences, the second dimension does not provide additional                               approach is generic, we also apply it to the recently
+information such that this approach still provides inadequate                             proposed GRU architecture [17] in our experiments.
+performance for time series data [8]. As another approach, the
+OC-SVM based method in [8] acquires a set of vectors from
+time series data by unfolding the data into a phase space using                       D. Organization of the Paper
+a time delay embedding process [19]. More specifically, for a
+certain sample, they create an E dimensional vector by using                             The organization of this paper is as follows. In Section II, we
+the previous E − 1 samples along with the sample itself [8].                          first describe the variable length anomaly detection problem
+However, in order to obtain a satisfactory performance from                           and then introduce our LSTM based structure. In Section
+this approach, the dimensionality, i.e., E, should be carefully                       III-A, we introduce anomaly detection algorithms based on the
+tuned, which restricts its usage in real life applications [20].                      OC-SVM formulation, where we also propose two different
+On the other hand, even though LSTM based algorithms                                  joint training methods in order to learn the LSTM and SVM
+provide high performance for time series data, we have to                             parameters. The merits of each different approach are also
+solve highly complex optimization problems to get an adequate                         detailed in the same section. In a similar manner, we introduce
+performance [1]. As an example, the LSTM based anomaly                                anomaly detection algorithms based on the SVDD formulation
+detection algorithms in [10], [21] first predict time series data                     and provide two different joint training methods to learn the
+and then fit a multivariate Gaussian distribution to the error,                       parameters in Section III-B. In Section IV, we demonstrate
+where they also select a threshold for this distribution. Here,                       performance improvements over several real life datasets. In
+they allocate different set of sequences to learn the parameters                      the same section, thanks to our generic approach, we also
+of the distribution and threshold via the maximum likelihood                          introduce GRU based anomaly detection algorithms. Finally,
+estimation technique [10], [21]. Thus, the conventional LSTM                          we provide concluding remarks in Section V.
+                                                                                                                                                                3
+
+
+
+          II. M ODEL AND P ROBLEM D ESCRIPTION                                                            𝒉𝑖                                   𝒄𝑖
+
+   In this paper, all vectors are column vectors and denoted
+                                                                                                     Mean Pooling                    Mean Pooling
+by boldface lower case letters. Matrices are represented by
+boldface uppercase √ letters. For a vector a, aT is its ordinary                              𝒉𝑖,1     𝒉𝑖,2     𝒉𝑖,𝑑𝑖             𝒄𝑖,1          𝒄𝑖,2    𝒄𝑖,𝑑𝑖
+transpose and ||a|| = aT a is the `2 -norm. The time index is
+given as subscript, e.g., ai is the ith vector. Here, 1 (and 0) is
+a vector of all ones (and zeros) and I represents the identity
+                                                                                                         𝒄𝑖,1              𝒄𝑖,2
+matrix, where the sizes are understood from the context.                          𝒄𝑖−1
+                                                                                                                                         ...
+                                                                                  𝒉𝑖−1       LSTM                   LSTM                               LSTM
+   We observe data sequences {X i }ni=1 , i.e., defined as                                               𝒉𝑖,1              𝒉𝑖,2
+                   X i = [xi,1 xi,2 . . . xi,di ],
+                                                                                              𝒙𝑖,1                  𝒙𝑖,2                               𝒙𝑖,𝑑𝑖
+where xi,j ∈ R , ∀j ∈ {1, 2, . . . di } and di ∈ Z+ is the
+                  p
+
+number of columns in X i , which can vary with respect to                      Fig. 2: Our LSTM based structure for obtaining fixed length sequences.
+i. Here, we assume that the bulk of the observed sequences
+are normal and the remaining sequences are anomalous. Our                      input vector and hi,j ∈ Rm is the output vector for the j th
+aim is to find a scoring (or decision) function to determine                   LSTM unit in Fig. 2. Additionally, si,j , f i,j and oi,j is the
+whether X i is anomalous or not based on the observed data,                    input, forget and output gates, respectively. Here, g(·) is set
+where +1 and −1 represent the outputs of the desired scoring                   to the hyperbolic tangent function, i.e., tanh, and applies to
+function for nominal and anomalous data respectively. As an                    input vectors pointwise. Similarly, σ(·) is set to the sigmoid
+example application for this framework, in host based intrusion                function. is the operation for elementwise multiplication of
+detection [1], the system handles operating system call traces,                two same sized vectors. Furthermore, W (·) , R(·) and b(·) are
+where the data consists of system calls that are generated                     the parameters of the LSTM architecture, where the size of
+by users or programs. All traces contain system calls that                     each is selected according to the dimensionality of the input
+belong to the same alphabet, however, the co-occurrence of                     and output vectors. After applying the LSTM architecture to
+the system calls is the key issue in detecting anomalies [1].                  each column of our data sequences as illustrated in Fig. 2, we
+For different programs, these system calls are executed in                     take the average of the LSTM outputs for each data sequence,
+different sequences, where the length of the sequence may                      i.e., the mean pooling method. By this, we obtain a new set
+vary for each program. Binary encoding of a sample set of                      of fixed length sequences, i.e., denoted as {h̄i }ni=1 , h̄i ∈ Rm .
+call sequences can be X 1 = 101011, X 2 = 1010 and                             Note that we also use the same procedure to obtain the state
+X 3 = 1011001 for n = 3 case [1]. After observing such                         information c̄i ∈ Rm for each X i as demonstrated in Fig. 2.
+a set of call sequences, our aim is to find a scoring function
+that successfully distinguishes the anomalous call sequences                   Remark 1. We use the mean pooling methodPdiin order to obtain
+from the normal sequences.                                                     the fixed length sequences as h̄i = d1i j=1    hi,j . However,
+   In order to find a scoring function l(·) such that                          we can also use the other pooling methods. As an example,
+                      (                                                        for the last and max pooling methods, we use h̄i = hi,di
+                        −1 if X i is anomalous                                 and h̄i = maxj hi,j , ∀i ∈ {1, 2, . . . n}, respectively. Our
+            l(X i ) =                              ,
+                        +1 otherwise                                           derivations can be straightforwardly extended to these differ-
+one can use the OC-SVM algorithm [6] to find a hyperplane                      ent pooling methods.
+that separates the anomalies from the normal data or the SVDD
+algorithm [7] to find a hypersphere enclosing the normal data                       III. N OVEL A NOMALY D ETECTION A LGORITHMS
+while leaving the anomalies outside the hypersphere. However,
+                                                                                  In this section, we first formulate the anomaly detection
+these algorithms can only process fixed length sequences.
+                                                                               approaches based on the OC-SVM and SVDD algorithms. We
+Hence, we use the LSTM architecture [14] to obtain a fixed
+                                                                               then provide joint optimization updates to train the parameters
+length vector representation for each Xi . Although there
+                                                                               of the overall structure.
+exist several different versions of LSTM architecture, we
+use the most widely employed architecture, i.e., the LSTM
+architecture without peephole connections [13]. We first feed                  A. Anomaly Detection with the OC-SVM Algorithm
+X i to the LSTM architecture as demonstrated in Fig. 2, where
+                                                                                  In this subsection, we provide an anomaly detection algo-
+the internal LSTM equations are as follows [14]:
+                                                                               rithm based on the OC-SVM formulation and derive the joint
+          z i,j = g(W (z) xi,j + R(z) hi,j−1 + b(z) )                    (1)   updates for both the LSTM and SVM parameters. For the
+          si,j = σ(W    (s)
+                              xi,j + R   (s)
+                                               hi,j−1 + b (s)
+                                                                )        (2)   training, we first provide a quadratic programming based algo-
+                        (f )              (f )                (f )
+                                                                               rithm and then introduce a gradient based training algorithm.
+          f i,j = σ(W          xi,j + R          hi,j−1 + b          )   (3)   To apply the gradient based training method, we smoothly
+          ci,j = si,j    z i,j + f i,j         ci,j−1                    (4)   approximate the original OC-SVM formulation and then prove
+          oi,j = σ(W (o) xi,j + R(o) hi,j−1 + b(o) )                     (5)   the convergence of the approximated formulation to the actual
+                                                                               one in the following subsections.
+          hi,j = oi,j g(ci,j ),                                          (6)      In the OC-SVM algorithm, our aim is to find a hyperplane
+where ci,j ∈ Rm is the state vector, xi,j ∈ Rp is the                          that separates the anomalies from the normal data [6]. We
+                                                                                                                                        4
+
+
+
+formulate the OC-SVM optimization problem for the sequence              We have the following Lagrangian for the SVM parameters
+{h̄i }ni=1 as follows [6]                                                                   kwk2     1 X
+                                                                                                        n           Xn
+                                     n                                   L(w, ξ, ρ, ν, α) =      +         ξi − ρ −     νi ξi
+                          kwk2    1 X                                                        2      nλ i=1
+              min              +        ξi − ρ         (7)                                                          i=1
+     θ∈Rnθ ,w∈Rm ,ξ∈R,ρ∈R  2     nλ i=1                                                              n
+                                                                                                     X
+    subject to: wT h̄i ≥ ρ − ξi , ξi ≥ 0, ∀i                   (8)                               −         αi (wT h̄i − ρ + ξi ),   (12)
+                                                                                                     i=1
+   W (·)T W (·) = I, R(·)T R(·) = I and b(·)T b(·) = 1,        (9)    where νi , αi ≥ 0 are the Lagrange multipliers. Taking
+where ρ and w are the parameters of the separating hyper-             derivative of (12) with respect to w, ξ and ρ and then setting
+plane, λ > 0 is a regularization parameter, ξ is a slack              the derivatives to zero gives
+variable to penalize misclassified instances and we group                               Xn
+
+the LSTM parameters {W (z) , R(z) , b(z) , W (s) , R(s) , b(s) ,                  w=        αi h̄i                              (13)
+W (f ) , R(f ) , b(f ) , W (o) , R(o) , b(o) } into θ ∈ Rnθ , where                       i=1
+                                                                                  n
+nθ = 4m(m+p+1). Since the LSTM parameters are unknown                             X
+                                                                                         αi = 1 and αi = 1/(nλ) − νi , ∀i.          (14)
+and h̄i is a function of these parameters, we also minimize
+                                                                                   i=1
+the cost function in (7) with respect to θ.
+  After solving the optimization problem in (7), (8) and (9),         Note that at the optimum, the inequalities in (8) become
+we use the scoring function                                           equalities if αi and νi are nonzero, i.e., 0 < αi < 1/(nλ)
+                                                                      [6]. With this relation, we compute ρ as
+                   l(X i ) = sgn(wT h̄i − ρ)                  (10)                      n
+                                                                                                T
+                                                                                      X
+to detect the anomalous data, where the sgn(·) function returns                   ρ=       αj h̄j h̄i for 0 < αi < 1/(nλ).   (15)
+the sign of its input.                                                                   j=1
+   We emphasize that while minimizing (7) with respect to                By substituting (13) and (14) into (12), we obtain the
+θ, we might suffer from overfitting and impotent learning of          following dual problem for the constrained minimization in
+time dependencies on the data [22], i.e., forcing the parameters      (7), (8) and (9)
+to null values, e.g., θ = 0. To circumvent these issues,                                  n
+                                                                                       1 XX
+                                                                                              n
+                                                                                                         T
+we introduce (9), which constraints the norm of θ to avoid                    min                αi αj h̄i h̄j              (16)
+                                                                          θ∈Rnθ ,α∈Rn 2
+overfitting and trivial solutions, e.g., θ = 0, while boosting the                       i=1 j=1
+ability of the LSTM architecture to capture time dependencies                          n
+                                                                                       X
+[22], [23].                                                              subject to:         αi = 1 and 0 ≤ αi ≤ 1/(nλ), ∀i         (17)
+                                                                                       i=1
+Remark 2. In (9), we use an orthogonality constraint for each
+                                                                         W (·)T W   (·)
+                                                                                         = I, R(·)T R(·) = I and b(·)T b(·) = 1,    (18)
+LSTM parameter. However, we can also use other constraints
+instead of (9) and solve the optimization problem in (7), (8)         where α ∈ Rn is a vector representation for αi ’s. Since the
+and (9) in the same manner. As an example, a common choice            LSTM parameters are unknown, we also put the minimization
+of constraint for neural networks is the Frobenius norm [24],         term for θ into (16) as in (7). By substituting (13) into (10),
+i.e., defined as                                                      we have the following scoring function for the dual problem
+                              XX                                                                    n
+                     kAkF =           A2ij               (11)                                      X        T        
+                                                                                    l(X i ) = sgn      αj h̄j h̄i − ρ ,          (19)
+                                 i   j
+                                                                                                       j=1
+for a real matrix A, where Aij represents the element at
+                                                                      where we calculate ρ using (15).
+the ith column and j th row of A. In this case, we can
+                                                                         In order to find the optimal θ and α for the optimization
+directly replace (9) with a Frobenius norm constraint for
+                                                                      problem in (16), (17) and (18), we employ the following
+each LSTM parameter as in (11) and then solve the opti-
+                                                                      procedure. We first select a certain set of the LSTM pa-
+mization problem in the same manner. Such approaches only
+                                                                      rameters, i.e., θ 0 . Based on θ 0 , we find the minimizing α
+aim to regularize the parameters [23]. However, for RNNs,
+                                                                      values, i.e., α1 , using the Sequential Minimal Optimization
+we may also encounter exponential growth or decay in the
+                                                                      (SMO) algorithm [25]. Now, we fix α as α1 and then update
+norm of the gradients while training the parameters, which
+                                                                      θ from θ 0 to θ 1 using the algorithm for optimization with
+significantly degrades capabilities of these architectures to
+                                                                      orthogonality constraints in [26]. We repeat these consecutive
+capture time dependencies [22], [23]. Thus, in this paper, we
+                                                                      update procedures until α and θ converge [27]. Then, we use
+put the constraint (9) in order to regularize the parameters
+                                                                      the converged values in order to evaluate (19). In the following,
+while improving the capabilities of the LSTM architecture in
+                                                                      we explain the update procedures for θ and α in detail.
+capturing time dependencies [22], [23].
+                                                                         Based on θ k , i.e., the LSTM parameter vector at the k th
+   1) Quadratic Programming Based Training Algorithm:                 iteration, we update αk , i.e., the α vector at the k th iteration,
+Here, we introduce a training approach based on quadratic             using the SMO algorithm due to its efficiency in solving
+programming for the optimization problem in (7), (8) and              quadratic constrained optimization problems [25]. In the SMO
+(9), where we perform consecutive updates for the LSTM                algorithm, we choose a subset of parameters to minimize and
+and SVM parameters. For this purpose, we first convert the            fix the rest of parameters. In the extreme case, we choose only
+optimization problem to a dual form in the following. We then         one parameter to minimize, however, due to (17), we must
+provide the consecutive updates for each parameter.                   choose at least two parameters. To illustrate how the SMO
+                                                                                                                                     5
+
+
+
+algorithm works in our case, we choose α1 and α2 to update            Algorithm 1 Quadratic Programming Based Training for the
+and fix the rest of the parameters in (16). From (17), we have        Anomaly Detection Algorithm Based on OC-SVM
+                                             Xn                        1: Initialize the LSTM parameters as θ 0 and the dual OC-
+            α1 = 1 − S − α2 , where S =         αi .      (20)              SVM parameters as α0
+                                              i=3                      2: Determine a threshold  as convergence criterion
+We first replace α1 in (16) with (20). We then take the                3: k = −1
+derivative of (16) with respect to α2 and equate the derivative        4: do
+to zero. Thus, we obtain the following update for α2 at the            5:    k =k+1
+k th iteration                                                         6:       Using θ k , obtain {h̄}ni=1 according to Fig. 2
+               (αk,1 + αk,2 )(K11 − K12 ) + M1 − M2                    7:       Find optimal αk+1 for {h̄}ni=1 using (20) and (21)
+     αk+1,2 =                                             , (21)
+                          K11 + K22 − 2K12                             8:       Based on αk+1 , obtain θ k+1 using (24) and Remark
+                 T            Pn                                            3
+where Kij , h̄i h̄j , Mi , j=3 αk,j Kij and αk,i represents                                                     2
+the ith element of αk . Due to (17), if the updated value of α2        9: while  κ(θ k+1 , αk+1 ) − κ(θ k , αk ) > 
+is outside of the region [0, 1/(nλ)], we project it to this region.   10: Detect anomalies using (19) evaluated at θ k and αk
+Once α2 is updated as αk+1,2 , we obtain αk+1,1 using (20).
+For the rest of the parameters, we repeat the same procedure,
+which eventually converges to a certain set of parameters [25].
+By this way, we obtain αk+1 , i.e., the minimizing α for θ k .        form as follows
+    Following the update of α, we update θ based on the
+updated αk+1 vector. For this purpose, we employ the op-                           G(βw,ρ (h̄i )) , max{0, βw,ρ (h̄i )}, ∀i,     (26)
+timization method in [26]. Since we have αk+1 that satisfies          where
+(17), we reduce the dual problem to
+                           n   n
+                                                                                           βw,ρ (h̄i ) , ρ − wT h̄i .
+                        1 XX                      T
+   min κ(θ, αk+1 ) =              αk+1,i αk+1,j h̄i h̄j        (22)   By substituting (26) into (7), we remove the constraint (8) and
+     θ                  2 i=1 j=1                                     obtain the following optimization problem
+                                                                                                         n
+ s.t.:W (·)T W (·) = I, R(·)T R(·) = I and b(·)T b(·) = 1. (23)                           kwk2        1 X
+                                                                              min                +          G(βw,ρ (h̄i )) − ρ   (27)
+For (22) and (23), we update W (·) as follows                          w∈Rm ,ρ∈R,θ∈Rnθ       2       nλ i=1
+                                                                       s.t.:W (·)T W (·) = I, R(·)T R(·) = I and b(·)T b(·) = 1. (28)
+                          −1             
+          (·)          µ                µ        (·)
+      W k+1 = I + Ak              I − Ak W k ,           (24)
+                       2                2                             Since (26) is not a differentiable function, we are unable to
+where the subscripts represent the current iteration index, µ         solve the optimization problem in (27) using gradient based
+                                    (·)        (·)
+is the learning rate, Ak = Gk (W k )T − W k GTk and the               optimization algorithms. Hence, we employ a differentiable
+                th              th
+element at the i row and the j column of G, i.e., Gij , is            function                                              
+defined as                                                                                         1           τ βw,ρ (h̄i )
+                                                                                 Sτ (βw,ρ (h̄i )) = log 1 + e                    (29)
+                           ∂κ(θ, αk+1 )                                                            τ
+                     Gij ,         (·)
+                                          .              (25)
+                              ∂W ij                                   to smoothly approximate (26), where τ > 0 is the smoothing
+                                                                      parameter and log represents the natural logarithm. In (29),
+Remark 3. For R(·) and b(·) , we first compute the gradient of        as τ increases, Sτ (·) converges to G(·) (see Proposition 1 at
+the objective function with respect to the chosen parameter as        the end of this section), hence, we choose a large value for τ .
+in (25). We then obtain Ak according to the chosen parameter.         With (29), we modify our optimization problem as follows
+Using Ak , we update the chosen parameter as in (24).
+                                                                                min       Fτ (w, ρ, θ)                           (30)
+                                                                        w∈Rm ,ρ∈R,θ∈Rnθ
+   With these updates, we obtain a quadratic programming
+based training algorithm (see Algorithm 1 for the pseudocode)          s.t.:W (·)T W (·) = I, R(·)T R(·) = I and b(·)T b(·) = 1 (31)
+for our LSTM based anomaly detector.                                  where Fτ (·, ·, ·) is the objective function of our optimization
+   2) Gradient Based Training Algorithm: Although the                 problem and defined as
+quadratic programming based training algorithm directly opti-                                 kwk2      1 X
+                                                                                                            n
+mizes the original OC-SVM formulation without requiring any                Fτ (w, ρ, θ) ,           +         Sτ (βw,ρ (h̄i )) − ρ.
+                                                                                                2      nλ i=1
+approximation, since it depends on the separated consecutive
+updates of the LSTM and OC-SVM parameters, it might not               To obtain the optimal parameters for (30) and (31), we update
+converge to even a local minimum [27]. In order to resolve this       w, ρ and θ until they converge to a local or global optimum
+issue, in this subsection, we introduce a training method based       [26], [28]. For the update of w and ρ, we use the SGD
+on only the first order gradients, which updates the parameters       algorithm [28], where we compute the first order gradient of
+at the same time. However, since we require an approximation          the objective function with respect to each parameter. We first
+to the original OC-SVM formulation to apply this method, we           compute the gradient for w as follows
+also prove the convergence of the approximated formulation                                               n
+                                                                                                     1 X −h̄i eτ βw,ρ (h̄i )
+to the original OC-SVM formulation in this subsection.                     ∇w Fτ (w, ρ, θ) = w +                              . (32)
+                                                                                                    nλ i=1 1 + eτ βw,ρ (h̄i )
+   Considering (8), we write the slack variable in a different
+                                                                                                                                                        6
+
+
+
+Using (32), we update w as                                                           ter. The complete algorithm is also provided in Algorithm 2 as
+                                                                                     a pseudocode. Moreover, we illustrate the convergence of our
+                wk+1 = wk − µ∇w Fτ (w, ρ, θ) w=wk ,                           (33)
+                                                                ρ =ρ k               approximation (29) to (26) in Proposition 1. Using Proposition
+                                                                θ =θ k
+                                                                                     1, we then demonstrate the convergence of the optimal values
+where the subscript k indicates the value of any parameter at                        for our objective function (30) to the optimal values of the
+the k th iteration. Similarly, we calculate the derivative of the                    actual SVM objective function (27) in Theorem 1.
+objective function with respect to ρ as follows
+                                 n                                                   Proposition 1. As τ increases, Sτ (βw,ρ (h̄i )) uniformly con-
+           ∂Fτ (w, ρ, θ)      1 X eτ βw,ρ (h̄i )                                     verges to G(βw,ρ (h̄i )). As a consequence, our approxima-
+                         =                             − 1.  (34)
+                 ∂ρ          nλ i=1 1 + eτ βw,ρ (h̄i )                               tion Fτ (w, ρ, θ) converges to the SVM objective function
+Using (34), we update ρ as                                                           F (w, ρ, θ), i.e., defined as
+                                                                                                                         n
+                                           ∂Fτ (w, ρ, θ)                                                    kwk2      1 X
+                  ρk+1 = ρk − µ                          w =w k .             (35)         F (w, ρ, θ) ,           +        G(βw,ρ (h̄i )) − ρ.
+                                                ∂ρ       ρ=ρk                                                 2      nλ i=1
+                                                              θ =θ k
+For the LSTM parameters, we use the method for optimization                          Proof of Proposition 1. In order to simplify our notation, for
+with orthogonality constraints in [26] due to (31). To update                        any given w, θ, X i and ρ, we denote βw,ρ (h̄i ) as Ω. We first
+each element of W (·) , we calculate the gradient of the                             show that Sτ (Ω) ≥ G(Ω), ∀τ > 0. Since
+objective function as                                                                                           1
+                                                                                                       Sτ (Ω) = log 1 + eτ Ω
+                                                                                                                               
+                         n                   (·)                                                               τ
+   ∂Fτ (w, ρ, θ)      1 X −wT ∂ h̄i /∂W ij eτ βw,ρ (h̄i )
+                  =                                       .                                                     1
+                                                                                                              ≥ log eτ Ω
+                                                                                                                           
+           (·)       nλ i=1
+       ∂W ij                        1 + eτ βw,ρ (h̄i )
+                                                                                                                τ
+                                                          (36)                                                =Ω
+We then update W (·) using (36) as                                                   and Sτ (Ω) ≥ 0, we have Sτ (Ω) ≥ G(Ω) = max{0, Ω}. Then,
+        (·)
+              
+                     µ
+                          −1 
+                                   µ
+                                      
+                                         (·)
+                                                                                     for any Ω ≥ 0, we have
+     W k+1 = I + B k            I − Bk W k ,                                  (37)                                         1 Ωeτ Ω
+                     2             2                                                          ∂Sτ (Ω)    −1
+                                                                                                      = 2 log 1 + eτ Ω +
+                               (·)                (·)                                           ∂τ       τ                   τ 1 + eτ Ω
+where B k = M k (W k )T − W k M Tk and
+                                                                                                         −1       1 Ωeτ Ω
+                        ∂Fτ (w, ρ, θ)                                                                 <     Ω+
+                 M ij ,               .                                       (38)                        τ       τ 1 + eτ Ω
+                               (·)
+                           ∂W ij                                                                      ≤0
+Remark 4. For R(·) and b(·) , we first compute the gradient of                       and for any Ω < 0, we have
+the objective function with respect to the chosen parameter as                                ∂Sτ (Ω)    −1            1 Ωeτ Ω
+                                                                                                      = 2 log 1 + eτ Ω +
+in (38). We then obtain B k according to the chosen parameter.                                   ∂τ      τ               τ 1 + eτ Ω
+Using B k , we update the chosen parameter as in (37).                                                < 0,
+Remark 5. In the semi-supervised framework, we have the                              thus, we conclude that Sτ (Ω) is a monotonically decreasing
+following optimization problem for our SVM based algorithms                          function of τ . As the last step, we derive an upper bound for
+[29]                                                                                 the difference Sτ (Ω) − G(Ω). For Ω ≥ 0, the derivative of the
+                 Pl         Pl+k                                                    difference is as follows
+                    i=1 ηi +   j=l+1 min(γj , ξj )
+                                                    
+      min                                               + kwk (39)                               ∂(Sτ (Ω) − G(Ω))         eτ Ω
+  θ,w,ξ,η,γ,ρ                 (1/C)                                                                                  =           − 1 < 0,
+                                                                                                         ∂Ω             1 + eτ Ω
+   s.t.:yi (wT h̄i + ρ) ≥ 1 − ηi , ηi ≥ 0, i = 1, . . . , l   (40)                   hence, the difference is a decreasing function of Ω for Ω ≥ 0.
+     wT h̄j − ρ ≥ 1 − ξj , ξj ≥ 0, j = l + 1, . . . , l + k                   (41)   Therefore, the maximum value is log(2)/τ and it occurs at
+       T
+  − w h̄j + ρ ≥ 1 − γj , γj ≥ 0, j = l + 1, . . . , l + k                     (42)   Ω = 0. Similarly, for Ω < 0, the derivative of the difference
+     (·)T       (·)            (·)T       (·)               (·)T (·)                 is positive, which shows that the maximum for the difference
+ W          W         = I, R          R         = I and b       b      = 1,   (43)   occurs at Ω = 0. With this result, we obtain the following
+where γ ∈ R and η ∈ R are slack variables as ξ, C is a                               bound
+trade-off parameter, l and k are the number of the labeled                                           log(2)                         
+and unlabeled data instances, respectively and yi ∈ {−1, +1}                                                = max Sτ (Ω) − G(Ω) .                  (44)
+                                                                                                       τ         Ω
+represents the label of the ith data instance.                                       Using (44), for any  > 0, we can choose τ sufficiently large
+   For the quadratic programming based training method, we                           so that Sτ (Ω) − G(Ω) < . Hence, as τ increases, Sτ (Ω)
+modify all the steps from (12) to (25) with respect to (39)–                         uniformly converges to G(Ω). By averaging (44) over all the
+(43). In a similar manner, we modify the equations from (26)                         data points and multiplying with 1/λ, we obtain
+to (38) according to (39)–(43) in order to get the gradient                                    log(2)                                      
+based training method in the semi-supervised framework. For                                            = max Fτ (w, ρ, θ) − F (w, ρ, θ) ,
+                                                                                                 λτ      w,ρ,θ
+the supervised implementation, we follow the same procedure
+with the semi-supervised implementation for k = 0 case.                              which proves the uniform convergence of Fτ (·, ·, ·) to F (·, ·, ·).
+
+  Hence, we complete the required updates for each parame-
+                                                                                                                                                                        7
+
+
+
+Theorem 1. Let wτ and ρτ be the solutions of (30) for                                  ξ represent the LSTM parameters and the slack variable
+any fixed θ. Then, wτ and ρτ are unique and Fτ (wτ , ρτ , θ)                           respectively as in the OC-SVM case. After solving the con-
+converges to the minimum of F (w, ρ, θ).                                               strained optimization problem in (46), (47) and (48), we detect
+                                                                                       anomalies using the following scoring function
+Proof of Theorem 1. We have the following Hessian matrix
+of Fτ (w, ρ, θ) with respect to w                                                                          l(X i ) = sgn(R2 − kh̄i − c̃k2 ).                         (49)
+                                n
+                            τ X     eτ βw,ρ (h̄i )            T
+   ∇2w Fτ (w, ρ, θ) = I +                            2 h̄i h̄i ,                      Algorithm 2 Gradient Based Training for the Anomaly De-
+                           nλ i=1 1 + eτ βw,ρ (h̄i )
+                                                                                       tection Algorithm Based on OC-SVM
+which satisfies v T ∇2w Fτ (w, ρ, θ)v > 0 for any nonzero col-                          1: Initialize the LSTM parameters as θ 0 and the OC-SVM
+umn vector v. Hence, the Hessian matrix is positive definite,                                 parameters as w0 and ρ0
+which shows that Fτ (w, ρ, θ) is strictly convex function of                            2: Determine a threshold  as convergence criterion
+w. Consequently, the solution wτ is both global and unique                              3: k = −1
+given any ρ and θ. Additionally, we have the following second                           4: do
+order derivative for ρ                                                                  5:    k =k+1
+                               n
+       ∂ 2 Fτ (w, ρ, θ)    τ X        eτ βw,ρ (h̄i )                                    6:    Using θ k , obtain {h̄}ni=1 according to Fig. 2
+                        =                             > 0,
+              ∂ρ2         nλ i=1 1 + eτ βw,ρ (h̄i ) 2                                   7:    Obtain wk+1 , ρk+1 and θ k+1 using (33), (35), (37)
+                                                                                           and Remark 4
+which implies that Fτ (w, ρ, θ) is strictly convex function of                                                                                    2
+                                                                                        8: while Fτ (w k+1 , ρk+1 , θ k+1 ) − Fτ (w k , ρk , θ k ) > 
+ρ. As a result, the solution ρτ is both global and unique for                           9: Detect anomalies using (10) evaluated at w k , ρk and θ k
+any given w and θ.
+   Let w∗ and ρ∗ be the solutions of (27) for any fixed θ.
+                                                                                          1) Quadratic Programming Based Training Algorithm: In
+From the proof of Proposition 1, we have
+                                                                                       this subsection, we introduce a training algorithm based on
+    Fτ (w∗ , ρ∗ , θ) ≥ Fτ (wτ , ρτ , θ) ≥ F (wτ , ρτ , θ)                              quadratic programming for (46), (47) and (48). As in the OC-
+                                        ≥ F (w∗ , ρ∗ , θ).                      (45)   SVM case, we first assume that the LSTM parameters are fixed
+                                                                                       and then perform optimization over the SVDD parameters
+Using the convergence result in Proposition 1 and (45), we                             based on the fixed LSTM parameters. For (46) and (47), we
+have                                                                                   have the following Lagrangian
+  lim Fτ (wτ , ρτ , θ) ≤ lim Fτ (w∗ , ρ∗ , θ) = F (w∗ , ρ∗ , θ)                                                        n        n
+ τ →∞                             τ →∞                                                                              1 X        X
+                                                                                           L(c̃, ξ, R, ν, α) =R2 +        ξi −     νi ξi
+  lim Fτ (wτ , ρτ , θ) ≥ F (w∗ , ρ∗ , θ),                                                                          nλ i=1
+ τ →∞                                                                                                                          i=1
+                                                                                                                       n
+which proves the following equality                                                                                    X
+                                                         ∗     ∗
+                                                                                                                   −         αi (ξi − kh̄i − c̃k2 + R2 ),            (50)
+                  lim Fτ (wτ , ρτ , θ) = F (w , ρ , θ).                                                                i=1
+                  τ →∞
+                                                                                       where νi , αi ≥ 0 are the Lagrange multipliers. Taking
+                                                                                       derivative of (50) with respect to c̃, ξ and R and then setting
+                                                                                       the derivatives to zero yields
+B. Anomaly Detection with the SVDD algorithm                                                            Xn
+
+   In this subsection, we introduce an anomaly detection                                           c̃ =     αi h̄i                                (51)
+                                                                                                            i=1
+algorithm based on the SVDD formulation and provide the                                               n
+joint updates in order to learn both the LSTM and SVDD                                                X
+                                                                                                            αi = 1 and αi = 1/(nλ) − νi , ∀i.                        (52)
+parameters. However, since the generic formulation is the
+                                                                                                      i=1
+same with the OC-SVM case, we only provide the required
+                                                                                       Putting (51) and (52) into (50), we obtain a dual form for (46)
+and distinct updates for the parameters and proof for the
+                                                                                       and (47) as follows
+convergence of the approximated SVDD formulation to the
+actual one.                                                                                            X n
+                                                                                                        n  X             T
+                                                                                                                                 n
+                                                                                                                                 X      T
+                                                                                              min
+                                                                                              n
+                                                                                                               α i α j h̄i h̄j −   αi h̄i h̄i     (53)
+   In the SVDD algorithm, we aim to find a hypersphere that                                          n
+                                                                                             θ∈R θ ,α∈R
+                                                                                                            i=1 j=1                     i=1
+encloses the normal data while leaving the anomalous data                                                  n
+outside the hypersphere [7]. For the sequence {h̄i }ni=1 , we
+                                                                                                           X
+                                                                                             subject to:         αi = 1 and 0 ≤ αi ≤ 1/(nλ), ∀i                      (54)
+have the following SVDD optimization problem [7]                                                           i=1
+                                    n
+                            2    1 X                                                         W (·)T W   (·)
+                                                                                                            = I, R(·)T R(·) = I and b(·)T b(·) = 1.                  (55)
+              min         R   +        ξi                 (46)
+    θ∈Rnθ ,c̃∈Rm ,ξ∈R,R∈R       nλ i=1                                                 Using (51), we modify (49) as
+                                  2           2                                                               n X n
+    subject to: kh̄i − c̃k − R ≤ ξi , ξi ≥ 0, ∀i                                (47)
+                                                                                                      
+                                                                                                                             T
+                                                                                                            X
+       (·)T       (·)            (·)T       (·)               (·)T (·)
+                                                                                         l(X i ) = sgn R2 −          αk αj h̄k h̄j
+   W          W         = I, R          R         = I and b        b     = 1,   (48)                                  k=1 j=1
+                                                                          2                                                     n
+where λ > 0 is a trade-off parameter between R and the                                                                          X          T         T
+                                                                                                                                                             
+total misclassification error, R is the radius of the hypersphere                                                        +2           αj h̄j h̄i − h̄i h̄i       .   (56)
+and c̃ is the center of the hypersphere. Additionally, θ and                                                                    j=1
+                                                                                                                                                      8
+
+
+
+In order to solve the constrained optimization problem in (53),            as follows
+(54) and (55), we employ the same approach as in the OC-                                                        n
+                                                                                                            1 X
+SVM case. We first fix a certain set of the LSTM parameters                       minm            R2 +            G(ΨR,c̃ (h̄i ))             (57)
+                                                                                n
+                                                                            θ∈R θ ,c̃∈R ,R∈R               nλ i=1
+θ. Based on these parameters, we find the optimal α using the
+SMO algorithm. After that, we fix α to update θ using the                   s.t.:W (·)T W (·) = I, R(·)T R(·) = I and b(·)T b(·) = 1, (58)
+algorithm for optimization with orthogonality constraints. We              where
+repeat these procedures until we reach convergence. Finally,
+we evaluate (56) based on the converged parameters.                                           ΨR,c̃ (h̄i ) , kh̄i − c̃k2 − R2 .
+                                                                           Since the gradient based methods cannot optimize (57) due to
+Remark 6. In the SVDD case, we apply the SMO algorithm
+                                                                           the nondifferentiable function G(·), we employ Sτ (·) instead
+using the same procedures with the OC-SVM case. In par-
+                                                                           of G(·) and modify (57) as
+ticular, we first choose two parameters, e.g., α1 and α2 , to
+                                                                                                                          n
+minimize and fix the other parameters. Due to (54), the chosen                                                    2    1 X
+                                                                                   min         F τ (c̃, R, θ) = R   +        Sτ (ΨR,c̃ (h̄i ))
+parameters must obey (20). Hence, we have the following                      θ∈Rnθ ,c̃∈Rm ,R∈R                        nλ i=1
+update rule for α2 at the k th iteration                                                                                                 (59)
+           2(1 − S)(K11 − K12 ) + K22 − K11 + M1 − M2
+ αk+1,2 =                                                    ,              s.t.:W (·)T W (·) = I, R(·)T R(·) = I and b(·)T b(·) = 1, (60)
+                         2(K11 + K22 − 2K12 )
+            Pn                                                             where Fτ (·, ·, ·) is the objective function of (59). To obtain the
+where S = j=3 αk,j and the other definitions are the same
+                                                                           optimal values for (59) and (60), we update c̃, R and θ till
+with the OC-SVM case. We then obtain αk+1,1 using (20). By
+                                                                           we reach either a local or a global optimum. For the updates
+this, we obtain the updated values αk+1,2 and αk+1,1 . For the
+                                                                           of c̃ and R, we employ the SGD algorithm, where we use the
+remaining parameters, we repeat this procedure until reaching
+                                                                           following gradient calculations. We first compute the gradient
+convergence.
+                                                                           of c̃ as
+Remark 7. For the SVDD case, we update W (·) at the k th                                                   n
+                                                                                                       1 X 2(c̃ − h̄i )eτ Ψc̃,R (h̄i )
+iteration as in (24). However, instead of (25), we have the                       ∇c̃ Fτ (c̃, R, θ) =                                  .  (61)
+                                                                                                      nλ i=1     1 + eτ Ψc̃,R (h̄i )
+following definition for G
+                           ∂π(θ, αk+1 )                                    Using (61), we have the following update
+                     Gij =         (·)
+                                        ,
+                              ∂W ij                                                       c̃k+1 = c̃k − µ∇c̃ Fτ (c̃, R, θ) c̃=c̃k ,           (62)
+                                                                                                                               R2 =Rk
+                                                                                                                                    2
+
+where                                                                                                                           θ =θ k
+                X n
+                n                                   n
+                  X                       T
+                                                    X              T       where the subscript k represents the iteration number. Like-
+π(θ, αk+1 ) ,             αk+1,i αk+1,j h̄i h̄j −         αk+1,i h̄i h̄i   wise, we compute the derivative of the objective function with
+                i=1 j=1                             i=1
+                                                                           respect to R2 as
+at the k th iteration. For the remaining parameters, we follow                                               n
+                                                                                    ∂Fτ (c̃, R, θ)        1 X −eτ Ψc̃,R (h̄i )
+the procedure in Remark 3.                                                                         = 1 +                            . (63)
+                                                                                        ∂R2              nλ i=1 1 + eτ Ψc̃,R (h̄i )
+   Hence, we obtain a quadratic programming based training
+algorithm for our LSTM based anomaly detector, which is also               With (63), we update R2 as
+described in Algorithm 3 as a pseudocode.                                                  2                  ∂Fτ (c̃, R, θ)
+                                                                                          Rk+1 = Rk2 − µ                      c̃=c̃k .        (64)
+                                                                                                                  ∂R2        R2 =Rk 2
+Algorithm 3 Quadratic Programming Based Training for the                                                                        θ =θ k
+Anomaly Detection Algorithm Based on SVDD                                  For θ, the gradient calculation is as follows
+ 1: Initialize the LSTM parameters as θ 0 and the dual SVDD                                       n             (·)
+                                                                                                    2(∂ h̄i /∂W ij )T (h̄i − c̃)eτ Ψc̃,R (h̄i )
+                                                                             ∂Fτ (c̃, R, θ)       X
+    parameters as α0                                                                    (·)
+                                                                                              =                                                   .
+ 2: Determine a threshold  as convergence criterion                             ∂W ij            i=1            nλ(1 + eτ Ψc̃,R (h̄i ) )
+ 3: k = −1                                                                                                                                    (65)
+ 4: do                                                                     Using (65), we have the following update
+ 5:     k =k+1                                                                            
+                                                                                                µ
+                                                                                                      −1 
+                                                                                                                µ
+                                                                                                                    
+                                                                                   (·)                                (·)
+ 6:     Using θ k , obtain {h̄}ni=1 according to Fig. 2                         W k+1 = I + B k            I − Bk W k ,                       (66)
+                                                                                                2               2
+ 7:     Find optimal αk+1 for {h̄}ni=1 using the procedure in
+                                                                                                     (·)            (·)
+    Remark 6                                                               where B k = M k (W k )T − W k M Tk and
+ 8:     Based on αk+1 , obtain θ k+1 using2 Remark 7                                               ∂Fτ (c̃, R, θ)
+ 9: while π(θ k+1 , αk+1 ) − π(θ k , αk ) >                                                M ij ,           (·)
+                                                                                                                   .                          (67)
+                                                                                                      ∂W ij
+10: Detect anomalies using (56) evaluated at θ k and αk
+
+                                                                           Remark 8. For R(·) and b(·) , we first compute the gradient of
+  2) Gradient Based Training Algorithm: In this subsection,                the objective function with respect to the chosen parameter as
+we introduce a training algorithm based on only the first order            in (67). We then obtain B k according to the chosen parameter.
+gradients for (46), (47) and (48). We again use the G(·)                   Using B k , we update the chosen parameter as in (66).
+function in (26) in order to eliminate the constraint in (47)
+                                                                                                                                                 9
+
+
+
+Remark 9. In the semi-supervised framework, we have the fol-               Algorithm 4 Gradient Based Training for the Anomaly De-
+lowing optimization problem for our SVDD based algorithms                  tection Algorithm Based on SVDD
+[30]                                                                        1: Initialize the LSTM parameters as θ 0         and the SVDD
+                              Xl         l+k
+                                         X                                     parameters as c̃0 and R02
+      min     R2 − C1 γ + C2     ξi + C3      ηj       (68)                 2: Determine a threshold  as convergence criterion
+   θ,c̃,R,ξ,γ,η
+                                         i=1         j=l+1                  3: k = −1
+    s.t.:kh̄i − c̃k2 − R2 ≤ ξi , ξi ≥ 0, ∀li=1                      (69)    4: do
+
+     yj (kh̄j − c̃k      2
+                             − R ) ≤ −γ + ηj , ηj ≥ 0, ∀l+k
+                                 2
+                                                                    (70)    5:     k =k+1
+                                                         j=l+1
+                                                                            6:     Using θ k , obtain {h̄}ni=1 according to Fig. 2
+       (·)T       (·)           (·)T (·)          (·)T (·)
+   W          W         = I, R       R   = I and b     b     = 1,   (71)    7:                      2
+                                                                                   Obtain c̃k+1 , Rk+1   and θ k+1 using (62), (64), (66)
+where η ∈ R is a slack variable as ξ, γ ∈ R is the margin                      and Remark 8                                           2
+of the labeled data instances, C1 , C2 and C3 are trade-                    8: while Fτ (c̃k+1 , Rk+1 , θ k+1 ) − Fτ (c̃k , Rk , θ k ) > 
+                                                                                                                                      2
+off parameters, k and l are the number of the labeled and                   9: Detect anomalies using (49) evaluated at c̃k , Rk        and θ k
+unlabeled data instances, respectively and yj ∈ {−1, +1}
+represents the label of the j th data instance.
+   For the quadratic programming based training method, we                 sequences, i.e., the digit dataset [31]. We then compare the
+modify all the steps from (50) to (56), Remark 6 and Remark 7              anomaly detection performances on several different bench-
+with respect to (68)–(71). In a similar manner, we modify the              mark real datasets such as the occupancy [32], Hong Kong
+equations from (57) to (67) according to (68)–(71) in order                Exchange (HKE) rate [33], http [34] and Alcoa stock price
+to obtain the gradient based training method in the semi-                  [35] datasets. While performing experiments on real bench-
+supervised framework. For the supervised implementation, we                mark datasets, we also include the GRU based algorithms in
+follow the same procedure with the semi-supervised implemen-               order to compare their performances with the LSTM based
+tation for l = 0 case.                                                     ones. Note that since the introduced algorithms have bounded
+   The complete algorithm is provided in Algorithm 4. In the               functions, e.g., the sigmoid function in the LSTM architecture,
+following, we provide the convergence proof as in the OC-                  for all the experiments in this section, we normalize each
+SVM case.                                                                  dimension of the datasets into [−1, 1].
+                                                                              Throughout this section, we denote the LSTM based OC-
+Theorem 2. Let c̃τ and Rτ2 be the solutions of (59) for                    SVM anomaly detectors that are trained with the gradient and
+any fixed θ. Then, c̃τ and Rτ2 are unique and Fτ (c̃τ , Rτ , θ)            quadratic programming based algorithms as “LSTM-GSVM”
+converges to the minimum of F (c̃, R, θ), i.e., defined as                 and “LSTM-QPSVM”, respectively. In a similar manner, we
+                               1 X
+                                  n                                        use “LSTM-GSVDD” and “LSTM-QPSVDD” for the SVDD
+          F (c̃, R, θ) , R2 +        G(ΨR,c̃ (h̄i )).                      based anomaly detectors. Moreover, for the labels of the GRU
+                              nλ i=1
+                                                                           based algorithms, we replace the LSTM prefix with GRU.
+Proof of Theorem 2. We have the following Hessian matrix
+of Fτ (c̃, R, θ) with respect to c̃                                               A. Anomaly Detection for Variable Length Data Sequences
+                       n              2                                       T
+                     X     2I(Ω i + Ω i ) +  4τ  Ω i (c̃   −  h̄i )(c̃ − h̄i )       In this section, we evaluate the performances of the intro-
+∇2c̃ Fτ (c̃, R, θ) =                                       2                   ,
+                                          nλ   1  +   Ω  i
+                                                                                  duced   anomaly detectors on the digit dataset [31]. In this
+                      i=1
+                                                                                  dataset, we have the pixel samples of digits, which were
+where Ωi = eτ Ψc̃,R (h̄i ) , which implies v T ∇2c̃ Fτ (c̃, R, θ)v > 0 written on a tablet by several different authors [31]. Since the
+for any nonzero column vector v. Thus, the Hessian matrix speed of writing varies from person to person, the number of
+is positive definite, which shows that Fτ (w, ρ, θ) is strictly samples for a certain digit might significantly differ. The intro-
+convex function of c̃. As a result, the solution c̃τ is both global duced algorithms are able to process such kind of sequences
+and unique given any R and θ. In addition to this, we have thanks to their generic structure in Fig. 2. However, the
+the following second order derivative for R2                                      conventional OC-SVM and SVDD algorithms cannot directly
+           2
+         ∂ Fτ (c̃, R, θ)      τ  Xn
+                                          e τ Ψc̃,R (h̄i )                        process these sequences [6], [7]. For these algorithms, we take
+                          =                                       >  0,           the mean of each sequence to obtain a fixed length vector
+             ∂(R2 )2         nλ i=1 1 + eτ Ψc̃,R (h̄i ) 2
+                                                            
+                                                                                  sequence, i.e., two dimensional in this case (two coordinates
+which implies that Fτ (c̃, R, θ) is strictly convex function of of a pixel). In order to evaluate the performances, we first
+R2 . Therefore, the solution Rτ2 is both global and unique for choose a digit as normal and another digit as anomaly. We
+any given c̃ and θ.                                                               emphasize that randomly choose digits for illustration and
+   The convergence proof directly follows the proof of Theo- we obtain similar performances for the other digits. We then
+rem 1.                                                                            divide the samples of these digits into training and test parts,
+                                                                                  where we allocate 60% of the samples for the training part and
+                                                                                  40% for the test part. In both the training and test parts, we
+                          IV. S IMULATIONS                                        select the samples so that 10% of the samples are anomalies.
+   In this section, we demonstrate the performances of the Then, using the training part, we optimize the parameters of
+algorithms on several different datasets. We first evaluate the each algorithm using two fold cross validation, where we also
+performances on a dataset that contains variable length data select certain crucial parameter, e.g., µ. This procedure results
+                                                                                                                                    10
+
+
+
+in µ = 0.05, 0.001, 0.05 and 0.01 for LSTM-GSVM, LSTM-                      hi,j = h̃i,j   z̃ i,j + hi,j−1   (1 − z̃ i,j ),       (75)
+QPSVM, LSTM-GSVDD and LSTM-QPSVDD, respectively.                                   m
+                                                                  where hi,j ∈ R is the output vector and xi,j ∈ R is the     p
+Furthermore, we select the output dimension of the LSTM
+                                                                  input vector. Furthermore, W (·) and R(·) are the parameters
+architecture as m = 2 and the regularization parameter as
+                                                                  of the GRU, where the sizes are selected according to the
+λ = 0.5 for all the algorithms. For the implementation of
+                                                                  dimensionality of the input and output vectors. We then replace
+the conventional OC-SVM and SVDD algorithms, we use the
+                                                                  (1)–(6) with (72)–(75) in Fig. 2 to obtain GRU based anomaly
+libsvm library and their parameters are selected in a similar
+                                                                  detectors.
+manner via built in optimization tools of libsvm [36].
+   Here, we use area under ROC curve as a performance                We first evaluate the performances of the algorithms on the
+metric [37]. In a ROC curve, we plot true positive rate           occupancy dataset [32]. In this dataset, we have five features,
+(TPR) as a function of false positive rate (FPR). Area un-        which are relative humidity percentage, light (in lux), carbon
+der this curve, i.e., also known as AUC, is a well known          dioxide level (in ppm), temperature (in Celsius) and humidity
+performance measure for anomaly detection tasks [37]. In          ratio, and our aim is to determine whether an office room is
+Fig. 3a and 3b, we illustrate the ROC curves and provide          occupied or not based on the features. Here, we use the same
+the corresponding AUC scores, where we label digit “0”            procedure with the previous subsection to separate the test
+and “9” as normal and anomaly, respectively. For the OC-          and training data. Moreover, using the training data, we select
+SVM and SVDD algorithms, since we directly take the mean          µ = 0.05, 0.05, 0.001 and 0.01 for LSTM-GSVM, LSTM-
+of variable length data sequences to obtain fixed length se-      QPSVM, LSTM-GSVDD and LSTM-QPSVDD, respectively.
+quences, they achieve significantly lower AUC scores com-         Note that, for the GRU based algorithms in this subsection,
+pared to the introduced LSTM based methods. Among the             we use the same parameter setting with the LSTM based
+LSTM based methods, LSTM-GSVM slightly outperforms                algorithms. Furthermore, we choose m = 5 and λ = 0.5 for
+LSTM-QPSVM. On the other hand, LSTM-GSVDD achieves                all of the experiments in this subsection in order to maximize
+significantly higher AUC than LSTM-QPSVDD. Since the              the performances of the algorithms.
+quadratic programming based training method depends on the           As can be seen in Table I, due to their inherent memory,
+separated consecutive updates of the LSTM and SVM (or             both the LSTM and GRU based algorithms achieve consid-
+SVDD) parameters, it might not converge to even a local           erably high AUC scores compared to the conventional SVM
+minimum. However, the gradient based method can guarantee         and SVDD algorithms. Moreover, GRU-GSVDD achieves the
+convergence to at least a local minimum given a proper choice     highest AUC score among all the algorithms, where the LSTM
+of the learning rate [28]. Thus, although these methods might     based algorithms (LSTM-GSVM and LSTM-QPSVM) also
+provide similar performances as in Fig. 3a, it is also expected   provide comparable AUC scores. Here, we also observe that
+to obtain much higher performance from the gradient based         the gradient based training method provides higher AUC
+method for certain cases as in Fig. 3b. However, overall, the     scores compared to the quadratic programming based training
+introduced algorithms provide significantly higher AUC than       method, which might stem from its separated update proce-
+the conventional methods.                                         dure that does not guarantee convergence to a certain local
+   Besides the previous scenario, we also consider a scenario,    minimum.
+where we label digit “1” and “7” as normal and anomaly,              Other than the occupancy dataset, we also perform an
+respectively. In Fig. 4a and 4b, we illustrate the ROC curves     experiment on the HKE rate dataset in order to examine the
+and provide the corresponding AUC scores. As in the previous      performances for a real life financial scenario. In this dataset,
+scenario, for both the SVM and SVDD cases, the introduced         we have the amount of Hong Kong dollars that one can buy for
+algorithms achieve higher AUC scores than the conventional        one US dollar on each day. In order to introduce anomalies
+algorithms. Among the introduced algorithms, LSTM-GSVM            to this dataset, we artificially add samples from a Gaussian
+and LSTM-GSVDD achieve the highest AUC scores for the             distribution with the mean and ten times the variance of the
+SVM and SVDD cases, respectively. Furthermore, the AUC            training data. Furthermore, using the training data, we select
+score of each algorithm is much lower compared to the             µ = 0.01, 0.005, 0.05 and 0.05 for LSTM-GSVM, LSTM-
+previous case due to the similarity between digit “1” and “7”.    QPSVM, LSTM-GSVDD and LSTM-QPSVDD, respectively.
+                                                                     In Table I, we illustrate the AUC scores of the algorithms
+B. Benchmark Real Datasets                                        on the HKE rate dataset. Since we have time series data, both
+                                                                  the LSTM and GRU based algorithms naturally outperform
+   In this section, we compare the AUC scores of each al-
+                                                                  the conventional methods thanks to their inherent memory,
+gorithm on several different real benchmark datasets. Since
+                                                                  which preserves sequential information. Moreover, since the
+our approach in this paper is generic, in addition to the
+                                                                  LSTM architecture also controls its memory content via output
+LSTM based algorithms, we also implement our approach
+                                                                  gate unlike the GRU architecture [17], we obtain the highest
+on the recently introduced RNN architecture, i.e., the GRU
+                                                                  AUC scores from LSTM-GSVM. As in the previous cases, the
+architecture, which is defined by the following equations [17]:
+                                                                gradient based training method provides better performance
+         z̃ i,j = σ W (z̃) xi,j + R(z̃) hi,j−1             (72)   than the quadratic programming based training.
+                                                                   We also evaluate the AUC scores of the algorithms on
+         r i,j = σ W (r) xi,j + R(r) hi,j−1                (73)   the http dataset [34]. In this dataset, we have 4 features,
+                                                                  which are duration (number of seconds of the connection),
+                                                      
+         h̃i,j = g W (h̃) xi,j + r i,j (R(h̃) hi,j−1 )     (74)
+                                                                  network service, number of bytes from source to destination
+                                                                                                                                                                                                              11
+
+
+
+                                               ROC Curves for SVM                                                                                     ROC Curves for SVDD
+                         1                                                                                                      1
+
+                        0.9                                                                                                    0.9
+
+                        0.8                                                                                                    0.8
+                                               AUC=0.8942                           LSTM-QPSVM
+                                                                                                                                                                                            LSTM-QPSVDD
+
+
+
+
+   True Positive Rate                                                                                 True Positive Rate
+                        0.7                                                         SVM                                        0.7
+                                                                                                                                                                                            SVDD
+                                                                                    LSTM-GSVM                                            AUC=0.8948                                         LSTM-GSVDD
+                        0.6                                                                                                    0.6
+                                         AUC=0.8873
+                        0.5                                                                                                    0.5
+                                                                       AUC=0.6041
+                                                                                                                                                                                       AUC=0.5429
+                        0.4                                                                                                    0.4
+                                                                                                                                                                         AUC=0.7565
+                        0.3                                                                                                    0.3
+
+                        0.2                                                                                                    0.2
+
+                        0.1                                                                                                    0.1
+
+                         0                                                                                                      0
+                              0   0.1   0.2    0.3    0.4    0.5     0.6   0.7   0.8    0.9      1                                   0   0.1   0.2     0.3   0.4    0.5     0.6    0.7      0.8   0.9     1
+                                                 False Positive Rate                                                                                     False Positive Rate
+                                                            (a)                                                                                                    (b)
+Fig. 3: The ROC curves of the algorithms for the digit dataset, where we consider digit “0” as normal and digit “9” as anomaly (a) for the SVM based
+algorithms and (b) for the SVDD based algorithms.
+                                               ROC Curves for SVM                                                                                      ROC Curves for SVDD
+                         1                                                                                                       1
+
+                        0.9                                                                                                    0.9
+                                  AUC=0.7744
+                                                                                                                                          AUC=0.7464
+                        0.8                                                                                                    0.8
+                                                                                    LSTM-QPSVM
+
+
+
+
+   True Positive Rate                                                                                     True Positive Rate
+                        0.7                                                         SVM                                        0.7
+                                                                                                                                                                                            LSTM-QPSVDD
+                                                                                    LSTM-GSVM
+                        0.6                                                                                                    0.6                                                          SVDD
+                                                                                                                                                                                            LSTM-GSVDD
+                        0.5                                                                                                    0.5
+                                                                           AUC=0.5580
+                        0.4                                                                                                    0.4                                                 AUC=0.5235
+
+                                                                                                                                                                         AUC=0.6513
+                        0.3                                       AUC=0.6849                                                   0.3
+
+                        0.2                                                                                                    0.2
+
+                        0.1                                                                                                    0.1
+
+                         0                                                                                                       0
+                              0   0.1   0.2    0.3    0.4    0.5     0.6   0.7   0.8    0.9      1                                   0   0.1   0.2     0.3   0.4     0.5     0.6      0.7   0.8     0.9   1
+                                                 False Positive Rate                                                                                     False Positive Rate
+                                                            (a)                                                                                                    (b)
+Fig. 4: The ROC curves of the algorithms for the digit dataset, where we consider digit “1” as normal and digit “7” as anomaly (a) for the SVM based
+algorithms and (b) for the SVDD based algorithms.
+
+and from destination to source. Using these features, we aim                                         artificially introduce anomalies via a Gaussian distribution
+to distinguish normal connections from network attacks. In                                           with the mean and ten times the variance of the training data.
+this experiment, we select µ = 0.01, 0.05, 0.001 and 0.01 for                                        Moreover, we choose µ = 0.01, 0.001, 0.001 and 0.005 for
+LSTM-GSVM, LSTM-QPSVM, LSTM-GSVDD and LSTM-                                                          LSTM-GSVM, LSTM-QPSVM, LSTM-GSVDD and LSTM-
+QPSVDD, respectively.                                                                                QPSVDD, respectively.
+   We demonstrate the performances of the algorithms on                                                 In Table I, we illustrate the AUC scores of the algorithms
+the http dataset in Table I. Even though all the algorithms                                          on the Alcoa stock price dataset. Here, we observe that the
+achieve high AUC scores on this dataset, we still observe                                            GRU and LSTM based algorithms achieve considerably higher
+that the LSTM and GRU based algorithms have higher                                                   AUC scores than the conventional methods thanks to their
+AUC scores than the conventional SVM and SVDD methods.                                               memory structure. Although the LSTM based algorithms have
+Overall, GRU-QPSVDD achieves the highest AUC score and                                               higher AUC in general, we obtain the highest AUC score from
+the quadratic programming based training methods performs                                            GRU-QPSVDD. Moreover, as in the previous experiments, the
+better than the gradient based training method on this dataset.                                      gradient based training method provides higher performance
+However, since the AUC scores are very high and close to                                             compared to the quadratic programming based method thanks
+each other, we observe only slight performance improvement                                           to its learning capabilities.
+for our algorithms in this case.
+   As the last experiment, we evaluate the anomaly detection                                                         V. C ONCLUDING R EMARKS
+performances of the algorithms on another financial dataset,                                           In this paper, we study anomaly detection in an unsu-
+i.e., the Alcoa stock price dataset [35]. In this dataset, we have                                   pervised framework and introduce LSTM based algorithms.
+daily stock price values. As in the HKE rate dataset, we again                                       Particularly, we have introduced a generic LSTM based
+                                                                                                                                                             12
+TABLE I: AUC scores of the algorithms for the occupancy, HKE rate, http and Alcoa stock price datasets.
+
+      Algorithms
+  PP
+      P P         SVM     SVDD LSTM-QPSVM LSTM-GSVM LSTM-QPSVDD LSTM-GSVDD GRU-QPSVM GRU-GSVM GRU-QPSVDD GRU-GSVDD
+   DatasetsPPP P
+    Occupancy    0.8676   0.6715      0.8917         0.8957          0.7869          0.8609          0.8718        0.9049         0.7217          0.9099
+     HKE         0.8000   0.8500      0.9467         0.9783          0.8560          0.9753          0.8479        0.9516         0.8791          0.9517
+     Http        0.9963   0.9993      0.9992         0.9983          0.9994          0.9994          0.9986        0.9989         0.9999          0.9994
+    Alcoa        0.7197   0.9390      0.9496         0.9515          0.9415          0.9507          0.7581        0.9392         0.9651          0.9392
+
+
+structure in order to process variable length data sequences.                   [12] Y. Bengio, P. Simard, and P. Frasconi, “Learning long-term dependen-
+After obtaining fixed length sequences via our LSTM based                            cies with gradient descent is difficult,” IEEE Transactions on Neural
+                                                                                     Networks, vol. 5, no. 2, pp. 157–166, Mar 1994.
+structure, we introduce a scoring function for our anomaly                      [13] K. Greff, R. K. Srivastava, J. Koutnk, B. R. Steunebrink, and J. Schmid-
+detectors based on the OC-SVM [6] and SVDD [7] algorithms.                           huber, “LSTM: A search space odyssey,” IEEE Transactions on Neural
+                                                                                     Networks and Learning Systems, vol. 28, no. 10, pp. 2222–2232, Oct
+As the first time in the literature, we jointly optimize the                         2017.
+parameters of both the LSTM architecture and the final scoring                  [14] S. Hochreiter and J. Schmidhuber, “Long short-term memory,” Neural
+                                                                                     Comput., vol. 9, no. 8, pp. 1735–1780, Nov. 1997.
+function of the OC-SVM (or SVDD) formulation. To jointly                        [15] R. Kozma et al., “Anomaly detection by neural network models and
+                                                                                     statistical time series analysis,” in Neural Networks, 1994. IEEE World
+optimize the parameters of our algorithms, we have also                              Congress on Computational Intelligence., 1994 IEEE International
+introduced gradient and quadratic programming based training                         Conference on, vol. 5, Jun 1994, pp. 3207–3210 vol.5.
+                                                                                [16] C. Bishop, “Novelty detection and neural network validation,” IEE
+methods with different algorithmic merits, where we extend                           Proceedings - Vision, Image and Signal Processing, vol. 141, pp. 217–
+our derivations for these algorithms to the semi-supervised and                      222(5), August 1994.
+                                                                                [17] J. Chung, C. Gulcehre, K. Cho, and Y. Bengio, “Empirical evaluation of
+fully supervised frameworks. In order to apply the gradient                          gated recurrent neural networks on sequence modeling,” arXiv preprint
+based training method, we modify the OC-SVM and SVDD                                 arXiv:1412.3555, 2014.
+                                                                                [18] Y. Wang, J. Wong, and A. Miner, “Anomaly intrusion detection using
+formulations and then provide the convergence results of the                         one class svm,” in Information Assurance Workshop, 2004. Proceedings
+modified formulations to the actual ones. Therefore, we obtain                       from the Fifth Annual IEEE SMC. IEEE, 2004, pp. 358–364.
+                                                                                [19] N. H. Packard, J. P. Crutchfield, J. D. Farmer, and R. S. Shaw, “Geometry
+highly effective anomaly detection algorithms, especially for                        from a time series,” Physical review letters, vol. 45, no. 9, p. 712, 1980.
+time series data, that are able to process variable length data                 [20] R. Zhang, S. Zhang, Y. Lan, and J. Jiang, “Network anomaly detection
+                                                                                     using one class support vector machine,” in Proceedings of the Inter-
+sequences. In our simulations, due to the generic structure of                       national MultiConference of Engineers and Computer Scientists, vol. 1,
+our approach, we have also introduced GRU based anomaly                              2008.
+                                                                                [21] S. Chauhan and L. Vig, “Anomaly detection in ecg time signals via
+detection algorithms. Through extensive set of experiments,                          deep long short-term memory networks,” in 2015 IEEE International
+we illustrate significant performance improvements achieved                          Conference on Data Science and Advanced Analytics (DSAA), Oct 2015,
+                                                                                     pp. 1–7.
+by our algorithms with respect to the conventional methods                      [22] L. Jing, C. Gulcehre, J. Peurifoy, Y. Shen, M. Tegmark, M. Soljačić, and
+[6], [7] over several different real and simulated datasets.                         Y. Bengio, “Gated orthogonal recurrent units: On learning to forget,”
+                                                                                     arXiv preprint arXiv:1706.02761, 2017.
+                                                                                [23] S. Wisdom et al., “Full-capacity unitary recurrent neural networks,” in
+                             R EFERENCES                                             Advances in Neural Information Processing Systems, 2016, pp. 4880–
+                                                                                     4888.
+ [1] V. Chandola, A. Banerjee, and V. Kumar, “Anomaly detection: A              [24] M. Bai, B. Zhang, and J. Gao, “Tensorial recurrent neural networks for
+     survey,” ACM Comput. Surv., vol. 41, no. 3, pp. 15:1–15:58, Jul. 2009.          longitudinal data analysis,” arXiv preprint arXiv:1708.00185, 2017.
+     [Online]. Available: http://doi.acm.org/10.1145/1541880.1541882            [25] J. Platt, “Sequential minimal optimization: A fast algorithm for training
+ [2] T. Xie, N. M. Nasrabadi, and A. O. Hero, “Learning to classify with             support vector machines,” 1998.
+     possible sensor failures,” IEEE Transactions on Signal Processing,         [26] Z. Wen and W. Yin, “A feasible method for optimization with orthog-
+     vol. 65, no. 4, pp. 836–849, Feb 2017.                                          onality constraints,” Mathematical Programming, vol. 142, no. 1, pp.
+ [3] B. Baingana and G. B. Giannakis, “Joint community and anomaly                   397–434, Dec 2013.
+     tracking in dynamic networks,” IEEE Transactions on Signal Processing,     [27] L. Veidinger, “On the numerical determination of the best approxima-
+     vol. 64, no. 8, pp. 2013–2025, April 2016.                                      tions in the chebyshev sense,” Numerische Mathematik, vol. 2, no. 1,
+ [4] K. Cohen, Q. Zhao, and A. Swami, “Optimal index policies for anomaly            pp. 99–105, 1960.
+     localization in resource-constrained cyber systems,” IEEE Transactions     [28] A. H. Sayed, Fundamentals of adaptive filtering. John Wiley & Sons,
+     on Signal Processing, vol. 62, no. 16, pp. 4224–4236, Aug 2014.                 2003.
+ [5] J. Sharpnack, A. Rinaldo, and A. Singh, “Detecting anomalous activity      [29] K. P. Bennett and A. Demiriz, “Semi-supervised support vector ma-
+     on networks with the graph fourier scan statistic,” IEEE Transactions           chines,” in Advances in Neural Information processing systems, 1999,
+     on Signal Processing, vol. 64, no. 2, pp. 364–379, Jan 2016.                    pp. 368–374.
+ [6] B. Schölkopf, J. C. Platt, J. Shawe-Taylor, A. J. Smola, and R. C.        [30] N. Görnitz, M. Kloft, K. Rieck, and U. Brefeld, “Toward supervised
+     Williamson, “Estimating the support of a high-dimensional distribution,”        anomaly detection,” J. Artif. Int. Res., vol. 46, no. 1, pp. 235–262, Jan.
+     Neural computation, vol. 13, no. 7, pp. 1443–1471, 2001.                        2013. [Online]. Available: http://dl.acm.org/citation.cfm?id=2512538.
+ [7] D. M. Tax and R. P. Duin, “Support vector data description,” Machine            2512545
+     Learning, vol. 54, no. 1, pp. 45–66, 2004. [Online]. Available:            [31] M. Lichman, “UCI machine learning repository,” 2013.
+     http://dx.doi.org/10.1023/B:MACH.0000008084.60811.49                       [32] L. M. Candanedo and V. Feldheim, “Accurate occupancy detection of
+ [8] J. Ma and S. Perkins, “Time-series novelty detection using one-class            an office room from light, temperature, humidity and co2 measurements
+     support vector machines,” in Proceedings of the International Joint             using statistical learning models,” Energy and Buildings, vol. 112, no.
+     Conference on Neural Networks, 2003., vol. 3, July 2003, pp. 1741–              Supplement C, pp. 28 – 39, 2016.
+     1745 vol.3.                                                                [33] E. W. Frees, “Regression modelling with actuarial and financial
+ [9] R. Zhang et al., “One class support vector machine for anomaly detection        applications.” [Online]. Available: http://instruction.bus.wisc.edu/jfrees/
+     in the communication network performance data,” in Proceedings of               jfreesbooks/Regression%20Modeling/BookWebDec2010/data.html
+     the 5th Conference on Applied Electromagnetics, Wireless and Optical       [34] S. Rayana, “ODDS library,” 2016. [Online]. Available: http://odds.cs.
+     Communications, ser. ELECTROSCIENCE’07. Stevens Point, Wis-                     stonybrook.edu
+     consin, USA: World Scientific and Engineering Academy and Society          [35] “Summary for alcoa inc. common stock.” [Online]. Available:
+     (WSEAS), 2007, pp. 31–37.                                                       http://finance.yahoo.com/quote/AA?ltr=1
+[10] P. Malhotra, L. Vig, G. Shroff, and P. Agarwal, “Long short term           [36] C.-C. Chang and C.-J. Lin, “LIBSVM: A library for support vector
+     memory networks for anomaly detection in time series,” in Proceedings.          machines,” ACM Transactions on Intelligent Systems and Technology,
+     Presses universitaires de Louvain, 2015, p. 89.                                 vol. 2, pp. 27:1–27:27, 2011, software available at http://www.csie.ntu.
+[11] H. Debar, M. Becker, and D. Siboni, “A neural network component for             edu.tw/∼cjlin/libsvm.
+     an intrusion detection system,” in Proceedings 1992 IEEE Computer          [37] A. P. Bradley, “The use of the area under the roc curve in the evaluation
+     Society Symposium on Research in Security and Privacy, May 1992,                of machine learning algorithms,” Pattern Recognition, vol. 30, no. 7, pp.
+     pp. 240–250.                                                                    1145 – 1159, 1997.
+

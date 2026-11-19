@@ -1,0 +1,2435 @@
+                                                              Self-Supervised Anomaly Detection:
+                                                                     A Survey and Outlook
+                                                   Hadi Hojjati†a,b , Thi Kieu Khanh Ho†a,b , Naregs Armanfarda,b
+                                                         a
+                                                             Department of Electrical and Computer Engineering, McGill
+
+
+
+
+arXiv:2205.05173v5 [cs.LG] 23 Jan 2024
+                                                                         University, Montreal, QC, Canada
+                                                                b
+                                                                  Mila - Quebec AI Institute, Montreal, QC, Canada
+
+
+
+
+                                         Abstract
+                                         Anomaly detection (AD) plays a crucial role in various domains, including
+                                         cybersecurity, finance, and healthcare, by identifying patterns or events that
+                                         deviate from normal behaviour. In recent years, significant progress has been
+                                         made in this field due to the remarkable growth of deep learning models. No-
+                                         tably, the advent of self-supervised learning has sparked the development of
+                                         novel AD algorithms that outperform the existing state-of-the-art approaches
+                                         by a considerable margin. This paper aims to provide a comprehensive re-
+                                         view of the current methodologies in self-supervised anomaly detection. We
+                                         present technical details of the standard methods and discuss their strengths
+                                         and drawbacks. We also compare the performance of these models against
+                                         each other and other state-of-the-art anomaly detection models. Finally,
+                                         the paper concludes with a discussion of future directions for self-supervised
+                                         anomaly detection, including the development of more effective and efficient
+                                         algorithms and the integration of these techniques with other related fields,
+                                         such as multi-modal learning.
+                                         Keywords: Anomaly Detection, Self-Supervised Learning, Contrastive
+                                         Learning, Representation Learning
+
+
+                                         1. Introduction
+                                             Anomaly detection (AD) is the task of identifying samples that differ
+                                         significantly from the majority of data and often signals an irregular, fake,
+
+                                            †
+                                                Both authors contributed equally to the paper
+
+
+                                         Preprint submitted to Neural Networks                                    January 24, 2024
+rare, or fraudulent observation (Wang et al., 2019). Anomaly detection is
+particularly useful in cases where we cannot define all existing classes during
+training. This makes AD algorithms applicable to a broad range of applica-
+tions, including but not limited to intrusion detection in cybersecurity (Xin
+et al., 2018), fraud detection (Malaiya et al., 2018), acoustic novelty detection
+(Hojjati and Armanfard, 2022), and medical diagnosis (Latif et al., 2018).
+    In the past, anomaly detection relied on manual inspection of data by
+experts. However, with the proliferation of sensory systems, the volume of
+data has surged, making the traditional method impractical. As a result, au-
+tomatic anomaly detection methods, including machine learning (ML)-based
+techniques, have gained significant popularity. Over the past few decades,
+numerous ML-based models have been developed for this purpose. Classical
+approaches like Kernel Density Estimation (KDE), One-Class Support Vec-
+tor Machine (OCSVM), and Isolation Forests (IF) have been widely adopted.
+However, the performance of these algorithms often degrades when applied to
+higher-dimensional data. In recent years, deep learning models have shown
+significant improvements over traditional ML models since they have the ca-
+pability to learn intricate patterns and representations from vast amounts of
+data, making them well-suited for anomaly detection. The utilization of deep
+learning for anomaly detection has yielded high accuracy and robust results,
+establishing it as a popular choice in various applications (Ruff et al., 2021;
+Hojjati and Armanfard, 2021).
+    Compared to typical deep learning tasks, anomaly detection poses unique
+challenges due to the characteristics of the data involved. Anomalies are typ-
+ically rare occurrences or costly events in the real world. Consequently, the
+training data for anomaly detection is imbalanced, with a majority of nor-
+mal data and only a small number of anomalies. Moreover, these anomalous
+samples can be contaminated with noise, further complicating the detection
+task. Additionally, anomalies cannot be treated as a single class, and a detec-
+tion system may encounter new types of abnormalities that were not present
+in the training data. These challenges render a significant portion of deep
+learning algorithms ineffective for anomaly detection.
+    In general, deep learning models can be categorized into supervised, semi-
+supervised, and unsupervised methods. Supervised methods, which rely
+on labelled data, often achieve high performance. However, as previously
+mentioned, annotated data is not commonly available for anomaly detection
+tasks, making semi-supervised and unsupervised models the only practical
+options. Unfortunately, these algorithms generally do not perform as well
+
+                                       2
+as their supervised counterparts. This limitation acts as a significant bot-
+tleneck, preventing deep anomaly detection algorithms from surpassing a
+certain performance threshold.
+    Recently, there has been a resurgence of hope for anomaly detection algo-
+rithms with the emergence of self-supervised learning (SSL). In SSL, similar
+to unsupervised learning, the model learns from unlabelled data without
+external annotation. It learns a generalizable representation from data by
+solving a supervised proxy task which is often unrelated to the target task
+but can help the network to learn a better embedding space. Depending on
+the nature of the data, a diverse set of tasks, such as colorization (Larsson
+et al., 2016), mutual information maximization (Hjelm et al., 2019), and pre-
+dicting geometric transformations (Gidaris et al., 2018) can be used as the
+supervised proxy task. These methods showed promising results in various
+applications, such as speech representation learning (Ravanelli et al., 2020),
+visual feature learning (Jing and Tian, 2021), and healthcare applications
+(Azizi et al., 2021). Even in some cases, self-supervised algorithms have
+approached the performance of fully-supervised models (Chen et al., 2020).
+    Motivated by the recent success of SSL, anomaly detection researchers
+have started to incorporate the idea of self-supervision for developing effective
+algorithms. Their studies showed that the representation that is learned
+through self-supervision could be useful for anomaly detection if the anomaly
+score and the pretext task are defined appropriately (Tack et al., 2020; Reiss
+and Hoshen, 2021).
+    As a result, self-supervised algorithms have emerged as the new state-
+of-the-art in anomaly detection, outperforming other traditional methods.
+Recently, a wide range of SSL frameworks has been developed for anomaly
+detection. However, to the best of our knowledge, no paper conducted a com-
+prehensive review of these methods. We aim to fill this gap by thoroughly
+reviewing and categorizing self-supervised learning approaches in anomaly
+detection. Our work provides a valuable resource for researchers and prac-
+titioners in this field and contributes to advancing state-of-the-art anomaly
+detection. In short, we can summarize the contribution of our work as fol-
+lows:
+   • We briefly review the current approaches in anomaly detection to locate
+     self-supervised anomaly detection in the context of AD research.
+   • We discuss the current approaches in self-supervised anomaly detection
+     and its application areas.
+
+                                       3
+   • We divide the existing self-supervised anomaly detection algorithms
+     into two high-level categories based on their requirement of negative
+     samples during training. SSL-based models are different from each
+     other based on their proxy tasks and architecture. Hence, it is essential
+     to categorize these methods to cover all of them.
+
+   • For the first time, we extensively cover the self-supervised learning
+     algorithms based on the data type that they are dealing with.
+
+   • For each type of method, we describe the techniques and assumptions
+     and highlight their pros and cons. We also discuss the implementation
+     details of some prominent algorithms in each category.
+
+   • We discuss possible future directions in self-supervised anomaly detec-
+     tion research.
+
+2. Related Works
+    In recent decades, there has been significant research and exploration
+of the anomaly detection problem across various domains. Several survey
+articles attempted to group anomaly detection algorithms into distinctive
+categories. Hodge and Austin (2004) and Agyemang et al. (2006) are two
+examples of early studies that categorized the existing algorithms and exten-
+sively discussed the techniques that are used in each category. In another
+prominent work, Chandola et al. (2009) surveyed the existing anomaly de-
+tection algorithms and divided them into distinctive categories. In addition
+to describing the technical details of each method, they identified the under-
+lying assumptions that are implicitly made regarding the anomalies. They
+also discussed the advantages, disadvantages and computational complexity
+of each technique. Furthermore, they extensively reviewed the application
+areas of the methods and highlighted the challenges faced in each domain.
+    More recently, deep learning methods have inspired researchers in anomaly
+detection, leading to the development of new algorithms in this domain. As
+a result, review papers focusing on deep anomaly detection have emerged.
+Chalapathy and Chawla (2019) was one of the first papers that presented a
+comprehensive review of deep anomaly detection methods. They categorized
+the existing algorithms based on their underlying assumptions and explained
+the pros and cons of each approach. Chalapathy and Chawla (2019) have also
+thoroughly explored applications of deep anomaly detection and assessed the
+
+                                      4
+effectiveness of each method. In another similar survey, Pang et al. (2021) re-
+viewed contemporary deep AD methods. They first discussed the challenges
+and complexities that anomaly detection faces, and then they categorized the
+existing deep methods into three high-level categories and eleven fine-grained
+subcategories. They emphasized how each category addresses challenges and
+identified key assumptions and intuitions. Notably, they also compiled a list
+of publicly available codes and datasets for benchmarking. While most re-
+view papers in recent years focused on specific sets of algorithms, Ruff et al.
+(2021) presented an extensive survey of anomaly detection methods, unifying
+classic shallow methods with recent deep approaches. They highlighted con-
+nections and similarities between these two types of algorithms, providing an
+in-depth description and taxonomy of common practices and challenges in
+anomaly detection. In addition to the mentioned studies, several other review
+papers in this field have been published, focusing on specific domains of ap-
+plication or particular types of methods. For example, the two survey papers
+Di Mattia et al. (2019) and Xia et al. (2022) are dedicated to reviewing the
+GAN-based anomaly detection methods. They discussed these models’ theo-
+retical bases and practical applications and provided a detailed description of
+existing challenges and future directions in GAN-based anomaly detection.
+Both of the papers also carried out empirical evaluations to compare the per-
+formance of different algorithms. In another study, Villa-Perez et al. (2021)
+empirically evaluated the performance of 29 semi-supervised AD algorithms.
+    While numerous survey papers have explored various aspects of anomaly
+detection, there remains a research gap concerning the thorough investigation
+of self-supervised methods, which have emerged as state-of-the-art in recent
+years. This paper aims to address this gap and provide a comprehensive
+analysis of self-supervised anomaly detection papers.
+
+3. Anomaly Detection: Terminology and Common Practices
+    The term anomaly detection is commonly used to encompass all algo-
+rithms designed to identify samples that deviate from normal patterns. Need-
+less to say, the development of anomaly detection models depends on factors
+such as the availability of data labels, types of anomalies, and specific appli-
+cations. Furthermore, there is inconsistency in the nomenclature used in the
+literature. To ensure clarity and avoid confusion, we first define and describe
+the relevant terminologies used throughout the paper.
+
+
+                                       5
+3.1. Anomaly, Outlier, Novelty, Out-of-Distribution Detection
+    Some studies use the terms anomaly, novelty, outlier and out-of-distribution
+interchangeably, while others distinguish them. Although most of the algo-
+rithms for detecting them are similar, their significance and application might
+differ. In this paper, we adopt the terminology proposed by previous studies
+and define each task as follows (Ruff et al., 2021):
+
+   • Anomaly Detection: Anomaly detection can be defined as the task
+     of identifying samples that are drawn from a distribution other than
+     the distribution of normal instances, denoted as P+ . For instance, if we
+     consider P+ as the distribution of horses, a zebra would be considered
+     an anomaly in the context of anomaly detection.
+
+   • Outlier Detection: An outlier is defined as a low-probability sample
+     drawn from the distribution of normal instances, P+ . For instance, in
+     the context of horse detection, a Falabella (a small horse breed) would
+     be considered an outlier among the various horse breeds.
+
+   • Novelty Detection A novelty is a sample that is drawn from a new
+     region of a non-stationary distribution of normal samples P+ . These
+     samples are often encountered during the inference phase, but their
+     counterparts were not present in the training data. For instance, a new
+     breed of horses is considered a novelty in the horse detection task.
+
+   • Out-of-Distribution Detection In out-of-distribution (OOD) detec-
+     tion, the goal is to identify samples that do not belong to any of the
+     training set classes. This problem, which is also referred to as open
+     category detection (Liu et al., 2018), is often formulated as a super-
+     vised problem where we have the labelled data from K classes during
+     training. We treat all the K classes as normal and aim to identify if
+     a sample does not come from these classes during the inference phase.
+     An example of the OOD detection task is using a classifier trained on
+     an animal dataset to detect samples from other datasets, e.g. flowers.
+
+Figure 1 illustrates an example of normal sample versus anomalies, outliers,
+novelty and out-of-distribution data.
+
+
+
+
+                                      6
+Figure 1: Normal samples are shown in green, anomalies in red, outliers in blue and
+novelties in purple. The dataset of animals is denoted by a light-blue dashed box while a
+dashed dark-red box shows other out-of-distribution datasets.
+
+
+
+
+3.2. Types of Anomalies
+    In the classic anomaly detection literature, anomalies are classified into
+three categories based on their nature (Chandola et al., 2009; Pang et al.,
+2021):
+
+    • Point Anomalies: A point anomaly refers to an individual sample
+      that exhibits an irregularity or deviation from the standard pattern. A
+      single cat image in the dataset of dog images or a fraudulent insurance
+      claim are examples of point anomalies. Most studies in the anomaly
+      detection literature focus on this type of anomaly (Chalapathy and
+      Chawla, 2019).
+
+    • Contextual Anomalies: A contextual anomaly, also known as a con-
+      ditional anomaly, is a data point deemed abnormal within a specific
+      context. The context should be defined as a part of the problem for-
+      mulation. For instance, a value of 120 km/h is considered an abnormal
+
+
+                                           7
+      recording of the speed of a bike, whereas it is not considered an abnor-
+      mal recording of the speed of a car. The anomaly classification depends
+      on the context in which the data point is evaluated.
+
+   • Collective Anomalies: Collective anomalies, also called group anoma-
+     lies, are a subset of data points that exhibit collective abnormality
+     when considered in relation to the entire dataset. While each sample
+     within a collective anomaly may not be abnormal, their combined pres-
+     ence indicates an anomaly. For instance, a series of high-value credit
+     card transactions that occur rapidly and consecutively might suggest a
+     stolen credit card, even though each individual transaction might ap-
+     pear normal. The collective behavior or pattern highlights the anomaly
+     in this case.
+
+   With the emergence of deep anomaly detection methods, recent studies
+proposed two additional anomaly types to distinguish between the various
+types of anomalies that deep models aim to detect (Ruff et al., 2021):
+
+   • Sensory (Low-Level) Anomalies: Low-level or sensory anomalies
+     refer to the irregularities that occur in the low-level feature hierar-
+     chy, such as textures or edges of an image. An example of a low-level
+     anomaly is a fractured texture. Low-level anomaly detection is help-
+     ful in detecting defects and artifacts in industrial applications. The
+     recently introduced MVTecAD dataset (Bergmann et al., 2019) con-
+     tains numerous examples of sensory anomalies and defects in industrial
+     applications.
+
+   • Semantic (High-Level) Anomalies: High-level or semantic anoma-
+     lies refer to samples that belong to a different class compared to the
+     normal data. For example, if we train a network to classify cat images
+     as normal samples, any image of an object other than a cat would be
+     considered a semantic anomaly. In this context, the anomaly is deter-
+     mined based on the semantic content or class of the sample rather than
+     low-level features.
+
+It is important to note that both sensory and semantic anomalies might over-
+lap with other types of anomalies. However, it is still essential to distinguish
+between semantic and sensory anomalies to avoid confusion in our discussions
+throughout the paper.
+
+                                       8
+3.3. Availability of Data Labels
+    To design an appropriate algorithm for anomaly detection, it is crucial
+to consider the availability of labels. Based on the label availability, AD
+algorithms can be divided into three settings:
+
+  1. Unsupervised Anomaly Detection: In this setting, which is ar-
+     guably the most common in anomaly detection, we assume that only
+     unlabeled data is available for training the model (Ruff et al., 2021;
+     Hodge and Austin, 2004). In the simplified form of unsupervised learn-
+     ing, we commonly assume that the data is noise-free and its distribution
+     is the same as the normal data, e.g. P ≡ P+ . If noisy data or unde-
+     tected anomalies are present in the training dataset, these assumptions
+     are violated, hence the developed models are not robust. A more re-
+     alistic approach can be to assume that the data distribution P is a
+     mixture of normal data and anomalies with a pollution rate η ∈ (0, 1),
+     e.g. P = (1 − η)P+ + ηP− . In this approach, it is crucial to determine
+     η and make a prior assumption about the distribution of anomalies
+     P− , which may degrade the method generalization. Overall, the un-
+     supervised settings for anomaly detection gained a great interest in
+     learning commonalities of data from a complex and high-dimensional
+     space without the need to access annotated training samples. Note that
+     the self-supervised learning methods, that are the focus of this paper,
+     can be considered as a subgroup of unsupervised learning techniques.
+  2. Semi-supervised Anomaly Detection: In this setting, we assume
+     that the training dataset is partially labelled and includes both labelled
+     and unlabeled samples. Semi-supervised algorithms are suitable for sce-
+     narios where it is costly to annotate the whole data. This setting is
+     also prevalent in anomaly detection because commonly, both labelled
+     and unlabelled data are present, but labelling the data often requires
+     expert knowledge, or in some cases, such as industrial and biomedical
+     applications, anomalies are costly to occur. Incorporating a small set
+     of anomaly samples during training could significantly improve the de-
+     tection accuracy and maximize the robustness of a model (Ruff et al.,
+     2019; Min et al., 2018; Kiran et al., 2018), especially compared to the
+     unsupervised learning techniques. However, due to the scarce avail-
+     ability of the labelled abnormal samples, a semi-supervised setting is
+     likely prone to overfitting. Therefore, making the correct assumptions
+
+
+                                      9
+   about the distribution of anomalies, i.e. P− , is crucial for accurately
+   incorporating the labelled anomalies in the training process.
+   It is important to note that Some existing papers refer to the task
+   of Learning from Positive and Unlabeled examples (LPUE) as semi-
+   supervised learning (Chandola et al., 2009). Note that based on the
+   above definitions, LPUE is an unsupervised learning technique where
+   the entire training data belongs to the normal class. LPUE is commonly
+   used in the literature to benchmark the anomaly detection algorithms
+   using popular datasets, such as CIFAR-10 and MNIST (Ruff et al.,
+   2018; Golan and El-Yaniv, 2018). In this task, the samples of one class
+   of the dataset are deemed normal and are used during the training,
+   and samples of other classes are considered anomalous (Hojjati and
+   Armanfard, 2021). One-class AD is another term which is used for
+   referring to the LPUE task.
+3. Supervised Anomaly Detection: In supervised anomaly detection,
+   we assume that the dataset is fully labelled. When anomalies are easily
+   annotated, it is more beneficial to adopt supervised methods(Feinman
+   et al., 2017; Lee et al., 2018; Jumutc and Suykens, 2014; Kim et al.,
+   2015). At this point, it is essential to distinguish between supervised
+   anomaly detection and binary classification problems. One might claim
+   that if the normal and abnormal data are available during the training
+   phase, the problem can be formulated as a supervised binary classifica-
+   tion problem and will no longer be an anomaly detection task. However,
+   we should note that, formally speaking, an anomaly is a sample that
+   does not belong to the normal class distribution P+ . The anomaly class
+   includes a broad range of data points that are not accessible/known
+   during the training phase. The common practice anomaly detection
+   is to assume that, in the training phase, there are enough labelled
+   samples from the normal class that can reveal P+ while the limited
+   available abnormal samples can only partially reveal P− . Hence, unlike
+   binary classification, which aims to learn a decision boundary separat-
+   ing the two classes, AD seeks to discover the normal class boundaries.
+   Although the supervised settings are more efficient and can achieve
+   higher accuracy, they are rarely used to formulate anomaly detection
+   problems compared to unsupervised and semi-supervised models. This
+   is because, in most real-world applications, it is impossible to describe
+   and have access to all existing anomaly classes.
+
+
+                                   10
+4. Self-supervised Learning for Anomaly Detection
+    Self-supervised learning can leverage large amounts of unlabeled data to
+learn robust representations of normal behaviour, making it a scalable and
+cost-effective solution for anomaly detection. In the subsequent sections of
+this paper, we will delve into the general methodology and contributions of
+self-supervised anomaly detection papers. Table 1 and Table 2 provide a
+summary of the key aspects of these papers, including the task they aim to
+solve, the evaluation metrics used, and how they quantify the anomaly score
+from the representation. In addition, Figure 2 illustrates the methodologies
+employed by each group of methods.
+
+4.1. Problem Formulation
+    Based on the dataset’s nature and the availability of data labels, the
+anomaly detection task can be formulated differently in past studies. The
+most common formulation is one-class anomaly detection (aka LPUE) (Golan
+and El-Yaniv, 2018; Sabokrou et al., 2019; Chen et al., 2020), in which one
+class of the dataset is trained as normal, while the remaining classes are
+considered abnormal. An example of this task is taking a class of the CIFAR-
+10 such as Cat as normal, and the rest as anomalies. On the other hand,
+in multi-class anomaly detection, multiple classes in the same datasets are
+considered normal during training, and one or multiple remaining classes are
+deemed anomalous (Zhang et al., 2022a; Tack et al., 2020).
+
+4.2. Algorithms
+    Self-supervised anomaly detection models vary primarily based on the
+nature of their proxy tasks. The proxy task is designed to guide the model
+in learning a representation that is specifically suited for anomaly detection,
+as opposed to a generic representation learned by an unsupervised model. In
+recent years, contrastive learning methods have emerged as a significant com-
+ponent of self-supervised learning (Chen et al., 2020). The primary objective
+of contrastive learning is to develop effective data representations by bringing
+together different views of the same sample while pushing them apart from
+other points. To accomplish this, various loss functions have been proposed,
+such as contrastive loss (Chopra et al., 2005) and triplet loss (Schroff et al.,
+2015). Notably, several variants of contrastive learning models have demon-
+strated impressive accuracy levels comparable to those of fully-supervised
+models in specific tasks (Chen et al., 2020). Anomaly detection is one of
+
+                                      11
+Figure 2: Several examples of pseudo-label generation processes that are associated with
+two main categories of SSL-AD. x is the pseudo-labeled input and fθ is the feature ex-
+tractor.
+
+
+
+
+the tasks where SSL algorithms have demonstrated remarkable performance
+levels that were previously unattainable.
+    Inspired by earlier works, we categorize the self-supervised AD models
+based on their pretext task into two groups (Weng and Kim, 2021):
+
+   • Self-predictive Methods: These algorithms create the pretext task
+     for each individual sample. Commonly, they apply a transformation
+     to the input and try to either predict the applied transformation or
+     reconstruct the original input. These models are effective even if only
+     positive samples, i.e. in-distribution (IND) samples, are available. As a
+     result, they do not necessarily require samples from other distributions,
+     also known as negatives, during training.
+
+   • Contrastive Methods: Contrastive models define the proxy task on
+     the relationship between pairs of samples. They commonly generate
+     positive views of a sample by applying different geometric transforma-
+     tions. Then, they aim to pull together the positives while pushing them
+     away from the negative ones. In contrastive learning, samples of the
+     current batch other than the anchor sample and its augmentations are
+
+                                          12
+      considered negative while positive samples are the ones that are coming
+      from augmentations of the anchor. Technically, contrastive algorithms
+      can also be considered self-predictive. In essence, they also need to
+      learn to predict the transformations to associate the same sample’s
+      augmentations with each other. However, the immense advancement
+      of contrastive learning in recent years encouraged us to treat them as
+      a stand-alone category.
+
+Fig. 2 visually illustrates the representation learning process of these two
+categories. As shown in this figure, unlike self-predictive algorithms, con-
+trastive learning methods incorporate negative samples. This figure also
+depicts the pseudo-label generation process for different SSL methods. Self-
+predictive models apply the transformations on positive samples and try to
+either predict the applied transformation or reconstruct the original input.
+Contrastive methods, on the other hand, do not explicitly predict the trans-
+formations or reconstruct the input and instead aim to distinguish between
+positive and negative samples. More details on the methods depicted in Fig.
+2 are presented in Sections 5 and 6.
+    In the early stages, the primary focus of algorithms was on image and
+video anomaly detection. This emphasis was primarily due to the fact that
+self-supervised representation learning and the related proxy tasks were pre-
+dominantly developed within the computer vision literature. Since a sig-
+nificant number of existing works concentrate on image anomaly detection,
+and this field is well-established, we first discuss the algorithms that were
+developed for visual anomaly detection, and subsequently, we will cover the
+papers that tried to tackle other data types in section 7.
+
+4.3. Anomaly Scoring
+    Self-supervised models are capable of learning a good feature representa-
+tion from the input data. However, this representation is not readily useful
+for anomaly detection. Defining a suitable scoring function to quantify the
+degree of abnormality from this representation is essential for designing an
+anomaly detection framework. Previous studies have used a flurry of scoring
+functions based on the downstream tasks to detect anomalies. For example,
+two widely used anomaly scores for one-class anomaly detection are normal-
+ity score and reconstruction error: Normality scores estimate the normality
+of new samples at the inference time after applying different transformations
+(Sohn et al., 2020; Li et al., 2021; Hendrycks et al., 2019; Golan and El-Yaniv,
+
+                                      13
+2018). Examples of this type of score include the Dirichlet score (Golan and
+El-Yaniv, 2018) and rotation score (Hendrycks et al., 2019). Reconstruction
+error, which is typically measured by the Euclidean distance between the
+original and the reconstructed input, is another category of scoring func-
+tions. The assumption behind using this score is that the reconstructed fea-
+tures of anomalies have higher errors than normal samples (Sabokrou et al.,
+2019; Salehi et al., 2020). For multi-class anomaly detection, scoring func-
+tions such as class-wise density estimation (negative Mahalanobis distance)
+(Sehwag et al., 2021) and data likelihood criterion (Zhang et al., 2021a)
+were also used. Finally, for tackling the out-of-distribution detection prob-
+lem, several other measures, including probability-based measures, rotation
+score (Hendrycks et al., 2019), Confusion Log Probability (CLP) (Winkens
+et al., 2020), Weighting Softmax Probability (Mohseni et al., 2020), and
+Mahalanobis distance (Sehwag et al., 2021) are used in the self-supervised
+anomaly detection literature.
+
+4.4. Performance Evaluation
+    To evaluate the performance of an anomaly detector, several criteria are
+used. In practical applications, the cost of false alarms (type I error) and
+missed-detected anomalies (type II error) are usually different. Most anomaly
+detectors define the decision function as
+                             (
+                               normal,     if Score(x) < ζ
+                  Output =                                   ,
+                               abnormal, if Score(x) ≥ ζ
+
+where Score(x) is the anomaly score for new sample x, and the decision
+threshold ζ is chosen to minimize the costs corresponding to the type I and
+II errors and to accommodate other constraints imposed by the environment
+(Field et al., 2004). However, it is common that the costs and constraints
+are not stable over time or are not fully specified in various scenarios. As
+an example, consider a financial fraud detector that receives anomaly alarms
+to investigate potentially fraudulent activities. A detector can only handle a
+limited number of alarms, and its job is to maximize the number of anoma-
+lies containing these alarms based on the precision metric. Meanwhile, an
+anomaly alarm being wrongly reported can cause a credit card agency plac-
+ing a hold on the customer’s credit card. Thus, the goal is to maximize the
+number of true alarms, given a constraint on the percentage of false alarms
+by using the recall metric.
+
+                                     14
+    Area Under the Receiver Operating Characteristic (ROC) Curve (AUC or
+simply AUC) is known for its ability to evaluate the model’s performance un-
+der a broad range of the decision threshold ζ (Fawcett, 2006). The AUROC
+curve is an indicator for all sets of precision-recall pairs at all possible thresh-
+olds. This makes AUC capable of interpreting the performance of models in
+various scenarios. As shown in Table 1, most anomaly detection methods use
+the AUC metric for evaluation. The random baseline achieves an AUC of
+0.5, regardless of the imbalance between normal and abnormal subsets, while
+an excellent model achieves an AUC close to 1, demonstrating the robustness
+of the model in distinguishing normal from abnormal classes.
+
+5. Self-Predictive Methods in Anomaly Detection
+    Self-Predictive methods can learn data embedding by defining the super-
+vised proxy task on a single sample. This approach focuses on the innate
+relationship between a sample and its own contents or its augmented views.
+An example of a self-predictive task is masking a portion of an image and
+trying to reconstruct it using a neural network (Salehi et al., 2020).
+    In most self-predictive approaches, the objective is to predict the label
+of the applied transformation, such as predicting the degree of rotation of
+an image. In this case, the anomaly score is commonly defined based on
+the Softmax probabilities of a supervised classifier. However, the objective
+of some methods is to reconstruct the original input from its transformed
+version. Solving the Jigsaw puzzle and denoising autoencoders are examples
+of this approach. In this case, the reconstruction error of the model is often
+used as the anomaly score. Geometric transformations were one of the earliest
+types of transformations that are used for visual representation learning.
+Doersch et al. (2015) showed that predicting the relative position of image
+patches is a helpful pretext task for improving the representation for object
+detection. In a later work, Gidaris et al. (2018) used rotation prediction for
+learning a better representation.
+    Geometric transformation models first create a self-labelled dataset by
+applying different geometric transformations to normal samples. The applied
+transformation is served as the label of each sample. Let T = {T1 , T2 , . . . , TK }
+be the set of geometric transformations. The new labelled dataset S can be
+constructed from the original dataset D as below:
+
+                        S := {(Tj (x), j)|x ∈ D, Tj ∈ T },                       (1)
+
+                                         15
+       Table 1: Widely-used Self-Supervised Anomaly Detection methods
+                                            .
+ Category              Method                    Task      Anomaly Score        Indicator
+                            GOEM
+                                                OCAD     Dirichlet Normality      AUC
+               (Golan and El-Yaniv, 2018)
+                             NRE
+                                                OCAD    Reconstruction Error      EER
+                  (Sabokrou et al., 2019)
+                           SSL-OE               OCAD
+                                                           Rotation Score         AUC
+                 (Hendrycks et al., 2019)       OOD
+                            GOAD
+                                                OCAD     Softmax Probability      AUC
+              (Bergman and Hoshen, 2020)
+   Self                  Puzzle-AE
+Predictive                                      OCAD     Error Normalization      AUC
+                    (Salehi et al., 2020)
+                          CutPaste
+                                                OCAD      Density Estimator       AUC
+                       (Li et al., 2021)
+                            SLA2 P
+                                                OCAD      Uncertainty Score       AUC
+                   (Wang et al., 2021c)
+                           NAF-AL               OCAD
+                                                             Likelihoods           F1
+                   (Zhang et al., 2021a)        MCAD
+                            DAAD                        Probabilistic scalars   F1,AUC
+                                                MCAD
+                   (Zhang et al., 2022a)                with majority voting     ACC
+                        Patch-Based
+                                                OCAD         L2 Distance          AUC
+                     (Tsai et al., 2022)
+                             CLP
+                                                 OOD         CLP Score            AUC
+                  (Winkens et al., 2020)
+                             CSI                         Cosine similarity,
+                                                OCAD                              AUC
+                     (Tack et al., 2020)                Representation Norm
+                             SSD
+                                                 OOD    Mahalanobis distance      AUC
+                   (Sehwag et al., 2021)
+                            DROC
+                                                OCAD       Normality score        AUC
+Contrastive          (Sohn et al., 2020)
+                             MCL
+                                                MS AD   Mahalanobis distance      AUC
+                     (Cho et al., 2021a)
+                             NDA
+                                                 ND      Reconstruction error     AUC
+                    (Chen et al., 2021a)
+                         Spatial CL
+                                                OCAD         L2 Distance          AUC
+                      (Kim et al., 2022)
+                       Self-Distillation                Temperature-Weighted
+                                                 OOD                              AUC
+                    (Rafiee et al., 2022)                  Nonlinear Score
+
+
+
+
+                                            16
+    Table 2: Summary of Widely-used Self-Supervised Anomaly Detection methods
+                                                  .
+
+    Method                                               Summary
+                            GEOM applies on all the given normal images and encourages learning
+    GOEM
+                                        the features that are useful for detecting novelties.
+                         Besides learning a reconstruction scheme, AE preserves the local geometric
+     NRE
+                     manifold based on NRE that leads to a discriminative neighborhood-guided SSL.
+                                          An auxiliary rotation loss is added to improve
+    SSL-OE
+                                     the robustness and uncertainty of deep learning models.
+                    GOAD uses affine transforms which are suitable for general data. It tries to predict
+    GOAD
+                      the applied transforms and uses the output of the classifier to detect anomalies.
+                                          U-Net solves the puzzled inputs and the robust
+  Puzzle-AE
+                                 adversarial training is used as an automatic shortcut removal.
+                         CutPaste augmentation creates local irregular patterns during training and
+   CutPaste
+                           identifies these local irregularity on unseen real defects at the test time.
+                          SLA2 P designs a discriminative anomaly score by employing feature-level
+    SLA2 P
+                                      self-supervised learning and adversarial perturbation.
+                           It employs data transformations in the SSL setting, and learns the data
+   NAF-AL
+                     likelihood by Autoregressive Flow-based Active Learning with Marginal Strategy.
+                             It includes a classifier and an adversarial training model. It captures
+    DAAD
+                       different data distributions and makes an evaluation using the majority voting.
+                     Incorporates relative feature similarity between patches of varying local distances
+ Patch-Based
+                                     to enhance information extraction from normal images.
+                        A simple contrastive training-based approach for OOD detection is proposed.
+     CLP
+                                CLP captures the similarity of the inlier and outlier dataset(s).
+                         A new detection score is introduced in the training phase that contrasts the
+      CSI
+                                  sample with distributionally-shifted augmentations of itself.
+                    An outlier detector is based on only unlabeled in-distribution data. SSD uses SSL
+      SSD
+                                    followed by a Mahalanobis distance in the feature space.
+                                One-class AD emphasizes the importance of decoupling building
+    DROC
+                                              classifiers for learning representations.
+                      MCL can shape dense class-conditional clusters by adding 2 components: class-
+     MCL
+                        conditional mask and stochastic positive attraction to boost the performance.
+                              Negative augmentation generates negative samples closer to normal
+     NDA
+                                    samples and helps separate normal and abnormal points.
+                               Incorporates autoencoder in conjunction with contrastive learning
+  Spatial CL
+                                 to reproduce the original image from cut-paste augmentation.
+                      Employs the self-distillation of the in-distribution data, and contrasting against
+Self-Distillation
+                       negative examples that are generated through shifting transformations of data.
+
+
+
+
+                                                  17
+where the original data point is shown by x. A multi-class network is trained
+over the dataset S to detect the transformation applied to the sample. Dur-
+ing the inference phase, the trained models are applied to the transformed
+versions of the samples, and the distribution of the Softmax output is used
+for anomaly detection (Golan and El-Yaniv, 2018). Unlike the Autoencoders
+and GAN-based methods, the geometric transformation models are discrimi-
+native. The intuition behind these models is that the model learns to extract
+important features of the input by learning to identify the applied geometric
+transformations. These features can also be helpful for anomaly detection.
+    The paper by Golan and El-Yaniv (2018) was the first work that used
+geometric transformation learning for anomaly detection. They named their
+method as GEOM and showed that it can significantly outperform the state-
+of-the-art in anomaly detection. They showed that their model can beat the
+top-performing baseline in CIFAR-10 and CatsVSDogs datasets by 32% and
+67%, respectively.
+    To calculate the anomaly score of a sample from the Softmax probabilities,
+Golan and El-Yaniv (2018) combined the log-likelihood of the conditional
+probability of each of the applied transformations:
+                                 K
+                                 X
+                         nS :=         log p(y(Tk (x))|Tk )                (2)
+                                 k=1
+
+Then, they approximated p(y(Tk (x))|Tk ) by a Dirichlet distribution:
+                              K
+                              X
+                       nS =         (α̃k − 1). log y(Tk (x)).              (3)
+                              k=1
+
+    An important issue of GEOM is that the classifier p(y(Tk (x))|Tk ) is only
+valid for samples the network encountered during the training. For other sam-
+ples which also includes anomalies, p(y(Tk (x))|Tk ) can have a very high vari-
+ance. To address this problem, (Hendrycks et al., 2018) proposed to use some
+anomalous samples during the training to ensure that p(y(Tk (x))|Tk ) = M1
+for anomalies. This method, which is also known as Outlier Exposure (OE),
+formulates the problem as a supervised task which might not be practical for
+some real-world applications as they do not have access to anomalies.
+    Even though self-predictive models showed promising results, their per-
+formance is still significantly poorer than fully-supervised models in out-of-
+distribution detection. However, some recent studies (Hendrycks et al., 2019)
+
+
+                                          18
+hinted that using SSL models in conjunction with supervised methods can
+improve the robustness of the model in different ways. Therefore, even in
+cases where we have access to anomaly data and labels, using self-supervised
+proxy tasks can enhance the performance of the anomaly detector.
+    A significant downside of geometric models is that they only use trans-
+formations that are well-suited for image datasets and cannot be generalized
+to other data types, e.g. tabular data. To overcome this issue, Bergman and
+Hoshen (2020) proposed a method called GOAD. In GOAD, the data is ran-
+domly transformed by several affine transformations T = {T1 , T2 , . . . , TK }.
+Unlike the geometric transformations, affine transforms are not limited to
+images and can be applied to any data type. Also, we can show that the
+geometric transformations are special cases of the affine transform, and the
+GEOM algorithm is a special case of GOAD. In GOAD, the network learns
+to map each of the transformations into one hypersphere by minimizing the
+below triplet loss:
+                          X
+                    L=       max (∥f (Tm (xi )) − cm ∥2 + s
+                            i
+                        −minm′ ̸=m ∥f (Tm (xi )) − cm′ ∥2 , 0),                (4)
+
+where f (.) is the network, s is a regularizing term for the distance between
+hyperspheres, and cm is the hypersphere center corresponding to the m−th
+transformation.
+    The above objective encourages the network to learn the hyperspheres
+with low intra-transformation and high inter-transformation variance. This
+is to provide a feature space, i.e. the last layer of f (.), in which the different
+transformations are separated. During the inference phase, the test samples
+are transformed by all transformations and the likelihood of predicting the
+correct transform is used as the anomaly score.
+    Although classification-based methods showed significant improvement in
+semantic anomaly detection on datasets such as CIFAR-10, their performance
+is poor on real-world datasets such as MVTecAD (Salehi et al., 2020). This
+is because these models can learn high-level features of data by learning
+the patterns which are present both in the original data and its augmented
+versions, e.g. rotated instances. However, these algorithms might not be
+well-suited for sensory-level anomaly detection tasks, e.g. detecting cracks
+in an object. This is because some types of low-level anomalies, such as
+texture anomalies, are often invariant to the transformations. To alleviate
+
+                                        19
+this issue, several other proxy tasks, that are more suitable for low-level
+anomaly detection, are proposed. For instance, Salehi et al. (2020) used
+the idea of solving the jigsaw puzzle for learning an efficient representation
+that can be used for pixel-level anomaly detection. Their proposed method,
+which they named as Puzzle-AE, trains a U-Net autoencoder to reconstruct
+the puzzled input. The reconstruction objective ensures that the model is
+sensitive to the pixel-level anomalies, while the pretext task of solving the
+puzzle enables the network to capture high-level semantic information, as
+shown in Fig. 2. They further boosted the performance of their model by
+incorporating adversarial training.
+    More recently, Li et al. (2021) developed a self-supervised method called
+CutPaste which significantly improves state-of-the-art in defect detection.
+CutPaste transformation randomly crops a local patch of the image and
+pastes it back to a different image location. The new augmented dataset is
+more representative of real anomalies. Thus, the model can be easily trained
+to identify and localize the local irregularity (shown by the white regions in
+the black background in Fig. 2). To detect the augmented samples from the
+un-transformed ones, the objective of the network is defined as follows:
+
+               LCP = Ex∈X {CE(g(x), 0) + CE(g(CP(x)), 1)},                (5)
+
+where CP (.) is the CutPaste augmentation, X is the set of normal data,
+CE(., .) is a cross-entropy loss, and g is a binary classifier that can be pa-
+rameterized by deep networks. In order to calculate the anomaly score from
+the representation, an algorithm like KDE or GDE can be used.
+   CutPaste can also learn a patch representation and compute the anomaly
+score of an image patch by cropping a patch before applying CutPaste aug-
+mentation. This facilitates localizing the defective area. In this case, the
+objective loss function is modified as:
+
+                Ex∈X {CE(g(c(x)), 0) + CE(g(CP(c(x))), 1)},               (6)
+where c(x) crops a patch at random location x.
+    In another similar work, Schlüter et al. (2021), introduced a new self-
+supervised task, called Natural Synthetic Anomalies (NSA) to detect and
+localize anomalies using only normal training data. Their proposed approach
+creates synthetic anomalies by seamlessly cloning a patch with various sizes
+from a source image into a destination image. In particular, NSA selects a
+random rectangular patch in the source image, randomly resizes the patch,
+
+                                     20
+blends the patch into the destination location from a different image, and
+creates a pixel-level mask. The new samples that NSA generates are different
+in size, shape, texture, location, color, etc. In other words, NSA dynamically
+produces a wide range of anomalies, which are more realistic approximation of
+natural anomalies than the samples that CutPaste creates by pasting patches
+at different locations. An example of NSA is shown in Fig. 2, where a random
+patch from a source cat image is seamlessly cloned onto another cat image.
+The NSA method outperforms the state-of-the-art algorithms on several real-
+world datasets such as MVTecAD.
+
+6. Contrastive Methods
+     The primary objective of contrastive self-supervised learning is to learn
+a feature space or a representation in which the positive samples are closer
+together and are further away from the negative points. Empirical evidence
+shows that contrastive learning models such as SimCLR (Chen et al., 2020)
+and MoCo (He et al., 2020) are particularly efficient in computer vision tasks.
+SimCLR, one of most popular recent contrastive learning algorithms, learns
+representations by maximizing the agreement between different augmented
+versions of the same image while repelling them from other samples in the
+batch. Each image xi from randomly sampled batch B = ({xi , yi })N         i=1 is
+augmented twice, producing an independent pair of views {x̂2i−1 , x̂2i }, and
+augmented batch B̂ = {(x̂i , ŷi )}2N  i=1 , where the labels of augmented data
+{ŷ2i−1 , ŷ2i } are equal to the original label yi . By performing independent
+transformation T and T′ drawn from a pre-defined augmentation function
+pool T , the augmented pair of views {x̂2i−1 = T(xi ), x̂2i = T′ (xi )} are gen-
+erated. Next, {x̂2i−1 , x̂2i } are passed sequentially through an encoder and a
+projection head to yield latent vectors {z2i−1 , z2i }. SimCLR learns the rep-
+resentation by minimizing the following loss for a positive pair of examples
+(m, n):
+                                          exp(sim(zm , zn )/τ )
+                    l(m, n) = − log P2N                                       (7)
+                                      i=1 1 {i̸ =m} exp(sim(zm , zi )/τ )
+where sim(zm , zn ) represents the cosine similarity between the pair of latent
+vectors (zm , zn ), 1i̸=m is an indicator function which is equal to 1 if i ̸= m
+and zero otherwise, and τ indicates the temperature hyperparameter which
+determines the degree of repulsion. The final objective is to minimize the
+
+
+
+                                       21
+contrastive loss, defined in (8), over all positive pairs in a mini-batch:
+                             N
+                          1 Xh                               i
+               LSimCLR =        l(2i − 1, 2i) + l(2i, 2i − 1) .                (8)
+                         2N i=1
+
+Contrastive learning models established themselves as powerful representa-
+tion learning tools. Still, they face crucial challenges for anomaly detec-
+tion. Most widely-used contrastive learning algorithms, such as SimCLR
+and MoCo, need negative samples to operate. However, we either only have
+access to the samples from one class in many anomaly detection tasks, or the
+distribution of classes is highly imbalanced. In addition, the learned repre-
+sentation is not readily suitable for the anomaly detection task, and we need
+to define a proper anomaly score.
+    Despite these challenges, several contrastive anomaly detection models
+have emerged in the recent years. The CSI method proposed by Tack et al.
+(2020) was the first attempt for using contrastive learning in anomaly de-
+tection. The CSI method is based on the idea of instance discrimination
+which considers every data point as a separate class and negative relative
+to other samples in the dataset (Wu et al., 2018). This idea is proven to
+be practical in visual representation learning for classification, but its per-
+formance in anomaly detection is unexplored (Chen et al., 2020). They also
+showed that if specific transformations are used for generating negative sam-
+ples from a given point, the learned representation can be more appropriate
+for anomaly detection. These distribution-shifting transformations can be
+denoted by a set as S. In contrast to SimCLR, which considers augmented
+samples as positive to each other, CSI attempts to consider them as negative
+if the augmentation is drawn from S. A significant conclusion of the CSI
+method is that although using the shifted transformations does not improve
+and even in some cases hurts the performance of the representation in other
+downstream tasks such as classification, it can improve the performance for
+anomaly detection.
+    If we denote the set of shifting transformations by S = {S0 = I, S1 , ..., SK−1 }
+with I being the identity function and K different (either random or deter-
+ministic) transformations, the CSI loss can be written as:
+                                             [          
+                        Lcon−SI := LSimCLR        BS ; T                        (9)
+                                               S∈S
+
+in which BS := {S(xi )}B
+                       i=1 . In simpler terms, the Lcon−SI is essentially the
+
+
+                                        22
+same as the SimCLR loss, but in the con-SI, the augmented samples are
+considered negative to each other.
+    In addition to discriminating each shifted instances, an auxiliary task
+is added with a Softmax classifier pcls−SI (y S |x) that predicts which shifting
+transformation y S ∈ S is applied for a given input xi . The classifying shifted
+instances (cls-SI) loss is defined as below:
+                           1 1 X X
+             Lcls−SI :=            − log pcls−SI (y S = S|x̂S )            (10)
+                          2B K S∈S
+                                   x̂S ∈B̂S
+
+The final loss of CSI is then defined as:
+
+                          LCSI := Lcon−SI + λLcls−SI                       (11)
+
+    The authors of the CSI empirically showed that the norm of the represen-
+tation ∥z(x)∥ is indeed a good anomaly score, where z is the representation
+vector and ∥·∥ denotes the second norm. This can be explained intuitively by
+considering that the contrastive loss increases the norm of the in-distribution
+samples to maximize the cosine similarity of samples generating from the
+same anchor. Consequently, during the test time, in-distribution samples are
+mapped further from the origin of the z space, while the representation of
+other data points, i.e. anomalies, have a smaller norm hence are closer to
+the origin. This is an important observation as it helps to solve the problem
+of defining the anomaly score on a representation that is learned in an un-
+supervised fashion. The authors also found that the cosine similarity to the
+nearest training point in {xm } can be another good anomaly score. They
+defined the score of their model as a combination of these two metrics as
+below:
+                 scon (x; {xm }) := max sim(z(xm ), zx ).∥z(x)∥            (12)
+                                    m
+
+where zx is the representation vector of the test sample x and z(xm ) is the
+closest representation vector in the training set.
+    Parallel to Tack et al. (2020), Winkens et al. (2020) developed a con-
+trastive model for detecting out-of-distribution instances. They evaluated
+their approach on several benchmark OOD tasks and showed that contrastive
+models are also capable in OOD. The paper’s key idea is that a fully super-
+vised model might not be able to capture the patterns that can be useful
+for out-of-distribution detection. However, using contrastive learning tech-
+niques, the model learns high-level and task-agnostic features that can also
+
+                                        23
+help detect OODs. When we combine these techniques with the supervised
+learning techniques, the resulting model can learn more reliable features for
+both semantic classification and OOD detection.
+    The CSI algorithm shows that the task-agnostic representation learned
+through contrastive learning is suitable for anomaly detection. However, a
+task-specific approach can be more suitable for anomaly detection. (The task
+may be defined as the AD task itself or another downstream task such as data
+classification.) The contrastive models, such as SimCLR, are quite helpful
+in learning a representation for individual data points. They can also learn
+separable clusters for each class without having access to any labels. How-
+ever, the resulting clusters may have blurry boundaries, and they commonly
+require fine-tuning for the downstream tasks.
+    To overcome this obstacle, Cho et al. (2021a) developed a contrastive
+model which is tailored for anomaly detection. Their model, which is called
+Masked Contrastive Learning (MCL), modifies the degree of repulsion based
+on the labels of the data points. In vanilla SimCLR, all other batch sam-
+ples, regardless of their class label, are considered negative relative to the
+anchor sample and are repelled with equal magnitude. However, in MCL,
+the repelling ratio is defined by the following class-conditional mask (CCM):
+                                       (
+                                          α if ȳm = ȳn
+                        CCM(m, n) = 1                      ,              (13)
+                                          τ
+                                             if ȳm ̸= ȳn
+where 0 < α < τ1 . Basically, CCM adjusts the temperature τ for the same
+labelled views to a smaller value of α. This means that if the negative sample
+has the same class as the anchor, it is repelled with less magnitude compared
+to other data points. The SimCLR loss function is modified according to this
+mask as follows:
+                      N
+                   1 Xh                                       i
+           LCCM =        lCCM (2i − 1, 2i) + lCCM (2i, 2i − 1) ,           (14)
+                  2N i=1
+
+                                     exp(sim(zm , zn )/τ )
+          pCCM (m, n) = P2N                                            ,   (15)
+                             i=1 1{i̸=m} exp(sim(zm , zi ).CCM(m, i)
+
+                      lCCM (m, n) = − log pCCM (m, n),                     (16)
+   Although the proposed mask leads to a finer-grained representation space,
+the repulsive nature of the loss function may lead to the formation of scattered
+
+                                      24
+clusters. To prevent this phenomenon, the MCL algorithm stochastically
+attracts each sample to the instances with the same class label.
+    To further improve the MCL model in (Cho et al., 2021a), an auxiliary
+classifier that predicts the applied transformation is also employed. The
+masking function is then modified based on the label of sample and its trans-
+formations. The repelling ratio is then smaller for the samples that simulta-
+neously have the same class label and transformation labels, compared to the
+samples with the same class but different transformation labels. A sample
+with the latter property repels with a smaller magnitude than the negative
+points.
+    To score the anomalies in (Cho et al., 2021a), the Mahalanobis distance
+(Mahalanobis, 1936), shown in (17), is employed.
+
+                       M D(x) = (zx − µ)T Σ−1 (zx − µ),                     (17)
+where zx is the representation of x, µ is the sample mean, and Σ is the sample
+covariance of features of the in-distribution training data. The Mahalanobis
+distance is a standard metric for scoring anomalies from their representation.
+It does not require any labelled data that makes it a common choice for many
+anomaly detection algorithms. In addition to this distance, the score of the
+auxiliary classifier is used to boost the model’s robustness.
+    In another similar work, Sehwag et al. (2021) explored the applicabil-
+ity of contrastive self-supervised learning for out-of-distribution (OOD) and
+anomaly detection from unlabeled data, and proposed a method called SSD.
+They also extended their algorithm to work with labelled data in two scenar-
+ios: First is the scenario in which it is assumed that there are a few labelled
+out-of-distribution samples (i.e. a k-shot learning setting where k is set to 1
+or 5), and the second scenario is the case in which labels of the in-distribution
+data are provided during the training phase.
+    In SSD (Sehwag et al., 2021), the SimCLR is used to learn the representa-
+tion and the Mahalanobis Distance is incorporated to detect anomalies. For
+the cases where the labelled data is present, the authors suggested using the
+SupCon loss, defined in (18), which is a supervised variant of the contrastive
+loss (Khosla et al., 2020), to have a more effective selection of the positive
+and negative samples for each image. In SupCon, samples from the same
+
+
+
+
+                                       25
+class are treated as positive and other samples as negatives.
+
+           LSupCon =
+                            1
+                                 P2N                       uT
+               2N                                           m ui /τ
+             1 X         2Nym −1  i=1 1(i ̸= m)1(yi = ym )e
+                   − log          P2N                               ,      (18)
+            2N i=1                  i=1 1(i ̸
+                                            = m)e uT
+                                                   m ui /τ
+
+
+
+where Nym refers to the number of images with label ym in the batch, and
+        h(f (x))
+ui = ∥h(f  (x))∥2
+                  with a projection head h(·) and an encoder f (·). Using SupCon
+loss yielded better performance compared to the contrastive loss throughout
+their experiments for the OOD detection from a labelled dataset. Overall,
+(Sehwag et al., 2021) showed that the contrastive approach can outperform
+other methods in OOD detection in both labelled and unlabeled settings.
+    Contrastive models are also used in conjunction with one-class models for
+anomaly detection. One-class classifiers are one of the most widely used mod-
+els in anomaly detection. They can detect anomalies after learning from a
+single class of examples. (Sohn et al., 2020) employed a two-stage framework
+for detecting anomalies using self-supervised learning models. In this frame-
+work, an SSL-based neural network is used to learn the representation of the
+input. A one-class classifier, such as OCSM or KDE, is applied to the learned
+representation to detect anomalies. The two-stage framework eliminates the
+need for defining an anomaly score and, as is empirically demonstrated in
+the paper, it can outperform other state-of-the-art methods.
+    Despite their promising empirical results, one-class classifiers suffer from
+a critical problem known as catastrophic collapse. This phenomenon happens
+when the network converges to the trivial solution of mapping all the inputs
+to a single point regardless of the input sample value x, i.e. ϕ(x) = c where
+ϕ(·) denotes the network output. This trivial solution is obtained when
+minimizing the center-loss defined as L = ||ϕ(x) − c||2 (Reiss et al., 2021;
+Ruff et al., 2018). The features that the network learns in such case are
+uninformative and cannot be used for distinguishing anomalies from normal
+data. This issue is also known as “hypersphere collapse”.
+    To overcome the hypersphere collapse problem, Reiss and Hoshen (2021)
+proposed a new loss function, called Mean-shifted contrastive loss (MSCL).
+Unlike the conventional contrastive loss, where the angular distance is com-
+puted relative to the origin, MSCL measures the angular distance relative
+to the normalized center of the extracted features. An example of MSCL is
+shown in Fig. 2. Formally, for a sample x, the mean-shifted representation
+
+
+                                      26
+is defined as:
+                                          ϕ(x) − c
+                                θ(x) =              ,
+                                         ∥ϕ(x) − c∥
+The mean-shifted contrastive loss is then given by:
+
+         LM SCL (x′ , x′′ ) = LCON S (θ(x′ ), θ(x′′ ))
+                                              exp((θ(x′ ).θ(x′′ ))/τ )
+                            = − log P2N                                      ,   (19)
+                                                       ′          ′
+                                      i=1 1[xi ̸= x ].exp((θ(x ).θ(xi ))/τ )
+
+where LCON S is the typical contrastive loss for a positive pair, shown in
+SimCLR (Chen et al., 2020), and x, x′′ are the two augmentations of the
+input x.
+    One limitation of the MSCL loss is that it implicitly encourages the net-
+work to increase the distance of features from the center. Because of this,
+normal data lie in a region far away from the center. To solve this issue,
+the loss function is modified by adding the angular center loss, which shrinks
+the distance of normal samples from the center. Reiss et al. (2021) showed
+that the overall loss, which is a combination of the MSCL and the angular
+losses, can achieve a better training stability and higher accuracy in anomaly
+detection than the regular center-loss.
+    In summary, recent papers suggest that the representation that is learned
+through self-supervised learning is indeed very useful for anomaly detection.
+An interesting observation is that even a simple scoring function such as the
+norm of the representation ∥z∥ can be used for detecting anomalies from
+the representations. This can be justified because, in CL-based models, the
+normal data is spread out on a hypersphere. This property can help to define
+the anomaly score as the distance of the representation from the center. A
+smaller distance means a higher probability of the point belonging to the
+anomaly class.
+
+
+7. Self-Supervised Anomaly Detection Beyond Images
+   In recent years, there has been a growing interest in extending self-
+supervised anomaly detection techniques beyond image data. While the
+majority of early research in anomaly detection focused on image and video
+data, the need to detect anomalies in various other data types, such as text,
+audio, and time series, has become increasingly apparent. In this section,
+
+                                          27
+            Table 3: Self-Supervised Anomaly Detection for Non-Image Data
+                                             .
+
+Data Type                Paper                     Type                         Idea
+                    Giri et al. (2020)       Self-Predictive          Machine ID Classification
+                    Kim et al. (2021)        Self-Predictive          Machine ID Classification
+                                                                      Pitch Shift, Fade In/Out,
+              Hojjati and Armanfard (2022)       Contrastive
+                                                                          Time-Stretch, etc.
+ Audio                                                                Machine ID Classification
+                   Guan et al. (2023)            Contrastive
+                                                                       Contrastive Pretraining
+                                                                    Joint Generative/Contrastive
+                   Zeng et al. (2023)            Contrastive
+                                                                       Representation Learning
+                                                                          Time Masking and
+                    Bai et al. (2023)        Self-Predictive
+                                                                      Machine ID Classification
+                 Carmona et al. (2022)       Self-Predictive              Anomaly Injection
+                                                                     Graph Contrastive Learning
+                Ho and Armanfard (2023)          Contrastive
+                                                                    Masked Sensor Reconstruction
+                                                                         Contrastive Learning
+                  Hojjati et al. (2023)          Contrastive
+                                                                        Between Time Blocks
+  Time-                                                                  Joint contrastive and
+                   Wang et al. (2023)            Contrastive
+  Series                                                                one-class classification
+                   Jeong et al. (2023)       Self-Predictive        Synthetic Anomaly Injection
+                  Zhang et al. (2022b)       Self-Predictive        Intra-Sample Prediction Task
+                   Fu and Xue (2022)         Self-Predictive        Masked Data Reconstruction
+                    Jiao et al. (2022)        Contrastive            Pseudo-Negative Generation
+                                                                    Detection the Downsampling
+                  Huang et al. (2022a)       Self-Predictive
+                                                                              Resolution
+                   Liu et al. (2021b)            Contrastive       Sub-graph Contrastive Learning
+                                                                   Sub-graph Contrastive Learning
+                   Zheng et al. (2021)           Contrastive
+                                                                      and Node Reconstruction
+                                                                    Graph Views with Node- and
+                   Duan et al. (2022)            Contrastive
+                                                                Sub-graph-level Contrastive Learning
+                                                                        Node-level Supervised
+                   Chen et al. (2022)            Contrastive
+                                                                         Contrastive Learning
+                                                                        Graph-level Supervised
+                    Xu et al. (2022)             Contrastive
+                                                               Contrastive Learning and Reconstruction
+ Graph                                                                   Graph-level Few-shot
+                   Zheng et al. (2022)           Contrastive
+                                                                         Contrastive Learning
+                                                                    Node- and Graph-level based
+                  Huang et al. (2022b)       Self-Predictive
+                                                                        Hop Count Prediction
+                                                                        Edge-level Contrastive
+                    Liu et al. (2021c)           Contrastive
+                                                                    Learning in Dynamic Graphs
+                                                                 Node- and Graph-level Contrastive
+                    Luo et al. (2022)            Contrastive
+                                                                               Learning
+                                                                      Node- and Sub-graph-level
+                Ho and Armanfard (2023)          Contrastive
+                                                               Contrastive Learning and Reconstruction
+                   Qiu et al. (2021)         Self-Predictive          Trainable Transformations
+  Other         Manolache et al. (2021a)     Self-Predictive           Text Anomaly Detection
+                Shenkar and Wolf (2022)       Contrastive         Tabular Data Anomaly Detection
+
+
+
+
+                                             28
+we delve into the advancements made in self-supervised anomaly detection
+methods that specifically target non-image data.
+    A crucial aspect of self-supervised learning methods is the selection of
+data-specific augmentations and proxy tasks. In the context of non-image
+self-supervised anomaly detection, a primary focus lies in defining a set of
+augmentations and proxy tasks that are effective for detecting anomalies.
+Inspired by image anomaly detection models, many algorithms have sought
+to adapt and extend these techniques for different data types. Table 3 sum-
+marizes the important papers in this field. In the following subsections, we
+explore various data types and their corresponding algorithms, shedding light
+on their augmentations and proxy tasks.
+7.1. Audio Anomaly Detection
+    Audio data plays a significant role in various applications, including
+speech recognition, environmental monitoring, and acoustic anomaly detec-
+tion. The detection of audio anomalies has been a longstanding research
+challenge. However, more recently, self-supervised methods have emerged as
+successful approaches for addressing this task. In the realm of audio data,
+much like in images and videos, the outcomes of augmenting transformations
+can be evaluated qualitatively. As a consequence, the literature has already
+established a robust set of positive and negative transformations that have
+proven effective. These include well-known techniques such as noise injection,
+pitch shifting, and fade in/fade out, among others. These established trans-
+formations have been used in conjunction with the ideas from self-supervised
+visual anomaly detection to develop new models for acoustic data. Another
+helpful aspect of audio data is that their spectrogram, which is an essential
+tool in anomaly detection, can be used as input to computer vision models
+such as CNNs. As a result, they can are compatible with existing image
+self-supervised representation learning tools.
+    Giri et al. (2020) was one of the first studies that adapted the idea of self-
+supervised learning for detecting abnormal machine conditions. They have
+incorporated augmentations such as linearly combining the audio and warp-
+ing the spectrograms in order to learn a representation which is suitable for
+anomaly detection. Their research demonstrated that their proposed method
+surpasses existing baselines by a significant margin. In another similar work,
+Kim et al. (2021) introduced an innovative framework for acoustic anomaly
+detection that incorporates the concept of self-supervision. In this algorithm,
+accurately identifying the machine ID associated with a given sound is defined
+as the proxy task. Additionally, they leveraged phase continuity information
+
+                                       29
+and employed the complex spectrum as input to their model. During the in-
+ference phase, any data that the model was unable to classify correctly with
+the corresponding machine ID has been deemed an anomaly. The experi-
+mental evaluations conducted in the paper demonstrated that the utilization
+of a simple proxy task yielded impressive results, significantly enhancing the
+model’s ability to detect anomalies.
+    For the first time, Hojjati and Armanfard (2022) introduced a contrastive
+framework for acoustic anomaly detection. They defined a comprehensive set
+of transformations, such as time and frequency masking, pitch shift, and noise
+injection, specifically designed for audio data. These transformations were
+utilized to create positive and negative pairs for training a contrastive learn-
+ing algorithm. They have shown that this approach significantly outperforms
+other existing methods and highlighted the remarkable improvement that
+could be achieved through contrastive learning in acoustic data. Following
+this work, Guan et al. (2023) proposed a method that combines contrastive
+learning with the proxy task of machine ID detection to improve accuracy.
+    These advancements have shown promise in detecting anomalous sounds,
+such as abnormal environmental sounds or audio events in surveillance sys-
+tems.
+
+7.2. Time-Series Anomaly Detection
+    Time series data arises in a wide range of domains, including finance,
+manufacturing, and healthcare. Detecting anomalies in time series is cru-
+cial for identifying unusual patterns or behaviours. Self-supervised learning
+techniques have been leveraged to capture temporal dependencies and detect
+anomalies in time series data.
+    Unlike images, videos, and audio data, defining suitable augmentations
+for time-series data is an exceptionally challenging task that heavily relies on
+the target application and characteristics of the data. Despite this inherent
+difficulty, researchers have proposed several ideas in recent years to adapt the
+self-supervised learning framework to time series. One particularly popular
+approach, which can be applied to a wide range of time series, involves inject-
+ing synthetic anomalies and training the network to distinguish them from
+positive samples. In an early attempt, Carmona et al. (2022) developed Neu-
+ral Contextual Anomaly Detection (NCAD), which could learn the boundary
+between normal and abnormal samples by injecting pseudo-negative samples
+during training. To generate these anomalies, they drew inspiration from
+Hendrycks et al. (2019), and replaced segments of the original time series with
+
+                                      30
+values obtained from another time series. To further enhance the diversity of
+the negative set, they also included synthetic point anomalies. A similar con-
+cept was employed by Jiao et al. (2022) to generate synthetic anomalies and
+train a representation using contrastive learning, which enables the discrim-
+ination between positive and negative samples. Very recently, Jeong et al.
+(2023) used the idea of synthetic anomaly injection in conjunction with the
+self-attention mechanism to detect abnormal sequences with high accuracy.
+    Another widely applicable and popular idea is the masking of a segment
+of the time-series data and training the network to reconstruct it. This con-
+cept has been successfully employed in image and audio anomaly detection.
+Notably, Fu and Xue (2022) demonstrated that this approach could also be
+effectively utilized for learning efficient representations in time-series data.
+The underlying assumption behind this idea is that by learning to reconstruct
+the masked segment, the network will learn the patterns that are present in
+normal data. In the case of multivariate time series, a possible implemen-
+tation involves masking the data of one time series and using the data from
+other entities to reconstruct or predict it (Ho and Armanfard, 2023; Zhang
+et al., 2022b). This allows the model to capture the dependencies and rela-
+tionships between different entities within the time-series data.
+    A notable trend in time-series anomaly detection involves leveraging tem-
+poral information of the data. This approach aims to capture meaningful
+patterns and enhance the learning of efficient representations. For exam-
+ple, Huang et al. (2022a) demonstrated that predicting the downsampling
+resolution of the data can significantly contribute to learning effective repre-
+sentations from time series. By incorporating the downsampling resolution
+prediction task, the network is encouraged to understand the underlying
+temporal structure and capture essential features at different resolutions.
+This enables the model to develop a comprehensive understanding of the
+time-series data, leading to improved anomaly detection performance. Ad-
+ditionally, researchers such as Hojjati et al. (2023) have utilized temporal
+adjacency information to generate positive and negative pairs for training
+contrastive learning models. This approach enhances the model’s ability to
+capture contextual information and detect anomalies by comparing similar
+and dissimilar pairs of temporal instances.
+    In conclusion, self-supervised learning techniques offer promising avenues
+for time-series anomaly detection. The injection of synthetic anomalies, along
+with methods such as contrastive learning and resolution prediction, enables
+the network to learn efficient representations and distinguish between normal
+
+                                      31
+and abnormal sequences.
+
+7.3. Graph Anomaly Detection
+    Following the great success of SSL in the image/signal/text domains,
+very recently, SSL has gained significant attention in graph-structured data.
+A graph is a representation of a network, consisting of nodes that represent
+entities (e.g., objects, users, sensors) and edges that represent the interactions
+between entities. These interactions/relationships between nodes are known
+as structural dependencies and are expressed by the adjacency matrix (aka
+a square matrix) (Liu et al., 2022). Each row and column of the matrix is
+associated with a node in the graph. The non-zero value in the entry of the
+matrix indicates whether there is an edge between two nodes. Given this
+unique property, graphs are different from other domains since the samples
+(nodes) are dependent on each other in the graph, while the samples in
+images or texts are independent. Due to such dependencies, it is therefore
+non-trivial to adopt pretext tasks designed for images or texts directly to
+graphs.
+    Many recent SSL methods have provided well-designed pretext tasks
+based contrastive learning that are applicable for graphs to deal with graph
+anomaly detection, the task of detecting anomalies (e.g., anomalous nodes,
+edges, sub-graphs) in static graphs. Note that in a static graph, oftentimes
+seen in social networks, the sets of nodes/edges and their features, as well
+as the adjacency matrix are fixed. (Liu et al., 2021b) proposed a local sub-
+graph-based sampling, which pays attention to the relationship between a
+node and its neighbors in a static graph, to select constrastive pairs. A pair
+consists of a node and its neighboring sub-graph. A positive pair composes
+of a target node and its neighboring sub-graph, while a negative pair consists
+of a node and its corresponding sub-graph. Note that a target node can be
+any node in a graph, a selected node in a negative pair is different from the
+target node selected in a positive pair, hence there is mismatching between
+the target node and the sub-graph in a negative pair. A constrative-based
+module is designed to estimate the matching between the target node and
+sub-graphs in constrastive pairs and would assign the abnormality level for
+every node.
+    (Zheng et al., 2021) also aimed to compute the level of abnormality of
+every node in a static graph by designing an effective graph view sampling
+technique. Given a target node, two positive sub-graphs are sampled, and
+two negative sub-graphs are sampled randomly and guaranteed that they are
+
+                                       32
+different from positive sub-graphs. They designed two pretext tasks, one is
+to determine the mismatching between the target node and its sub-graphs in
+contrastive pairs as similar to (Liu et al., 2021b), the other is to reconstruct
+the target node’s features based on surrounding nodes in positive sub-graphs.
+As a result, by taking advantage of multiple pretext tasks, (Zheng et al., 2021)
+showed better detection performance on anomalous nodes than (Liu et al.,
+2021b).
+     Not limited to sub-graph-level sampling, (Duan et al., 2022) showed the
+effectiveness of combining various contrastive pair sampling strategies. Given
+the original graph input as the first view, they adopted edge modification to
+generate the second view of the graph. For each view, they combined node-
+subgraph, node-node and subgraph-subgraph sampling techniques. The first
+two techniques can capture sub-graph- and node-level anomalous information
+in each view, while the latter focuses on more global anomalous information
+between two views. They showed that a diversity of sampling techniques
+helps to learn more representative and intrinsic graph embeddings, which
+could further improve the anomaly detection performance.
+     While the above studies are unsupervised graph anomaly detection meth-
+ods, i.e., no annotated labels are available in the training phase, several
+studies leveraged prior human knowledge on graph anomalies. For example,
+(Chen et al., 2022) took advantage of prior human knowledge, hence, they
+designed a contrastive loss and trained the model in a supervised manner, i.e.,
+labeled normal and abnormal nodes are respectively treated as positive and
+negative samples. (Xu et al., 2022) also used human knowledge for helping
+the detection performance, but the way of building their contrastive pairs is
+different from (Chen et al., 2022). Given the actual anomalous static graph,
+they augmented a new graph by a knowledge modeling technique, then fed
+both original and augmented graphs to a Siamese graph neural network such
+that both graphs are encoded into the same latent space, making it feasible
+to contrast original and augmented graphs. After encoding, they designed a
+constrative loss that is integrated with the human knowledge of anomalies,
+i.e., the contrastive loss would guide the encoder to differently represent the
+nodes in the original graph and the nodes in the augmented graph. (Zheng
+et al., 2022) also verified the effectiveness of having prior human knowledge
+in graph anomaly detection by proposing to use few anomalous samples in
+the training phase. This technique is known as few-shot supervised learning
+that could enrich the supervision signals for the model, hence, the detection
+accuracy could be improved.
+
+                                      33
+    As is seen from the aforementioned studies, most of techniques used the
+local context of graphs (i.e., the sub-graph knowledge) and adopted con-
+trastive learning, however, Huang et al. (2022b) showed that using only local
+information is insufficient to effectively detect anomalies. More specifically,
+they designed a self-predictive framework for hop count (aka the shortest
+path length between pairs of nodes) prediction task, which considers both
+local and global information. The intuition behind hop counts based on local
+and global information is that since node-level anomalies are different normal
+nodes at both the feature- and adjacency matrix-levels, the distance between
+an anomalous node and its surrounding nodes should be larger than that
+between a normal node and its neighboring nodes. Hence, computing hop
+counts based on both local and global information can be useful to construct
+an anomaly indicator.
+    SSL with well-designed pretext tasks has shown a capability to handle
+complex structural dependencies and detect graph anomalies in static graphs.
+However, detecting anomalous graph objects raises an even more difficult
+problem in a dynamic graph (aka a graph set), which consists of consecutive
+temporal graphs indexed in time, hence, the feature sets of nodes/edges and
+adjacency matrices change overtime. Time-series signals, edge streams in
+social networks, and videos are some of the examples that can be converted
+to dynamic graphs (Ho et al., 2023). Several studies have shown the potential
+of SSL to detect anomalies in dynamic graphs. For example, (Liu et al.,
+2021c) aimed to detect edge-level anomalies at different time steps in an
+edge stream by designing a dynamic graph transformer-based contrastive
+learning. Positive edges are sampled from the normal training set while
+negative edges are randomly sampled based on a random sampling technique
+and are guaranteed that these negative samples are different from positive
+samples.
+    Other additional examples have demonstrated the ability of SSL in dy-
+namic graphs constructed from different data modalities. For example, (Luo
+et al., 2022) aimed to detect anomalies in molecular networks, protein net-
+works and social networks. They first constructed dynamic graphs for these
+networks. Then, they leveraged contrastive learning to capture both node-
+level and graph-level representations by a dual-graph encoder, and aimed to
+detect graph-level anomalies. (Ho and Armanfard, 2023) aimed to effectively
+construct a graph set for time-series signal data, and then detect node-level
+and sub-graph-level anomalies in constructed graphs. To do so, they uti-
+lized the reconstruction-based and contrastive-based SSL pretext tasks to
+
+                                      34
+effectively capture the local sub-graph information in graphs.
+    In conclusion, SSL have yielded promising results for detecting anomalous
+graph objects at the node-, edge-, sub-graph- and graph-levels in both static
+and dynamic graphs. Using the knowledge of the features sets of nodes/edges,
+the adjacency matrices, the local and global information in graphs, and more
+importantly designing a diversity of effective graph augmentation techniques
+for pretext tasks would significantly improve the method’s detection perfor-
+mance.
+
+7.4. Anomaly Detection in Other Non-Image Data Types
+    Beyond Graphs, audio, and time series data, self-supervised anomaly de-
+tection techniques have also been successfully applied to other data types.
+In particular, Shenkar et al. (2022) introduced an innovative contrastive
+learning algorithm specifically designed for tabular data. Their approach in-
+volved incorporating the concept of feature masking as a proxy task. During
+the training process, the model learns to create a mapping that maximizes
+the mutual information (MI) between the original samples and the masked
+features. To identify anomalies, the contrastive loss itself is directly used as
+the anomaly score. The findings of this study demonstrated the efficacy of
+self-supervised learning in tabular anomaly detection.
+    Another area that has recently garnered attention is text anomaly de-
+tection using self-supervision. Manolache et al. (2021b) introduced a novel
+proxy task called Replaced Mask Detection (RMD), which involves two steps:
+I) Masking a particular word in the input, and II) Replacing the masked
+word with an alternative. The model is trained to differentiate between the
+original and transformed versions of the text. Through extensive analysis,
+the authors demonstrated that the proposed framework achieved significant
+improvements in text anomaly detection.
+    Self-supervised models have indeed achieved remarkable success in vari-
+ous domains. However, their effectiveness is often dependent on the specific
+transformations they employ, which can limit their applicability. Fortunately,
+certain transformations, such as data masking, have proven to be adaptable
+across different data types. Drawing inspiration from this observation, a ded-
+icated line of research has emerged with the goal of developing self-supervised
+methods for anomaly detection that can be applied to diverse data types.
+This research aims to create techniques that leverage self-supervision to de-
+tect anomalies effectively and efficiently in various domains, expanding the
+scope of self-supervised anomaly detection beyond specific data types. The
+
+                                      35
+work of Qiu et al. (2021) is one of the most notable papers in this field.
+They have introduced the concept of trainable transformations that can be
+flexibly applied to any data type. The fundamental principle behind their
+approach involves mapping transformed data into a representation where
+distinct transformations can be discerned while still preserving the similarity
+between the transformed and original data. Remarkably, their framework
+demonstrates the capability to learn domain-specific transformations when
+applied to diverse datasets, including medical data and cyber-security data.
+This ability to adapt to different data types underscores the versatility and
+potential of their method in anomaly detection applications.
+    In conclusion, the field of self-supervised anomaly detection has expanded
+beyond image data, with significant progress made in detecting anomalies
+in non-image data types. By leveraging self-supervised learning techniques
+tailored to specific data modalities, researchers have demonstrated promising
+results in detecting anomalies in text, audio, time series, graphs, and IoT
+sensor data. These advancements open up new possibilities for anomaly
+detection in a wide range of applications, contributing to the development of
+robust and versatile anomaly detection systems.
+
+8. Comparative Evaluation and Discussions
+    In this section, we focus on presenting the results reported by self-supervised
+image anomaly detection papers in a comparative manner to gain valuable
+insights into their performance. It is important to note that we have cho-
+sen to analyze only image data in this section, excluding other data types.
+This decision was made due to the inherent variations in datasets and back-
+bones used across different studies, which could potentially introduce unfair
+comparisons. By focusing specifically on image data, we can provide a more
+meaningful and unbiased evaluation of the self-supervised anomaly detection
+methods.
+    A flurry of datasets is used to benchmark the self-supervised anomaly de-
+tection algorithms. CIFAR-10 (Krizhevsky et al.), and MVTecAD (Bergmann
+et al., 2019) are two of the most common dataset that recent anomaly de-
+tection papers used. CIFAR-10 includes images of ten different objects. To
+benchmark an AD algorithm on this dataset, we assume that we only have
+access to the data from one of the classes during the training. During the
+test time, other classes are considered to be anomalies.
+
+
+                                       36
+Table 4: Performance of Self-Supervised Models on CIFAR-10 against shallow and deep
+baselines. The bold values denote the highest AUROC (%) result for each class
+
+                       Baseline                         Self-Predictive Method                Contrastive Learning
+
+ Class KDE OCSVM DSVDD OCGAN DROCC GEOM RotNet OE GOAD Puzzle SSLOE PANDA CSI                      SSD NDA     MSCL
+
+
+ Plane 61.2     65.6   61.7   75.7   81.7   74.7    71.9   87.6   77.2   78.9   90.4   97.4 89.9 82.7 98.5     97.7
+  Car 64.0      40.9   65.9   53.1   76.7   95.7    94.5   93.9   96.7   78.2   99.3   98.4 99.1 98.5 76.5     98.9
+ Bird 50.1      65.3   50.8   64.0   66.7   78.1    78.4   78.6   83.3   69.9   93.7   93.9 93.1 84.2 79.6     95.8
+  Cat 56.4      50.1   59.1   62.0   67.1   72.4    70.0   79.9   77.7   54.9   88.1   90.6 86.4 84.5 79.1     94.5
+ Deer 66.2      75.2   60.9   72.3   73.6   87.8    77.2   81.7   87.8   75.5   97.4   97.5 93.9 84.8 92.4     97.3
+  Dog 62.4      51.2   65.7   62.0   74.4   87.8    86.8   85.6   87.8   66.0   94.3   94.4 93.2 90.9 71.7     97.1
+ Frog 74.9      71.8   67.7   72.3   74.4   83.4    81.6   93.3   90.0   74.8   97.1   97.5 95.1 91.7 97.5     98.4
+ Horse 62.6     51.2   67.3   57.5   71.4   95.5    93.7   87.9   96.1   73.3   98.8   97.5 98.7 95.2 69.1     98.3
+ Ship 75.1      67.9   75.9   82.0   80.0   93.3    90.7   92.6   93.8   83.3   98.7   97.6 97.9 92.9 98.5     98.7
+ Truck 76.0     48.5   73.1   55.4   76.2   91.3    88.8   92.1   92.0   70.0   98.5   97.4 95.5 94.4 75.2     98.4
+  Ave:   64.8   58.8   64.8   65.7   74.2   86.0    83.3 87.3 88.2       72.5   95.6   96.2   94.3 90.0 84.3   97.5
+
+
+
+
+    Table 4 presents the result of several state-of-the-art SSL models against
+the commonly-used shallow and deep baselines for one-class AD on the
+CIFAR-10 dataset. This task can evaluate the performance of algorithms
+in semantic (high-level) anomaly detection. It is important to note that for
+the sake of fair comparison, we included the methods that use the same back-
+bone. Looking at this table, we can readily confirm that the self-supervised
+approaches can outperform other shallow and deep anomaly detection algo-
+rithms by a significant margin. This remarkable improvement leads to the
+emergence of SSL algorithms as a key category of anomaly detection.
+    Besides semantic anomaly detection, self-supervised methods show sat-
+isfactory performance for defect detection and spotting sensory anomalies
+(Song et al., 2021; Tsai et al., 2022; Kim et al., 2022). Fig. 3 shows the
+performance of the self-supervised models on the MVTecAD dataset against
+other widely-used algorithms including shallow models, deep models and gen-
+erative models. More specifically, the compared shallow models are Gaussian
+(Ruff et al., 2021), MVE (Ruff et al., 2021), SVDD (Tax and Duin, 2004),
+KDE (Ruff et al., 2021), kPCA (Ruff et al., 2021), patch-SVDD (Yi and Yoon,
+2020) and IGD (Chen et al., 2021b). The compared deep models are CAVGA
+(Venkataramanan et al., 2020), ARNet (Fei et al., 2020), SPADE (Cohen and
+Hoshen, 2020), MOCCA (Valerio Massoli et al., 2020), DSVDD (Ruff et al.,
+2018), FCDD (Liznerski et al., 2020), DFR (Shi et al., 2021), STFPM (Wang
+et al., 2021b), Gaussian-AD (Rippel et al., 2021), InTra (Pirnay and Chai,
+
+
+                                                   37
+2021), PaDiM (Defard et al., 2021) and DREAM (Zavrtanik et al., 2021).
+The included generative models in Fig. 3 are AnoGAN (Schlegl et al., 2017),
+LSA (Abati et al., 2019), GANomaly (Akcay et al., 2018), AGAN (Ruff et al.,
+2021), Normalizing Flows-based DifferNet (Rudolph et al., 2021), CFLOW
+(Gudovskiy et al., 2022) and CS-Flow (Rudolph et al., 2022). Looking at the
+figure, we can infer that SSL-based models can achieve a good performance
+on this dataset. However, the superiority of self-supervised algorithms over
+other baselines is less evident in this task than in one-class AD. Also, some al-
+gorithms such as GEOM, and CSI, which show state-of-the-art performance
+on CIFAR-10, achieve a weak accuracy in this anomaly detection task.
+    The above argument manifests the importance of choosing the right pre-
+text task in self-supervised learning. Methods such as GEOM and RotNet
+which are based on geometric transformations, and CSI and SSD which are
+based on contrastive methods, work well for detecting semantic anomalies,
+but they are not well-suited for defect detection. On the other hand, SSL ap-
+proaches that are based on pixel-level transformations, such as CutPaste, can
+achieve good accuracy on the MVTecAD dataset. Choosing the right proxy
+task, depending on the downstream objective and types of anomalies, is the
+key to the success of the SSL models. This allows researchers to improve the
+state-of-the-art by coming up with effective pretext tasks.
+    Out-of-distribution detection is another task in which SSL models are
+widely applied. Table 5 shows the experimental results of some SSL models
+(shown in the top 10 rows) against a supervised method, shown in the last
+row of the table. The supervised method is in fact a ResNet-50 network that
+is trained to classify the data available in CIFAR-10 from the other OOD
+dataset – i.e., ResNet-50 is trained as an eleven-way classifier, ten for CIFAR-
+10 and one for the OOD dataset. To benchmark an OOD algorithm, it is
+common to train a model on the CIFAR-10 dataset and test the model using
+another dataset. If the samples of the test datasets are similar to the CIFAR-
+10 to some extent, the task is called near-OOD detection (e.g. CIFAR-10
+vs. CIFAR-100). Otherwise, it is referred to as far-OOD detection (e.g.
+CIFAR-10 vs. SVHN, or CIFAR-10 vs. LSUN). We observe that SSL can
+even achieve better performance than the supervised baseline. This manifests
+that it is not necessary to have access to the data ground truths for the OOD
+detection task.
+    The results reported in Table 5 shows that all the SSL-based methods
+can achieve an accuracy above 94% on far-OOD detection (i.e. CIFAR-10
+vs. SVHN). It can suggest that the SSL models can learn meaningful features
+
+                                       38
+Figure 3: Performance of anomaly detection algorithms on the MVTecAD dataset. Each
+group of algorithm is denoted by a different colour.
+
+
+
+
+of the dataset. Almost all algorithms perform well in near-OOD detection,
+and some can even beat the supervised baseline.
+
+9. Application Domains
+    Anomaly detection systems are widely deployed in various domains, such
+as medicine, industry, infrastructure, social medical, financial security, etc.
+Despite the fact that self-supervised anomaly detection is a relatively new
+field, it is now widely employed in practical applications along with other
+popular methods such as Semi-supervised learning (Villa-Perez et al., 2021),
+and GAN and its variants (Xia et al., 2022).
+    Self-supervised learning algorithms are commonly used in medical re-
+search for detecting irregularities in patients’ records. They are successfully
+employed for detecting epileptic seizures (Xu et al., 2020), pulmonary dis-
+eases (Bozorgtabar et al., 2020), Parkinson disease (Jiang et al., 2021), and
+retinal diseases(Burlina et al., 2022). In addition, they are applied to differ-
+ent modalities of medical data, including Computed Tomography (CT) scans
+(Venkatakrishnan et al., 2020), 3D volumetric CT data (Cho et al., 2021b),
+X-ray scans (Spahr et al., 2021), optical coherence tomography (OCT) (Zhao
+
+                                       39
+Table 5: Performance of SSL models against a supervise-based method for OOD detection.
+The bold values denote the highest AUROC (%) result for each OOD dataset
+
+                                             IND: CIFAR-10         IND: CIFAR-100
+                  Method                          OOD:               OOD:
+                                          CIFAR-100 SVHN LSUN CIFAR-10 SVHN LSUN
+        RotNet (Hendrycks et al., 2018)     93.3    94.4   97.6   75.7   86.9   93.4
+            CSI (Tack et al., 2020)         89.2    99.8   90.3    -      -      -
+       SSL-OE (Hendrycks et al., 2019)      93.3    98.4   93.2    -      -      -
+          CLP (Winkens et al., 2020)        92.9    99.5    -     78.9   95.4    -
+       SSL-OOD (Mohseni et al., 2020)       93.8    99.2   98.9   77.7   95.8   88.9
+           MCL (Cho et al., 2021a)          90.8    97.9   93.8    -      -      -
+         MCL-SEI (Cho et al., 2021a)        94.0    99.3   96.3    -      -      -
+          SSD (Sehwag et al., 2021)         90.6    99.6   96.5   69.6   94.9   79.5
+       SSDk (k=5) (Sehwag et al., 2021)     93.1    99.7   97.8   78.3   99.1   93.4
+          SDNS (Rafiee et al., 2022)        94.2    99.9   97.5   67.6   97.2   74.6
+        ResNet-50 (Sehwag et al., 2021)     90.6    99.6   93.8   55.3   94.5   69.4
+
+
+
+
+et al., 2021), Spectral Domain - optical coherence tomography images (SD-
+OCT) (Park et al., 2021), and MRI images (Zhang et al., 2021b; Hansen
+et al., 2022).
+    Self-supervised anomaly detection method are also employed in industrial
+applications for defect detection, and failure prediction (Bahavan et al., 2020;
+Hou et al., 2021), as well as for monitoring infrastructural facilities (Liu et al.,
+2021a; Jahan et al., 2021).
+    The application of self-supervised AD is not limited to the aforementioned
+areas. Several fields such as financial fraud detection (Schreyer et al., 2021;
+Wang et al., 2021a), text anomaly detection (Manolache et al., 2021b), and
+splice detection (Huh et al., 2018) are also benefited from the SSL algorithms.
+    Figure 4 depicts the timeline of papers focusing on self-supervised anomaly
+detection algorithms and their applications. This figure highlights the rapid
+growth of this field and its wide applicability in addressing real-world prob-
+lems.
+
+10. Future Directions
+    Although the self-supervised models have established themselves as state-
+of-the-art in anomaly detection, there is still much room for improvement in
+this research field. This section briefly discusses some critical challenges that
+SSL-based anomaly detectors suffer from and presents some high-level ideas
+for addressing them.
+
+                                               40
+Figure 4: Timeline of Self-Supervised Anomaly Detection Papers. Papers concerning the
+algorithms are distinguished from the application papers. The category of each algorithm
+is denoted by a distinctive color.
+
+
+
+
+[1] (Golan and El-Yaniv, 2018); [2] (Sabokrou et al., 2019); [3] (Hendrycks et al., 2018); [4] (Winkens et al.,
+
+2020); [5] (Mohseni et al., 2020); [6] (Bergman and Hoshen, 2020); [7] (Salehi et al., 2020); [8] (Tack et al.,
+2020); [9] (Sehwag et al., 2021); [10] (Sohn et al., 2020); [11] (Li et al., 2021); [12] (Cho et al., 2021a); [13] (Reiss
+and Hoshen, 2021); [14] (Reiss et al., 2021); [15] (Chen et al., 2021a); [16] (Schlüter et al., 2021); [17] (Song
+et al., 2021); [18] (Wang et al., 2021c); [19] (Zhang et al., 2021a); [20] (Zhang et al., 2022a); [21] (Kim et al.,
+2022); [22] (Rafiee et al., 2022); [23] (Zheng et al., 2022); [24] (Ho and Armanfard, 2023); [25] (Wang et al.,
+2023); [26] (Guan et al., 2023); [27] (Jeong et al., 2023); [28] (Hojjati et al., 2023); [29] (Huh et al., 2018);
+[30] (Xu et al., 2020); [31] (Bozorgtabar et al., 2020); [32] (Venkatakrishnan et al., 2020); [33] (Manolache
+
+et al., 2021a); [34] (Spahr et al., 2021); [35] (Jiang et al., 2021); [36] (Zhao et al., 2021); [37] (Schreyer et al.,
+2021); [38] (Park et al., 2021); [39] (Cho et al., 2021b); [40] (Zhang et al., 2021b); [41] (Jahan et al., 2021);
+[42] (Burlina et al., 2022); [43] (Bai et al., 2023); [44] (Hansen et al., 2022).
+
+
+
+
+10.1. Negative Sampling in Contrastive Models
+    In recent years, contrastive models dominated self-supervised AD algo-
+rithms. To learn an efficient representation, CL algorithms require accessing
+negative samples. In the standard setting, it is assumed that other batch
+samples are negative, even though their class label is the same as that of the
+query sample. However, if the number of same-class samples increases, the
+quality of the learned representation degrades. In some anomaly detection
+tasks, where the training data comprises samples of one class, this negative
+sampling bias may turn into a big issue. This motivates researchers to design
+unbiased versions of the contrastive loss (Chuang et al., 2020).
+
+                                                          41
+    Interestingly, previous studies showed that even in the one-class setting,
+the instance discrimination contrastive learning can lead to a suitable repre-
+sentation for anomalies. This can be because all the training data are spread
+out on a hypersphere, and the anomalies are mapped to the center of the
+space, as we discussed in section 6.
+    Following the success of SimCLR, several other contrastive models are
+developed. These methods can be good candidates for one-class anomaly
+detection since they can be trained using only positive samples. Some recent
+models, such as BYOL (Grill et al., 2020) and Barlow Twins (Zbontar et al.,
+2021), do not require negative samples during training. To the best of our
+knowledge, there is no study that evaluates the performance of these models
+for anomaly detection.
+
+10.2. Incorporating Labelled Data
+    In the most anomaly detection studies, it is assumed that no labeled
+anomaly is available during the training phase. However, in some appli-
+cations, we might be able to have a few labelled anomalies. These labelled
+samples can significantly improve the algorithm if incorporated appropriately.
+Recently, Sehwag et al. (2021) explored the problem of few-shot anomaly
+detection, where they assume a few labelled anomalies are present. They
+showed that even a few anomalies can significantly improve the detection
+accuracy. Zheng et al. (2022) proposed an extended algorithm of multi-scale
+contrastive learning, called ANEMONE, by incorporating it with a handful
+of ground-truth anomalies. Since the assumption of having access to a few
+anomaly samples during training time is feasible in many tasks, we believe
+that models with the capability to incorporate them have a great poten-
+tial to improve the detection performance. Such methods also have more
+application in real-life problems.
+
+10.2.1. Multi-Modal Anomaly Detection
+    In many applications, including medical imaging, cybersecurity, and surveil-
+lance systems, the datasets contain multiple sources of information or modal-
+ities. Detecting anomalies in such cases heavily depends on the quality and
+relevance of the information contained in each modality and the ability to
+effectively fuse this information to make a robust decision (?). Since self-
+supervised methods have already established themselves as powerful tools
+for learning representations, it would be interesting to study their applica-
+tion in multi-modal learning for anomaly detection. To this end, researchers
+
+                                     42
+might pursue the direction of designing cross-modal proxy tasks that aid the
+model to fuse information from different modalities in an efficient manner.
+
+10.2.2. Efficient Self-Supervised Learning
+    Currently, self-supervised models have shown superior performance over
+traditional algorithms. Yet, they face critical challenges such as their com-
+putational cost, which prevents their widespread use in many applications.
+Future research in self-supervised learning will likely focus on designing com-
+putationally effective models that can leverage the vast amounts of unanno-
+tated data available for training. Additionally, the use of transfer learning,
+meta-learning, and federated learning may become more widespread as a
+way to overcome the limitations of self-supervised algorithms and enable
+their deployment in resource-constrained environments. Furthermore, re-
+search may also investigate the scalability of self-supervised learning to han-
+dle large amounts of data and diverse domains, as well as its interpretability
+and robustness to adversarial attacks.
+
+11. Conclusion
+   In this paper, we discussed the state-of-the-art methods in self-supervised
+anomaly detection and highlighted the strengths and drawbacks of each ap-
+proach. We also compared their performance on benchmark datasets and
+pinpointed their applications. In summary, we can argue that self-supervised
+models are well suited for tackling the problem of anomaly detection. Yet,
+there are still a lot of under-explored issues and room for improvement. Still,
+the significant success of SSL algorithms offers a bright horizon for achieving
+new milestones in automatic anomaly detection.
+
+Acknowledgments
+    The authors wish to acknowledge the financial support of the Natu-
+ral Sciences, Engineering Research Council of Canada (NSERC), Fonds de
+recherche du Québec (FRQNT), AGE-WELL, and the Department of Elec-
+trical and Computer Engineering at McGill University. This research was
+enabled in part by support provided by Calcul Quebec and Compute Canada.
+
+
+
+
+                                      43
+References
+Abati, D., Porrello, A., Calderara, S., Cucchiara, R., 2019. Latent space
+ autoregression for novelty detection, in: Proceedings of the IEEE/CVF
+ Conference on Computer Vision and Pattern Recognition, pp. 481–490.
+
+Agyemang, M., Barker, K., Alhajj, R., 2006. A comprehensive survey of
+  numeric and symbolic outlier mining techniques. Intell. Data Anal. 10,
+  521–538. doi:10.3233/IDA-2006-10604.
+
+Akcay, S., Atapour-Abarghouei, A., Breckon, T.P., 2018. Ganomaly: Semi-
+  supervised anomaly detection via adversarial training, in: Asian conference
+  on computer vision, Springer. pp. 622–637.
+
+Azizi, S., Mustafa, B., Ryan, F., Beaver, Z., Freyberg, J., Deaton, J., Loh, A.,
+  Karthikesalingam, A., Kornblith, S., Chen, T., Natarajan, V., Norouzi, M.,
+  2021. Big self-supervised models advance medical image classification, in:
+  2021 IEEE/CVF International Conference on Computer Vision (ICCV),
+  pp. 3458–3468. doi:10.1109/ICCV48922.2021.00346.
+
+Bahavan, N., Suman, N., Cader, S., Ranganayake, R., Seneviratne, D., Mad-
+  dumage, V., Seneviratne, G., Supun, Y., Wijesiri, I., Dehigaspitiya, S.,
+  et al., 2020. Anomaly detection using deep reconstruction and forecasting
+  for autonomous systems. arXiv preprint arXiv:2006.14556 .
+
+Bai, J., Chen, J., Wang, M., Ayub, M.S., Yan, Q., 2023.          Ss-
+  dpt:    Self-supervised dual-path transformer for anomalous sound
+  detection.       Digital Signal Processing 135, 103939.     URL:
+  https://www.sciencedirect.com/science/article/pii/S1051200423000349,
+  doi:https://doi.org/10.1016/j.dsp.2023.103939.
+
+Bergman, L., Hoshen, Y., 2020. Classification-based anomaly detection for
+  general data, in: International Conference on Learning Representations
+  (ICLR).
+
+Bergmann, P., Fauser, M., Sattlegger, D., Steger, C., 2019. Mvtec ad — a
+  comprehensive real-world dataset for unsupervised anomaly detection, in:
+  2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition
+  (CVPR), pp. 9584–9592. doi:10.1109/CVPR.2019.00982.
+
+
+
+                                      44
+Bozorgtabar, B., Mahapatra, D., Vray, G., Thiran, J.P., 2020. Salad: Self-
+  supervised aggregation learning for anomaly detection on x-rays, in: Inter-
+  national Conference on Medical Image Computing and Computer-Assisted
+  Intervention, Springer. pp. 468–478.
+
+Burlina, P., Paul, W., Liu, T.A., Bressler, N.M., 2022. Detecting anomalies in
+  retinal diseases using generative, discriminative, and self-supervised deep
+  learning. JAMA ophthalmology 140, 185–189.
+
+Carmona, C.U., Aubet, F.X., Flunkert, V., Gasthaus, J., 2022.
+  Neural contextual anomaly detection for time series, in: Raedt,
+  L.D. (Ed.), Proceedings of the Thirty-First International Joint
+  Conference on Artificial Intelligence,   IJCAI-22,   International
+  Joint Conferences on Artificial Intelligence Organization. pp.
+  2843–2851.        URL: https://doi.org/10.24963/ijcai.2022/394,
+  doi:10.24963/ijcai.2022/394. main Track.
+
+Chalapathy, R., Chawla, S., 2019.    Deep learning for anomaly
+ detection: A survey.    URL: https://arxiv.org/abs/1901.03407,
+ doi:10.48550/ARXIV.1901.03407.
+
+Chandola, V., Banerjee, A., Kumar, V., 2009. Outlier detection: A survey.
+ ACM Computing Surveys 14, 15.
+
+Chen, B., Zhang, J., Zhang, X., Dong, Y., Song, J., Zhang, P., Xu, K., Khar-
+ lamov, E., Tang, J., 2022. Gccad: Graph contrastive learning for anomaly
+ detection. IEEE Transactions on Knowledge and Data Engineering .
+
+Chen, C., Xie, Y., Lin, S., Qiao, R., Zhou, J., Tan, X., Zhang, Y.,
+ Ma, L., 2021a. Novelty detection via contrastive learning with nega-
+ tive data augmentation, in: Zhou, Z.H. (Ed.), Proceedings of the Thir-
+ tieth International Joint Conference on Artificial Intelligence, IJCAI-
+ 21, International Joint Conferences on Artificial Intelligence Organiza-
+ tion. pp. 606–614. URL: https://doi.org/10.24963/ijcai.2021/84,
+ doi:10.24963/ijcai.2021/84. main Track.
+
+Chen, T., Kornblith, S., Norouzi, M., Hinton, G., 2020. A simple frame-
+ work for contrastive learning of visual representations, in: International
+ conference on machine learning, PMLR. pp. 1597–1607.
+
+
+                                     45
+Chen, Y., Tian, Y., Pang, G., Carneiro, G., 2021b. Unsupervised anomaly
+ detection with multi-scale interpolated gaussian descriptors. arXiv preprint
+ arXiv:2101.10043 2.
+
+Cho, H., Seol, J., Lee, S.g., 2021a. Masked contrastive learning for
+ anomaly detection, in: Zhou, Z.H. (Ed.), Proceedings of the Thirti-
+ eth International Joint Conference on Artificial Intelligence, IJCAI-21,
+ International Joint Conferences on Artificial Intelligence Organization.
+ pp. 1434–1441. URL: https://doi.org/10.24963/ijcai.2021/198,
+ doi:10.24963/ijcai.2021/198. main Track.
+
+Cho, J., Kang, I., Park, J., 2021b. Self-supervised 3d out-of-distribution
+ detection via pseudoanomaly generation, in: International Conference on
+ Medical Image Computing and Computer-Assisted Intervention, Springer.
+ pp. 95–103.
+
+Chopra, S., Hadsell, R., LeCun, Y., 2005. Learning a similarity metric dis-
+ criminatively, with application to face verification, in: 2005 IEEE Com-
+ puter Society Conference on Computer Vision and Pattern Recognition
+ (CVPR’05), pp. 539–546 vol. 1. doi:10.1109/CVPR.2005.202.
+
+Chuang, C.Y., Robinson, J., Lin, Y.C., Torralba, A., Jegelka, S., 2020. De-
+  biased contrastive learning. Advances in Neural Information Processing
+  Systems 33.
+
+Cohen, N., Hoshen, Y., 2020. Sub-image anomaly detection with deep pyra-
+  mid correspondences. arXiv preprint arXiv:2005.02357 .
+
+Defard, T., Setkov, A., Loesch, A., Audigier, R., 2021. Padim: a patch
+  distribution modeling framework for anomaly detection and localization,
+  in: International Conference on Pattern Recognition, Springer. pp. 475–
+  489.
+
+Di Mattia, F., Galeone, P., De Simoni, M., Ghelfi, E., 2019. A survey on
+  gans for anomaly detection. URL: https://arxiv.org/abs/1906.11632,
+  doi:10.48550/ARXIV.1906.11632.
+
+Doersch, C., Gupta, A., Efros, A.A., 2015. Unsupervised visual representa-
+ tion learning by context prediction, in: Proceedings of the IEEE interna-
+ tional conference on computer vision, pp. 1422–1430.
+
+
+                                     46
+Duan, J., Wang, S., Zhang, P., Zhu, E., Hu, J., Jin, H., Liu, Y., Dong,
+ Z., 2022. Graph anomaly detection via multi-scale contrastive learning
+ networks with augmented view. arXiv:2212.00535.
+
+Fawcett, T., 2006. An introduction to roc analysis. Pattern Recogn. Lett.
+  27, 861–874. URL: https://doi.org/10.1016/j.patrec.2005.10.010,
+  doi:10.1016/j.patrec.2005.10.010.
+
+Fei, Y., Huang, C., Jinkun, C., Li, M., Zhang, Y., Lu, C., 2020. Attribute
+  restoration framework for anomaly detection. IEEE Transactions on Mul-
+  timedia .
+
+Feinman, R., Curtin, R.R., Shintre, S., Gardner, A.B., 2017. Detecting
+  adversarial samples from artifacts. arXiv preprint arXiv:1703.00410 .
+
+Field, S.A., Tyre, A.J., Jonzén, N., Rhodes, J.R., Possingham, H.P., 2004.
+  Minimizing the cost of environmental management decisions by optimizing
+  statistical thresholds. Ecology Letters 7, 669–675.
+
+Fu, Y., Xue, F., 2022.       Mad: Self-supervised masked anomaly
+  detection task for multivariate time series, in:  2022 Interna-
+  tional Joint Conference on Neural Networks (IJCNN), pp. 1–8.
+  doi:10.1109/IJCNN55064.2022.9892218.
+
+Gidaris, S., Singh, P., Komodakis, N., 2018. Unsupervised representation
+  learning by predicting image rotations. arXiv preprint arXiv:1803.07728 .
+
+Giri, R., Tenneti, S.V., Cheng, F., Helwani, K., Isik, U., Kr-
+  ishnaswamy, A., 2020.      Self-supervised classification for de-
+  tecting anomalous sounds,    in:      Detection and Classifica-
+  tion of Acoustic Scenes and Events Workshop 2020.            URL:
+  https://www.amazon.science/publications/self-supervised-classification-for-detec
+
+Golan, I., El-Yaniv, R., 2018. Deep anomaly detection using geometric trans-
+ formations. Advances in neural information processing systems 31.
+
+Grill, J.B., Strub, F., Altché, F., Tallec, C., Richemond, P.H., Buchatskaya,
+  E., Doersch, C., Pires, B.A., Guo, Z.D., Azar, M.G., Piot, B.,
+  Kavukcuoglu, K., Munos, R., Valko, M., 2020. Bootstrap your own la-
+  tent: A new approach to self-supervised learning. arXiv:2006.07733.
+
+
+                                     47
+Guan, J., Xiao, F., Liu, Y., Zhu, Q., Wang, W., 2023. Anomalous sound
+ detection using audio representation with machine id based contrastive
+ learning pretraining, in: ICASSP 2023 - 2023 IEEE International Con-
+ ference on Acoustics, Speech and Signal Processing (ICASSP), pp. 1–5.
+ doi:10.1109/ICASSP49357.2023.10096054.
+
+Gudovskiy, D., Ishizaka, S., Kozuka, K., 2022. Cflow-ad: Real-time unsu-
+ pervised anomaly detection with localization via conditional normalizing
+ flows, in: Proceedings of the IEEE/CVF Winter Conference on Applica-
+ tions of Computer Vision, pp. 98–107.
+
+Hansen, S., Gautam, S., Jenssen, R., Kampffmeyer, M., 2022. Anomaly
+  detection-inspired few-shot medical image segmentation through self-
+  supervision with supervoxels. Medical Image Analysis 78, 102385.
+
+He, K., Fan, H., Wu, Y., Xie, S., Girshick, R., 2020. Momentum contrast
+  for unsupervised visual representation learning, in: Proceedings of the
+  IEEE/CVF conference on computer vision and pattern recognition, pp.
+  9729–9738.
+
+Hendrycks, D., Mazeika, M., Dietterich, T., 2018. Deep anomaly detection
+  with outlier exposure, in: International Conference on Learning Represen-
+  tations. URL: https://openreview.net/forum?id=HyxCxhRcY7.
+
+Hendrycks, D., Mazeika, M., Kadavath, S., Song, D., 2019. Using self-
+  supervised learning can improve model robustness and uncertainty. Ad-
+  vances in Neural Information Processing Systems 32.
+
+Hjelm, R.D., Fedorov, A., Lavoie-Marchildon, S., Grewal, K., Bach-
+  man, P., Trischler, A., Bengio, Y., 2019.     Learning deep rep-
+  resentations by mutual information estimation and maximization,
+  in: International Conference on Learning Representations.  URL:
+  https://openreview.net/forum?id=Bklr3j0cKX.
+
+Ho, T.K.K., Armanfard, N., 2023. Self-supervised learning for anomalous
+  channel detection in eeg graphs: Application to seizure analysis, in: Pro-
+  ceedings of the AAAI Conference on Artificial Intelligence.
+
+Ho, T.K.K., Karami, A., Armanfard, N., 2023. Graph-based time-series
+  anomaly detection: A survey. arXiv preprint arXiv:2302.00058 .
+
+
+                                    48
+Hodge, V., Austin, J., 2004.            A survey of outlier detec-
+ tion methodologies.     Artificial Intelligence Review 22, 85–126.
+ doi:10.1023/B:AIRE.0000045502.10941.a9.
+
+Hojjati, H., Armanfard, N., 2021. Dasvdd: Deep autoencoding support vec-
+ tor data descriptor for anomaly detection, in: arXiv. arXiv:2106.05410.
+
+Hojjati, H., Armanfard, N., 2022. Self-supervised acoustic anomaly detec-
+ tion via contrastive learning, in: ICASSP 2022 - 2022 IEEE International
+ Conference on Acoustics, Speech and Signal Processing (ICASSP).
+
+Hojjati, H., Sadeghi, M., Armanfard, N., 2023. Multivariate time-series
+ anomaly detection with temporal self-supervision and graphs: Applica-
+ tion to vehicle failure prediction, in: The European Conference on Machine
+ Learning and Principles and Practice of Knowledge Discovery in Databases
+ (ECML-PKDD).
+
+Hou, W., Tao, X., Xu, D., 2021. A self-supervised cnn for particle inspection
+  on optical element. IEEE Transactions on Instrumentation and Measure-
+  ment 70, 1–12.
+
+Huang, D., Shen, L., Yu, Z., Zheng, Z., Huang, M., Ma, Q., 2022a.
+ Efficient time series anomaly detection by multiresolution self-
+ supervised discriminative network. Neurocomputing 491, 261–272. URL:
+ https://www.sciencedirect.com/science/article/pii/S0925231222003435,
+ doi:https://doi.org/10.1016/j.neucom.2022.03.048.
+
+Huang, T., Pei, Y., Menkovski, V., Pechenizkiy, M., 2022b. Hop-count
+ based self-supervised anomaly detection on attributed networks, in: Joint
+ European Conference on Machine Learning and Knowledge Discovery in
+ Databases, Springer. pp. 225–241.
+
+Huh, M., Liu, A., Owens, A., Efros, A.A., 2018. Fighting fake news: Im-
+ age splice detection via learned self-consistency, in: Proceedings of the
+ European conference on computer vision (ECCV), pp. 101–117.
+
+Jahan, K., Umesh, J.P., Roth, M., 2021. Anomaly detection on the rail lines
+  using semantic segmentation and self-supervised learning, in: 2021 IEEE
+  Symposium Series on Computational Intelligence (SSCI), IEEE. pp. 1–7.
+
+
+
+                                     49
+Jeong, Y., Yang, E., Ryu, J.H., Park, I., Kang, M., 2023. Anomalybert:
+  Self-supervised transformer for time series anomaly detection using data
+  degradation scheme. arXiv:2305.04468.
+Jiang, H., Lim, W.Y.B., Ng, J.S., Wang, Y., Chi, Y., Miao, C., 2021.
+  Towards parkinson’s disease prognosis using self-supervised learning and
+  anomaly detection, in: ICASSP 2021-2021 IEEE International Conference
+  on Acoustics, Speech and Signal Processing (ICASSP), IEEE. pp. 3960–
+  3964.
+Jiao, Y., Yang, K., Song, D., Tao, D., 2022. Timeautoad: Autonomous
+  anomaly detection with self-supervised contrastive loss for multivariate
+  time series. IEEE Transactions on Network Science and Engineering 9,
+  1604–1619. doi:10.1109/TNSE.2022.3148276.
+Jing, L., Tian, Y., 2021. Self-supervised visual feature learning with deep
+  neural networks: A survey. IEEE Transactions on Pattern Analysis and
+  Machine Intelligence 43, 4037–4058. doi:10.1109/TPAMI.2020.2992393.
+Jumutc, V., Suykens, J.A., 2014. Multi-class supervised novelty detection.
+  IEEE transactions on pattern analysis and machine intelligence 36, 2510–
+  2523.
+Khosla, P., Teterwak, P., Wang, C., Sarna, A., Tian, Y., Isola, P.,
+ Maschinot, A., Liu, C., Krishnan, D., 2020.        Supervised con-
+ trastive learning, in: Larochelle, H., Ranzato, M., Hadsell, R.,
+ Balcan, M., Lin, H. (Eds.), Advances in Neural Information Pro-
+ cessing Systems, Curran Associates, Inc.. pp. 18661–18673.   URL:
+ https://proceedings.neurips.cc/paper/2020/file/d89a66c7c80a29b1bdbab0f2a1a94af8-
+Kim, D., Jeong, D., Kim, H., Chong, K., Kim, S., Cho, H., 2022. Spatial
+  contrastive learning for anomaly detection and localization. IEEE Access
+  10, 17366–17376.
+Kim, M., Ho, M.T., Kang, H.G., 2021.          Self-supervised com-
+  plex network for machine sound anomaly detection, in: 2021 29th
+  European Signal Processing Conference (EUSIPCO), pp. 586–590.
+  doi:10.23919/EUSIPCO54536.2021.9615923.
+Kim, S., Choi, Y., Lee, M., 2015. Deep learning with support vector data
+  description. Neurocomputing 165, 111–117.
+
+                                    50
+Kiran, B.R., Thomas, D.M., Parakkal, R., 2018. An overview of deep learning
+  based methods for unsupervised and semi-supervised anomaly detection in
+  videos. Journal of Imaging 4, 36.
+
+Krizhevsky,  A.,     Nair,     V.,    Hinton,   G.,    .           Cifar-10
+  (canadian   institute    for     advanced   research).             URL:
+  http://www.cs.toronto.edu/ kriz/cifar.html.
+
+Larsson, G., Maire, M., Shakhnarovich, G., 2016. Learning representations
+  for automatic colorization, in: European Conference on Computer Vision
+  (ECCV).
+
+Latif, S., Usman, M., Rana, R., Qadir, J., 2018. Phonocardiographic sens-
+  ing using deep learning for abnormal heartbeat detection. IEEE Sensors
+  Journal 18, 9393–9400.
+
+Lee, K., Lee, K., Lee, H., Shin, J., 2018. A simple unified framework for
+  detecting out-of-distribution samples and adversarial attacks. Advances in
+  neural information processing systems 31.
+
+Li, C.L., Sohn, K., Yoon, J., Pfister, T., 2021. Cutpaste: Self-supervised
+  learning for anomaly detection and localization, in: Proceedings of the
+  IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp.
+  9664–9674.
+
+Liu, M., Xu, Z., Xu, Q., 2021a. Deepfib: Self-imputation for time series
+  anomaly detection. arXiv preprint arXiv:2112.06247 .
+
+Liu, S., Garrepalli, R., Dietterich, T., Fern, A., Hendrycks, D.,
+  2018.   Open category detection with PAC guarantees, in: Dy,
+  J., Krause, A. (Eds.), Proceedings of the 35th International Con-
+  ference on Machine Learning, PMLR. pp. 3169–3178.            URL:
+  https://proceedings.mlr.press/v80/liu18e.html.
+
+Liu, Y., Jin, M., Pan, S., Zhou, C., Zheng, Y., Xia, F., Philip, S.Y., 2022.
+  Graph self-supervised learning: A survey. IEEE Transactions on Knowl-
+  edge and Data Engineering 35, 5879–5900.
+
+Liu, Y., Li, Z., Pan, S., Gong, C., Zhou, C., Karypis, G., 2021b. Anomaly
+  detection on attributed networks via contrastive self-supervised learning.
+  IEEE transactions on neural networks and learning systems 33, 2378–2392.
+
+                                    51
+Liu, Y., Pan, S., Wang, Y.G., Xiong, F., Wang, L., Chen, Q., Lee, V.C.,
+  2021c. Anomaly detection in dynamic graphs via transformer. IEEE Trans-
+  actions on Knowledge and Data Engineering .
+
+Liznerski, P., Ruff, L., Vandermeulen, R.A., Franks, B.J., Kloft, M., Müller,
+  K.R., 2020. Explainable deep one-class classification. arXiv preprint
+  arXiv:2007.01760 .
+
+Luo, X., Wu, J., Yang, J., Xue, S., Peng, H., Zhou, C., Chen, H., Li, Z.,
+  Sheng, Q.Z., 2022. Deep graph level anomaly detection with contrastive
+  learning. Scientific Reports 12, 19867.
+
+Mahalanobis, P., 1936. On the generalised distance in statistics, in: Proceed-
+ ings of the National Institute of Sciences of India, pp. 49–55.
+
+Malaiya, R.K., Kwon, D., Kim, J., Suh, S.C., Kim, H., Kim, I., 2018. An em-
+ pirical evaluation of deep learning for network anomaly detection, in: 2018
+ International Conference on Computing, Networking and Communications
+ (ICNC), IEEE. pp. 893–898.
+
+Manolache, A., Brad, F., Burceanu, E., 2021a.          DATE: Detect-
+ ing anomalies in text via self-supervision of transformers, in: Pro-
+ ceedings of the 2021 Conference of the North American Chap-
+ ter of the Association for Computational Linguistics: Human Lan-
+ guage Technologies, Association for Computational Linguistics, Online.
+ pp. 267–277. URL: https://aclanthology.org/2021.naacl-main.25,
+ doi:10.18653/v1/2021.naacl-main.25.
+
+Manolache, A., Brad, F., Burceanu, E., 2021b. Date: Detecting anomalies in
+ text via self-supervision of transformers. arXiv preprint arXiv:2104.05591
+ .
+
+Min, E., Long, J., Liu, Q., Cui, J., Cai, Z., Ma, J., 2018. Su-ids: A semi-
+ supervised and unsupervised framework for network intrusion detection,
+ in: International Conference on Cloud Computing and Security, Springer.
+ pp. 322–334.
+
+Mohseni, S., Pitale, M., Yadawa, J., Wang, Z., 2020. Self-supervised
+ learning for generalizable out-of-distribution detection. Proceedings
+ of the AAAI Conference on Artificial Intelligence 34, 5216–5223.
+
+
+                                     52
+  URL:     https://ojs.aaai.org/index.php/AAAI/article/view/5966,
+  doi:10.1609/aaai.v34i04.5966.
+
+Pang, G., Shen, C., Cao, L., Hengel, A.V.D., 2021. Deep learning
+  for anomaly detection: A review. ACM Comput. Surv. 54. URL:
+  https://doi.org/10.1145/3439950, doi:10.1145/3439950.
+
+Park, S., Balint, A., Hwang, H., 2021. Self-supervised medical out-of-
+  distribution using u-net vision transformers, in: International Confer-
+  ence on Medical Image Computing and Computer-Assisted Intervention,
+  Springer. pp. 104–110.
+
+Pirnay, J., Chai, K., 2021. Inpainting transformer for anomaly detection.
+  arXiv preprint arXiv:2104.13897 .
+
+Qiu, C., Pfrommer, T., Kloft, M., Mandt, S., Rudolph, M., 2021. Neu-
+  ral transformation learning for deep anomaly detection beyond images,
+  in: Meila, M., Zhang, T. (Eds.), Proceedings of the 38th Interna-
+  tional Conference on Machine Learning, PMLR. pp. 8703–8714. URL:
+  https://proceedings.mlr.press/v139/qiu21a.html.
+
+Rafiee, N., Gholamipoorfard, R., Adaloglou, N., Jaxy, S., Ramakers, J.,
+  Kollmann, M., 2022. Self-supervised anomaly detection by self-distillation
+  and negative sampling. arXiv preprint arXiv:2201.06378 .
+
+Ravanelli, M., Zhong, J., Pascual, S., Swietojanski, P., Monteiro, J., Tr-
+  mal, J., Bengio, Y., 2020. Multi-task self-supervised learning for robust
+  speech recognition, in: ICASSP 2020 - 2020 IEEE International Confer-
+  ence on Acoustics, Speech and Signal Processing (ICASSP), pp. 6989–6993.
+  doi:10.1109/ICASSP40776.2020.9053569.
+
+Reiss, T., Cohen, N., Bergman, L., Hoshen, Y., 2021. Panda: Adapting pre-
+  trained features for anomaly detection and segmentation, in: Proceedings
+  of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-
+  tion, pp. 2806–2814.
+
+Reiss, T., Hoshen, Y., 2021. Mean-shifted contrastive loss for anomaly de-
+  tection. arXiv preprint arXiv:2106.03844 .
+
+Rippel, O., Mertens, P., Merhof, D., 2021. Modeling the distribution of
+  normal data in pre-trained deep features for anomaly detection, in: 2020
+
+                                    53
+  25th International Conference on Pattern Recognition (ICPR), IEEE. pp.
+  6726–6733.
+
+Rudolph, M., Wandt, B., Rosenhahn, B., 2021. Same same but differnet:
+ Semi-supervised defect detection with normalizing flows, in: Proceedings
+ of the IEEE/CVF Winter Conference on Applications of Computer Vision,
+ pp. 1907–1916.
+
+Rudolph, M., Wehrbein, T., Rosenhahn, B., Wandt, B., 2022. Fully convo-
+ lutional cross-scale-flows for image-based defect detection, in: Proceedings
+ of the IEEE/CVF Winter Conference on Applications of Computer Vision,
+ pp. 1088–1097.
+
+Ruff, L., Kauffmann, J.R., Vandermeulen, R.A., Montavon, G., Samek, W.,
+ Kloft, M., Dietterich, T.G., Müller, K.R., 2021. A unifying review of deep
+ and shallow anomaly detection. Proceedings of the IEEE .
+
+Ruff, L., Vandermeulen, R., Goernitz, N., Deecke, L., Siddiqui, S.A., Binder,
+ A., Müller, E., Kloft, M., 2018. Deep one-class classification, in: Interna-
+ tional conference on machine learning, PMLR. pp. 4393–4402.
+
+Ruff, L., Vandermeulen, R.A., Görnitz, N., Binder, A., Müller, E., Müller,
+ K.R., Kloft, M., 2019. Deep semi-supervised anomaly detection. arXiv
+ preprint arXiv:1906.02694 .
+
+Sabokrou, M., Khalooei, M., Adeli, E., 2019. Self-supervised representa-
+  tion learning via neighborhood-relational encoding, in: Proceedings of the
+  IEEE/CVF International Conference on Computer Vision (ICCV).
+
+Salehi, M., Eftekhar, A., Sadjadi, N., Rohban, M.H., Rabiee, H.R.,
+  2020. Puzzle-ae: Novelty detection in images through solving puzzles.
+  arXiv:2008.12959.
+
+Schlegl, T., Seeböck, P., Waldstein, S.M., Schmidt-Erfurth, U., Langs, G.,
+  2017. Unsupervised anomaly detection with generative adversarial net-
+  works to guide marker discovery, in: International conference on informa-
+  tion processing in medical imaging, Springer. pp. 146–157.
+
+Schlüter, H.M., Tan, J., Hou, B., Kainz, B., 2021. Self-supervised out-of-
+  distribution detection and localization with natural synthetic anomalies
+  (nsa). arXiv preprint arXiv:2109.15222 .
+
+                                     54
+Schreyer, M., Sattarov, T., Borth, D., 2021. Multi-view contrastive self-
+  supervised learning of accounting data representations for downstream au-
+  dit tasks. arXiv preprint arXiv:2109.11201 .
+
+Schroff, F., Kalenichenko, D., Philbin, J., 2015. Facenet: A unified em-
+  bedding for face recognition and clustering, in: 2015 IEEE Conference
+  on Computer Vision and Pattern Recognition (CVPR), pp. 815–823.
+  doi:10.1109/CVPR.2015.7298682.
+
+Sehwag, V., Chiang, M., Mittal, P., 2021.        {SSD}:    A uni-
+  fied framework for self-supervised outlier detection, in:   In-
+  ternational Conference on Learning Representations.       URL:
+  https://openreview.net/forum?id=v5gjXpmR8J.
+
+Shenkar, T., Wolf, L., 2022. Anomaly detection for tabular data with internal
+  contrastive learning, in: International Conference on Learning Represen-
+  tations.
+
+Shi, Y., Yang, J., Qi, Z., 2021. Unsupervised anomaly segmentation via deep
+  feature reconstruction. Neurocomputing 424, 9–22.
+
+Sohn, K., Li, C.L., Yoon, J., Jin, M., Pfister, T., 2020. Learning and eval-
+  uating representations for deep one-class classification. arXiv preprint
+  arXiv:2011.02578 .
+
+Song, J., Kong, K., Park, Y.I., Kim, S.G., Kang, S.J., 2021. Anoseg:
+  Anomaly segmentation network using self-supervised learning. arXiv
+  preprint arXiv:2110.03396 .
+
+Spahr, A., Bozorgtabar, B., Thiran, J.P., 2021. Self-taught semi-supervised
+  anomaly detection on upper limb x-rays, in: 2021 IEEE 18th International
+  Symposium on Biomedical Imaging (ISBI), IEEE. pp. 1632–1636.
+
+Tack, J., Mo, S., Jeong, J., Shin, J., 2020. Csi: Novelty detection via con-
+  trastive learning on distributionally shifted instances. Advances in neural
+  information processing systems 33, 11839–11852.
+
+Tax, D.M., Duin, R.P., 2004. Support vector data description. Machine
+  learning 54, 45–66.
+
+
+
+                                     55
+Tsai, C.C., Wu, T.H., Lai, S.H., 2022. Multi-scale patch-based representation
+  learning for image anomaly detection and segmentation, in: Proceedings
+  of the IEEE/CVF Winter Conference on Applications of Computer Vision,
+  pp. 3992–4000.
+
+Valerio Massoli, F., Falchi, F., Kantarci, A., Akti, S., Kemal Ekenel, H.,
+  Amato, G., 2020. Mocca: Multi-layer one-class classification for anomaly
+  detection. arXiv e-prints , arXiv–2012.
+
+Venkatakrishnan, A.R., Kim, S.T., Eisawy, R., Pfister, F., Navab, N.,
+  2020. Self-supervised out-of-distribution detection in brain ct scans. arXiv
+  preprint arXiv:2011.05428 .
+
+Venkataramanan, S., Peng, K.C., Singh, R.V., Mahalanobis, A., 2020. At-
+  tention guided anomaly localization in images, in: European Conference
+  on Computer Vision, Springer. pp. 485–503.
+
+Villa-Perez, M.E., Alvarez-Carmona, M.A., Loyola-Gonzalez, O., Medina-
+  Perez, M.A., Velazco-Rossell, J.C., Choo, K.K.R., 2021. Semi-supervised
+  anomaly detection algorithms: A comparative summary and future
+  research directions. Knowledge-Based Systems 218, 106878. URL:
+  https://www.sciencedirect.com/science/article/pii/S0950705121001416,
+  doi:https://doi.org/10.1016/j.knosys.2021.106878.
+
+Wang, C., Dou, Y., Chen, M., Chen, J., Liu, Z., Philip, S.Y., 2021a. Deep
+ fraud detection on non-attributed graph, in: 2021 IEEE International Con-
+ ference on Big Data (Big Data), IEEE. pp. 5470–5473.
+
+Wang, G., Han, S., Ding, E., Huang, D., 2021b. Student-teacher feature
+ pyramid matching for unsupervised anomaly detection. arXiv preprint
+ arXiv:2103.04257 .
+
+Wang, H., Bah, M.J., Hammad, M., 2019. Progress in outlier detection
+ techniques: A survey. Ieee Access 7, 107964–108000.
+
+Wang, R., Liu, C., Mou, X., Gao, K., Guo, X., Liu, P., Wo, T., Liu,
+ X., 2023. Deep contrastive one-class time series anomaly detection.
+ arXiv:2207.01472.
+
+
+
+
+                                     56
+Wang, Y., Qin, C., Wei, R., Xu, Y., Bai, Y., Fu, Y., 2021c. Sla2 p:
+ Self-supervised anomaly detection with adversarial perturbation. URL:
+ https://arxiv.org/abs/2111.12896, doi:10.48550/ARXIV.2111.12896.
+Weng, L., Kim, J.W., 2021. Tutorial: Self-supervised learning, in: Canziani,
+ A., Grant, E. (Eds.), Advances in Neural Information Processing Systems.
+ URL: https://nips.cc/virtual/2021/tutorial/21895.
+Winkens, J., Bunel, R., Roy, A.G., Stanforth, R., Natarajan, V., Led-
+ sam, J.R., MacWilliams, P., Kohli, P., Karthikesalingam, A., Kohl,
+ S., Cemgil, T., Eslami, S.M.A., Ronneberger, O., 2020.          Con-
+ trastive training for improved out-of-distribution detection.  URL:
+ https://arxiv.org/abs/2007.05566, doi:10.48550/ARXIV.2007.05566.
+Wu, Z., Xiong, Y., Yu, S.X., Lin, D., 2018. Unsupervised feature learning
+ via non-parametric instance discrimination, in: Proceedings of the IEEE
+ Conference on Computer Vision and Pattern Recognition (CVPR).
+Xia, X., Pan, X., Li, N., He, X., Ma, L., Zhang, X., Ding, N., 2022.
+  Gan-based anomaly detection: A review.          Neurocomputing URL:
+  https://www.sciencedirect.com/science/article/pii/S0925231221019482,
+  doi:https://doi.org/10.1016/j.neucom.2021.12.093.
+Xin, Y., Kong, L., Liu, Z., Chen, Y., Li, Y., Zhu, H., Gao, M., Hou, H., Wang,
+  C., 2018. Machine learning and deep learning methods for cybersecurity.
+  Ieee access 6, 35365–35381.
+Xu, J., Zheng, Y., Mao, Y., Wang, R., Zheng, W.S., 2020. Anomaly detection
+ on electroencephalography with self-supervised learning, in: 2020 IEEE In-
+ ternational Conference on Bioinformatics and Biomedicine (BIBM), IEEE.
+ pp. 363–368.
+Xu, Z., Huang, X., Zhao, Y., Dong, Y., Li, J., 2022. Contrastive at-
+ tributed network anomaly detection with data augmentation, in: Advances
+ in Knowledge Discovery and Data Mining: 26th Pacific-Asia Conference,
+ PAKDD 2022, Chengdu, China, May 16–19, 2022, Proceedings, Part II,
+ Springer. pp. 444–457.
+Yi, J., Yoon, S., 2020. Patch svdd: Patch-level svdd for anomaly detection
+  and segmentation, in: Proceedings of the Asian Conference on Computer
+  Vision.
+
+                                     57
+Zavrtanik, V., Kristan, M., Skočaj, D., 2021. Draem-a discriminatively
+  trained reconstruction embedding for surface anomaly detection, in: Pro-
+  ceedings of the IEEE/CVF International Conference on Computer Vision,
+  pp. 8330–8339.
+
+Zbontar, J., Jing, L., Misra, I., LeCun, Y., Deny, S., 2021. Bar-
+  low twins: Self-supervised learning via redundancy reduction, in:
+  Meila, M., Zhang, T. (Eds.), Proceedings of the 38th International
+  Conference on Machine Learning, PMLR. pp. 12310–12320. URL:
+  https://proceedings.mlr.press/v139/zbontar21a.html.
+
+Zeng, X.M., Song, Y., Zhuo, Z., Zhou, Y., Li, Y.H., Xue, H., Dai, L.R.,
+  McLoughlin, I., 2023. Joint generative-contrastive representation learning
+  for anomalous sound detection, in: ICASSP 2023 - 2023 IEEE Interna-
+  tional Conference on Acoustics, Speech and Signal Processing (ICASSP),
+  pp. 1–5. doi:10.1109/ICASSP49357.2023.10095568.
+
+Zhang, J., Saleeby, K., Feldhausen, T., Bi, S., Plotkowski, A., Womble,
+  D., 2021a.     Self-supervised anomaly detection via neural autore-
+  gressive flows with active learning, in: NeurIPS 2021 Workshop
+  on Deep Generative Models and Downstream Applications.          URL:
+  https://openreview.net/forum?id=LdWEo5mri6.
+
+Zhang, X., Mu, J., Zhang, X., Liu, H., Zong, L., Li, Y., 2022a.
+  Deep anomaly detection with self-supervised learning and ad-
+  versarial training.      Pattern Recognition 121, 108234. URL:
+  https://www.sciencedirect.com/science/article/pii/S0031320321004155,
+  doi:https://doi.org/10.1016/j.patcog.2021.108234.
+
+Zhang, X., Xie, W., Huang, C., Zhang, Y., Wang, Y., 2021b. Self-
+  supervised tumor segmentation through layer decomposition. arXiv
+  preprint arXiv:2109.03230 .
+
+Zhang, Z., Zhao, L., Cai, D., Feng, S., Miao, J., Guan, Y., Tao,
+  H., Cao, J., 2022b.       Time series anomaly detection for smart
+  grids via multiple self-supervised tasks learning, in: 2022 IEEE
+  International Conference on Knowledge Graph (ICKG), IEEE
+  Computer Society, Los Alamitos, CA, USA. pp. 392–397.       URL:
+  https://doi.ieeecomputersociety.org/10.1109/ICKG55886.2022.00057,
+  doi:10.1109/ICKG55886.2022.00057.
+
+                                    58
+Zhao, H., Li, Y., He, N., Ma, K., Fang, L., Li, H., Zheng, Y.,
+  2021. Anomaly detection for medical images using self-supervised and
+  translation-consistent features. IEEE Transactions on Medical Imaging
+  40, 3641–3651.
+
+Zheng, Y., Jin, M., Liu, Y., Chi, L., Phan, K.T., Chen, Y.P.P., 2021. Gener-
+  ative and contrastive self-supervised learning for graph anomaly detection.
+  IEEE Transactions on Knowledge and Data Engineering .
+
+Zheng, Y., Jin, M., Liu, Y., Chi, L., Phan, K.T., Pan, S., Chen, Y.P.P.,
+  2022. From unsupervised to few-shot graph anomaly detection: A multi-
+  scale contrastive learning approach. arXiv preprint arXiv:2202.05525 .
+
+
+
+
+                                     59
+

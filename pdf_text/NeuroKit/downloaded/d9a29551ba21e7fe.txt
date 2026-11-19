@@ -1,0 +1,382 @@
+      Accelerated Sample-Accurate R-Peak Detectors
+                Based on Visibility Graphs
+                             Jonas Emrich, Taulant Koka, Sebastian Wirth, and Michael Muma
+
+
+   Abstract—The effective detection and accurate clinical di-            important local features and captures nonstationary behavior
+agnosis of cardiac conditions strongly relies on the correct             [7]. Koka et al. made use of the so-called natural visibility
+localization of R-peaks in the electrocardiogram (ECG). Recently,        graph (NVG) [13] and demonstrated its great potential for a
+demand for sample-accurate R-peak detection, which is essential
+to precisely reveal vital features, such as heart rate variability       sample-accurate detection of R-peaks. Despite this potential,
+and pulse transit time, has increased. Therefore, we propose two         the computation and storage of the NVGs for very large data
+novel sample-accurate visibility-graph-based R-peak detectors,           sets is still expensive and further improvements are required.
+the FastNVG and the FastWHVG detector. The visibility graph                 In this work, we further explore the potential of visibility-
+(VG) transformation maps a discrete signal into a graph by               graph-based R-peak detectors. In particular, two novel fast
+representing sampling locations as nodes and establishing edges
+between mutually visible samples. However, processing large-             visibility-graph-based R-peak detectors are proposed that re-
+scale clinical ECG data urgently demands further acceleration of         duce the computation time by one order of magnitude com-
+VG-based algorithms. The proposed methods reduce the required            pared to the detector by Koka et al.. The first detector
+computation time by one order of magnitude and simultaneously            (FastNVG) integrates an acceleration technique into the NVG,
+decrease the required memory compared to a recently proposed             leading to a reduction of computation time of the graph
+VG-based R-Peak detector. Instead of transforming the entire
+ECG, the proposed acceleration benefits largely from building the        building procedure and a reduction of the dimensionality of the
+VG based on a subset containing only the samples relevant to R-          adjacency matrix. The second detector (FastHVG) also builds
+peak detection. Further acceleration is obtained by adopting the         upon this acceleration and further reduces the computation
+computationally efficient horizontal visibility graph, which has         time and memory requirements by constructing a weighted
+not yet been used for R-peak detection. Numerical experiments            version of the horizontal visibility graph (HVG). The HVG is
+and benchmarks on multiple ECG databases demonstrate a
+significantly superior performance of the proposed VG-based              a subgraph of the NVG that can be more efficiently computed
+methods compared to popular R-peak detectors.                            due to its simpler geometry [14], [15], but its potential in R-
+   Index Terms—ECG, R-peak detection, Visibility graph                   Peak detection has, to the best of our knowledge, not been
+                                                                         explored prior to this work. Using multiple benchmark ECG
+                       I. I NTRODUCTION
+                                                                         datasets, we show that the proposed methods yield a significant
+   The precise detection of R-peaks in the electrocardiogram             performance gain in terms of F1 -score and HRV estimation
+(ECG) is a crucial step for assessing cardiovascular health              compared to popular R-peak detectors.
+and is required in a variety of clinical and research settings.                Organization: Section II introduces the methodology of
+For example, estimates of heart rate variability (HRV) in                the proposed algorithms and details the proposed detectors.
+pathological regions (≤ 40 ms [1]) may be severely affected by           Then, numerical results and benchmarks against established
+even a few samples imprecision. A sample-accurate detection              methods are provided in Section III, while Section IV draws
+of R-peaks carries great significance for several applications,          a conclusion and gives an outlook to future work.
+such as cuffless blood pressure estimation using the pulse
+transit time calculated from the peak positions in an ECG and                                 II. M ETHODOLOGY
+a simultaneously recorded photoplethysmogram (PPG) [2] or                   This section presents the complete pipeline (Fig. 1) for the
+HRV analysis [3]. While over the last five decades, a great              proposed accelerated R-peak detectors using visibility graphs.
+quantity of detectors were developed (e.g., [4]–[11]), most of           First, Section II-A describes two visibility graph transforma-
+these detectors do not aim for a sample-accurate detection,              tions that represent the ECG signal as a graph. Subsequently,
+which remains a difficult task. The difficulties arise, e.g.,            graph information is used to weight the ECG signal so as to
+due to the presence of noise, motion artifacts [12], varying             emphasize R-peaks, as described in Section II-B. Finally, the
+morphology of QRS complexes in different patients, health                R-peak positions are determined by thresholding the resulting
+conditions and changing measurement settings.                            signal, as outlined in Section II-C. Acceleration methods that
+   Recently, Koka et al. proposed an R-peak detector that relies         reduce the computation time by an order of magnitude are
+on a mapping of the ECG signal to a graph, which preserves               presented in Section II-D. A python implementation will be
+  Taulant Koka (email: taulant.koka@tu-darmstadt.de) and Michael Muma    made available on the authors github page.
+(email: michael.muma@tu-darmstadt.de) are with the Robust Data Science
+Group at TU Darmstadt, Germany. Their work has been funded by the ERC    A. Visibility Graph Transformations for R-peak Detection
+Starting Grant ScReeningData under grant number 101042407.
+  The work of the first author has been funded by the LOEWE initiative    The general idea underlying the visibility graph transfor-
+(Hesse, Germany) within the emergenCITY center.                          mation [13] is to map a discrete-time series xn ∈ R with
+
+
+ ISBN: 978-9-4645-9360-0                                            1090                                               EUSIPCO 2023
+                                                              Visibility Graph                                           Graph                              Node Metric                   Threshold
+                         ECG Signal
+                                                              Transformation                                         Representation                       (#k-Hop Paths)               Weighted Signal
+
+                                                                                                                               3
+
+
+                                                                                                                     1                  6
+                                                                                                                                                         w0 w1 w2 w3 . . . wn                                    R-Peaks
+                                                                                                                 0         2       4         7
+
+
+                                                                                                                                   5
+        0            1    2   3   4   5   6   7           0    1   2       3            4     5   6   7
+                                                                                                                                                                                       R-peaks   weighted sig.
+
+
+ Fig. 1: Illustration of the pipeline for the visibility-graph-based R-peak detector: First, the time series is mapped into a graph representation using the NVG
+ transformation, as depicted in the second block. Subsequently, a node metric is calculated in the graph domain, to weight the original signal, emphasizing
+ R-peak positions, which are then extracted by a thresholding procedure.
+
+
+
+                     (a) Natural Visibility Graph                                           (b) Horizontal Visibility Graph                         Unfortunately, a direct application of the HVG has proven
+                                                                                                                                                 to be unsuitable for R-peak detection, i.e., it does not lead
+                                                                                                                                                 to reliable R-peak detections. However, we conjecture that the
+
+ $ P S O L W X G H                                                      $ P S O L W X G H
+                                                                                                                                                 incorporation of additional edge weight information that is not
+                                                                                                                                                 captured by the simple (but computationally efficient) graph
+                                                                                                                                                 generation process may benefit the R-peak detection capacity
+                                                                                                                                                 of the HVG. The weighted graph is then defined as a triple
+                                       6 D P S O H V                                                       6 D P S O H V                         Gw = (V, E, ω), where ω : E → W maps each edge to a set
+                                                                                                                                                 of weights W. In this work, extensive numerical experiments
+ Fig. 2: Visualization of the visibility criterion used for creating directed edges
+ (top-to-bottom) in the NVG on the left (2a) and HVG on the right (2b).                                                                          have been conducted to benchmark the influence of various
+                                                                                                                                                 edge weights on the performance in terms of R-peak detec-
+                                                                                                                                                 tion. Considered weights include the Euclidean distance, the
+ associated locations tn ∈ R, n = 0, . . . , N −1 to a graph G =                                                                                 horizontal and vertical distance, the slope, and the angle, each
+ (V, E), where V is a set of vertices and E is a set of edges. For                                                                               computed with respect to the line segment between the two
+ every sampling location tn , a corresponding vertex vn ∈ V is                                                                                   points defining the edge. Empirical observations (which are
+ created and edges between vertices are established according                                                                                    omitted for the sake of brevity) suggest that the weighted edges
+ to a visibility criterion determined by the graph transformation.                                                                               provide a significant benefit for the HVG, in the application
+ While numerous visibility graph transformations employing a                                                                                     of R-peak detection. Specifically, the absolute slope
+ range of criteria for edge generation have been proposed in the
+ literature [14]–[17], this work focuses on the NVG and the                                                                                                                            xa − xb
+                                                                                                                                                                         ω(εa,b ) =            ,                      (3)
+ computationally efficient HVG, which is a subgraph of the                                                                                                                             ta − tb
+ NVG [13], [14]. The graphs are generated by adding edges                                                                                        yields a larger gain compared to other edge weights and is
+ εa,b to E, whenever the associated points (ta , xa ), (tb , xb )                                                                                therefore utilized in the HVG transformation in the following,
+ satisfy some relation for all intermediate points (tc , xc ) with                                                                               resulting in the weighted horizontal visibility graph (WHVG).
+ ta < tc < tb . In particular, the NVG is constructed by
+ employing the criterion                                                                                                                         B. k-Hop Paths: A Node Property to Emphasize R-Peaks
+                                          xb − xa                                                                                                   As demonstrated in [7], the number of k-hop paths, in short,
+                  xc < xb + (xa − xb ) ·           ,           (1)
+                                           tb − ta                                                                                               the k-hop centrality, is a suitable node property to emphasize
+ while the HVG is obtained from                                                                                                                  R-peaks. It is defined as the number of paths of length k that
+                                                                                                                                                 start at a given node. When k = 1, the metric represents the
+                                                       xc < min{xa , xb }.                                                             (2)       outdegree of the node, which is the sum of the weights of
+    The intuition behind (1) and (2) is that for the NVG (Fig. 2a)                                                                               all outgoing edges. For a DAG, the k-hop centrality c can be
+ an edge is formed when a straight line of sight exists between                                                                                  computed as
+ two points, whereas the HVG (Fig. 2b) requires the line of                                                                                                                 c = Ak 1,                       (4)
+ sight to be horizontal.
+                                                                                                                                                 where A is the adjacency matrix of the graph G and 1 =
+    In this work, we utilize directed versions of the NVG and
+                                                                                                                                                 (1, . . . , 1)⊤ is the all-ones vector of length N . Note that for
+ HVG transformations that establish directed edges from larger
+                                                                                                                                                 a weighted graph, such as the WHVG, (4) yields a weighted
+ to smaller points (top-to-bottom). In this case, the maximum
+                                                                                                                                                 k-hop centrality. To prevent the values in (4) from becoming
+ value of the time series is represented as the source node in the
+                                                                                                                                                 impractically large, the normalized centrality c̄ is adopted and
+ graph and local minima are sinks resulting in a directed acyclic
+                                                                                                                                                 calculated iteratively as follows:
+ graph (DAG) [7]. As we will see later, the chosen visibility
+ criteria lead to a sparse graph that represents R-peaks as nodes                                                                                                                Ac̄i
+ of high connectivity.                                                                                                                                                c̄i+1 =            , i ∈ [0, k].                (5)
+                                                                                                                                                                                ∥Ac̄i ∥2
+
+
+                                                                                                                                        1091
+In the first iteration, the normalized centrality is initialized        and computation steps. Additionally, a major advantage of the
+as c̄0 = 1/N , and (5) is iterated k times. Note, that for an           HVG compared to the NVG is that fast implementations, such
+undirected graph, (5) converges to the eigenvector centrality           as [21] and [22], exist, which can be calculated with a worst-
+[18]. For a DAG, however, the entries of c̄i in (5) converge            case time complexity of linear time O(n). In contrast, for the
+to zero if k exceeds the length of the longest path starting            NVG, even efficient methods, such as the binary search tree
+at the respective node. Therefore, the iterative computation            [23] or the divide-and-conquer algorithm [24], have an average
+of the weight vector is stopped when c̄i reaches a pre-defined          time complexity of O(n log n), which degrades to O(n2 ) in
+sparsity level β, i.e., when ∥c̄i ∥0 /N ≤ β. Here, ∥c̄i ∥0 denotes      the worst case. Accelerating the NVG and WHVG detectors
+the number of nonzero elements in c̄i . See Section III-A and           with the proposed methodology yields the proposed FastNVG
+Fig. 3 for the choice of β. In summary, as the sparsity of the          and FastWHVG detectors, respectively.
+weight vector increases with increasing path length k, highly
+connected nodes with long path lengths, such as R-peaks in                                                                III. S IMULATIONS
+an ECG signal, are emphasized (see Fig. 1).                               This section is dedicated to the evaluation of the proposed
+C. Threshold                                                            R-peak detectors. The experiments investigate the selection
+                                                                        of the sparsity parameter β (III-A), examine the introduced
+   The R-peak positions in the weighted ECG signal can be               acceleration (III-B) and compare the detection accuracy, by
+extracted by applying a thresholding method, such as the                evaluating it within a tolerance window of zero and five sam-
+one developed by Pan and Tompkins [4], which has been                   ples (III-C). The evaluation is conducted on real data including
+applied in many R-peak detectors, e.g., [5], [7], [19]. We              a dataset from the Glasgow University Database (GUDB)
+adapted a commonly used Python implementation [20] and                  [25], which provides highly accurate annotations, allowing for
+made the following minor modifications: (i) The signal and              sample-accurate benchmarking, as well as the well-established
+noise thresholds were initialized as described in the original          MIT-BIH Arrhythmia Database (MITDB) [26], [27].
+paper by Pan and Tompkins [4]. (ii) Peak candidates that occur
+in close proximity to previously detected R-peaks (i.e., those          A. Sparsity Parameter Selection
+with a distance smaller than the minimum peak distance of
+300 ms) are compared, and only the candidate with the highest              Empirical experiments in [7] based on the GUDB suggest
+weighted signal value is considered, while the other candidates         that a sparsity parameter of β = 0.55 (i.e., 55% of the entries
+are discarded. (iii) The searchback procedure was modified to           of c̄ are nonzero) provides best results for the NVG detector
+take into account not only previous peak candidates, but also           in the application of R-peak detection, while the performance
+any samples above the noise threshold that are further than             remains stable over a broad sparsity region around this value.
+the minimum peak distance away from adjacent peaks.                     Similar observations were made for the FastNVG detector,
+                                                                        where the sparsity level is computed with respect to the
+D. Acceleration                                                         dimension of the reduced data vector.
+   In clinical practice, long-term ECG monitoring and data                 We also conducted numerical benchmarks on the GUDB
+collection in biobanks may lead to extensive amounts of                 to determine the optimal beta for the FastWHVG detector. To
+collected data. Thus, a fast runtime of R-peak detectors is             this end, we look at two performance measures. Firstly, the F1 -
+crucial. For this reason, acceleration techniques that reduce the       score, which considers both precision and recall and is given
+computation time compared to [7] by one order of magnitude              by
+                                                                                                        2TP
+(see Section III) are proposed below.                                                       F1 =                    ,               (6)
+   As shown in [7], the time complexity of visibility-graph-                                      2TP + FP + FN
+based R-peak detectors that employ a segmentation is linear             where TP, FP, FN denote the number of correct, false
+in the number of segments. We therefore propose a data                  and missed R-peak detections, respectively; and secondly, the
+reduction technique to accelerate the computation of individual
+segments by considering only a subset of samples for graph                                        W K        W K                      W K        W K                         P H G L D Q
+construction. More precisely, we only consider the set of                                                                                         
+local maxima that is greater than the median of the segment.
+Such an acceleration is reasonable since the R-peaks are, with                                                                                           
+                                                                                                                                             δ RMSSD
+                                                                     F1  V F R U H
+high probability, elements of the subset. By contrast, samples
+with small amplitudes are neglected. As a consequence, the                                                                                    RMSSD      
+                                                                                     
+dimensions of the adjacency matrix A and the weight vector                                                                                               
+c̄ are significantly reduced. This leads to a faster graph
+construction in (1) and (2) and a faster computation of the                                                                                                   
+matrix-vector product in (5).                                                             6 S D U V L W \  S D U D P H W H U    L Q                       6 S D U V L W \  S D U D P H W H U    L Q  
+   Further reduction of the computation and memory require-             Fig. 3: Sample-accurate evaluation of the FastWHVG for several nonzero
+ments is obtained by adopting the HVG for R-peak detection.             weight elements. To make a compromise between F1 -score and relative
+As a subgraph of the NVG, the HVG requires less memory                  RMSSD error δRMSSD , a sparsity parameter value of β = 85% is seletced.
+
+
+
+                                                                1092
+                                                                                                                                                                                                                                                                                                                                           [5]
+                                                                                                                                                                                                                                                                                                                                     6 : 7    
+                                                                                                                                                                                                                                                                                                                                                                   [4]
+                                                                                                                                                                                                                                                                                                                                     3 D Q  	  7 R P S N L Q V    
+                                                                                                                                                                                                                                                                                                                                                    [9]
+                                                                                                                                                                                                                                                                                                                                     + D P L O W R Q    
+                                                                                                                                                                                                                                                                                                                                                       [11]
+                                                                                                                                                                                                                                                                                                                                     & K U L V W R Y    
+
+
+
+F1  V F R U H
+                                                                                                                                                                                                                                                                                                                                            [10]
+                                                                                                                                                                                                                                                                                                                                     : 4 5 6    
+
+                                                                                                                                                                                                                                                                                                                                                             [6]
+                                                                                                                                                                                                                                                                                                                                     7 Z R  $ Y H U D J H    
+
+
+
+
+                                         3 U R S R V H G  ' H W H F W R U V                        3 U R S R V H G  ' H W H F W R U V                       3 U R S R V H G  ' H W H F W R U V                                     3 U R S R V H G  ' H W H F W R U V                     3 U R S R V H G  ' H W H F W R U V
+                                                                                                                                                                                                                                                                                                                                                                 [20]
+                                                                                                                                                                                                                                                                                                                                     0 D W F K H G  ) L O W H U    
+
+                                                                                                                                                                                                                                                                                                                                                   [8]
+                                                                                                                                                                                                                                                                                                                                     ( Q J ] H H    
+                
+                                                                                                                                                                                                                                                                                                                                                            [7]
+                                                                                                                                                                                                                                                                                                                                     . R N D  	  0 X P D    
+
+                                                                                                                                                                                                                                                                                                                                     ) D V W : + 9 *    
+                
+                            0 D W K V                                              6 L W W L Q J                                           : D O N L Q J                                                         + D Q G  % L N H                                           - R J J L Q J                                           ) D V W 1 9 *    
+
+
+                 Fig. 4: Evaluation of the proposed detectors against several established R-peak detection methods on the GUDB [25] using a zero tolerance window.
+
+
+
+   relative error of the root mean square of successive differences                                                                                                                                  . R N D  	  0 X P D
+   (RMSSD). The RMSSD is given by
+                         v                                                                                                                                                                                   ) D V W 1 9 *
+                         u
+                         u 1        M
+                                                                                                                                                                                                         ) D V W : + 9 *
+                                   X
+           RMSSD = t                  (RRm+1 − RRm )2 ,         (7)
+                           M − 1 m=1
+                                                                                                                                                                                                                                                                  
+                                                                                                                                                                                                                                           5 X Q W L P H  U H O D W L Y H  W R  P H G L D Q  R I  . R N D  	  0 X P D [7]
+   where RRm is the mth interval between two successive R-
+                                                                                                                                                                                                    Fig. 5: Runtime comparison between the proposed detectors and the detector
+   peaks and M is the number of RR intervals. The relative                                                                                                                                          of Koka et al. on the GUDB. The runtime is shown in relation to the median
+   error of the estimate RMSSD,
+                          \ which we denote as δRMSSD ,                                                                                                                                             runtime of the detector in [7].
+   is computed as
+                                                                                \ − RMSSD
+                                                                               RMSSD
+                              δRMSSD =                                                    .                                                                (8)                                      the detectors by Pan & Tompkins [4], Hamilton [9], Christov
+                                                                                  RMSSD                                                                                                             [11], Engelse & Zeelenberg [8] and Koka & Muma [7]. Since
+   Fig. 3 provides an empirical evaluation of the F1 -score and                                                                                                                                     most of the detectors proposed in the literature introduce
+   δRMSSD as functions of the sparsity parameter β, where an                                                                                                                                        a time delay due to the use of causal filters, the median
+   optimal value of β is one, which minimizes the average                                                                                                                                           time difference between the detected R-peak positions and the
+   δRMSSD and simultaneously maximizes the average F1 -score,                                                                                                                                       annotated R-peaks in the ECG signal was subtracted for each
+   while maintaining low variance. For the FastWHVG, it can                                                                                                                                         recording.
+   be observed that the performance remains stable over a broad                                                                                                                                        1) Performance on GUDB: The GUDB provides sample
+   interval, with a slight drop in the 5th percentile of the F1 -score                                                                                                                              accurately annotated ECG recordings of 25 subjects per-
+   for 45% ≤ β ≤ 75%. Therefore, a target level of β = 85% is                                                                                                                                       forming five different activities, ranging from solving math
+   utilized for the FastWHVG in all our experiments.                                                                                                                                                problems to jogging. For a sample-accurate comparison, the
+                                                                                                                                                                                                    ECG data recorded by a chest strap was evaluated and the
+   B. Runtime                                                                                                                                                                                       resulting F1 -scores are shown in Fig. 4. In all cases, the
+      In order to evaluate the introduced acceleration, the pro-                                                                                                                                    methods by [8] and [7] as well as the proposed ones perform
+   posed algorithms are benchmarked on the GUDB against [7] in                                                                                                                                      best. However, in the last two experiments, where signals are
+   terms of their relative runtime compared to the median runtime                                                                                                                                   more noisy due to movement artifacts, the F1 -score of Engzee
+   of Koka et al., as depicted in Fig. 5. It is shown, that both                                                                                                                                    degrades, while the visibility-graph-based detectors, i.e., [7]
+   of the proposed accelerated detectors, i.e., utilizing the NVG                                                                                                                                   and the proposed FastHVG and FastNVG detectors, retain a
+   and WHVG, introduce a significant runtime improvement                                                                                                                                            comparatively high accuracy. In addition, it can be observed
+   of up to 90% in comparison to [7]. The median runtimes                                                                                                                                           that the FastNVG performs slightly better than the FastWHVG.
+   compared to [7] are 11.65% for the FastNVG and 9.78%                                                                                                                                                2) Performance on MITDB: The evaluation on the MITDB,
+   for the FastwWHVG, respectively. Since all variants use the                                                                                                                                      assessing the F1 -score and δRMSSD , was performed using the
+   same segmentation method, i.e., fixed sized segments for                                                                                                                                         signals from Lead I of the 48 recordings, with five sample
+   computation, the observed acceleration is solely attributed to                                                                                                                                   tolerance to account for imprecision in the annotated R-peak
+   a faster computation.                                                                                                                                                                            locations (Fig. 6). Again, the proposed detectors are the best
+                                                                                                                                                                                                    performing methods, i.e., they yield the highest F1 -scores
+   C. Detection Accuracy                                                                                                                                                                            of all considered detectors. Furthermore, the visibility graph
+      To evaluate the detection accuracy, the proposed methods                                                                                                                                      based methods show a low δRMSSD , whereas [8] exhibits a
+   are compared against several established R-peak detectors,                                                                                                                                       significantly larger error, although it reached high F1 -scores
+   i.e., Stationary Wavelet Transform (SWT) [5], WQRS [10],                                                                                                                                         on the GUDB. Note that imperfections in the annotations may
+   Two Moving Average [6], Matched Filter [20], as well as                                                                                                                                          lead to a biased RMSSD error, i.e., even a perfect R-peak
+
+
+                                                                                                                                                            1093
+estimator cannot reach a zero error.                                                       [8] W. Engelse and C. Zeelenberg, “A single scan algorithm for QRS
+                                                                                               detection and feature extraction,” IEEE Computers in Cardiology, vol. 6,
+                                                              [5]
+                                                                                               no. 1, pp. 37–42, 1979.
+                                                                                           [9] P. Hamilton, “Open source ECG analysis,” in Computers in Cardiology,
+                                                                                 [4]           2002, pp. 101–104.
+                                                                    [9]                   [10] W. Zong, G. Moody, and D. Jiang, “A robust open-source algorithm
+                                                                    [11]                       to detect onset and duration of QRS complexes,” in Computers in
+                                                                                               Cardiology, 2003, pp. 737–740.
+                                                                [10]                      [11] I. I. Christov, “Real time electrocardiogram QRS detection using com-
+                                                                           [6]                 bined adaptive threshold,” Biomedical engineering online, vol. 3, no. 1,
+                                                                            [20]               pp. 1–9, 2004.
+                                                                                          [12] F. Strasser, M. Muma, and A. M. Zoubir, “Motion artifact removal in
+                                                                [8]
+                                                                                               ecg signals using multi-resolution thresholding,” in 2012 Proceedings
+
+δRMSSD
+                                                                             [7]               of the 20th European Signal Processing Conference (EUSIPCO), 2012,
+                                                                                               pp. 899–903.
+                                                                                          [13] L. Lacasa, B. Luque, F. Ballesteros, J. Luque, and J. C. Nuño, “From
+                                                                                               time series to complex networks: The visibility graph,” Proceedings of
+                                                                                               the National Academy of Sciences, vol. 105, no. 13, pp. 4972–4975,
+Fig. 6: Comparison of the F1 -score and δRMSSD (as in (8)) for the evaluated                   Apr. 2008.
+methods on the MITDB [26] using a tolerance window of five samples.                       [14] B. Luque, L. Lacasa, F. Ballesteros, and J. Luque, “Horizontal visibility
+                                                                                               graphs: Exact results for random time series,” Physical Review E, 2010.
+                                                                                          [15] L. Lacasa, “Horizontal visibility graphs from integer sequences,” Journal
+                            IV. C ONCLUSION                                                    of Physics A: Mathematical and Theoretical, vol. 49, no. 35, p. 35LT01,
+                                                                                               Jul. 2016.
+   In this work, the FastNVG and the FastWHVG detectors,                                  [16] M. Wang, A. L. M. Vilela, R. Du, L. Zhao, G. Dong, L. Tian, and H. E.
+which are based on the visibility graph transformation for time                                Stanley, “Exact results of the limited penetrable horizontal visibility
+                                                                                               graph associated to random time series and its application,” Scientific
+series, were proposed. The introduced acceleration method                                      Reports, vol. 8, no. 1, p. 5130, Dec. 2018.
+reduces the computation time of the proposed methods by                                   [17] Q. Xuan, J. Zhou, K. Qiu, D. Xu, S. Zheng, and X. Yang, “Clpvg:
+an order of magnitude compared to [7], while also reducing                                     Circular limited penetrable visibility graph as a new network model for
+                                                                                               time series,” Chaos: An Interdisciplinary Journal of Nonlinear Science,
+the required memory. Numerical evaluations evidence the                                        vol. 32, no. 1, p. 013130, 2022.
+applicability of the proposed methods in sample-accurate R-                               [18] G. Russo, V. Nicosia, and V. Latora, “Centrality Measures,” in Complex
+peak detection, which was demonstrated on a high-precision                                     Networks: Principles, Methods and Applications. Cambridge: Cam-
+                                                                                               bridge University Press, 2017, pp. 31-68.
+ECG database. Moreover, the proposed detectors performed                                  [19] B. Porr and L. Howell, “R-peak detector stress test with a new noisy
+excellently on multiple ECG datasets and have shown a sig-                                     ECG database reveals significant performance differences amongst pop-
+nificant gain in performance compared to established methods.                                  ular detectors,” bioRxiv, 2019.
+                                                                                          [20] B. Porr, L. Howell, I. Stournaras, and Y. Nir, “Popular ECG R peak
+Exploring and further developing the proposed methods for                                      detectors written in python,” Jul. 2022.
+related biomedical signals, such as PPG signals [28], is of                               [21] G. Zhu, Y. Li, and P. Wen, “Epileptic seizure detection in EEGs signals
+great interest and will thus be the subject of future work.                                    using a fast weighted horizontal visibility algorithm,” Computer methods
+                                                                                               and programs in biomedicine, vol. 115 2, pp. 64–75, 2014.
+                                                                                          [22] C. Stephen, “A Scalable Linear-Time Algorithm for Horizontal Visibility
+                               R EFERENCES                                                     Graph Construction Over Long Sequences,” in 2021 IEEE International
+  [1] N. Singh, K. J. Moneghetti, J. W. Christle, D. Hadley, V. Froelicher, and                Conference on Big Data (Big Data), 2021, pp. 40–50.
+      D. Plews, “Heart rate variability: An old metric with new meaning in the            [23] D. Fano Yela, F. Thalmann, V. Nicosia, D. Stowell, and M. Sandler,
+      era of using mhealth technologies for health and exercise training guid-                 “Online visibility graphs: Encoding visibility in a binary search tree,”
+      ance. part two: Prognosis and training,” Arrhythmia & Electrophysiology                  Physical Review Research, vol. 2, no. 2, p. 023069, Apr. 2020.
+      Review 2018;7(4):247–55., 2018.                                                     [24] X. Lan, H. Mo, S. Chen, Q. Liu, and Y. Deng, “Fast transformation from
+  [2] Y. Choi, Q. Zhang, and S. Ko, “Noninvasive cuffless blood pressure                       time series to visibility graphs,” Chaos: An Interdisciplinary Journal of
+      estimation using pulse transit time and Hilbert–Huang transform,” Com-                   Nonlinear Science, vol. 25, no. 8, p. 083105, 2015.
+      puters & Electrical Engineering, vol. 39, no. 1, pp. 103–111, 2013,                 [25] L. Howell and B. Porr, “High precision ECG Database with
+      special issue on Recent Advanced Technologies and Theories for Grid                      annotated R peaks, recorded and filmed under realistic conditions,”
+      and Cloud Computing and Bio-engineering.                                                 Dec. 2018, publisher: University of Glasgow. [Online]. Available:
+  [3] D. P. Williams, J. Koenig, L. Carnevali, A. Sgoifo, M. N. Jarczok, E. M.                 https://researchdata.gla.ac.uk/716/
+      Sternberg, and J. F. Thayer, “Heart rate variability and inflammation: A            [26] G. Moody and R. Mark, “The impact of the MIT-BIH Arrhythmia
+      meta-analysis of human studies,” Brain, Behavior, and Immunity, vol. 80,                 Database,” IEEE Engineering in Medicine and Biology Magazine,
+      pp. 219–226, 2019.                                                                       vol. 20, no. 3, pp. 45–50, 2001.
+  [4] J. Pan and W. J. Tompkins, “A Real-Time QRS Detection Algorithm,”                   [27] A. L. Goldberger, L. A. N. Amaral, L. Glass, J. M. Hausdorff, P. C.
+      IEEE Transactions on Biomedical Engineering, vol. BME-32, no. 3, pp.                     Ivanov, R. G. Mark, J. E. Mietus, G. B. Moody, C.-K. Peng, and H. E.
+      230–236, 1985.                                                                           Stanley, “Physiobank, physiotoolkit, and physionet: components of a
+  [5] V. Kalidas and L. Tamil, “Real-time QRS detector using Stationary                        new research resource for complex physiologic signals.” Circulation,
+      Wavelet Transform for Automated ECG Analysis,” in 2017 IEEE 17th                         vol. 101 23, pp. E215–20, 2000.
+      International Conference on Bioinformatics and Bioengineering (BIBE),               [28] T. Schäck, C. Sledz, M. Muma, and A. M. Zoubir, “A new method for
+      2017, pp. 457–461.                                                                       heart rate monitoring during physical exercise using photoplethysmo-
+  [6] M. Elgendi, M. Jonkman, and F. De Boer, “Frequency Bands Effects                         graphic signals,” in 2015 23rd European Signal Processing Conference
+      on QRS Detection.” in BIOSIGNALS 2010 - Proceedings of the 3rd In-                       (EUSIPCO), 2015, pp. 2666–2670.
+      ternational Conference on Bio-inpsired Systems and Signal Processing,
+      Jan. 2010, pp. 428–431.
+  [7] T. Koka and M. Muma, “Fast and Sample Accurate R-Peak Detection for
+      Noisy ECG Using Visibility Graphs,” in 2022 44th Annual International
+      Conference of the IEEE Engineering in Medicine & Biology Society
+      (EMBC), 2022, pp. 121–126.
+
+
+
+                                                                                       1094
+

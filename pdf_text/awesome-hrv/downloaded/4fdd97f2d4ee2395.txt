@@ -1,0 +1,520 @@
+                                                               ECGadv: Generating Adversarial Electrocardiogram to
+                                                                   Misguide Arrhythmia Classification System
+                                                      Huangxun Chen1† , Chenyu Huang1† , Qianyi Huang21 , Qian Zhang1 , Wei Wang3
+                                                                         1
+                                                                           The Hong Kong University of Science and Technology
+                                                                     2
+                                                                   Southern University of Science and Technology, Peng Cheng Laboratory
+                                                                            3
+                                                                              Huazhong University of Science and Technology
+                                                 {hchenay, chuangak}@connect.ust.hk, huangqy@sustech.edu.cn, qianzh@cse.ust.hk, weiwangw@hust.edu.cn
+                                                                                           †
+                                                                                             Co-primary Authors
+
+
+
+
+arXiv:1901.03808v4 [cs.LG] 14 Jan 2020
+                                                                    Abstract                                great public concern. The state-of-the-art literature has
+                                                                                                            shown that to attack a DNN-based image classifier, an adver-
+                                           Deep neural networks (DNNs)-powered Electrocardio-               sary can construct adversarial images by adding almost im-
+                                           gram (ECG) diagnosis systems recently achieve promising
+                                                                                                            perceptible perturbations to the input image. This misleads
+                                           progress to take over tedious examinations by cardiologists.
+                                           However, their vulnerability to adversarial attacks still lack   DNNs to misclassify them into an incorrect class (Szegedy
+                                           comprehensive investigation. The existing attacks in image       et al. 2013; Goodfellow, Shlens, and Szegedy 2014; Carlini
+                                           domain could not be directly applicable due to the distinct      and Wagner 2017). Such adversarial attacks would pose dev-
+                                           properties of ECGs in visualization and dynamic properties.      astating threats to the DNN-powered ECG diagnosis system.
+                                           Thus, this paper takes a step to thoroughly explore adversar-    On one hand, adversarial examples fool the system to give
+                                           ial attacks on the DNN-powered ECG diagnosis system. We          incorrect results so that the system fails to serve the purpose
+                                           analyze the properties of ECGs to design effective attacks       of diagnosis assistance. On the other hand, adversarial ex-
+                                           schemes under two attacks models respectively. Our results       amples would breed medical frauds. The DNNs’ outputs are
+                                           demonstrate the blind spots of DNN-powered diagnosis sys-        expected to be utilized in other decision-making in medical
+                                           tems under adversarial attacks, which calls attention to ade-
+                                                                                                            system (Finlayson et al. 2018), including billing and reim-
+                                           quate countermeasures.
+                                                                                                            bursement between hospitals/physicians and insurance com-
+                                                                                                            panies. Large institutions or individual actors may exploit
+                                                                Introduction                                the system’s blind spots on adversarial examples to inflate
+                                                                                                            medical costs (e.g., exaggerate symptoms) for profit3 .
+                                         In common clinical practice, the ECG is an important tool
+                                                                                                               To our knowledge, previous literature on DNN model at-
+                                         to diagnose a wide spectrum of cardiac disorders, which
+                                                                                                            tacks mainly focus on the image domain, and has yet to thor-
+                                         are the leading health problem and cause of death world-
+                                                                                                            oughly discuss the adversarial attacks on ECG recordings. In
+                                         wide by statistics (World Health Organization 2018). There
+                                                                                                            this paper, we identify the distinct properties of ECGs, and
+                                         are recent high-profile examples of Deep Neural Networks
+                                                                                                            investigate two types of adversarial attacks for DNN-based
+                                         (DNNs)-powered approaches achieving parity with human
+                                                                                                            ECG classification system.
+                                         cardiologists on ECG classification and diagnosis (Awni Y
+                                                                                                               In Type I Attack, the adversary can access the ECG
+                                         et al. 2019; IEEE-Spectrum 2018; Kiranyaz, Ince, and Gab-
+                                                                                                            recordings and corrupt them by adding perturbations. One
+                                         bouj 2016; Al Rahhal et al. 2016), which are superior to
+                                                                                                            possible case is a cardiologist who can access patients’
+                                         traditional classification methods. Given enormous costs of
+                                                                                                            ECGs and have monetary incentive to manipulate them to
+                                         healthcare, it is tempting to replace expensive manual ECG
+                                                                                                            fool the checking system of insurance companies. Another
+                                         examining of cardiologists with a cheap and highly accurate
+                                                                                                            possible case is a hacker who intercept and corrupt data to
+                                         deep learning system. In recent, the U.S. Food and Drug Ad-
+                                                                                                            attack a cloud-deployed ECG diagnosis system for fun or
+                                         ministration has granted clearance to several deep learning-
+                                                                                                            profit. That data may be uploaded from portable patches like
+                                         based ECG diagnostic systems such as AliveCor1 and Bio-
+                                                                                                            Life Signal LP1100 or household medical instruments like
+                                         fourmis2 .
+                                                                                                            Heal Force ECG monitor to the cloud-deployed algorithms
+                                            With DNN’s increasing adoption in ECG diagnosis, its
+                                                                                                            for analysis. For both cases, the adversary aims to engineer
+                                         potential vulnerability to ‘adversarial examples’ also arouses
+                                                                                                            ECGs so that the ECG classification system is mislead to
+                                         Copyright c 2020, Association for the Advancement of Artificial    give the diagnosis that he/she desires, and in the meanwhile,
+                                         Intelligence (www.aaai.org). All rights reserved.                  the data perturbations should be sufficiently subtle that they
+                                             1
+                                               https://www.prnewswire.com/news-releases/fda-grants-first-   are either imperceptible to humans, or if perceptible, seems
+                                         ever-clearances-to-detect-bradycardia-and-tachycardia-on-a-
+                                         personal-ecg-device-300835949.html                                    3
+                                                                                                                 https://www.beckershospitalreview.com/legal-regulatory-
+                                             2
+                                               https://www.mobihealthnews.com/content/fda-clears-           issues/cardiologist-convicted-in-fountain-of-youth-billing-fraud-
+                                         biofourmis-software-ecg-based-arrhythmia-detection                 scam.html
+natural and not representative of an attack. We found that
+simply applying existing image-targeted attacks on ECG
+recordings generates suspicious adversarial instances, be-
+cause commonly-used Lp norm in image domain to encour-
+age visual imperceptibility is unsuitable for ECGs (see Fig-
+ure 3). In visualization, each value in an ECG represents
+the voltage of a sampling point which is visualized as a
+line curve. Meanwhile, each value in a image represents the
+grayscale or RGB value of a pixel which is visualized as
+the corresponding color. Humans have different perceptual
+sensitivities to colors and line curves. As shown in Fig. 1,
+when two data arrays are visualized as line curves, their
+differences are more prominent rather than those visualized              Figure 2: Adversarial Attack v.s. Substitution attack
+as gray-scale images. In this paper, we propose smoothness
+metrics to quantify perceptual similarities of line curves, and
+leverages them to generate unsuspicious adversarial ECG in-            start time. We mimic it by shifting perturbation with vari-
+stances.                                                               ous amount before adding to victim ECGs.
+                                                                    2. Filtering of ECG devices, as a standard process to combat
+                                                                       noise, will be applied on injected perturbation and may
+                                                                       impair its attack effect. In evaluation, two widely-adopted
+                                                                       filters are applied to adversarial examples. The rectangu-
+                                                                       lar filter is used in generation process, since it strictly re-
+                                                                       moves all power within selected frequency range.
+                                                                    3. Type I accesses digital ECGs without showing up on the
+                                                                       scene, but physical injection should be conducted closer
+                                                                       to victim. The smaller attack duration(the part of an ECG
+                                                                       affected by perturbation), the lower exposure risk. Thus
+                                                                       we generate perturbation with different attack duration for
+Figure 1: Perception test. There are two data arrays in the            evaluation.
+range of [−1, 1], and the second one is obtained by adding
+                                                                    4. Physical attacks inject perturbation generated from known
+a few perturbations with 0.1 amplitude to the first one. Both
+                                                                       ECGs to on-the-fly ECGs. The variance between them
+of them are visualized as line curves and gray-scale images.
+                                                                       may affect attack effect. In evaluation, perturbation gen-
+                                                                       erated with random selected ECGs are tested on others.
+    It is worth mentioning the difference between adversar-            In summary, the contributions of this paper are as follows:
+ ial attacks and simple substitution attacks. In substitution at-
+ tack, the adversary replaces the victim ECG with ECG of            • This paper thoroughly investigate adversarial attacks for
+ another subject with the target class. However, the ECGs, as         DNN-based ECG classification systems. We identify the
+ a kind of biomedical signs, are often unique to their own-           distinct properties of ECGs to facilitate designing effec-
+ ers as fingerprint (Odinaka et al. 2012). Thus, the simple           tive attack schemes under two attack models respectively.
+ substitution attacks can be effectively defended if the sys-       • We propose a smoothness metric to effectively quantify
+ tem checks input ECGs against prior recordings from the              human perceptual distance on line cures, which quantifies
+ same patient. However, the adversarial attacks only add sub-         the pattern similarity in a computationally-efficient way.
+ tle perturbations without substantially altering the personal        Adversarial attacks using the smoothness metric achieve
+ identifier (Figure 2).                                               a 99.9% success attack rate. In addition, we conduct an
+    In Type II Attack, the adversary may not be able to access        extensive human perceptual study on both ordinary peo-
+ the ECGs directly or they want to fool the system without            ple and cardiologists to evaluate the imperceptibility of
+ leaving digital tampering footage. Thus, the attackers inject        adversarial ECG instances.
+ perturbation to on-the-fly ECGs by physical process. The
+ feasibility of such attacks can be achieved by EMI signal          • We model the sampling point uncertainty of the on-the-fly
+ injection as in (Kune et al. 2013), which meant to pollute           ECGs and the filtering effect within the adversarial gen-
+ ECGs but did not consider crafting injected signals for ad-          eration scheme. The generated perturbations are skewing-
+ versarial attacks. Due to lack of equipment like patient sim-        resistant and filtering-resistant to tamper with on-the-fly
+ ulator, we could not implement their prototype to conduct            signals (99.64% success rate), and generalize well in un-
+ physical attacks. However, we identify four major properties         seen examples.
+ of such attack that different from Type I, explicitly consider
+ them in attacking strategy and mimic them in evaluation.                                 Related Works
+1. There is skewing in time domain between perturbation             Here we review recent works on adversarial examples, and
+    and ECG, since the attacker hardly knows ECGs exact             the existing arrhythmia classification systems.
+Adversarial Examples                                               published defenses based on randomly transforming the in-
+Recently, considerable attack strategies have been proposed        put. Thus, we do not discuss defense breaking in this paper.
+to generate adversarial examples. Attacks can be classified
+into targeted and untargeted ones based on the adversarial         Arrhythmia Classification System
+goal. The adversary of the former modifies an input to mis-        Considerable efforts have been made on automated arrhyth-
+lead the targeted model to classify the perturbed input into a     mia classification systems to take over tedious manual ex-
+chosen class, while the adversary of the latter make the per-      aminations. Deep learning methods show great potential due
+turbed input misclassified to any class other than the ground      to their ability to automatically learn features through mul-
+truth. In this paper, we only focus on the more powerful tar-      tiple levels of abstraction, which frees the system from the
+geted attacks.                                                     dependence on hand-engineered features. Recent works (Ki-
+   Based on the accessibility to the target model, the exist-      ranyaz, Ince, and Gabbouj 2016; Al Rahhal et al. 2016;
+ing attacks fall into white-box and black-box attacks cat-         Awni Y et al. 2019) started applying DNN models on ECG
+egories. In former manner, an adversary has complete ac-           signals for arrhythmia classification and achieved good per-
+cess to a classifier (Szegedy et al. 2013; Goodfellow, Shlens,     formance. For any system in the health-care field, it is crucial
+and Szegedy 2014; Moosavi-Dezfooli, Fawzi, and Frossard            to defend against any possible attacks since people’s lives
+2016; Carlini and Wagner 2017; Kurakin, Goodfellow, and            rely heavily on the system’s reliability. Prior work (Kune et
+Bengio 2018), while in latter manner, an adversary has zero        al. 2013) has launched attacks to pollute the measurement
+knowledge about them (Papernot, McDaniel, and Goodfel-             of cardiac devices by a low-power emission of chosen elec-
+low 2016; Moosavi-Dezfooli et al. 2017; Liu et al. 2016).          tromagnetic waveforms. The adversarial attacks and the in-
+This paper studies the white-box adversarial attacks to ex-        jection attacks in (Kune et al. 2013) complement each other.
+plore the upper bound of an adversary to better motivate de-       The injection attack can inject the carefully-crafted pertur-
+fense methods. Besides, prior works (Papernot, McDaniel,           bation generated by adversarial attacks to perform targeted
+and Goodfellow 2016; Liu et al. 2016) have shown the trans-        attacks to mislead the arrhythmia classification system.
+ferability of adversarial attacks, i.e, train a substitute model
+given black-box access to a target model, and transfer the                           Technical Approach
+attacks to it by attacking the substitute one.                     In this section, we illustrate our attack strategies for two
+   Adversarial attacks have been studied most in image do-         threat models respectively.
+main. However, in other domains, these attack schemes may
+lose effect, e.g., (Qin et al. 2019) identifies unique problems    Type I Attack Strategy
+on speech recognition and leverages properties of human au-
+ditory system to generate audio adversarial examples. This         Problem Formulation Given an m-class classifier, g :
+paper, however, focuses on adversarial attacks on ECG di-          X → Y that accepts an input x ∈ X and produces an out-
+agnosis, another important application domain of DNN.              put y ∈ Y. The output vector y, treatedPas the probability
+                                                                                                                 m
+   In the image domain, most works adopted Lp norm as ap-          distribution, satisfies 0 ≤ yi ≤ 1 and i=1 yi = 1. The
+proximations of human perceptual distance to constrain the         classifier assigns the label C (x) = argmaxi g(x)i to the in-
+distortion. However, for ECGs in time-series format, people        put x. Let C ∗ (x) be the correct label of x. Given a valid
+focus more on the overall pattern/shape, which can not be          input x and a target class t 6= C ∗ (x), an adversary aims
+fully described by Lp norm (Eichmann and Zgraggen 2015;            to generate adversarial examples xadv so that the classifier
+Gogolou et al. 2018) (see Section ‘Similarity Metrics’ for         predicts g(xadv ) = t (i.e. successful attack), and xadv and
+details). Recent works (Kurakin, Goodfellow, and Bengio            x are close based on the similarity metric (i.e. visual imper-
+2018; Athalye et al. 2018; Chen et al. 2018) have explored         ceptibility). It can be modeled as a constrained minimization
+the robustness of the adversarial examples in the physical         problem as seen in prior works (Szegedy et al. 2013):
+world, where the input images could not be precisely con-                             minimize D(x, xadv )
+trolled, and may change under different viewpoints, lighting                                                                   (1)
+                                                                                      such that C (xadv ) = t
+and camera noise. Our strategy on Type II attack is inspired
+by (Athalye et al. 2018; Brown et al. 2017). Different from        where D is some similarity metric. It is worth mentioning
+images, we deal with sampling point uncertainty of the peri-       that there is no box constraints for time-series measurement.
+odic ECGs and the filtering function of ECG devices.               It is equivalent to solve (Carlini and Wagner 2017):
+   Recent works on GAN-based attacks (Xiao et al. 2018;
+Song et al. 2018) focus on improve attacking efficiency to                     minimize D(x, xadv ) + c · fg (xadv )           (2)
+image classification system, which can be combined with
+metric computation efficiency of ECGadv in future work.            where fg is an objective function mapping the input to a
+A workshop paper (Han et al. 2019) convolves perturbation          positive number, which satisfies fg (xadv ) ≤ 0 if and only
+with Gaussian kernels for ECG adversarial attacks. Our pro-        if C (xadv ) = t. One common objective function is cross-
+posed smoothness metric and Gaussian kernels method can            entropy. We adopt the one in (Carlini and Wagner 2017).
+be integrated to improve the system. Besides, our paper fur-             fg (xadv ) = (maxi6=t (Z(xadv )i ) − Z(xadv )t )+     (3)
+ther addresses the issues in physical ECG attacks. For the
+emerging defense methods, (Athalye, Carlini, and Wagner            where Z(x) = z is logits, i.e., the output of all layers except
+2018) proposed a general framework to circumvent several           the softmax. (e)+ is short-hand for max(e, 0).
+Similarity Metrics To generate adversarial examples, we              Type II Attack Strategy
+require a distance metric to quantify perceptual similarity to       Problem Formulation Given the same m-class classifier,
+encourage visual imperceptibility. The widely-adopted dis-           g : X → Y as above, in Type II attack, we explicitly
+tance metrics in the literature are Lp norms kxadv − xkp ,           consider the filtering process in attack scheme. Filtering is
+                                               Pn           1
+where the p-norm k · kp is defined as kvkp = ( i=1 |vi |p ) p .      a standard process in ECG devices to combat noises be-
+Lp norms focus on the change in each pixel value. However,           fore the data analysis, including baseline wandering noises
+human perception on line curves focuses more on the over-            (<0.05Hz) and the power-line noises (50 or 60 Hz) (Luo
+all pattern/shape. Studies in (Eichmann and Zgraggen 2015;           and Johnston 2010). To generate filtering-resistant pertur-
+Gogolou et al. 2018) show that given a group of line curves          bations, we constrain the power of the perturbation within
+for similarity assessment, pattern-focused distance metrics          those filtered frequency bands during the optimization pro-
+like the Dynamic time warping (DTW)-based ones pro-                  cedure. We also consider the possible skewing to gener-
+duce rankings that are closer to the human-annotated rank-           ate perturbations that are effective for the on-the-fly ECGs,
+ings than value-focused metrics like Euclidean distances.            since it is hard for the attacker to obtain the exact time that
+Thus, we consider using DTW to quantify the similarity of            the device begins measuring ECGs. Inspired by Expectation
+ECGs at first. However, the non-differentiability and non-           Over Transformation(EOT) (Athalye et al. 2018), we regard
+parallelism of DTW make it ill-suited for adversarial attacks.       such uncertainty as a shifting transformation of the original
+Recent work (Cuturi and Blondel 2017) proposes a differen-           measurement and explicitly consider such a transformation
+tiable DTW variant, Soft-DTW. However, Soft-DTW does                 within the optimization procedure.
+not change the essence of DTW – a standard dynamic pro-                 Formally, given a distance function D(·, ·) and a chosen
+gramming problem. The value and gradient of Soft-DTW                 distribution T of transformation function t, we have the fol-
+would be computed in quadratic time, and it is hard to lever-        lowing optimization problem:
+age the parallel computing of the GPU to speed it up. To                        minimize Et∼T [D(t(xadv ), t(x))]+
+capture the pattern similarity in a computation-efficient way,                                                                    (5)
+                                                                                           c · Et∼T [− log P (yt |t(xadv ))]
+we adopt the following metric, denoted as smoothness as our
+similarity metric. Given δ = xadv − x and var(·) refers to           where xadv = x + h(xperturb ). xperturb is the added pertur-
+variance calculation:                                                bation and h(·) is a rectangular filter. Specifically, we trans-
+                                                                     form the xperturb from time domain to frequency domain
+                                                                     via Fast Fourier transform. We utilize a mask to zero the
+             diff (δ) = δi − δi−1 , i = 2, . . . , n                 power of frequency bins for less than 0.05Hz and 50/60Hz.
+                                                               (4)
+             dsmooth (δ) = var(diff (δ))                             Finally, inverse Fast Fourier transform will transform it back
+   Smoothness metric dsmooth quantifies the smoothness of            to the time domain. Besides, we add a constraint 1 <
+perturbation(δ) by measuring the variation of the difference         Et∼T [D(t(xadv ), t(x))] < 2 . 1 is large enough that xadv
+between neighbouring points of perturbation. The smaller             can have a large probability of successful attacks under most
+the variation, the smoother the perturbation. A smoother per-        shifting transformations. Since the ECG signals of the same
+turbation δ means that the adversarial instances x0 are more         class share common pattern, a sufficiently large 1 can im-
+likely to preserve a similar pattern to the original instance        plicitly enable the universality of an adversarial sample, i.e.,
+x. In the extreme case where dsmooth = 0, δ should be a              a perturbation is effective on other unseen samples of the
+constant and xadv = x + constant, i.e., the adversarial in-          same class. 2 forces the adversarial examples to be within a
+stances xadv have the same shape as the original instance            certain distance constraint of the original.
+x. It is worth mentioning that in our attack scheme, we in-          Perturbation Window Size For adversarial attacks, it is
+tentionally preserve the zero-mean and one-variance prop-            better that the perturbation attracts minimal attention of the
+erty of the generated xadv , therefore the perturbation can          victim. Thus, we introduce the length of the perturbation wd
+not be easily filtered by the normalization layer of the sys-        as a parameter, which could be set by the adversary and fixed
+tem. Besides, compared with the quadratic time complexity            during the perturbation generation. wd gives the system flex-
+of Soft-DTW, the smoothness metric can be computed in                ibility to control the added perturbation. The intuition behind
+linear time, which is efficient in principle. To further quan-       is that the smaller wd is, the smaller the attack duration. At-
+tify the efficiency, we run the adversarial attacks with dif-        tack duration denotes the time when the attacker try to inject
+ferent metrics: Soft-DTW, smoothness metric and L2 norm.             the signal. It is obviously that the less time the attacker stays
+Both the computing resources (AWS c5.2xlarge instances)              active in the crime scene, the less chance it will be perceived
+and the victim ECGs are the same. The average CPU time               by the victim. Moreover, the larger wd is, the generated per-
+per iteration of different metrics are shown in Table 1. The         turbation has higher probability of having an effect on other
+smoothness metric can be further accelerated by GPU.                 unseen samples of the same class(i.e., universality).
+
+          Metric             dsoftdtw     dsmooth       dl2                             Experimental Results
+     CPU time/iteration       12.28s       0.05s       0.05s         In this section, we first introduce the victim DNN-based
+                                                                     ECG classification system for attack scheme evaluation,
+ Table 1: Computation Efficiency across Different Metrics            then evaluate our attacks in two threat models respectively4 .
+                                                                        4
+                                                                            https://github.com/codespace123/ECGadv
+Victim DNN-powered ECG Diagnosis Model                             Success Rate of Targeted Attacks We select the first 360
+We apply our attack strategies to the DNN-based arrhyth-           segments of class N, class A and class O respectively, and
+mia classification system (Rajpurkar et al. 2017; Andreotti        the first 220 segments of class v in attack dataset to eval-
+et al. 2017; Awni Y et al. 2019). An arrhythmia is defined         uate the success rate of the targeted attacks. For each ECG
+as any rhythm other than a normal rhythm. If the detection         segment, we conduct three targeted attacks to other classes
+algorithm is mislead to classify an arrhythmia as a normal         one by one. Thus, we have 12 source-target pairs given 4
+one, the patient may miss the optimal treatment period. Con-       classes. The attack results are shown in Table 3. With all
+versely if a normal rhythm is misclassified as an arrhythmia,      three similarity metrics, the generated adversarial instances
+the patient may accept unnecessary consultation and treat-         achieve high attack success rates. dl2 fails in a few instances
+ment, which results in medical resources waste or frauds.          of some source-target pairs, such as “O → A”, “A → N”, “O
+   The original model (Rajpurkar et al. 2017) adopts 34-           → N” and “v → N”. dsmooth case achieves almost a 100%
+layer Residual Networks (ResNet) (He et al. 2016) to clas-         success rate and dsmooth,l2 achieves a 100% success rate.
+sify a 30s single-lead ECG segment into 14 different classes.         A sample of generated adversarial ECG signals are shown
+However, their dataset and trained model are not public.           in Fig. 3. Due to the limited space, we only show a case
+In the Physionet/Computing in the Cardiology Challenge             where an original atrial fibrillation ECG(A) is misclassi-
+2017 (Clifford et al. 2017), (Andreotti et al. 2017) repro-        fied to a normal rhythm(N). Compared with original ECG,
+duced the approach by (Rajpurkar et al. 2017) on the PhyDB         dl2 one presents small but consecutive peaks at multiple lo-
+dataset and achieved a good performance. The model is              cations, which are almost impossible in cardiac rhythms.
+the representative of the current state-of-the-art in arrhyth-     While the dsmooth one presents smooth signal transition
+mia classification. Both their algorithm and model are avail-      and preserves more similar pattern to the original. It is also
+able in open-source5 . PhyDB dataset consists of 8,528             noticed that the Soft-DTW one present suspicious spikes,
+short single-lead ECG segments labeled as 4 classes: nor-          the extent of which falls in between L2-norm and ‘smooth-
+mal rhythm(N), atrial fibrillation(A), other rhythm(O) and         ness+L2’ cases. Table 1 shows CPU time per iteration of
+noise(v). Both atrial fibrillation and other rhythm indicates      softDTW is about 12 seconds, and it takes hundreds of it-
+arrhythmia. Atrial fibrillation is the most prevalent cardiac      erations to generate one example. It is time-consuming to
+arrhythmia. “Other rhythm” in the dataset refers to other          generate large number of them (600 in our perceptual study)
+abnormal arrhythmia except atrial fibrillation. For note, the      using softDTW. Since the proposed attacks as shown in Ta-
+accuracy of this model is not 100% on the PhyDB dataset.           ble 3 almost achieve 100% success rate, without affecting
+Thus, to prove the effectiveness of the proposed attacks, we       major conclusions, we exclude softDTW in evaluation.
+only generate adversarial examples for those ECGs origi-
+nally correctly classified by the model without attacks. The       Human Perceptual Study We conduct an extensive hu-
+profile of the attack dataset is shown in Table 2 (6081 ECGs       man perceptual study on both ordinary people and cardiolo-
+in total). The sampling rate of the ECGs is 300Hz, i.e., the       gists to evaluate the imperceptibility of adversarial ECGs.
+length of a 30s ECG is 9000.                                          Ordinary human participants without medical expertise
+                                                                   are recruited from Amazon Mechanical Turk(AMT). Thus,
+Evaluation for Type I Attack                                       they are only required to compare the adversarial examples
+Experiment Setup We implement our attack strategy for              generated using different similarity metrics and choose the
+Type I Attack under the framework of CleverHans (Paper-            one closer to the original ECG. For each similarity metric,
+not et al. 2018). We adopt the Adam optimizer (Kingma              we generate 600 adversarial examples (each source-target
+and Ba 2014) with 0.005 learning rate to search for ad-            pair accounts for 50 examples). In the study, the participants
+versarial examples. We compare the performance of three            are asked to observe an original example and its two adver-
+similarity metrics on adversarial examples generation, given       sarial ones generated using two different similarity metrics.
+δ = xadv −x: (i) dl2 (δ) = kδk22 , (ii)dsmooth (δ) (Equation 4),   Then they need to choose one of the two adversarial exam-
+(iii) dsmooth,l2 (δ) = dsmooth (δ) + k · dl2 (δ), k = 0.01. All    ples that is closer to the original. The perceptual study com-
+metrics are evaluated under the same optimization scheme           prises three parts, (i) dsmooth versus dl2 , (ii) dsmooth,l2 ver-
+with the same hyper-parameters.                                    sus dl2 , and (iii) dsmooth versus dsmooth,l2 . To avoid labeling
+                                                                   bias, we allow each user to conduct at most 60 trials for each
+                                             Time length (s)       part. For each tuple of an original example and its two ad-
+                Type             Number                            versarial examples, we collect 5 annotations from different
+                                             mean      std
+                                                                   participants. In total, we collected 9000 annotations from 57
+        Normal rhythm(N)           3886      32.85    9.70         AMT users. The study results are shown in Table 4, where
+       Atrial Fibrillation(A)       447      32.25 11.98           “triumphs” denotes the metric got 4 or 5 votes for all 5 an-
+         Other rhythm(O)           1488      35.46 11.56           notations, and “wins” denotes that the metric got 3 votes for
+         Noisy signal(v)            260      24.02 10.42           5, i.e., a narrow victory.
+                                                                      Compared with the dl2 -generated examples, the dsmooth -
+            Table 2: Data profile for the attack dataset           generated ones are voted closer to the original in 81.34% of
+                                                                   the trials. This indicates that the smoothness metric encour-
+                                                                   ages generated adversarial examples preserve similar pat-
+   5
+       https://github.com/fernandoandreotti/cinc-challenge2017     terns to original ones, so they are more likely to be imper-
+                              dl2                                    dsmooth                               dsmooth,l2
+               A           N          O        v         A           N       O       v        A          N         O            v
+      A        /        97.22%      100%     100%        /         100% 100%       100%       /       100.0% 100.0%          100.0%
+      N      100%          /        100%     100%      100%          /     100%    100%     100%         /       100%         100%
+      O     99.44%      95.0%         /      100%     99.72%       100%      /     100%     100%       100%         /         100%
+      v      100%       99.55%      100%       /       100%        100% 100%         /      100%       100%      100%           /
+
+                                         Table 3: Success rates of targeted attacks (Type I Attack)
+
+
+                dsmooth wins(%)                 dl2 wins(%)              annotates a type A instance as type O. The last three columns
+  i        triumphs wins       total     triumphs wins total             show the percentage of adversarial examples which are an-
+             58.67     22.67 81.34           10      8.66 18.66          notated the same type as their original counterparts. The re-
+                                                                         sults show that in all cases, cardiologists give the same anno-
+               dsmooth,l2 wins(%)                dl2 wins(%)             tations to adversarial examples as their original counterparts.
+ ii        triumphs wins        total    triumphs wins total             The possible reason is that most perturbations generally oc-
+              65.5      18.5     84         7.83      8.17   16          cur on the wave valley, but the cardiologists give annotations
+                dsmooth wins(%)              dsmooth,l2 wins(%)          based on the peak-to-peak intervals. They think the subtle
+ iii       triumphs wins       total     triumphs wins total
+                                                                         perturbations possibly caused by instrument noise. The re-
+                                                                         sults that adversarial signals can be correctly classified by
+             31.83     27.83 59.67         15.83      24.5 40.33         cardiologists but wrongly classified by the classifier prove
+                                                                         that our attacks successfully fool the classifier to disable its
+      Table 4: Human perceptual study (AMT participants)                 function of diagnosis assistance without arousing suspicion.
+
+                                                                         Evaluation for Type II Attack
+ceptible. When comparing dsmooth and dsmooth,l2 , dsmooth
+get a few more votes (59.67%) than dsmooth,l2 , which further            Success Rate of Targeted Attacks We implement our at-
+validates that the smoothness metric better qualifies human              tack strategy for Type II attack under the framework of Clev-
+similarity perception on line curves than L2 norm. The data              erHans (Papernot et al. 2018). During training, we maxi-
+provide sufficient evidence (p values < 0.0001 using z-test)             mize the objective function using the Adam (Kingma and
+at the 5% level of significance to conclude that most people             Ba 2014) optimizer, and approximate the gradient of the
+think dsmooth is more imperceptible than dl2 and dsmooth,l2 .            expected value through independently sampling transforma-
+   Besides participants on AMT, we also invite three cardi-              tions at each gradient decent step. Among 12 source-target
+ologists to evaluate whether added perturbations arouse their            pairs, we randomly choose 10 samples of each pair to gener-
+suspicion. The cardiologists are asked to classify the given             ate adversarial perturbations by applying the attack strategy
+ECG and its adversarial counterparts into 4 classes(A, N, O,             in Section . We generate one perturbation from one sample.
+v) based on their medical expertise. We focus on the cases               To generate filtering-resistant perturbation, we use rectangu-
+of “N → A”, “N → O”, “A → N”, “O → N”, which misclas-                    lar filter that removes the signal with frequency of lower than
+sify a normal rhythm to an arrhythmia or vise versa. For the             0.05Hz and 50/60Hz. Because the rectangular filter can re-
+above 4 source-target pairs, we randomly select 6 type N, 3              move all the energy within the chosen frequency band which
+type A and 3 type O, then we generate adversarial examples               is stricter than other filters. In this evaluation, we generate
+with different similarity metrics. Thus, we have 48 samples              the perturbation at full length, i.e., wd is equal to 9000.
+(original and adversarial ones) and shuffle them randomly.                  During testing, we apply the generated perturbations to
+For every sample, we collect annotations from all three car-             100 randomly-chosen samples from every source class to see
+diologists. The results are shown in Table 5.                            whether the adversarial examples could mislead the classi-
+                                                                         fier universally. By source class, we mean the chosen test-
+                                                                         ing sample has the same class with training sample gener-
+          Idx    Original     dl2       dsmooth   dsmooth,l2             ating perturbation. Before adding perturbations to the tar-
+           1      100%       100%        100%       100%                 get sample, we apply a filter on the perturbations to test
+           2      91.7%      100%        100%       100%                 the filtering-resistance. The filter has two choices: Filter 1
+           3      100%       100%        100%       100%                 is the rectangular filter which is the same as the training pro-
+                                                                         cedure. Filter 2 is the combination of two common filters
+                                                                         used in ECG signal processing, a high-pass butterworth filter
+          Table 5: Human Perceptual Study (Cardiologists)                with 0.05Hz cutting frequency and notch filters for 50/60Hz
+                                                                         power line noises. To mimic the sampling point uncertainty
+  Each row refers to one cardiologist. The first column de-              of the on-the-fly signals, we randomly shift perturbations
+notes the percentage of the cardiologist’s annotations the               and add them to the original signals for 200 times.The av-
+same as the labels in PhyDB dataset. Only one cardiologist               erage success rates are shown in Table 6. The row refers
+                                                                               Figure 4: Success attack rates with different sized
+           Figure 3: A sample of generated adversarial ECG signal.             windows.
+
+
+to origin class and the column refers to target class. In one       class is A. The possible reason is the inherent property of
+cell, the top success attack rate is for filter 1 and the bottom    class A, i.e., if a certain part of the ECG signal is regraded
+is for filter 2. Our attack strategy achieves pretty high suc-      as atrial fibrillation, then the whole ECG segment will be
+cess rates, which indicates that the generated perturbation is      classified as class A. The success attack rates under different
+filtering-resistant, skewing-resistant and universal.               filters are quite similar, which shows the filtering-resistance
+                                                                    of our generated perturbations.
+               A          N           O           v
+       A       /
+                       99.97%/     99.82%/      100%/                                      Conclusion
+                       99.96%      99.86%       100%
+                                                                    This paper proposes ECGadv to generate adversarial ECG
+            100%/                   100%/      99.83%/
+       N                   /                                        examples to misguide arrhythmia classification systems. The
+            100%                    100%       99.75%
+                                                                    existing attacks in image domain could not be directly appli-
+            100%/      99.76%/                  100%/
+       O                               /                            cable due to the distinct properties of ECGs in visualization
+            100%       99.73%                   100%
+                                                                    and dynamic properties. We analyze the properties of ECGs
+            100%/      97.63%/     98.70%/
+       v                                           /                to design effective attacks schemes under two attacks mod-
+            100%       97.45%      98.76%
+                                                                    els respectively. Our results demonstrate the blind spots of
+                                                                    DNN-powered diagnosis systems under adversarial attacks
+ Table 6: Success rates of targeted attacks (Type II Attack)        to call attention to adequate countermeasures.
+                                                                    Acknowledgment This work was supported in part by
+Impact of Window Size In this section, we evaluate the              the RGC under Contract CERG 16203719, 16204418 and
+success attack rates with different sized windows wd . As           in part by the Guangdong Natural Science Foundation No.
+mentioned before, the smaller the window size, the lower            2017A030312008.
+the chance that the attacker can be perceived. In this eval-
+uation, we generate perturbations on different sized win-
+dows 9000,7500,6000,4500,3000 and 1500. For each win-
+                                                                                            References
+dow size, we generate adversarial examples under the same          [Al Rahhal et al. 2016] Al Rahhal, M. M.; Bazi, Y.; Al-
+conditions as the previous section randomly 10 samples              Hichri, H.; Alajlan, N.; Melgani, F.; and Yager, R. R. 2016.
+for each source-target pairs. Then we apply filters, shift the      Deep learning approach for active classification of electro-
+perturbation randomly and add it to other samples from the          cardiogram signals. Information Sciences 345:340–354.
+original source class. The results are shown in Figure 4. The      [Andreotti et al. 2017] Andreotti, F.; Carr, O.; Pimentel,
+legend refers to target class under different filters. In most      M. A.; Mahdi, A.; and De Vos, M. 2017. Comparing feature-
+cases, the success rate decreases a lot when the window size        based classifiers and convolutional neural networks to detect
+decreases. However, they slowly decrease and even remain            arrhythmia from short segments of ecg. Computing 44:1.
+almost unchanged under the cases of “A → O”, “N → O”
+and “v → O”. All these cases are from a certain class to           [Athalye et al. 2018] Athalye, A.; Engstrom, L.; Ilyas, A.;
+class O. This is mainly because class O (refers to other ab-        and Kwok, K. 2018. Synthesizing robust adversarial ex-
+normal arrhythmia except atrial fibrillation) may cover an          amples. In International Conference on Machine Learning,
+expansive input space so that it is easier to misclassify an        284–293.
+other class to class O. Besides, we find that except for class     [Athalye, Carlini, and Wagner 2018] Athalye, A.; Carlini,
+O, the success rate decrease more slowly when the target            N.; and Wagner, D. 2018. Obfuscated gradients give a false
+  sense of security: Circumventing defenses to adversarial ex-       Adam: A method for stochastic optimization. arXiv preprint
+  amples. In International Conference on Machine Learning,           arXiv:1412.6980.
+  274–283.                                                          [Kiranyaz, Ince, and Gabbouj 2016] Kiranyaz, S.; Ince, T.;
+[Awni Y et al. 2019] Awni Y, H.; Pranavm, R.; Masoumeh,              and Gabbouj, M. 2016. Real-time patient-specific ecg classi-
+  H.; Geoffrey H, T.; Codie, B.; Mintu P, T.; and Andrew Y,          fication by 1-d convolutional neural networks. IEEE Trans-
+  N. 2019. Cardiologist-level arrhythmia detection and classi-       actions on Biomedical Engineering 63(3):664–675.
+  fication in ambulatory electrocardiograms using a deep neu-       [Kune et al. 2013] Kune, D. F.; Backes, J.; Clark, S. S.;
+  ral network. Nature Medicine volume 25, 6569.                      Kramer, D.; Reynolds, M.; Fu, K.; Kim, Y.; and Xu, W.
+[Brown et al. 2017] Brown, T. B.; Mané, D.; Roy, A.; Abadi,         2013. Ghost talk: Mitigating emi signal injection attacks
+  M.; and Gilmer, J. 2017. Adversarial patch. arXiv preprint         against analog sensors. In Security and Privacy (SP), 2013
+  arXiv:1712.09665.                                                  IEEE Symposium on, 145–159. IEEE.
+[Carlini and Wagner 2017] Carlini, N., and Wagner, D. 2017.         [Kurakin, Goodfellow, and Bengio 2018] Kurakin,             A.;
+  Towards evaluating the robustness of neural networks. In           Goodfellow, I. J.; and Bengio, S. 2018. Adversarial
+  2017 IEEE Symposium on Security and Privacy (SP), 39–              examples in the physical world. In Artificial Intelligence
+  57. IEEE.                                                          Safety and Security. Chapman and Hall/CRC. 99–112.
+[Chen et al. 2018] Chen, S.-T.; Cornelius, C.; Martin, J.;          [Liu et al. 2016] Liu, Y.; Chen, X.; Liu, C.; and Song, D.
+  and Chau, D. H. 2018. Robust physical adversarial                  2016. Delving into transferable adversarial examples and
+  attack on faster r-cnn object detector. arXiv preprint             black-box attacks. arXiv preprint arXiv:1611.02770.
+  arXiv:1804.05810.
+                                                                    [Luo and Johnston 2010] Luo, S., and Johnston, P. 2010. A
+[Clifford et al. 2017] Clifford, G. D.; Liu, C.; Moody, B.;          review of electrocardiogram filtering. Journal of electrocar-
+  Lehman, L.-w. H.; Silva, I.; Li, Q.; Johnson, A.; and Mark,        diology 43(6):486–496.
+  R. G. 2017. Af classification from a short single lead ecg
+  recording: The physionet computing in cardiology challenge        [Moosavi-Dezfooli et al. 2017] Moosavi-Dezfooli, S.-M.;
+  2017. Proceedings of Computing in Cardiology 44:1.                 Fawzi, A.; Fawzi, O.; and Frossard, P. 2017. Universal
+                                                                     adversarial perturbations. In Proceedings of the IEEE
+[Cuturi and Blondel 2017] Cuturi, M., and Blondel, M.                Conference on Computer Vision and Pattern Recognition,
+  2017. Soft-dtw: a differentiable loss function for time-series.    1765–1773.
+  In Proceedings of the 34th International Conference on Ma-
+  chine Learning-Volume 70, 894–903. JMLR. org.                     [Moosavi-Dezfooli, Fawzi, and Frossard 2016] Moosavi-
+                                                                     Dezfooli, S.-M.; Fawzi, A.; and Frossard, P.            2016.
+[Eichmann and Zgraggen 2015] Eichmann,               P.,     and     Deepfool: a simple and accurate method to fool deep neural
+  Zgraggen, E. 2015. Evaluating subjective accuracy in               networks. In Proceedings of the IEEE Conference on
+  time series pattern-matching using human-annotated rank-           Computer Vision and Pattern Recognition, 2574–2582.
+  ings. In Proceedings of the 20th International Conference
+  on Intelligent User Interfaces, 28–37. ACM.                       [Odinaka et al. 2012] Odinaka, I.; Lai, P.-H.; Kaplan, A. D.;
+                                                                     O’Sullivan, J. A.; Sirevaag, E. J.; and Rohrbaugh, J. W.
+[Finlayson et al. 2018] Finlayson, S. G.; Chung, H. W.; Ko-          2012. Ecg biometric recognition: A comparative analysis.
+  hane, I. S.; and Beam, A. L. 2018. Adversarial attacks             IEEE Transactions on Information Forensics and Security
+  against medical deep learning systems. arXiv preprint              7(6):1812–1824.
+  arXiv:1804.05296.
+                                                                    [Papernot et al. 2018] Papernot, N.; Faghri, F.; Carlini, N.;
+[Gogolou et al. 2018] Gogolou, A.; Tsandilas, T.; Palpanas,          Goodfellow, I.; Feinman, R.; Kurakin, A.; Xie, C.; Sharma,
+  T.; and Bezerianos, A. 2018. Comparing similarity per-             Y.; Brown, T.; Roy, A.; Matyasko, A.; Behzadan, V.; Ham-
+  ception in time series visualizations. IEEE transactions on        bardzumyan, K.; Zhang, Z.; Juang, Y.-L.; Li, Z.; Sheatsley,
+  visualization and computer graphics.                               R.; Garg, A.; Uesato, J.; Gierke, W.; Dong, Y.; Berthelot, D.;
+[Goodfellow, Shlens, and Szegedy 2014] Goodfellow, I. J.;            Hendricks, P.; Rauber, J.; and Long, R. 2018. Technical re-
+  Shlens, J.; and Szegedy, C. 2014. Explaining and harnessing        port on the cleverhans v2.1.0 adversarial examples library.
+  adversarial examples. arXiv preprint arXiv:1412.6572.              arXiv preprint arXiv:1610.00768.
+[Han et al. 2019] Han, X.; Hu, Y.; Foschini, L.; Jankelson,         [Papernot, McDaniel, and Goodfellow 2016] Papernot, N.;
+  L.; and Ranganath, R. 2019. Adversarial examples for elec-         McDaniel, P.; and Goodfellow, I. 2016. Transferability in
+  trocardiograms.                                                    machine learning: from phenomena to black-box attacks us-
+[He et al. 2016] He, K.; Zhang, X.; Ren, S.; and Sun, J. 2016.       ing adversarial samples. arXiv preprint arXiv:1605.07277.
+  Deep residual learning for image recognition. In Proceed-         [Qin et al. 2019] Qin, Y.; Carlini, N.; Cottrell, G.; Goodfel-
+  ings of the IEEE conference on computer vision and pattern         low, I.; and Raffel, C. 2019. Imperceptible, robust, and
+  recognition, 770–778.                                              targeted adversarial examples for automatic speech recog-
+[IEEE-Spectrum 2018] IEEE-Spectrum. 2018. Artificial in-             nition. In International Conference on Machine Learning,
+  telligence is challenging doctors. https://spectrum.ieee.org/      5231–5240.
+  static/ai-vs-doctors.                                             [Rajpurkar et al. 2017] Rajpurkar, P.; Hannun, A. Y.; Hagh-
+[Kingma and Ba 2014] Kingma, D. P., and Ba, J. 2014.                 panahi, M.; Bourn, C.; and Ng, A. Y. 2017. Cardiologist-
+ level arrhythmia detection with convolutional neural net-
+ works. arXiv preprint arXiv:1707.01836.
+[Song et al. 2018] Song, Y.; Shu, R.; Kushman, N.; and Er-
+ mon, S. 2018. Constructing unrestricted adversarial exam-
+ ples with generative models. In Advances in Neural Infor-
+ mation Processing Systems, 8312–8323.
+[Szegedy et al. 2013] Szegedy, C.; Zaremba, W.; Sutskever,
+ I.; Bruna, J.; Erhan, D.; Goodfellow, I.; and Fergus, R. 2013.
+ Intriguing properties of neural networks. arXiv preprint
+ arXiv:1312.6199.
+[World Health Organization 2018] World Health Organiza-
+ tion. 2018. Cardiovascular disease is the leading global
+ killer. https://www.who.int/cardiovascular diseases/en/.
+[Xiao et al. 2018] Xiao, C.; Li, B.; Zhu, J. Y.; He, W.; Liu,
+ M.; and Song, D. 2018. Generating adversarial examples
+ with adversarial networks. In 27th International Joint Con-
+ ference on Artificial Intelligence, IJCAI 2018, 3905–3911.
+ International Joint Conferences on Artificial Intelligence.
+

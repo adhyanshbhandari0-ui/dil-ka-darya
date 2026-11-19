@@ -1,0 +1,272 @@
+                                             LinkNet: Exploiting Encoder Representations for
+                                                    Efficient Semantic Segmentation
+                                                                  Abhishek Chaurasia                                         Eugenio Culurciello
+                                                     School of Electrical and Computer Engineering                Weldon School of Biomedical Engineering
+                                                                   Purdue University                                        Purdue University
+                                                                 West Lafayette, USA                                       West Lafayette, USA
+                                                              Email: aabhish@purdue.edu                                  Email: euge@purdue.edu
+
+
+
+
+arXiv:1707.03718v1 [cs.CV] 14 Jun 2017
+                                            Abstract—Pixel-wise semantic segmentation for visual scene     bypassing spatial information, directly from the encoder to the
+                                         understanding not only needs to be accurate, but also efficient   corresponding decoder improves accuracy along with significant
+                                         in order to find any use in real-time application. Existing       decrease in processing time. In this way, information which
+                                         algorithms even though are accurate but they do not focus
+                                         on utilizing the parameters of neural network efficiently. As     would have been otherwise lost at each level of encoder is
+                                         a result they are huge in terms of parameters and number          preserved, and no additional parameters and operations are
+                                         of operations; hence slow too. In this paper, we propose a        wasted in relearning this lost information.
+                                         novel deep neural network architecture which allows it to learn      In Section III we give detailed explanation of our LinkNet
+                                         without any significant increase in number of parameters. Our
+                                                                                                           architecture. The proposed network was tested on popular
+                                         network uses only 11.5 million parameters and 21.2 GFLOPs
+                                         for processing an image of resolution 3 × 640 × 360. It gives     datasets: Cityscapes [20] and CamVid [21] and its processing
+                                         state-of-the-art performance on CamVid and comparable results     times was recorded on NVIDIA Jetson TX1 Embedded Systems
+                                         on Cityscapes dataset. We also compare our networks processing    module as well as on Titan X GPU. These results are reported
+                                         time on NVIDIA GPU and embedded system device with existing       in Section IV, which is followed by conclusion.
+                                         state-of-the-art architectures for different image resolutions.
+
+                                                               I. I NTRODUCTION                                                  II. R ELATED WORK
+
+                                            Recent advancement in machines with ability to perform              Semantic segmentation involves labeling each and every
+                                         computationally intensive tasks have enabled researchers to tap pixel of an image and therefore, retaining spatial information
+                                         deeper into neural networks. Convolutional neural networks’ becomes utmost important. A neural network architecture
+                                         (CNNs) [1], [2] recent success has been demonstrated in image used for scene parsing can be subdivided into encoder and
+                                         classification [3], [4], [5], [6], [7], [8], localization [9], [10], decoder networks, which are basically discriminative and
+                                         scene understanding [11], [12] etc. A lot of researchers have generative networks respectively. State-of-the-art segmentation
+                                         shifted their focus towards scene understanding because of networks, generally use categorization models which are mostly
+                                         the surge in tasks like augmented reality and self-driving winners of ImageNet Large Scale Visual Recognition Challenge
+                                         vehicle, and one of the main step involved in it is pixel-level (ILSCRC) as their discriminator. The generator either uses
+                                         classification/semantic segmentation [13], [14].                     the stored pooling indices from discriminator, or learns the
+                                            Inspired by auto-encoders [3], [15], most of the existing parameters using convolution to perform upsampling. Moreover,
+                                         techniques for semantic segmentation use encoder-decoder pair encoder and decoder can be either symmetric (same number of
+                                         as core of their network architecture. Here the encoder encodes layers in encoder and decoder with same number of pooling
+                                         information into feature space, and the decoder maps this and unpooling layers), or they can be asymmetric.
+                                         information into spatial categorization to perform segmentation.       In [22] a pre-trained VGG was used as discriminator. Pooling
+                                         Even though semantic segmentation targets application that indices after every max-pooling step was saved and then later
+                                         require real-time operation, ironically most of the current deep used for upsampling in the decoder. Later on researchers came
+                                         networks require excessively large processing time. Networks up with the idea of deep deconvolution network [23], [24], fully
+                                         such as YOLO [16], Fast RCNN [17], SSD [18] focus on convolutional network (FCN) combined with skip architecture
+                                         real-time object detection but there is very little to no work [25], which eliminated the need of saving pooling indices.
+                                         done in this direction in case of semantic segmentation [19]. Networks designed for classification and categorization mostly
+                                            In our work, we have made an attempt to get accurate use fully connected layer as their classifier; in FCN they
+                                         instance level prediction without compromising processing time get replaced with convolutional layers. Standard pre-trained
+                                         of the network. Generally, spatial information is lost in the encoders such as: AlexNet [4], VGG [5], and GoogLeNet
+                                         encoder due to pooling or strided convolution is recovered by [7] have been used for segmentation. In order to get precise
+                                         using the pooling indices or by full convolution. We hypothesize segmentation boundaries, researchers have also tried to cascade
+                                         and later prove in our paper that instead of the above techniques; their deep convolutional neural network (DCNN) with post-
+                                                                        Fig. 2: Convolutional modules in encoder-block (i)
+
+
+
+
+                 Fig. 1: LinkNet Architecture
+
+processing steps, like the use of Conditional Random Field
+(CRF) [26], [11].
+   Instead of using networks which were designed to perform
+image classification, [27] proposed to use networks specifically
+designed for dense predictions. Most of these networks failed
+to perform segmentation in real-time on existing embedded
+hardware. Apart from this, recently recurrent neural networks
+(RNNs) were used to get contextual information [28] and to              Fig. 3: Convolutional modules in decoder-block (i)
+optimize CRF [29]; but the use of RNN in itself makes it
+computationally very expensive. Some work was also done
+in designing efficient network [30], [19], where DCNN was          and ∗2 means upsampling by a factor of 2. We use batch
+optimized to get a faster forward processing time but with a       normalization between each convolutional layer and which is
+decrease in prediction accuracy.                                   followed by ReLU non-linearity [31], [32]. Left half of the
+                                                                   network shown in Figure 1 is the encoder while the one the right
+               III. N ETWORK ARCHITECTURE
+                                                                   is the decoder. The encoder starts with an initial block which
+   The architecture of LinkNet is presented in Figure 1.           performs convolution on input image with a kernel of size 7×7
+Here, conv means convolution and full-conv means full              and a stride of 2. This block also performs spatial max-pooling
+convolution [25]. Furthermore, /2 denotes downsampling by a        in an area of 3 × 3 with a stride of 2. The later portion of
+factor of 2 which is achieved by performing strided convolution,   encoder consists of residual blocks [6] and are represented as
+                                                                   encoder-block(i). Layers within these encoder-blocks are shown
+          TABLE I: Input and output feature maps                   in detail in Figure 2. Similarly, layer details for decoder-blocks
+                                                                   are provided in Figure 3. Table I contains the information about
+              Block
+                          Encoder        Decoder                   the feature maps used in each of these blocks. Contemporary
+                          m         n    m         n               segmentation algorithms use networks such as VGG16 (138
+                 1.       64    64       64    64                  million parameters), ResNet101 (45 million parameters) as their
+                 2.       64   128      128    64                  encoder which are huge in terms of parameters and GFLOPs.
+                 3.      128   256      256   128                  LinkNet uses ResNet18 as its encoder, which is fairly lighter
+                 4.      256   512      512   256
+                                                                   network and still outperforms them as evident from Section
+                                    TABLE II: Performance comparison. Image size is W×H
+                                               NVIDIA TX1                                  NVIDIA Titan X
+                     Model
+                                  480×320        640×360         1280×720      640×360       1280×720       1920×1080
+                                  ms   fps       ms   fps        ms   fps     ms    fps      ms   fps       ms    fps
+                     SegNet       757    1.3    1251      0.8      -     -    69    14.6     289    3.5     637    1.6
+                     ENet          47   21.1      69     14.6    262   3.8     7   135.4      21   46.8      46   21.6
+                     LinkNet      108    9.3     134      7.8    501   2.0    15    65.8      53   18.7     117    8.5
+
+
+
+     TABLE III: Comparison on the basis of operations                  frame with varying resolution. As evident from the numbers
+                     GFLOPs    Parameters    Model size (fp16)
+                                                                       provided, LinkNet can process very high resolution image
+                                                                       at 8.5 fps on GPU. More importantly, it can give real-time
+      SegNet           286.0       29.5M               56.2 MB
+      ENet               3.8        0.4M                0.7 MB         performance even on NVIDIA TX1. ’-’ indicates that network
+      Proposed Net      21.2       11.5M               22.0 MB         was not able to process image at that resolution on the
+                                                                       embedded device.
+                                                                          We choose 640 × 360 as our default image resolution and
+IV. We use the technique of full-convolution in our decoder            report number of operations required to process image of this
+as proposed earlier by [25]. Every conv(k × k)(im, om) and             resolution in Table III. Number of operations determine the
+full-conv(k × k)(im, om) operations has at least three                 forward pass time of any network, therefore reduction in it
+parameters. Here, (k × k) represent (kernel − size) and                is more vital than reduction in number of parameters. Our
+(im, om) represent (inputmap, outputmap) respectively.                 approach’s efficiency is evident in the much low number of
+   Unlike existing neural network architectures which are being        operations per frame and overall parameters.
+used for segmentation, our novelty lies in the way we link each
+encoder with decoder. By performing multiple downsampling B. Benchmarks
+operations in the encoder, some spatial information is lost. It   We use Torch7 [33] machine-learning tool for training with
+is difficult to recover this lost information by using only the RMSProp as the optimization algorithm. The network was
+downsampled output of encoder. [22] linked encoder with trained using four NVIDIA TitanX. Since the classes present
+decoder through pooling indices, which are not trainable in all the datsets are highly imbalanced; we use a custom class
+parameters. Other methods directly use the output of their weighing scheme defined as wclass =               1
+                                                                                                      ln(1.02+pclass ) . This class
+encoder and feed it into the decoder to perform segmentation. weighing scheme has been taken from [19] and it gave us
+In this paper, input of each encoder layer is also bypassed better results than mean average frequency. As suggested in
+to the output of its corresponding decoder. By doing this we Cityscapes [20], we use intersections over union (IoU) and
+aim at recovering lost spatial information that can be used instance-level intersection over union (iIoU) as our performance
+by the decoder and its upsampling operations. In addition, metric instead of using pixel-wise accuracy. In order to prove
+since the decoder is sharing knowledge learnt by the encoder that the bypass connections do help, each table contains IoU and
+at every layer, the decoder can use fewer parameters. This iIoU values with as well as without bypass. We also compare
+results in an overall more efficient network when compared to LinkNet’s performance with other standard models such as
+the existing state-of-the-art segmentation networks, and thus SegNet [24], ENet [19], Dilation8/10 [34], and Deep-Lab CRF
+real-time operation. Information about trainable parameters and [35].
+number operations required for each forward pass is provided          a) Cityscapes: This dataset consists of 5000 fine-
+in detail in Section IV.                                        annotated images, out of which 2975 are available for training,
+                          IV. R ESULTS                          500 for validation, and the remaining 1525 have been selected
+                                                                as test set [20]. We trained on our network on 19 classes
+   We compare LinkNet with existing architectures on two that was provided in the official evaluation scripts [20]. As
+different metrics:                                              reported in Table IV, our network outperforms existing models.
+   1) Performance in terms of speed:
+         • Number of operations required to perform one
+                                                                     TABLE IV: Cityscapes val set results (* on test set)
+            forward pass of the network
+         • Time taken to perform one forward pass                      Model                       Class IoU Class iIoU
+   2) Performace interms of accuracy on Cityscapes [20] and            SegNet*                          56.1             34.2
+       CamVid [21] datasets.                                           ENet*                            58.3             34.4
+                                                                             Dilation10                            68.7      -
+A. Performance Analysis                                                      Deep-Lab CRF (VGG16)                  65.9      -
+   We report inference speed of LinkNet on NVIDIA TX1                        Deep-Lab CRF (ResNet101)              71.4   42.6
+embedded system module as well as on widely used NVIDIA                      LinkNet without bypass                72.6   51.4
+                                                                             LinkNet                               76.4   58.6
+TitanX. Table II compares inference time for a single input
+TABLE V: Results on CamVid test set of (1) SegNet, (2) ENet, (3) Dilation8, (4) LinkNet without bypass, and (5) LinkNet
+
+
+                    Model   Building                                            Pedestrian    Fence            Sidewalk   Bicyclist
+                                        Tree      Sky    Car   Sign     Road                           Pole                              IoU    iIoU
+
+
+                    1       88.8       87.3      92.4   82.1   20.5    97.2    57.1          49.3     27.5    84.4        30.7         65.2    55.6
+                    3       74.7       77.8      95.1   82.4   51.0    95.1    67.2          51.7     35.4    86.7        34.1         68.3    51.3
+                    2       82.6       76.2      89.9   84.0   46.9    92.2    56.3          35.8     23.4    75.3        55.5         65.3     -
+                    3       84.6       87.4      88.8   72.6   37.1    95.3    61.2          56.0     33.1    88.3        24.4         66.3    52.7
+                    4       88.8       85.3      92.8   77.6   41.7    96.8    57.0          57.8     37.8    88.4        27.2         68.3    55.8
+
+
+
+
+                  (a) Input Image                                     (b) Ground truth                                                (c) Prediction
+
+                                               Fig. 4: LinkNet prediction on Cityscapes [20] test set.
+
+
+
+
+                  (a) Input Image                                     (b) Ground truth                                                (c) Prediction
+
+                                                Fig. 5: LinkNet prediction on CamVid [21] test set.
+
+
+These performance values were calculated on validation dataset. which we ignore during training. The original frame resolution
+Input image of resolution 1024 × 512 was used for training for this dataset is 960 × 720 (W,H) but we downsampled the
+the network. A batch size of 10 and initial learning rate of images by a factor of 1.25 before training. Due to hardware
+5e−4 was found to give optimum performance. Figure 4 shows constraint, batch size of 8 was used to train the network.
+the predicted segmented output on couple of cityscapes test In Table V we compare the performance of the proposed
+images.                                                          algorithm with existing state-of-the-art algorithms on test set.
+      b) CamVid: It is another automotive dataset which con- LinkNet outperforms all of them in both IoU and iIoU metrics.
+tains 367 training, 101 validation, and 233 testing images [21]. Segmented output of LinkNet can be seen in Figure 5
+There are eleven different classes such as building, tree, sky,
+car, road, etc. while the twelfth class contains unlabeled data,
+                            V. C ONCLUSION                                          [13] X. Ren, L. Bo, and D. Fox, “Rgb-(d) scene labeling: Features and
+                                                                                         algorithms,” in Computer Vision and Pattern Recognition (CVPR), 2012
+   We have proposed a novel neural network architecture                                  IEEE Conference on, 2012, pp. 2759–2766.
+designed from the ground up specifically for semantic seg-                          [14] C. Farabet, C. Couprie, L. Najman, and Y. LeCun, “Learning hierarchical
+mentation. Our main aim is to make efficient use of scarce                               features for scene labeling,” IEEE Transactions on Pattern Analysis and
+                                                                                         Machine Intelligence, vol. 35, no. 8, pp. 1915–1929, Aug 2013.
+resources available on embedded platforms, compared to fully                        [15] J. Ngiam, A. Khosla, M. Kim, J. Nam, H. Lee, and A. Y. Ng, “Multimodal
+fledged deep learning workstations. Our work provides large                              deep learning,” in Proceedings of the 28th international conference on
+gains in this task, while matching and at times exceeding                                machine learning (ICML-11), 2011, pp. 689–696.
+                                                                                    [16] J. Redmon, S. Divvala, R. Girshick, and A. Farhadi, “You only look
+existing baseline models, that have an order of magnitude larger                         once: Unified, real-time object detection,” in Proceedings of the IEEE
+computational and memory requirements. The application of                                Conference on Computer Vision and Pattern Recognition, 2016, pp.
+proposed network on the NVIDIA TX1 hardware exemplifies                                  779–788.
+                                                                                    [17] S. Ren, K. He, R. Girshick, and J. Sun, “Faster r-cnn: Towards real-time
+real-time portable embedded solutions.                                                   object detection with region proposal networks,” in Advances in neural
+   Even though the main goal was to run the network on mobile                            information processing systems, 2015, pp. 91–99.
+                                                                                    [18] W. Liu, D. Anguelov, D. Erhan, C. Szegedy, S. Reed, C.-Y. Fu, and A. C.
+devices, we have found that it is also very efficient on high                            Berg, “Ssd: Single shot multibox detector,” in European Conference on
+end GPUs like NVIDIA Titan X. This may prove useful in                                   Computer Vision. Springer, 2016, pp. 21–37.
+data-center applications, where there is a need of processing                       [19] A. Paszke, A. Chaurasia, S. Kim, and E. Culurciello, “Enet: A deep
+                                                                                         neural network architecture for real-time semantic segmentation,” arXiv
+large numbers of high resolution images. Our network allows                              preprint arXiv:1606.02147, 2016.
+to perform large-scale computations in a much faster and more                       [20] M. Cordts, M. Omran, S. Ramos, T. Rehfeld, M. Enzweiler, R. Benenson,
+efficient manner, which might lead to significant savings.                               U. Franke, S. Roth, and B. Schiele, “The cityscapes dataset for semantic
+                                                                                         urban scene understanding,” in Proc. of the IEEE Conference on Computer
+                          ACKNOWLEDGMENT                                                 Vision and Pattern Recognition (CVPR), 2016.
+                                                                                    [21] G. J. Brostow, J. Shotton, J. Fauqueur, and R. Cipolla, “Segmentation
+   This work was partly supported by the Office of Naval                                 and recognition using structure from motion point clouds,” in ECCV (1),
+Research (ONR) grants N00014-12-1-0167, N00014-15-1-2791                                 2008, pp. 44–57.
+                                                                                    [22] V. Badrinarayanan, A. Handa, and R. Cipolla, “Segnet: A deep con-
+and MURI N00014-10-1-0278. We gratefully acknowledge the                                 volutional encoder-decoder architecture for robust semantic pixel-wise
+support of NVIDIA Corporation with the donation of the TX1,                              labelling,” arXiv preprint arXiv:1505.07293, 2015.
+Titan X, K40 GPUs used for this research.                                           [23] H. Noh, S. Hong, and B. Han, “Learning deconvolution network for
+                                                                                         semantic segmentation,” in Proceedings of the IEEE International
+                                                                                         Conference on Computer Vision, 2015, pp. 1520–1528.
+                               R EFERENCES                                          [24] V. Badrinarayanan, A. Kendall, and R. Cipolla, “Segnet: A deep
+ [1] Y. LeCun and Y. Bengio, “Convolutional networks for images, speech,                 convolutional encoder-decoder architecture for image segmentation,”
+     and time series,” The handbook of brain theory and neural networks, pp.             arXiv preprint arXiv:1511.00561, 2015.
+     255–258, 1998.                                                                 [25] J. Long, E. Shelhamer, and T. Darrell, “Fully convolutional networks
+ [2] Y. LeCun, L. Bottou, G. B. Orr, and K. R. Müller, Neural Networks:                 for semantic segmentation,” in Proceedings of the IEEE Conference on
+     Tricks of the Trade. Berlin, Heidelberg: Springer Berlin Heidelberg,                Computer Vision and Pattern Recognition, 2015, pp. 3431–3440.
+     1998, ch. Efficient BackProp, pp. 9–50.                                        [26] L.-C. Chen, G. Papandreou, I. Kokkinos, K. Murphy, and A. L. Yuille,
+ [3] M. A. Ranzato, F. J. Huang, Y.-L. Boureau, and Y. LeCun, “Unsupervised              “Semantic image segmentation with deep convolutional nets and fully
+     learning of invariant feature hierarchies with applications to object recog-        connected crfs,” arXiv preprint arXiv:1412.7062, 2014.
+     nition,” in Computer Vision and Pattern Recognition, 2007. CVPR’07.            [27] F. Yu and V. Koltun, “Multi-scale context aggregation by dilated
+     IEEE Conference on, 2007, pp. 1–8.                                                  convolutions,” arXiv preprint arXiv:1511.07122, 2015.
+ [4] A. Krizhevsky, I. Sutskever, and G. E. Hinton, “Imagenet classification        [28] F. Visin, M. Ciccone, A. Romero, K. Kastner, K. Cho, Y. Bengio,
+     with deep convolutional neural networks,” in Advances in Neural                     M. Matteucci, and A. Courville, “Reseg: A recurrent neural network-
+     Information Processing Systems 25, 2012, pp. 1097–1105.                             based model for semantic segmentation,” in Proceedings of the IEEE
+ [5] K. Simonyan and A. Zisserman, “Very deep convolutional networks for                 Conference on Computer Vision and Pattern Recognition Workshops,
+     large-scale image recognition,” arXiv preprint arXiv:1409.1556, 2014.               2016, pp. 41–48.
+ [6] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image         [29] S. Zheng, S. Jayasumana, B. Romera-Paredes, V. Vineet, Z. Su, D. Du,
+     recognition,” arXiv preprint arXiv:1512.03385, 2015.                                C. Huang, and P. H. Torr, “Conditional random fields as recurrent neural
+ [7] C. Szegedy, W. Liu, Y. Jia, P. Sermanet, S. Reed, D. Anguelov, D. Erhan,            networks,” in Proceedings of the IEEE International Conference on
+     V. Vanhoucke, and A. Rabinovich, “Going deeper with convolutions,” in               Computer Vision, 2015, pp. 1529–1537.
+     Proceedings of the IEEE Conference on Computer Vision and Pattern              [30] S. Han, H. Mao, and W. J. Dally, “Deep compression: Compressing deep
+     Recognition, 2015, pp. 1–9.                                                         neural network with pruning, trained quantization and huffman coding,”
+ [8] C. Szegedy, S. Ioffe, and V. Vanhoucke, “Inception-v4, inception-resnet             arXiv preprint arXiv:1510.00149, 2015.
+     and the impact of residual connections on learning,” arXiv preprint            [31] V. Nair and G. E. Hinton, “Rectified linear units improve restricted
+     arXiv:1602.07261, 2016.                                                             boltzmann machines,” in Proceedings of the 27th international conference
+ [9] P. Sermanet, D. Eigen, X. Zhang, M. Mathieu, R. Fergus, and Y. Le-                  on machine learning (ICML-10), 2010, pp. 807–814.
+     Cun, “Overfeat: Integrated recognition, localization and detection using       [32] S. Ioffe and C. Szegedy, “Batch normalization: Accelerating deep
+     convolutional networks,” arXiv preprint arXiv:1312.6229, 2013.                      network training by reducing internal covariate shift,” arXiv preprint
+[10] J. Tompson, R. Goroshin, A. Jain, Y. LeCun, and C. Bregler, “Efficient              arXiv:1502.03167, 2015.
+     object localization using convolutional networks,” in Proceedings of the       [33] R. Collobert, K. Kavukcuoglu, and C. Farabet, “Torch7: A matlab-like
+     IEEE Conference on Computer Vision and Pattern Recognition, 2015,                   environment for machine learning,” in BigLearn, NIPS Workshop, 2011.
+     pp. 648–656.                                                                   [34] F. Yu and V. Koltun, “Multi-scale context aggregation by dilated
+[11] P. Sturgess, K. Alahari, L. Ladicky, and P. H. Torr, “Combining appear-             convolutions,” arXiv preprint arXiv:1511.07122, 2015.
+     ance and structure from motion features for road scene understanding,”         [35] L.-C. Chen, G. Papandreou, I. Kokkinos, K. Murphy, and A. L.
+     in BMVC 2012-23rd British Machine Vision Conference, 2009.                          Yuille, “Deeplab: Semantic image segmentation with deep convolutional
+[12] D. Eigen and R. Fergus, “Predicting depth, surface normals and                      nets, atrous convolution, and fully connected crfs,” arXiv preprint
+     semantic labels with a common multi-scale convolutional architecture,” in           arXiv:1606.00915, 2016.
+     Proceedings of the IEEE International Conference on Computer Vision,
+     2015, pp. 2650–2658.
+

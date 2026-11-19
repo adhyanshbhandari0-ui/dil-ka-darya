@@ -1,0 +1,596 @@
+Duan et al. BMC Medical Informatics and Decision Making                  (2019) 19:5
+https://doi.org/10.1186/s12911-018-0730-7
+
+
+
+
+ RESEARCH ARTICLE                                                                                                                                 Open Access
+
+Utilizing dynamic treatment information for
+MACE prediction of acute coronary
+syndrome
+Huilong Duan1, Zhoujian Sun1, Wei Dong2 and Zhengxing Huang1*
+
+
+  Abstract
+  Background: Main adverse cardiac events (MACE) are essentially composite endpoints for assessing safety and
+  efficacy of treatment processes of acute coronary syndrome (ACS) patients. Timely prediction of MACE is highly
+  valuable for improving the effects of ACS treatments. Most existing tools are specific to predict MACE by mainly
+  using static patient features and neglecting dynamic treatment information during learning.
+  Methods: We address this challenge by developing a deep learning-based approach to utilize a large volume of
+  heterogeneous electronic health record (EHR) for predicting MACE after ACS. Specifically, we obtain the deep
+  representation of dynamic treatment features from EHR data, using the bidirectional recurrent neural network. And
+  then, the extracted latent representation of treatment features can be utilized to predict whether a patient occurs
+  MACE in his or her hospitalization.
+  Results: We validate the effectiveness of our approach on a clinical dataset containing 2930 ACS patient samples with
+  232 static feature types and 2194 dynamic feature types. The performance of our best model for predicting MACE after
+  ACS remains robust and reaches 0.713 and 0.764 in terms of AUC and Accuracy, respectively, and has over 11.9% (1.2%)
+  and 1.9% (7.5%) performance gain of AUC (Accuracy) in comparison with both logistic regression and a boosted
+  resampling model presented in our previous work, respectively. The results are statistically significant.
+  Conclusions: We hypothesize that our proposed model adapted to leverage dynamic treatment information in EHR
+  data appears to boost the performance of MACE prediction for ACS, and can readily meet the demand clinical
+  prediction of other diseases, from a large volume of EHR in an open-ended fashion.
+  Keywords: Acute coronary syndrome, MACE prediction, Deep learning, Bidirectional recurrent neural network,
+  Electronic health record
+
+
+Background                                                                             about 30% people are at risk of having ACS during their
+Acute coronary syndrome (ACS) is a term used to de-                                    lifetime [8].
+scribe a range of conditions associated with sudden,                                      Main adverse cardiac event (MACE) refers to a type of
+reduced blood flow to the heart, including ST-elevation                                composite end-event point event that contains unstable
+myocardial infarction (STEMI), non- ST-elevation myo-                                  angina, myocardial infarction, death, and revasculariza-
+cardial infarction (NSTEMI), and unstable angina (UA)                                  tion during hospitalization. As a vital composite end-
+[1]. ACS is the most common type of coronary artery                                    point, MACE has been frequently used in assessing
+disease (CVD) [2–4]. Every year, CVD and ACS together                                  safety and efficacy of treatment processes of ACS patients
+account for approximately 7 million deaths [5, 6], ac-                                 [9–12]. MACE prediction can be used to anticipate
+counting for around half of the global burden [7], and                                 whether an individual is likely to experience unexpected
+                                                                                       adverse cardiac events during his or her hospitalization
+* Correspondence: zhengxing.h@gmail.com                                                and after discharge [5, 13, 14]. Traditionally, cohort-based
+1
+ College of Biomedical Engineering and Instrument Science, Zhejiang
+University, Key Lab for Biomedical Engineering of Ministry of Education,
+                                                                                       studies are conducted to develop MACE prediction tools.
+Zheda Road, Hangzhou, China                                                            Recently, with the increasing availability of a large volume
+Full list of author information is available at the end of the article
+
+                                         © The Author(s). 2019 Open Access This article is distributed under the terms of the Creative Commons Attribution 4.0
+                                         International License (http://creativecommons.org/licenses/by/4.0/), which permits unrestricted use, distribution, and
+                                         reproduction in any medium, provided you give appropriate credit to the original author(s) and the source, provide a link to
+                                         the Creative Commons license, and indicate if changes were made. The Creative Commons Public Domain Dedication waiver
+                                         (http://creativecommons.org/publicdomain/zero/1.0/) applies to the data made available in this article, unless otherwise stated.
+Duan et al. BMC Medical Informatics and Decision Making   (2019) 19:5                                                      Page 2 of 11
+
+
+
+
+of electronic health record (EHR) data, there is a gradual                   samples collected from a Chinese hospital, to
+attention to use data-driven approaches to construct effi-                   demonstrate the effectiveness of our proposed
+cient tools for MACE prediction [12, 15–17]. Theoretic-                      model for MACE prediction.
+ally speaking, the two types of studies have different
+concerns. Cohort-based studies are usually based on a                     The remainder of this paper is organized as follows.
+small set of handpicked patient features which are col-                 The related work is introduced in Section 2. In Section
+lected in costly trials, and the generated tools are relatively         3, we present our proposed model of utilizing dynamic
+simple to use in clinical practice. On the contrary, EHR                treatment information for predicting MACE after ACS,
+data-driven models can remedy the limitations of cohort-                via a typical deep neural network architecture, i.e.,
+based studies, but are usually complex and difficult to in-             Bi-LSTM. In Section 4, we present experimental results
+terpret. Although valuable, most existing models proposed               and evaluate the performance of our method in com-
+by both types of studies have a common serious limitation,              parison with the state-of-the-art models. The merits and
+i.e., they are built on static patient features and neglect the         limitations of our proposed model are discussed in
+influence of dynamic treatment information on MACE                      Section 5. Finally, Section 6 concludes our work and dis-
+prediction. Since there have been considerable evidence                 cusses future directions.
+that clinical conditions of patients are dynamically chan-
+ged when treatments are performed, dynamic treatment
+information has the potential to boost the performance of               Related work
+MACE prediction.                                                        From the technique perspective, the work on MACE
+   To this end, this study proposes a data-driven model                 prediction can be categorized as cohort-based studies
+that leverages recurrent neural networks (RNN) to learn                 and data-driven studies, respectively.
+the deep feature representation of dynamic features which                  As a traditional approach of medical research,
+are extracted from EHR [18–20]. In comparison with trad-                cohort-based studies have been widely adopted to inves-
+itional temporal analysis methods, such as the Cox pro-                 tigate specific clinical hypothesis questions, e.g., the
+portional hazard model [21], RNN provides a substantial                 relationship between potential risk factors and MACE
+nonlinear improvement in model generalization and is                    [23, 24]. In general, a hypothetical question is firstly
+more scalable [7]. RNN has proven effective in many                     proposed by clinical researchers, and then a group of
+difficult machine learning tasks, such as image processing              subjects are recruited into the cohort and observed over
+[18] and language translation [19]. To fully utilize the                a period, to collect data that may be relevant to the
+dynamic information and avoid the influence of gradient                 hypothesis. The prediction models can be furtherly
+vanishing, we adopt a specific type of RNN structure,                   developed based on the collected cohort data, via univar-
+i.e., bi-directional RNN with long-short time memory                    iate, multivariate logistic regression or Cox proportional
+(Bi-LSTM) [20, 22], to extract dynamic features from                    hazards regression model, etc. The most famous cohort-
+EHR data to predict MACE. To our best knowledge,                        based models for MACE prediction include the Global
+this is the first work for MACE prediction by taking                    Registry of Acute Coronary Events (GRACE) [2], the
+into account not only the static patient features but                   Thrombolysis in Myocardial Infarction (TIMI) [3], and
+also dynamic treatment information into a deep                          the Platelet Glycoprotein IIb/IIIa Unstable Angina:
+neural network model.                                                   Receptor Suppression Using Integrilin Therapy (PUR-
+                                                                        SUIT) [5], etc.
+  The contributions of this paper can be summarized as                     Although useful, there is a serious flaw of cohort-based
+follows:                                                                studies: they usually select a small set of patient variables,
+                                                                        to simplify the model and facility its use in clinical practice
+   We present a deep learning model to utilize                         [25]. However, the inclusion of fewer risk factors into the
+    dynamic treatment information for predicting                        model learning may lead to the degradation of the model’s
+    MACE after ACS, and the incorporation of dynamic                    predictive performance. On the contrary, more potential
+    treatment information into learning boosts the                      risk factors (e.g., Cystain C, homocysteine in MACE pre-
+    performance of MACE prediction.                                     diction) are recently identified in the literature [26], but
+   The proposed model extracts the latent                              are not included in the existing cohort-based models, and
+    representation of dynamic treatment features via                    therefore eventually limits the value of the cohort-based
+    Bi-LSTM, which can be used to predict whether                       models.
+    a patient occurs MACE in his or her                                    Recently, with the widely application of EHR in health-
+    hospitalization.                                                    care facilities, thousands of data-driven models have
+   Extensive experiments are conducted on a real EHR                   been developed by exploring the huge potential of EHR
+    dataset, which consists of 2930 ACS patient                         data in various clinical applications, e.g., screening,
+Duan et al. BMC Medical Informatics and Decision Making         (2019) 19:5                                                        Page 3 of 11
+
+
+
+
+diagnosis, treatment, prognosis and monitoring [27].                          Methods
+Compared with the traditional cohort-based studies,                           Figure 1 illustrates our idea of utilizing temporal treat-
+EHR data-driven models can well address the limitations                       ment information for MACE prediction of ACS patients
+of cohort-based studies [25].                                                 during their hospitalizations. More details of our ap-
+  Early work on data-driven prediction has been per-                          proach are presented as follows:
+formed based on conventional machine learning and
+data mining methods. For example, Hu et al. proposed a
+hybrid model that combines both random forest and                             Patient feature processing and embedding
+support vector machine to predict the risk of MACE                            Clinical information is regularly observed/recorded in
+[11]. Bandyopadhyay et al. proposed a Bayesian network                        EHR data. From the temporal perspective, clinical data
+to predict cardiovascular risk [28]. In [29], a vector                        of a patient’s EHR d = 〈xs, Xd〉 can be categorized as both
+spline multinomial logistic regression model was pre-                         static features xs and dynamic features Xd. As shown in
+sented to predict risks of patients with ovarian tumors.                      Fig. 2, our encoders firstly map the dynamic part of an
+These works show the usefulness of utilizing medical                          input to a sequence of K-dimensional embeddings Xd
+data for clinical risk prediction. Recently, many deep                        = (x(1), x(2), … , x(T)), using a lookup table with one
+learning models, e.g., Stacked Denoising Auto-encoder                         vector for each time epoch (e.g., one hospitalization day
+(SDAE), and Convolutional Neural Network (CNN), etc.,                         in this study), where x(t) = [x1, x2⋯, xK] (1 ≤ t ≤ T) is the
+have been adopted for the prediction/detection task in                        encoded vector, K is the cardinal number of dynamic
+medical domain and achieved a promising perform-                              features, and T is the length of stay (LOS) of that pa-
+ance. For example, Raghavendra et al. proposed a                              tient. The dimensions of dynamic features observed in
+CNN-based model to diagnosis the glaucoma using                               that time epoch are set to 1 and the rest are 0.
+digital fundus images [15], and afterwards they ap-                              The aim of this study is to utilize dynamic treatment
+plied CNN to detect the myocardial infarction and                             information to boost the performance of MACE predic-
+ventricular arrhythmias in ECG singles [16, 17].                              tion for ACS patients. To this end, we need to deal with
+Huang et al. proposed a regularized SDAE to predict                           information that may cause MACE, i.e., the record hap-
+the risk of ACS patients [30]. Li et al. developed a                          pened before MACE. To this end, we need to truncate
+deep belief network based model to predict the risk                           our data to eliminate the influence of clinical informa-
+factors of bone disease progression [31].                                     tion that would not cause MACE. Specifically, if an
+  Although successful, not the full potential of EHR data                     adverse cardiac event is observed at time stamp t for a
+has been explored. To the best of our knowledge, most of                      particular patient sample 〈xs, (x(1), x(2), … , x(t), … , x(T))〉
+existing data-driven models were trained based on static                      with LOS T, the prefix of the original input sequence,
+patient features, and lack the ability to model time-                         i.e., 〈xs, (x(1), x(2), … , x(t))〉, is selected as a training sam-
+dependent co-variates in the observation window such                          ple (〈xs, (x(1), x(2), … , x(t))〉, c), where c ∈ {0 : none, 1 :
+that an individual’s disease progression mediated by dy-                      MACE } denotes the MACE label at time stamp t. If
+namic treatment information cannot be reliably measured,                      multiple MACEs are observed in one patient’s
+which limits the performance of predictive models.                            hospitalization, the firstly happened MACE and its’
+
+
+
+
+ Fig. 1 Utilizing EHR data to support MACE prediction during ACS patients’ hospitalization
+Duan et al. BMC Medical Informatics and Decision Making        (2019) 19:5                                                  Page 4 of 11
+
+
+
+
+ Fig. 2 Representing dynamic features found on each hospitalization day as a specific vector
+
+
+
+
+previous observed treatment information are selected to                      backward hidden layer. The input layer encodes tem-
+be the MACE label and the training sample, respectively.                     poral treatment information extracted from raw EHR
+   Note that, (x(1), x(2), … , x(T)) is a sequence of dynamic fea-           data. Then the dynamic feature-embedding layer con-
+tures observed during a patient’s hospitalization. Intuitively,              verts the treatment information to an embedding vec-
+we initialize the representation for these dynamic features of               tor, whose details are explained above. After dynamic
+each individual patient. A widely adopted strategy is to rep-                feature-embedding layer, there are two parallel LSTM
+resent each word (a.k.a. dynamic feature) by using one-hot                   layers: forward hidden layer and backward hidden
+vector. However, these dynamic features observed on a spe-                   layer. At each time-step t, the forward hidden layer
+cific time-period (i.e., one day, etc.) and thus may have no                                                           !       !
+                                                                             will compute a hidden representation ð h 1 ; ⋯; h t Þ of
+strict order. In fact, these dynamic features are treatment                  the sub-sequence that contains treatment information
+interventions, which can be performed on the patient in a                    from x1 to xt. For the backward LSTM, it processes
+loosely-structure manner [32]. Therefore, as depicted                        each treatment sequence in its reverse order, and forms a
+in Fig. 2, we embed the set of dynamic features ob-
+served on each hospitalization day to a vector, and                          sequence of hidden representation ðh 1 ; ⋯; h t Þ of the
+then apply the standard Bi-LSTM to encode context-                           sub-sentence that contains treatment information from xt
+                                                                                                                   !
+ual semantic representations for dynamic features.                           to x1. We calculate the hidden states h t by the following
+                                                                             equations:
+                                                                                                   !           
+Using Bi-LSTM to generate deep representations of                                it ¼ σ W i xt þ U i h t−1 þ bi                     ð1Þ
+treatment information
+                                                                                                                  
+Our method assumes use of both RNN and logistic                                 ^ t ¼ tanh W c xt þ U c !
+                                                                                C                       h t−1 þ bc                  ð2Þ
+regression to predict MACEs of ACS patients during
+their hospitalizations. The simplified layer architecture                                          !            
+that generates deep representation of our mix model is                          f t ¼ σ W f xt þ U f h t−1 þ b f                    ð3Þ
+presented in Fig. 3.
+  Original RNN is a neural network architecture de-                                        ^ t þ f t  C t−1
+                                                                                C t ¼ it  C                                        ð4Þ
+signed to handle sequential input data, but it lacks the                                               !      
+ability to model long-term dependencies. A LSTM is a                            ot ¼ σ W o xt þ U o h t−1 þ bo                      ð5Þ
+type of RNN cell that addresses this issue by keeping a
+memory cell to serve as a summary of the preceding                              !
+                                                                                h t ¼ ot  tanhðC t Þ                               ð6Þ
+elements of an input sequence. In this study, we adopt
+Bi-LSTM to extract deep features from dynamic treat-                         where σ represents the sigmoid activation function, W∗
+ment information in EHR data. As can be seen in Fig. 3,                      is the input-to-hidden weight matrix, U∗ is the state-to-
+it has four kinds of layers: input layer, dynamic                            state recurrent weight matrix, and b∗ is the bias vector.
+feature-embedding layer, forward hidden layer, and                           The hidden state of LSTM is the concatenation of
+Duan et al. BMC Medical Informatics and Decision Making       (2019) 19:5                                                   Page 5 of 11
+
+
+
+
+ Fig. 3 The framework of bi-directional LSTM used in this proposed MACE prediction model
+
+
+
+     !                                                                      is performed using the back-propagation and the mini-
+ðct ; h t Þ . The long-term memory is saved in ct, and the
+forget gate and input gate are used to control the updat-                   batch stochastic gradient descent strategy.
+ing of Ct, and the output gate is used to control the up-
+              !                                                             Results
+dating of h t .
+                                                                            Data collection
+  To make full use of information hidden in Bi-LSTM,
+                                                                            This is a retrospective study assessing the performance
+we merge the hidden representations of forward and
+                                     !                                      of MACE prediction. The experimental dataset was ex-
+backward layers by concatenating h t and h 1 ., i.e., the                   tracted from the cardiology department of Chinese PLA
+last states of both layers, Hence, the output representa-                   General Hospital. Patients with ACS who admitted to
+                                                      !                     the hospital between 2012 and 2016 were randomly se-
+tion of Bi-LSTM layer can be denoted as he ¼ ½h t ; h 1 .
+The output hidden layer he of input sequence xe is then                     lected in the experimental dataset. Three experienced
+incorporated with static patient features xs, which is                      clinicians were employed to ascertain MACE by
+already compressed, to represent the final state of the                     reviewing medical records with a majority voting
+patient sample z = [xs, he].                                                strategy. The experimental EHR dataset contains data
+                                                                            for 2930 ACS patients. The dataset documented 233
+MACE prediction                                                             static patient features including demographics, smok-
+To predict a distribution P(yi) over MACE outcome yi ∈                      ing status, alcohol consumption, laboratory values and
+C, the outputs z(i) are passed through a logistic regres-                   diagnosis captured at the admission stage, etc. The
+sion layer ^yi ¼ σðWz zðiÞ þbz Þ , where Wz and bz are                      dynamic data, including temporal treatment and care
+                                                                            activities delivered during patients’ hospitalization,
+learned parameters for logistic regression.
+                                                                            with 2194 features, is documented in EHR as well as
+  To learn the parameters of the proposed model, we
+                                                                            static ones.
+set the cross-entropy of y as the loss function and
+                                                                               To be more specific, static patient features including
+minimize it in terms of Wr,Wc ,Wf,Wo,Wz and bz. As
+                                                                            demographic variables (e.g., age and gender), physical
+our model is a supervised method, each patient
+                                                                            examination variables (e.g., blood pressure, heart rate
+sample x(i) has its golden MACE outcome y(i). The
+                                                                            and BMI), comorbidities, laboratory results, and disease/
+following loss function is used:
+                                                                            treatment history (e.g., Post-PCI, Post-CABG) were col-
+             1 XjDj  ðiÞ                                              lected at the admission stage. All static features are
+                              ð iÞ         ð iÞ             ð iÞ
+Loss ¼ −             c    logy     þ   1−c        log   1−y                 time-invariant in a single hospitalization visit. Comor-
+            jDj i¼1
+                                                                            bidities were categorized as present or absent at the ad-
+                                                                  ð7Þ       mission stage of patients’ hospitalizations. Variables with
+                                                                            more than 30% missing values were not included in the
+where ∣D∣ is the total number of training samples, c(i)                     analysis while the missing data belong to variables with
+is the MACE indicator for the i-th patient where 1 indi-                    less than 30% missing values is set by the median of that
+cates the occurrence of MACE and 0 control, and y(i) is                     variable. Table 1 shows details of some critical static pa-
+the output of the proposed model for an input x(i). The                     tient features.
+weights are updated during the training phase. Dynamic                         Dynamic features refer to medical interventions and
+feature embeddings are fine-tuned as well. Optimization                     their occurring time-stamps. Figure 4 plots both names
+Duan et al. BMC Medical Informatics and Decision Making               (2019) 19:5                                                 Page 6 of 11
+
+
+
+
+Table 1 Baseline characteristics of the experimental dataset                        committee ruled that no formal ethics approval was
+Characteristics                                 No. of participants                 required in this particular case.
+                                                (n = 2930)
+Demographics                                                                        Experiment settings and baseline models
+  Age, (mean ± sdv.) [min-max]                  62.27 ± 12.11 [28–91]               We present the following four learning strategies for
+  Gender, Male/Female                           2079/851                            MACE prediction:
+Physical examination, (mean ± sdv.) [min-max]
+                                                                                     1) Logistic regression based on static patient features,
+  Systolic BP, mm Hg                            132.10 ± 17.64 [11–240]
+                                                                                        named LR. We build a LR classifier solely based on
+  Diastolic BP, mm Hg                           77.59 ± 10.17 [35–120]                  static patient features to construct a MACE
+  Height, cm                                    167.01 ± 8.15 [56–188]                  prediction model. This model does not use dynamic
+  Weight, kg                                    71.81 ± 12.42 [32–200]                  treatment information into learning.
+  Ejection Fraction, (mean ± sdv.) [min-max] 59.51 ± 7.82 [17–78]                    2) A boosted resampling model presented in our
+                                                                                        previous work [12], named Boosted-RMTM. This
+Comorbid conditions (%)
+                                                                                        model was built based on static patient feature and
+  Diabetes                                      803 (27.4%)
+                                                                                        dynamic treatment information was not used during
+  Hypertension                                  1981 (67.6%)                            learning, neither.
+  Heart Failure                                 165 (5.6%)                           3) The proposed model was built based on both static
+  arteriosclerosis                              2267 (77.4%)                            patient features and dynamic treatment
+  History of current or previous smoking        1113 (38.0%)                            information, named mix model.
+                                                                                     4) The proposed model was built based on dynamic
+Laboratory data, (mean ± sdv.) [min-max]
+                                                                                        treatment information, named dynamic model. This
+  Creatinine, umol/L                            78.72 ± 38.18 [29.5–739.4]
+                                                                                        model does not use static patient features into
+  Creatinine kinase, umol/L                     86.11 ± 112.02 [6.2–4651.1]             learning.
+  Alanine aminotransferase, umol/L              26.02 ± 27.66 [1.7–593]
+  Aspartate aminotransferase, umol/L            21.70 ± 19.53 [5.8–589.4]             We employ the four models to verify that if the
+  Troponin T, ng/ml                             0.029 ± 0.084 [0.002–0.886]         utilization of dynamic treatment information can boost
+                                                                                    the performance of MACE prediction for ACS patients.
+  Glucose, umol/L                               6.16 ± 2.26 [2.69–28.62]
+                                                                                    The accuracy and AUC are selected as evaluation met-
+Disease/Treatment history (%)
+                                                                                    rics in the experiments. These measure criterions are
+  Post-PCI (patient who has taken PCI           816 (27.8%)                         widely used in the evaluation of classification and pre-
+  surgery in the past and was admitted
+  into the hospital at this time)                                                   diction tasks in clinical applications.
+                                                                                      All four models were trained using the experimental
+  Post-CABG (patient who has taken              46 (1.6%)
+  CABG surgery in the past and was                                                  dataset. We iteratively divided the data into the train
+  admitted into the hospital at this time)                                          and test set with a ratio of 4:1, and reported the model
+Length of Stay, (mean ± sdv.) [min-max]         9.12 ± 7.05 [1–54]                  performance on the test set. Specifically, we took four
+MACE (%)                                        752 (22.4%)                         folds of data as the training set and the remaining
+                                                                                    one-fold as the test set. We conducted this for five dif-
+                                                                                    ferent folds and calculated the average performance.
+                                                                                    Both the dynamic and mix models were trained ten
+and occurring time-stamps of top 30 most used treat-                                times because of the non-convex character of the neural
+ment interventions contained in the experimental                                    network. The results obtained by both dynamic and mix
+dataset. These 30 interventions occupy almost 50%                                   model are the average performances of 10 results. The
+treatment behaviors for ACS patients, while the other                               performance of both Boosted-RMTM and LR was de-
+2194 interventions occupy the left 50%, indicating                                  rived from our previous work [12].
+that they are infrequently adopted in ACS patients’                                   As to the hyper-parameter setting of the proposed
+treatment processes such that our dataset is very                                   models, the learning rate is 0.01, the L2 coefficient is
+sparse.                                                                             0.01, the epoch is 200, the hidden state of Bi-LSTM is
+  Approval by the Data Protection Committee at the                                  256, and the static data is transformed into a
+Chinese PLA General Hospital was obtained prior to                                  128-dimensional vector. To avoid overfitting, we used
+initiation of the study. Informed consent was waived                                early stop and weight decay as regularization tricks. The
+because of the presence of de-identified data and lack                              proposed models were implemented by Python 3.5 in
+of feasibility of obtaining informed consent from all                               the Tensor flow framework. The source code is available
+participants in the experimental dataset. A local ethics                            in https://github.com/ZJU-BMI/mace_prediction.
+Duan et al. BMC Medical Informatics and Decision Making       (2019) 19:5                                                  Page 7 of 11
+
+
+
+
+ Fig. 4 Number and frequency of top 30 treatment interventions in the collected EHR dataset
+
+
+Data analysis                                                               some sampling tricks, such as over-sampling or
+In the experiments, we used two metrics, i.e., AUC                          under-sampling, can be imposed to address the data im-
+and accuracy, to evaluate the performance of MACE                           balance problem. We are sure that incorporating the
+prediction. The value of AUC is invariant to the cali-                      proposed RNN-based learning strategy into the boosted
+bration [33]. Regarding the accuracy, different models                      resampling framework can further improve the perform-
+have their specific optimal thresholds, which derives                       ance of MACE prediction. However, it is beyond the
+different calibration strategies [34]. However, it would                    scope of this study, and we plan to implement it in our
+be inappropriate to compare the performance between                         future work.
+models if these models are calibrated with different
+strategies. To this end, we selected 0.5, which is the                      Effect of length of stay
+widely used threshold in literature, in our experi-                         The longer one patient stays in a hospital, the more
+ments for measuring the performance of MACE                                 EHR data are accumulated. Intuitively, we hold the idea
+prediction.                                                                 that the learning model will perform better if more data
+  Table 2 shows the evaluation results on both accuracy                     are integrated into learning. To validate this assumption,
+and AUC. Specifically, the proposed dynamic model ob-                       we explore the tendency of performance with the differ-
+tains the best result in terms of both AUC and accuracy                     ent length of stay.
+for MACE prediction. It indicates that the utilization of                     As can be seen in Fig. 5, we notice that both the AUC
+dynamic treatment information can improve the predic-                       and accuracy curves dramatically increases with the
+tion performance for ACS. As can be seen in Table 2,                        increase of LOS. It indicates that incorporating more dy-
+the proposed mix model does not achieve expected per-                       namic treatment information into learning can boost the
+formance for MACE prediction. The performance of the                        prediction performance. Also, we can see from Fig. 5,
+mix model is even worse than that of Boosted-RMTM.                          that the dynamic model significantly performs better
+It is possible that the static data is sparser than that of                 than the mix model regardless of the increase in LOS.
+dynamic data, and thus deteriorates the performance for                     This phenomenon, which is similar to the result listed in
+MACE prediction.                                                            Table 2, proves the static features indeed deteriorate the
+  Note that there are just 22.5% patient samples who                        performance.
+have MACE during their length of stay (as shown in
+Table 1), indicating that our dataset is typically imbal-                   Effect of training set size
+anced. To enhance the generalize ability of our model,                      Next, we study how the proposed approach performs
+                                                                            with the increasing size of experimental data. As pre-
+Table 2 Experimental results with 7 days’ dynamic information               sented in Fig. 6a, the proposed dynamic model con-
+                           AUC                         Accuracy             verges using only about 30% of data in terms of AUC,
+LR                         0.637 ± 0.010               0.752 ± 0.007        while the curve of the mix model increases consistently
+Mix                        0.681 ± 0.006               0.746 ± 0.005        with the increase in the ratio of size. Figure 6b shows
+Dynamic                    0.713 ± 0.005               0.764 ± 0.004
+                                                                            similar trends in terms of accuracy. The curve of the
+                                                                            dynamic model increases slowly with the increase in the
+Boosted-RMTM               0.700 ± 0.003               0.689 ± 0.004
+                                                                            ratio of data and significantly outperforms the mix
+Duan et al. BMC Medical Informatics and Decision Making          (2019) 19:5                                                    Page 8 of 11
+
+
+
+
+ Fig. 5 Impact of the different length of stay on the performance of MACE prediction regarding (a) AUC and (b) Accuracy
+
+
+
+
+model. It suggests that the dramatic robustness of the                         Discussions
+dynamic model. As well, it can be anticipated that the                         With these experimental results, we summarize several
+prediction performance of the mix model can be im-                             interesting findings as follows:
+proved when to learn with more data.
+                                                                                 In most cases, our proposed dynamic model
+Statistical test                                                                  outperforms benchmark models for predicting MACE
+We perform a paired comparison t-test to verify if the                            after ACS. The p-values between the proposed model
+performance improvement of the proposed approach                                  and benchmark models show that there is a significant
+over benchmark models is statistically significant. The                           difference between the performances obtained by the
+paired sample t-test is a statistical procedure used to                           employed models. Our proposed dynamic model has
+determine whether the mean difference between the two                             an average AUC of 0.713 and is thus the best MACE
+sets of observations is zero. Shifting to our problem,                            predictor. These findings confirm our assumption that
+MACE of all patient samples was predicted using both                              leveraging dynamic treatment information contained
+our proposed models and baseline models, resulting in                             in a large volume of heterogeneous EHR appears to
+pairs of observations between each pair of models.                                boost the performance of MACE prediction, and has
+  The performance of our approach showed consider-                                significant potential to meet the demand clinical
+able improvements regarding AUC in predicting MACE                                prediction of other diseases, from a large volume of
+of ACS patients and the t-test showed in Table 3 demon-                           EHR in an open-ended fashion.
+strated that there are indeed statistically significant                          With the gradual inclusion of more treatment
+differences between our model and benchmark models.                               information into learning for individuals, the prediction
+As can be seen in Table 3, each model we implemented                              performance dramatically increases. The tendency of
+has a substantial difference compared to the others. All                          the curve in Fig. 5 arises as the hospitalization day per
+model pairs have a p-value< 0.05, which suggests that                             patient increases. As well, it is clearly to see that the
+the proposed deep learning approach, especially the                               curve surpasses 0.7 in terms of AUC after the number
+dynamic model, obtains a competitive and statistically                            of hospitalization days is larger than five. It indicates
+significant performance in MACE prediction in compari-                            that we need at least 5 days’ treatment information per
+son with the benchmark models.                                                    patient to obtain the stable prediction results.
+
+
+
+
+ Fig. 6 Impact of the different ratio of training data for MACE prediction, in terms of (a) AUC, and (b) Accuracy
+Duan et al. BMC Medical Informatics and Decision Making              (2019) 19:5                                                   Page 9 of 11
+
+
+
+
+Table 3 Statistical AUC differences in MACE prediction between                        For one thing, the dynamic nature of patient status
+models                                                                                 is often essential/critical to the selection of
+Model                Boosted-RMTM       LR          Dynamic      Mix                   treatment interventions. To address this challenge,
+Boosted-RMTM         /                  5.98E-5**   5.46E-11**   0.018*                we expect that our proposed model can incorporate
+LR                   /                  /           4.68E-7**    1.17E-3**             richer execution information, e.g., vital signs,
+                                                                                       symptoms, and clinical observations on patient
+Dynamic              /                  /           /            1.16E-9**
+                                                                                       status, etc., into learning, which would make our
+Mix                  /                  /           /            /
+                                                                                       proposed model more intelligent in the treatment
+**: p-value < 0.01; *: p-value < 0.05
+                                                                                       adoption and MACE prevention.
+                                                                                      For the other thing, our proposed model neglects
+      It is not surprising to see from Fig. 6 that with                               the causal relations between treatment interventions
+       sufficient training data samples, the proposed                                  and effects. Note that causal effect analysis is useful
+       model can achieve a better prediction                                           to find out unexpected changes in treatment
+       performance since deep learning method can                                      interventions and explain why scheduled treatment
+       achieve accurate representations from the big                                   plans are changed to obtain the optimal treatment
+       data. Due to the large amount of EHR data                                       effects. As an open medical problem, the causal
+       generated over time, we plan to investigate the                                 effect analysis can be benefited in mining a large
+       suitability of deep neural networks for discovering                             scale of EHR data in a maximum-informative
+       nontrivial knowledge that best describe the                                     manner.
+       inpatient treatment journeys and then improve
+       the performance of MACE prediction.
+                                                                                   Conclusion
+  Overall, compared with benchmark models, our model                               This paper proposes a novel deep learning based approach
+improves the performance of MACE prediction of ACS.                                to address the MACE prediction problem for ACS pa-
+Theoretically, many state-of-the-art machine learning al-                          tients during their hospitalization. In comparison with
+gorithms, such as logistic regression, rely on aggregate fea-                      existing ACS risk scoring models that can only rely on a
+tures to produce a MACE prediction model based on                                  small set of patient features, our proposed model can pre-
+static patient features and are not suitable for coping with                       dict the occurrence probabilities well of MACE by utiliz-
+the dynamic nature of treatment information during the                             ing a large volume of longitudinal and heterogeneous
+hospitalization of ACS patients [35]. As a result, they lack                       EHR data, especially the dynamic treatment information.
+the ability to model time-dependent co-variates in the ob-                         The proposed model relies on a Bi-LSTM-based deep
+servation window such that an individual’s progression                             learning structure to aggregate dynamic treatment infor-
+mediated by dynamic treatment information cannot be                                mation in patients’ hospitalization. Then, the extracted
+reliably measured to improve the performance of predict-                           latent dynamic treatment features are concatenated with
+ive models in a continuous manner. To address this                                 static patient features to induce a regression layer for
+challenge, we utilize deep learning tacit to generate latent                       MACE prediction. Experiments conducted on a real clin-
+representations of dynamic treatment information for                               ical dataset illustrate that our proposed model can reach a
+ACS patients from their heterogeneous EHRs. It provides                            highly competitive performance in predicting MACE for
+a possible avenue to predict MACE in a real-time manner.                           ACS patients, compared to state-of-the-art machine learn-
+  The experimental results were evaluated by clinical                              ing models, e.g., logistic regression, and the boosted-
+experts from Chinese PLA General hospital. In general,                             RMTM model proposed in our previous work.
+physicians from the hospital are satisfied with the pre-                              We plan to carry out our future work along two direc-
+diction performance, and they indicate that the proposed                           tions. First, we intend to conduct a large scale of experi-
+model can provide a continuous MACE prediction                                     ments and evaluate the performance of our proposed
+service to monitor treatment processes of ACS patients                             model on a larger scale of EHRs with more complex
+predictively. It is also applicable to clinical decision sup-                      diseases. In addition, we plan to develop and deploy a
+port systems that recommend proper treatment inter-                                dynamic MACE prediction service in treatment pro-
+ventions for physicians, which can significantly minimize                          cesses of ACS patients. As advocated by our clinical
+the possibility of MACE occurrences.                                               collaborators, the dynamic MACE prediction service can
+                                                                                   support healthcare professionals for estimating clinical
+Limitations                                                                        risks of ACS patients nearly real-time and therefore
+Although our study reveals that the proposed model is                              adjusting/scheduling appropriate treatment interventions
+useful in predicting MACE after ACS, there are complex                             to reduce the occurrences of MACE in a continuous and
+and critical tasks that need to be further considered.                             predictive manner.
+Duan et al. BMC Medical Informatics and Decision Making                 (2019) 19:5                                                                      Page 10 of 11
+
+
+
+
+Abbreviations                                                                         3.    Antman EM, et al. The TIMI risk score for unstable angina/non-ST elevation
+ACC: Accuracy; ACS: Acute coronary syndrome; AUC: Area under the curve;                     MI: a method for prognostication and therapeutic decision making. J Am
+Bi-LSTM: Bidirectional long short term memory; EHR: Electronic health record;               Med Assoc. 2000;284(7):835–42.
+LR: Logistic regression; MACE: Major adverse cardiac event; RNN: Recurrent            4.    Mega JL, et al. Rivaroxaban in patients with a recent acute coronary
+neural network                                                                              syndrome. N Engl J Med. 2012;366(1):9–19.
+                                                                                      5.    Mozaffarian D, et al. American Heart Association statistics committee and
+Acknowledgements                                                                            stroke statistics – 2015 update: a report from the American Heart
+This work was supported by the National Nature Science Foundation of                        Association. Circulation. 2015;131(4):e29–322.
+China under Grant No 61672450. The author would like to give special                  6.    Weiwei Chen, et al. Report on Cardiovascular Disease in China
+thanks to all experts who cooperated in the evaluation of the proposed                      2014,Encyclopedia of China Publishing House, 2015, ISBN 978-7-5000-9510-1.
+method. The authors are especially thankful for the positive support received         7.    Ohira T, Iso H. Cardiovascular disease epidemiology in Asia: an overview.
+from Chinese People Liberate Army General Hospital as well as to all medical                Circ J. 2013;77:1646–52.
+staff involved.                                                                       8.    Brindle PM, et al. The accuracy and impact of risk assessment in the primary
+                                                                                            prevention of cardiovascular disease: a systematic review. Heart. 2006;92(12):
+Funding                                                                                     1752–9.
+This study was funded by the National Nature Science Foundation of China              9.    Goff DC, et al. 2013 ACC/AHA guideline on the assessment of cardiovascular
+under Grant No 61672450. The funder had no role in the design of the                        risk: a report of the American College of Cardiology/American Heart
+study, collection, analysis and interpretation of data, or writing the                      Association task force on practice guidelines. Circulation. 2014;129:S49–73.
+manuscript.                                                                           10.   Boersma E, et al. Predictors of outcome in patients with acute coronary
+                                                                                            syndromes without persistent ST-segment elevation. Results from an
+Availability of data and materials                                                          international trial of 9461 patients. Circulation. 2000;101(22):2557–67.
+The datasets generated and/or analyzed during the current study are not               11.   D. Hu, et al. Utilizing Chinese admission records for MACE prediction of
+publicly available due to the hospital’s regulations, but are available from the            acute coronary syndrome, international journal of environmental research
+corresponding author on reasonable request.                                                 and public health, 13(9):912, 2016.
+                                                                                      12.   Huang Z, et al. MACE prediction of acute coronary syndrome via boosted
+Authors’ contributions                                                                      resampling classification using electronic medical records. J Biomed Inform.
+All authors conceived of the proposed idea. ZH and WD planned the                           2017;66:161–70.
+experiments. HD and ZS implemented the methods, carried out the                       13.   Acute Coronary Syndrome. Available online: https://en.wikipedia.org/wiki/
+experiments. ZS extracted experimental dataset from the hospital                            Acute_coronary_syndrome (Access 26 Sept 2018).
+information system. WD evaluated the proposed models. ZH wrote the                    14.   Ye S. Coronary event. In: Gellman MD, Turner JR, editors. Encyclopedia of
+manuscript with the comments from HD, ZS, and WD. All authors read and                      Behavioral Medicine. New York, NY: Springer New York; 2013. p. 503.
+approved the final manuscript.                                                        15.   Raghavendra U, et al. Deep convolution neural network for accurate
+                                                                                            diagnosis of glaucoma using digital fundus images. Inf Sci. 2018;441:41–9.
+Ethics approval and consent to participate                                            16.   Raghavendra U, et al. Automated identification of shockable and non-
+Approval by the Data Protection Committee at the Chinese PLA General                        shockable life-threatening ventricular arrhythmias using convolutional
+Hospital was obtained prior to initiation of the study. Informed consent was                neural network. Futur Gener Comput Syst. 2018;79(3):952–9.
+waived because of the presence of deidentified data and lack of feasibility of        17.   Raghavendra U, et al. Application of deep convolutional neural network for
+obtaining informed consent from all participants in the experimental dataset.               automated detection of myocardial infarction using ECG signals. Inf Sci.
+The ethics committee at the Chinese PLA General Hospital ruled that no                      2017;415:190–8.
+formal ethics approval was required in this particular case.                          18.   Cho K, Van Merrienboer B, Gulcehre C, et al. Learning phrase representations
+                                                                                            using RNN encoder-decoder for statistical machine translation. In empirical
+Consent for publication                                                                     methods in natural language processing (EMNLP). 2014:1724–1734. Doha, Qatar.
+Not applicable.                                                                       19.   Karpathy A, Li F. Deep visual-semantic alignments for generating image
+                                                                                            descriptions. Computer vision and pattern recognition (CVPR), 2015:3128–
+Competing interests                                                                         3137. Boston, MA, USA.
+The authors declare that they have no competing interests.
+                                                                                      20.   Hochreiter S, Schmidhuber J. Long short-term memory. Neural Comput.
+                                                                                            1997;9(8):1735–80.
+Publisher’s Note                                                                      21.   D.R. Cox. Regression models and life-tables, journal of the Royal Statistical
+Springer Nature remains neutral with regard to jurisdictional claims in                     Society, series B (methodological), 34(2):187–220, 1972.
+published maps and institutional affiliations.                                        22.   O. Melamud, J. Goldberger, and I. Dagan. Context2vec: learning generic
+                                                                                            context embedding with bidirectional LSTM. In CoNLL, 2016.
+Author details                                                                        23.   Adams TD, Gress RE, Smith SC, et al. Long-term mortality after gastric
+1                                                                                           bypass surgery. N Engl J Med. 2007;357(8):753–61.
+ College of Biomedical Engineering and Instrument Science, Zhejiang
+University, Key Lab for Biomedical Engineering of Ministry of Education,              24.   Pai JK, Pischon T, Ma J, et al. Inflammatory markers and the risk of coronary
+Zheda Road, Hangzhou, China. 2Department of Cardiology, Chinese PLA                         heart disease in men and women. N Engl J Med. 2004;351(25):2599–610.
+General Hospital, Beijing, China.                                                     25.   Zhengxing Huang, Zhenxiao Ge, Wei Dong and Huilong Duan, Utilizing electronic
+                                                                                            health records to predict multi-type major adverse cardiovascular events after
+Received: 24 November 2017 Accepted: 27 December 2018                                       acute coronary syndrome, Knowledge and Information Systems, 2018.
+                                                                                      26.   Ponikowski P, Voors AA, Anker SD, et al. ESC guidelines for the diagnosis
+                                                                                            and treatment of acute and chronic heart failure: the task force for the
+References                                                                                  diagnosis and treatment of acute and chronic heart failure of the European
+1. Amsterdam EA, Wenger NK, Brindis RG, Casey DE, Ganiats TG, Holmes DR,                    Society of Cardiology (ESC) developed with the special contribution of the
+    Jaffe AS, Jneid H, Kelly RF, Kontos MC, Levine GN, Liebson PR, Mukherjee D,             heart failure association (HFA) of the ESC. Eur Heart J. 2016;37:2129–200.
+    Peterson ED, Sabatine MS, Smalling RW, Zieman SJ. 2014 AHA/ACC                    27.   Blumenthal D, Tavenner M. The “meaningful use” regulation for electronic
+    Guideline for the Management of Patients With Non-ST-Elevation Acute                    health records. N Engl J Med. 2010 Aug 5;363(6):501–4.
+    Coronary Syndromes: A Report of the American College of Cardiology/               28.   Bandyopadhyay S, et al. Data mining for censored time-to-event data: a
+    American Heart Association Task Force on Practice Guidelines. Circulation.              Bayesian network model for predicting cardiovascular risk from electronic
+    2014;130(25):e344–426.                                                                  health record data, Data Mining Knowl. Discovery. 2015;29(4):1033–69.
+2. Goodman SG, et al. The expanded global registry of acute coronary events:          29.   Van Hoorde K, Van Huffel S, Timmerman D, Bourne T, Van Calster B. A
+    baseline characteristics, management practices, and hospital outcomes of                spline-based tool to assess and visualize the calibration of multiclass risk
+    patients with acute coronary syndromes. Am Heart J. 2009;158(2):193–201.                predictions. J Biomed Inform. 2015;54:283–93.
+Duan et al. BMC Medical Informatics and Decision Making                  (2019) 19:5   Page 11 of 11
+
+
+
+
+30. Huang Z, Dong W, Duan H, Liu J. A regularized deep learning approach for
+    clinical risk prediction of acute coronary syndrome using electronic health
+    records. IEEE Trans Biomed Eng. 2018;65(5):956–68.
+31. Li H, et al. Identifying informative risk factors and predicting bone disease
+    progression via deep belief networks. Methods. 2014;69(3):257–65.
+32. Huang Z, et al. Predictive monitoring of clinical pathways. Expert Syst Appl.
+    2016;56:227–41.
+33. Emilio Soria Olivas et al. Handbook of Research on Machine Learning
+    Applications and Trends: Algorithms, Methods, and Techniques, Hershey,
+    IGI-global, 2009.
+34. Van Calster B, Nieboer D, Vergouwe Y, De Cock B, Pencina MJ, Steyerberg
+    EW. A calibration hierarchy for risk models was defined: from utopia to
+    empirical data. J Clin Epidemiol. 2016;74:167–76.
+35. Choi E, Schuetz A, Stewart WF, Sun J. Using recurrent neural network
+    models for early detection of heart failure onset. J Am Med Inform Assoc.
+    2017;24(2):361–70.
+

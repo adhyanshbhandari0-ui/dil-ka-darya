@@ -1,0 +1,260 @@
+                  AF Classification from a Short Single Lead ECG Recording: the
+                       PhysioNet/Computing in Cardiology Challenge 2017
+
+      Gari D Clifford1,2 , Chengyu Liu1,3 , Benjamin Moody4 , Li-wei H. Lehman 4 , Ikaro Silva4 , Qiao Li1 , A
+                                         E Johnson 4 , and Roger G. Mark4
+                     1
+                       Department of Biomedical Informatics, Emory University, Atlanta, USA
+             2
+               Department of Biomedical Engineering, Georgia Institute of Technology, Atlanta, USA
+               3
+                 School of Instrument Science and Engineering, Southeast University, Nanjing, China
+           4
+             Institute for Medical Engineering & Science, Massachusetts Institute of Technology, USA
+
+                              Abstract                                 performance was shown on carefully-selected often clean
+                                                                       data, 3) a separate out of sample test dataset was not used,
+         The PhysioNet/Computing in Cardiology (CinC) Chal-            or 4) only a small number of patients were used. It is chal-
+      lenge 2017 focused on differentiating AF from noise, nor-        lenging to reliably detect AF from a single short lead of
+      mal or other rhythms in short term (from 9-61 s) ECG             ECG, and the broad taxonomy of rhythms makes this par-
+      recordings performed by patients. A total of 12,186 ECGs         ticularly difficult. In particular, many non-AF rhythms ex-
+      were used: 8,528 in the public training set and 3,658 in         hibit irregular RR intervals that may be similar to AF.
+      the private hidden test set. Due to the high degree of inter-       The 2017 PhysioNet/CinC Challenge aims to encour-
+      expert disagreement between a significant fraction of the        age the development of algorithms to classify, from a sin-
+      expert labels we implemented a mid-competition bootstrap         gle short ECG lead recording (between 30 s and 60 s in
+      approach to expert relabeling of the data, levering the best     length), whether the recording shows normal sinus rhythm,
+      performing Challenge entrants’ algorithms to identify con-       AF, an alternative rhythm, or is too noisy to be classified.
+      tentious labels.                                                 In this Challenge, we treat all non-AF abnormal rhythms
+         A total of 75 independent teams entered the Challenge         as an alternative rhythm.
+      using a variety of traditional and novel methods, ranging
+      from random forests to a deep learning approach applied          2.       Challenge data
+      to the raw data in the spectral domain. Four teams won the
+      Challenge with an equal high F1 score (averaged across
+                                                                       2.1.     Data source
+      all classes) of 0.83, although the top 11 algorithms scored
+      within 2% of this. A combination of 45 algorithms identi-
+                                                                          A total of 12,186 ECG recordings were generously do-
+      fied using LASSO achieved an F1 of 0.87, indicating that
+                                                                       nated for this Challenge by AliveCor. Each recording was
+      a voting approach can boost performance.
+                                                                       taken by an individual who had purchased one of three
+                                                                       generations of AliveCor’s single-channel ECG device, and
+      1.       Introduction                                            in theory, held each of the two electrodes in each hand cre-
+                                                                       ating a lead I (LA-RA) equivalent ECG. Many of the ECGs
+         Atrial fibrillation (AF) is the most common sustained         were inverted (RA-LA) since the device did not require the
+      cardiac arrhythmia, occurring in 1-2% of the general pop-        user to rotate it in any particular orientation.
+      ulation [1] and is associated with significant mortality and        After some basic checks for signal quality, the device
+      morbidity through association of risk of death, stroke,          recorded for an average of 30 s. The hardware then trans-
+      heart failure and coronary artery disease, etc. [2].             mitted the data to a smartphone or tablet acoustically into
+         Despite the enormity of this problem, AF detection re-        the microphone (over the air, not through a wire) using a
+      mains problematic, because it may be episodic. AF de-            19 kHz carrier frequency and a 200 Hz/mV modulation in-
+      tectors can be thought of belonging to one of two cat-           dex. The data were digitized in real time at 44.1 kHz and
+      egories: atrial activity analysis-based or ventricular re-       24-bit resolution using software demodulation. Finally the
+      sponse analysis-based methods.                                   data were stored as 300 Hz, 16-bit files with a bandwidth
+         Previous studies concerning AF classification are gen-        0.5-40 Hz and a ± 5 mV dynamic range.
+      erally limited in applicability because 1) only classifica-         The data were then converted into WFDB-compliant
+      tion of normal and AF rhythms were performed, 2) good            Matlab V4 files (each including a .mat file containing the
+
+
+
+Computing in Cardiology 2017; VOL 44                          Page 1                 ISSN: 2325-887X DOI:10.22489/CinC.2017.065-469
+ECG and a .hea file containing the waveform information)
+and split into training and test data sets. The training set
+contains 8,528 recordings lasting from 9 s to 61 s and the
+test set contains 3,658 recordings of similar lengths (and
+class distributions). The test set has not been made avail-
+able to the public and will remain private for the purpose
+of scoring for the duration of the Challenge and for some
+period afterwards to enable follow-up work.
+
+2.2.     Expert labeling
+   Four classes of data were considered: normal rhythm,
+AF rhythm, other rhythm and noisy recordings. Three ver-
+sion of the data labels were generated for the challenge, in    Figure 1. Performance of the algorithms on the hidden test
+increasing level of accuracy. Initially, the recording labels   sub-set of 710 recordings. The algorithms were ranked in
+were given with the ECG data by AliveCor, which were            descending order of score.
+created through an outsourced company and about 10% of
+these were over-read. These labels were posted at the be-
+ginning of the challenge and acted as the V1 version of         rithms all contributed to an improved score. Each algo-
+labeling, which was used in the unofficial entry phase run-     rithm is ranked in descending order of performance on the
+ning from Feb 1st to April 9th 2017.                            hidden test sub-set of 710 recordings (see figure 1). The
+   However, some recordings labeled as normal, AF or            entire dataset (training and test) were then ranked in order
+other rhythms were actually very noisy and made rhythm          of level of disagreement from most to least. Eight ECG
+identification by eye virtually impossible. Thus, we visu-      analysis experts were then asked to independently relabel
+ally re-checked all the recordings and relabeled some data      the top 1129 most ‘disagreeableness’ with no knowledge
+as the noisy class, resulting in V2 version of labels. This     of the prior label. At least three experts were assigned to
+set of labels was used in the official entry phase which ran    each recording, although in some cases it was as high as
+from April 16th to September 1st 2017. A third version          eight experts. Table 1 shows the detailed re-labeling results
+was created for the final test runs as now described.           from the eight experts for these 1,129 test recordings, in-
+                                                                cluding the annotation frequency for each rhythm type, the
+2.3.     Mid-challenge bootstrap relabeling of                  average number of annotators employed per recording, and
+                                                                the inter-rater agreement level measure, i.e., Fleissḱappa,
+         the hidden data
+                                                                κ, which is used for assessing the reliability of agreement
+   Given the large number of training and test examples in      between a fixed number of raters (herein eight raters) when
+this Challenge, and the limited time and resources avail-       assigning categorical ratings to a number of classifying
+able, the Challenge organizers were not able to recheck         items (herein four types).
+every label by hand before the challenge began, instead we         κ can be interpreted as expressing the extent to which
+took the unusual approach of providing a suitable bench-        the observed amount of agreement among raters exceeds
+mark algorithm (below which we knew a contributor was           what would be expected if all raters made their ratings
+unlikely to be adding much new information) and used the        completely randomly. From Table 1, it is clear that there
+competition entrants scoring above this benchmark to help       are slight agreements among the annotators for each of
+us identify the data we suspected to be incorrectly labeled.    the four classes (all κ < 0.2). Over all 1,129 recordings
+That is, we ranked the data in terms of the largest level       κ = 0.245, which indicates a fair agreement among the
+of disagreement between the top performing algorithms.          annotators for all re-labeling task.
+The assumption here is that a large enough ensemble of             After this re-labeling process, all labels were updated
+independent algorithms can be voted together in a suitable      and denoted version 3 (V3). Only test data were updated
+manner to create an improved gold standard, a fact we have      with the new labels. Please note a very few training record-
+demonstrated on ECG analysis before [3, 4]. The corol-          ings were also updated with the new labels and these up-
+lary to this is that the harder a task, the more likely your    dates are usually from single expert’s annotation. More
+independent labelers (or algorithms) are to disagree. We        details about the number of recordings in each version of
+therefore assumed that the labels which most algorithms         the labels can be seen in Table 2.
+classified correctly were both easy to classify and correct,       Although a ranking table was posted on-line for the
+and focused on the ones on which most top scoring algo-         competition, this was based on only 27.3% of the test data
+rithms disagreed. We first identified that the top 10 algo-     to guarantee that the 10 entries each team were allowed
+
+
+
+                                                           Page 2
+                                   Number of                Annotation frequency
+                       Class       recordings      Normal    AF Other Noisy              Total    N       κ
+                       Normal          386          1203     136    353      367         2059    5.33   0.173
+                       AF              131          134      283    203       98          718    5.48   0.113
+                       Other           525          1539     236    685      376         2836    5.40   0.197
+                       Noisy            87           81      23      51      306          461    5.30   0.128
+                       Total          1129          2957     678 1292       1147         6074    5.38   0.245
+Table 1. Re-labeling results from the eight annotators for 1,129 recordings in test set. N : average number of annotators
+per recording.
+
+
+ Type                           # recordings (%)                                                 Predicted Classification
+                           V1              V2               V3                          Normal     AF Other Noisy           Total
+                                                                                                                            P
+ Training                                                                 Normal         Nn        Na      No        Np     PN
+ Normal           5154 (60.4)     5050 (59.2)      5076 (59.5)            AF             An        Aa      Ao        Ap     PA
+ AF                 771 (9.0)       738 (8.7)        758 (8.9)            Other          On        Oa      Oo        Op     PO
+ Other            2557 (30.0)     2456 (28.8)      2415 (28.3)            Noisy          Pn
+                                                                                         P         Pa
+                                                                                                   P       Po
+                                                                                                           P        PPp        P
+ Noisy               46 (0.5)       284 (3.3)        279 (3.3)            Total            n          a       o         p
+ Test                                                                 Table 3. Definition of parameters for scoring used in eq.
+ Normal           2209 (60.4)     2195 (60.0)      2437 (66.6)        1.
+ AF                 331 (9.1)       315 (8.6)        286 (7.8)
+ Other            1097 (30.0)     1015 (27.8)       683 (18.7)
+ Noisy               21 (0.6)       133 (3.6)        252 (6.9)             The final challenge score is generated as follows:
+        Table 2. Data profile for the training/test set.                                         F1n + F1a + F1o
+                                                                                         F1 =                                   (1)
+                                                                                                        3
+                                                                      More information on the Challenge scoring mechanism
+during the official period could not overfit on the test data.        and rules can be found at http://physionet.org/
+At the end of the Challenge, entrants were asked to identify          challenge/2017.
+their top performing algorithm and the scoring was re-run                At the end of the official challenge phase, one entry was
+on all the V3 test data to produce a final score several days         selected by each team as the final challenge entry. This
+after the close of the competition. If a competitor did not           entry was evaluated on the whole hidden test data.
+indicate the best algorithm of their possible 15 entries, then
+the most recently submitted algorithm was used.                       4.         Voting approaches
+                                                                         For the naı̈ve voting method, we firstly ranked the al-
+3.        Scoring                                                     gorithms in descending order of performance on the val-
+                                                                      idation set. Subsequently, we calculated the F1 results
+   The scoring for this challenge was an F1 measure, which            by taking the mode of all algorithm labels. We then ap-
+is an average F1 value from the classification type. The              plied a LASSO to all the algorithms to generated penal-
+counting rules for the numbers of the variables are defined           ized maximum-likelihood fitted coefficients for a general-
+in Table 3. Validation was 300 records (3.5%) of train-               ized linear model to select a subset of algorithms and a
+ing set just to ensure the algorithm produced the expected            weighted voting scenario. Finally, we repeated this using
+results. Provisional scoring was based on 1000 records                [4], with signal quality as additional features (LASSO+).
+(27.3%) of test set, and the final (user-selected) algorithm
+was scored on all of the test set.                                    5.         Results
+   For each of the four types, F1 is defined as:
+                                                                         During the official period of the competition, over 300
+   Normal: F1n = P2×N      Pn
+                        N+    n                                       entries were submitted in the Challenge by 75 teams (70
+     AF rhythm: F1a = P2×Aa
+                        A+
+                          P
+                            a
+                                                                      of which carry an open source license). Eight of the 70
+                                                                      team’s entries were deemed unofficial because they sub-
+     Other rhythm: F1o = P2×Oo
+                           O+
+                             P
+                               o                                      mitted too late (and did not participate in the essential un-
+                                                                      official beta test period), or they exceeded the number of
+     Noisy: F1p = P2×P
+                    P+
+                      Pp
+                         p
+                           .                                          allowable entries in the official period (because their team
+
+
+
+                                                                 Page 3
+ Rank           Entrant           Test     Validation    Train   winners, used multiple classifiers, or boosting approaches,
+ =1          Teijeiro et al.     0.831       0.912       0.893   including XGBoost, an algorithm that has recently been
+ =1           Datta et al.       0.829       0.990       0.970   dominating applied machine learning and Kaggle compe-
+ =1          Zabihi et al.       0.826       0.968       0.951   titions for structured or tabular data. However, the fact that
+ =1           Hong et al.        0.825       0.990       0.970   a standard random forest with well chosen features per-
+ =5         Baydoun et al.       0.822       0.859       0.965   formed as well as more complex approaches, indicates that
+ =5            Bin et al.        0.821       0.870       0.875   perhaps a set of 8,528 training patterns was not enough to
+ =5         Zihlmann et al.      0.821       0.913       0.889   give the more complex approaches an advantage. With so
+ =5           Xiong et al.       0.818       0.905       0.877   many parameters and hyperparameters to tune, the search
+ –          Voting (top 10)      0.844         –           –     space can be enormous and significant overtraining was
+ –          Voting (top 30)      0.847         –           –     seen even in the winning entries (see table 4). Most impor-
+ –          Voting (top 50)      0.851         –           –     tantly, the voting of independent algorithms provided a 4%
+ –          Voting (all 75)      0.855         –           –     boost in the F1 measure.
+ –         Voting (LASSO)        0.858         –           –         We note two key limitations of the competition: 1. The
+ –        Voting (LASSO+)        0.868         –           –     choice of the F1 metric may not be the most appropriate
+Table 4. Final scores for the top 8 of 75 Challenge teams,       for screening, although, retraining on a different metric is
+as well as for voting approaches. Bold indicates winning         straight forward. 2. The κ between many data remained
+scores and – indicates not applicable.                           low even after relabeling, indicating that the training data
+                                                                 could be improved. This could be achieved either through
+                                                                 voting or by using the κ itself.
+members misread the rules and submitted more than 10
+entries via multiple email accounts).                            References
+   Table 4 lists the top scoring entries ranked by F1 on
+                                                                 [1] Lip GYH, Fauchier L, Freedman SB, Van Gelder I, Natale A,
+the test set. Note that we rounded to two decimal places
+                                                                     Gianni C, Nattel S, Potpara T, Rienstra M, Tse H, Lane DA.
+for awarding prizes, resulting in four equal first and four
+                                                                     Atrial fibrillation. Nature Reviews Disease Primers 2016;
+equal fifth placed teams. We also reported the F1 results            2:16016.
+on both validation and training sets for comparison, giv-        [2] Camm AJ, et al. Guidelines for the management of atrial fib-
+ing a chance to observe if the developed algorithms have             rillation: the Task Force for the Management of Atrial Fib-
+over-trained on the training data.                                   rillation of the European Society of Cardiology (ESC). Eur
+   The results for the naı̈ve voting as a function of the num-       Heart J 2010;31(19):2369–2429.
+ber of algorithms used (ranked in order of validation F1         [3] Zhu T, Johnson AEW, Behar J, Clifford GD. Bayesian voting
+scores) are given in the lower half of Table 4. Using the            of multiple annotators for improved QT interval estimation.
+top 10 algorithms for voting, a F1 value of 0.844 was ob-            In Computing in Cardiology, volume 40. Zaragoza, Spain,
+tained, which is higher than any of the individual submis-           Sep 2013; 249–252.
+sion. When using the top 30 and 50 algorithms for vot-           [4] Zhu T, Johnson AEW, Behar J, Clifford GD. Crowd-Sourced
+                                                                     Annotation of ECG Signals Using Contextual Information.
+ing, the F1 value increased to 0.847 and 0.851 respectively.
+                                                                     Annals of Biomedical Engineering 2014;42(4):871–884.
+When using all 75 algorithms for voting, the F1 score rose
+to 0.855. Finally, using LASSO for feature selection, 45         Acknowledgments
+algorithms were selected from the validation scores, and a
+                                                                    Funding was from the National Institutes of Health,
+test F1 of 0.858 was achieved. Highest F1 score of 0.868
+                                                                 grant R01-GM104987, the International Post-doctoral Ex-
+was achieved by weighted voting of 45 algorithms with
+                                                                 change Programme of the National Postdoctoral Manage-
+signal quality (LASSO+), which represents the best F1
+                                                                 ment Committee of China and Emory University. We are
+performance of any of the approaches.
+                                                                 also grateful to Mathworks and Computing in Cardiology
+                                                                 for sponsoring the competition prize money and free li-
+6.       Discussions & Conclusions
+                                                                 censes, and to AliveCor for providing the data. We are
+   The large spread of performances indicates that this          also grateful to the clinical experts for data annotation:
+is a non-trivial problem. Never-the-less the top scoring         Dave Albert, Giovanni Angelotti, Christina Chen, Rodrigo
+teams provided excellent scores, demonstrating that an au-       Octavio Deliberato, Danesh Kella, Oleksiy Levantsevych,
+tomated screening system is possible. Winning approaches         Roger Mark, Deepak Padmanabhan and Amit Shah.
+varied from hand crafted features fed to a random forest,        Address for correspondence:
+extreme gradient boosting (XGBoost), to convolutional            Gari Clifford; gari@gatech.edu;
+(deep) neural networks (CNNs) and recurrent neural net-          WMRB, 1639 Pierce Dr NE, Atlanta, GA 30322
+works (RNNs). Many entrants, including several of the
+
+
+
+                                                            Page 4
+

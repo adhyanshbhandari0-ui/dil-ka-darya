@@ -1,0 +1,602 @@
+                                  Atlantis Studies in Uncertainty Modelling, volume 1
+              11th Conference of the European Society for Fuzzy Logic and Technology (EUSFLAT 2019)
+
+
+Graphical analysis of the progression of atrial arrhythmia through an
+   ensemble of Generative Adversarial Network Discriminators
+
+
+             Nahuel Costaa and Jesús Fernándezb and Inés Cousoc and Luciano Sáncheza
+             a
+               Universidad de Oviedo, Departamento de Informática. [UO251652,luciano]@uniovi.es
+                                b
+                                  Medtronic, S.A. jesus.fernandez@medtronic.com
+                    c
+                      Universidad de Oviedo, Departamento de Estadı́stica. couso@uniovi.es
+
+
+
+
+                       Abstract                                     electrograms (iECGs) of these. Although surface elec-
+                                                                    trograms are a potential source of information about
+                                                                    the evolution of the arrhythmia [6], the morphology of
+    Logs of arrhythmia episodes in patients with
+                                                                    the heartbeat in iECGs is lost in the high-pass filtering
+    pacemakers are used to estimate the tempo-
+                                                                    at the ICD electrode and the only relevant information
+    ral progression of atrial arrhythmia. In or-
+                                                                    is kept in the instantaneous frequencies of atrium and
+    der to attain an early detection, a stream of
+                                                                    ventricle (see Figure 1). On the other hand, an early
+    dates and episode lengths are fed to an array
+                                                                    diagnosis is needed, thus the working records are nec-
+    of detectors, each of which is responsive to a
+                                                                    essarily short (see Figure 2), and it may well happen
+    narrow range of arrhythmias. The outputs of
+                                                                    that the number of available episodes for a given pa-
+    these detectors are organized on a projection
+                                                                    tient is not large enough to fit a non-trivial model.
+    map, used by the specialist to assess the risk
+                                                                    This is aggravated by the fact that the data is non-
+    in the evolution of the patient. Each of the
+                                                                    stationary and it is precisely the change in the prop-
+    mentioned detectors is a Recurrent Neural
+                                                                    erties of this data (from paroxysmal to permanent)
+    Network(RNN), that is in turn the discrim-
+                                                                    that we want to predict on the basis of a short sam-
+    inating element of a Generative Adversarial
+                                                                    ple of data. Additional complications exist, because
+    Network (GAN) that has been trained to gen-
+                                                                    the algorithm that the pacemaker uses for determin-
+    erate temporal sequences of values of the de-
+                                                                    ing episode lengths is not reliable and clusters of short
+    grees of truth that the arrhythmia episodes
+                                                                    episodes are wrongly reported sometimes instead of
+    are not isolated.
+                                                                    long AF episodes. All in all, sequences of episode
+    Keywords: Heart Disease, Generative Ad-                         lengths cannot be used isolatedly; a model that jointly
+    versarial Network, Time Series                                  depends on both the lenghts and the time lapses be-
+                                                                    tween episodes is needed.
+                                                                    Unfortunately, although the progression of AF is a
+1   Introduction                                                    complex process that depends on many different fac-
+                                                                    tors, each patient is associated to only a few tens of
+Atrial fibrillation (AF) is an abnormal heartbeat, com-             pacemaker records. There are not many different tech-
+mon in the elderly, that sometimes progresses from                  niques for classifying short time series [5] and, to the
+paroxysmal arrhythmia (episodes of arrhythmia that                  best of our knowledge, a model that is simple enough
+end spontaneously) to persistent arrhythmia (episodes               to be learnt from a small set of data while at the same
+that last more than seven days and do not end without               time it is able to extrapolate the break point between
+external intervention) or permanent arrhythmia (un-                 paroxistic and permanent AF has not been found yet.
+interrupted episodes). It is common for paroxysmal
+                                                                    Unlike this kind of model, this paper follows a different
+arrhythmia to progress to persistent or permanent ar-
+                                                                    approach. A set of dynamical models that are able to
+rhythmia [7]. There are numerous risk factors that
+                                                                    capture the key features of the different AF progres-
+influence the progress [8], and early diagnosis is bene-
+                                                                    sions will be used, but these models will not be fitted
+ficial for optimal treatment.
+                                                                    to the data, but used to enlarge the training sample.
+The treatment of AF often involves the use of pace-                 An array of learning detectors of AF are trained with
+makers or ICDs (Implantable Cardiac Defibrillators).                model-generated data, so that each of the detectors is
+These devices keep a record of the dates and lengths                only exposed to arrhythmias of a certain type. When
+of the episodes, and (to a certain extent) intracardiac
+
+
+
+
+                               Copyright © 2019, the Authors. Published by Atlantis Press.
+       This is an open access article under the CC BY-NC license (http://creativecommons.org/licenses/by-nc/4.0/).    566
+                                                            are organized in a map [4]. If detectors tuned to ar-
+                                                            rhythmias with similar properties are adjacent in the
+                                                            map, the output of the map can be regarded as a pro-
+                                                            jection of the available data on the parameter space of
+                                                            the dynamical models. This projection provides a de-
+                                                            piction of the parameters of the model that best fit the
+                                                            patient and also gives insight about the narrowness of
+                                                            the estimation that is possible with the available data.
+                                                            The structure of this paper is as follows: in Section
+                                                            2, pacemakers and the dynamical model of the AF
+                                                            episodes are described. In Section 3, the GAN used
+                                                            as a detector is introduced and the map arrangement
+                                                            described. In Section 4 some preliminary results about
+                                                            the specificity of the detectors and the application of
+                                                            this technique to actual patients are given. The paper
+                                                            concludes in Section 5 with a discussion about the po-
+                                                            tential advantages and drawbacks of this idea and the
+                                                            areas of further development.
+
+
+                                                            2    A model of pacemaker-detected
+                                                                 arrhythmia events
+
+                                                            A surface electrogram (ECG) is the representation of
+                                                            cardiac electrical activity from two electrodes placed
+                                                            on the surface of the body which are located apart from
+                                                            the heart (see Figure 1, upper part). With this type of
+                                                            derivation, all kinds of electrical activity are recorded,
+Figure 1: Top: Surface ECG (taken from reference
+                                                            including non-cardiac electrical activity. On the con-
+[1]). Bottom: Intracardiac ECG. The morphology of
+                                                            trary, an intracardiac electrocardiogram (iECG) (re-
+the surface ECG is not kept in the iECG, where there
+                                                            call Figure 1, lower part) is the representation of the
+is only one peak for each heartbeat.
+                                                            potential difference between two points in contact with
+                                                            the myocardium in space over time. iECGs are ob-
+                                                            tained from pacemakers or ICDs logs and are less in-
+this array is fed with pacemaker records from a real
+                                                            formative. The purpose of this study is to anticipate
+patient, it is expected that only a few detectors will
+                                                            arrhythmia progress on the basis of these pacemakers
+recognize that the patient’s arrhythmia is the same
+                                                            or ICDs logs.
+type as the arrhythmia with which they were trained.
+                                                            Pacemakers do not store a continuous stream of data,
+Key to the success of this idea is the specificity of the
+                                                            but there are certain events that trigger that data is
+detectors, that must only react to episodes matching a
+                                                            recorded. The primary purpose of a pacemaker is to
+compact set of clinical situations. In this paper it was
+                                                            release an electrical current between two points to ac-
+considered that detectors obtained from Generative
+                                                            tivate the cardiac cells and therefore facilitate cardiac
+Adversarial Networks (GANs) can be highly specific.
+                                                            contraction. Depending on the electrical signal that
+In particular, two recurrent neural networks will be
+                                                            is measured through the leads, the pacemaker will re-
+used as generator and discriminator, and trained until
+                                                            spond in order to stimulate, inhibit, or change its op-
+the generator is able to produce realistic sequences of
+                                                            eration mode. In particular, in the presence of cardiac
+arrhythmia episodes and the discriminator efficiently
+                                                            arrhythmia, if a patient experiences a high intrinsic
+separates these sequences from “actual” sequences (in
+                                                            atrial heart rate the pacemaker does not try to match
+this case, “actual” series are synthesized with the dy-
+                                                            the ventricle to the atrial rate. Instead, the pace-
+namical models mentioned before).
+                                                            maker changes its operation mode and uses a different
+In any case, when these detectors are fed with insuf-       algorithm for generating the excitation of the ventri-
+ficient data (short pacemaker records) it is expected       cle. This process is called Automatic Mode Switching
+that many of them recognize the arrhythmia as its           (AMS) [3]. AMS events are stored in the pacemaker
+own, thus the output of the set of detectors will not       memory and are used to mark the beginning of AF
+be too specific. It is also proposed that these detectors   episodes (recall Figure 2, upper part). The lengths of
+
+
+
+
+                                                                                                                         567
+                                                                                                                     cases, a simulator is a va
+                                                                                                 cases, a simulator  AMSis afunctions
+                                                                                                                             valuable tool    for en
+                                                                                                                                       properly.
+                                                                                                 AMS functions properly.
+                                                                                                                     2.3 Dynamical model
+                                                                                                 2.3 Dynamical model of             the pacemak
+                                                                                                                            switching
+                                                                                                         switching
+                                                                       cases,EMS  event
+                                                                              a simulator  is a valuable              NA that
+                                                                                                            tool for ensure
+                                                                                 cases, a simulatorNA is a valuable tool=forA ensure      that
+                                                                       AMS functions    properly.                     AN          · pAN
+                                                                                 AMS functions properly.
+                                                                                                   AN   =   A · p AN
+                                                                                                                      AG = A · pAG
+                                                                       2.3 Dynamical       model of model
+                                                                                                        the  pacemaker
+                                                                                                            A·p             mode
+                                                                                 2.3 Dynamical     AG = Arrhytmia
+                                                                                                                ofAG
+                                                                                                                   the pacemaker        mode
+                                                                             switchingswitching                       GA
+                                                                                                   GA
+                                                              Normal    NA                                           3 Figures and Tab
+                                                                                   NA
+                                                                                                 3 Figures and EMS             event
+                                                                                                                           Tables
+                                                                        AN = A ·AN  pAN = A · pAN
+                                                                                                                     All figures must be centered
+                                                                        AG = A ·AG  pAG = A · pAGAll figures
+                                                                                                           Gapmust be  centered
+                                                                                                                     and  captionlike Figure
+                                                                                                                                   of the      3. T
+                                                                                                                                          figure  mu
+                                                                                                 and caption of thefigure.
+                                                                                                                      figure must always appear
+                                                                        GA         GA            figure.
+                                                                       3    Figures and Tables
+                                                                                3 Figures and Tables                         Figure 3: Exam
+                                                                                                           Figure 3: Example of figure title
+                                                          Figure 3: State   diagram
+                                                                    All figuresAll
+                                                                                must
+                                                                                          of the dynamical
+                                                                                       be centered
+                                                                                                                  model    of the
+                                                                                   figures  must belike Figurelike
+                                                                                                     centered   3. The  number
+                                                                                                                   Figure 3. The number
+                                                          beginning of
+                                                                    and AF    episodes.
+                                                                         caption  of the figure must  always appear   below
+                                                                               and caption of the figure must always appear the below the
+                                                                    figure.    figure.                             3.1 Tables
+                                                                                                  3.1   Tables
+                                                          and (3) gap. TheFigure  third3: state
+                                                                                           Example isof figure
+                                                                                                       associated       to those
+                                                                                                                  All tables
+                                                                                                               title           must be centere
+                                                                                            Figure
+                                                                                               All 3: Example
+                                                                                                   tables  mustofbe figure
+                                                                                                                  and      title
+                                                                                                                      centered
+                                                                                                                       title     and clear.
+                                                                                                                             always         Th
+                                                                                                                                    appear be
+                                                          cases where the pacemaker has           detected a non-existent
+                                                                                               and title always appear below the table (See
+                                                          ending of the event and a new AMS event is going to
+                                                          happen. Observe that there are AMS events in the NAME
+                                                                     3.1 Tables                                     NAME
+                                                                                3.1 Tables
+                                                          transitions from normal       to arrhythmia but also           in tran-AGE John Smi
+                                                                                                                  John Smith         35
+                                                                                                                                   George Bro
+                                                                     All gap
+                                                          sitions from   tablesto arrhythmia.
+                                                                                 must
+                                                                                All    be
+                                                                                    tables centered
+                                                                                            must  be and
+                                                                                                      centered    Theclear.
+                                                                                                          clear.and
+                                                                                                                George
+                                                                                                                        number
+                                                                                                                         BrownThe number
+                                                                                                                                     21
+                                                                       and title always  appear
+                                                                                  and title     below
+                                                                                            always    the below
+                                                                                                   appear table (See  Table
+                                                                                                                 the table  1). 1:
+                                                                                                                           (See
+                                                                                                                         Table  Table 1). of
+                                                                                                                                   Caption
+                                                          The times at states “normal” andTable       “gap”    follow ofexpo-
+                                                                                                           1: Caption      the table goes h
+                                                          nential distributions with parameters λNA and λGA ,
+                                                                                     NAME NAME        AGE         AGE
+                                                                                                                Acknowledgement
+                                                          respectively. The time John
+                                                                                    at the
+                                                                                         Smith
+                                                                                               state “arrhythmia”
+                                                                                                        35
+                                                                                                                             fol-
+                                                                                           Acknowledgement
+                                                                                               John   Smith         35
+                                                          lows an exponential distribution
+                                                                                   George Brown     with
+                                                                                             George 21 Brown
+                                                                                                            parameter
+                                                                                                                The
+                                                                                                                    21
+                                                                                                                      word  λ A.
+                                                                                                                           “acknowledgeme
+                                                          The probability that the nextThe   stateword   “acknowledgement”
+                                                                                                                left,          must be
+                                                                                                                      not numbered
+                                                                                                      after “arrhythmia”            andalig
+                                                                                                                                        bo
+                                                                          Table 1: Caption left,
+                                                                                            of    not
+                                                                                                the    numbered
+                                                                                                      able goes    and
+                                                                                                                 here.  boldfaced.
+                                                          is “gap” is pAG and the Table 1:   Caption
+                                                                                    probability         of the
+                                                                                                      that  thistable goes  here.
+                                                                                                                    transition
+                                                          ends in “normal” is pAN = 1 − pAG .
+                                                                       Acknowledgement
+                                                          The progression ofAcknowledgement
+                                                                                 the AF from paroxysmal to perma-
+                                                                     The word The
+                                                                                “acknowledgement”   must be alignedbe
+                                                                                     word “acknowledgement”         to aligned
+                                                                                                                        the
+                                                          nent is introduced    by
+                                                                     left, not left, letting
+                                                                              numbered       the parametermust λNA change      to the
+                                                                                     not and boldfaced.
+                                                                                         numbered and boldfaced.
+Figure 2: Top: Dates of pacemaker mode changes dur-       with time. The speed of the progression is modelled
+ing a year (beginning of AF episodes, see also Figure     by a parameter α ∈ [0, 1],
+1). Bottom: Recorded length of the AF episodes.
+                                                                                λNA (t) = λNA (0) · αt ,                          (1)
+
+the AF episodes are stored along with the AMS dates       where α = 1 is an stable patient and lower values of
+in the pacemaker memory.                                  α are patients with a quick progression to permanent
+                                                          arrhythmia.
+Although AMS is a simple concept, the mode switch-
+ing depends on a large number of variables that depend
+on the patient. It is possible that the peacemaker al-    3     GAN-based detector
+gorithm prematurely concludes that the AF event has
+ended, only to discover past a few seconds that an AF     The simple Markov model described in the preceding
+is still taking place. In this case, a second AMS event   section captures the essence of the pacemaker opera-
+is generated and the pacemaker mode is restored. This     tion: it takes into account the frequency of the AF
+has not relevant consequences for the efficiency of the   events, its length, the inaccuracies of the pacemaker
+device, but the stored information is inaccurate, as      and the speed of the progression. However, there are
+there may be cases where a cluster of short arrhyth-      patients that do not fit this model, because the time
+mias is reported instead of a long event.                 between AF episodes does not always follow an expo-
+                                                          nential distribution. Also, as mentioned in the intro-
+                                                          duction, a large set of AF episodes is not compatible
+2.1   Dynamical model of AMS events                       with an early diagnosis thus the numerical estimation
+                                                          of the five parameters λNA , λGA , λA , pAG and α would
+A simplified model of the temporal sequence of AMS
+                                                          not be reliable even in the case that the patient fits
+events associated to a patient is depicted in Figure 3.
+                                                          the model.
+This is a continuous time Markov model with three
+states: (1) normal/out of arrhythmia, (2) arrhythmia      The procedure that is proposed in this study relies
+
+
+
+
+                                                                                                                             568
+                                        True!
+                                        sequences
+                                                                                Loss for discriminator net
+                                                                   Gradient adjustment
+                                                                                     Predictions for!
+                                                                                     true sequences
+                          Generator                        Discriminator
+                                                                                     Predictions for!
+        Noise                              False!
+                                                                                     false sequences
+                                           sequences
+
+                               Gradient adjustment                                 Loss for generator net
+
+                   Figure 4: GAN architecture for obtaining one of the discriminant elements
+
+
+in an array of discriminant elements, tuned to spe-
+cific sets of values of the five parameters that define
+an instance of the Markov model. The output of
+these elements is a projection of the episode in a five-
+dimensional space whose coordinates are the values of
+λNA , λGA , λA , pAG and α. λGA and pAG depend on the
+pacemaker algorithm, while λNA , λA and α measure
+the condition of the patient. In particular, α measures
+the progression of the AF. Each of these elements is
+trained with different sequences of AF episodes gen-
+erated by means of a model that depends on a given
+tuple of values of the parameters. If these discrimi-
+nant elements are specific enough (i.e. if they only re-
+act to sequences of values that are generated with the
+same or similar parameters as the training sequences)
+it is immediate that, when confronted to a time series
+that follows the model in Section 2.1, only one ele-
+ment of the map will be active. When a sequence of
+AF episodes of a patient whose progression do not ex-
+actly matches the model is fed to the map, a pattern
+of activations will be displayed that allows to assess
+the progression speed of the arrhythmia.
+In order to obtain the discriminant elements, a GAN
+is used with the architecture described in Figure 4.       Figure 5: Top: Synthetic sequence of episodes (simula-
+Both the generator and the discriminator are LSTM          tion time: 10 years), showing the evolution to perma-
+networks. The output of the discriminator is a voting      nent AF. Bottom: Sequence comprising the degrees of
+combination of all the nodes in the LSTM network,          truth that AF events are isolated (input to the GAN
+that is compared to a threshold in order to decide         network)
+whether the input is one of the true sequences or it
+is the output of the generator LSTM. The input to
+the net is a sequence of fuzzy memberships of the as-      4   Numerical results
+sert “the AMS event is isolated”, which measures how
+many events are present in a soft window (with Gaus-
+                                                           Properties of the GAN discriminators are analyzed
+sian membership) that spans a few days before and
+                                                           first in terms of the sensibility of the nets to changes
+after the data and moves along with the data (see Fig-
+                                                           in the parameters, namely the ability of an LSTM net-
+ure 5) [9].
+                                                           work for correctly classifying Markov model-produced
+                                                           sequences in terms of the generating model parame-
+                                                           ters. At the end of this section two maps are shown,
+                                                           measuring both a synthetic sequence of AMS events
+                                                           and a true patient.
+
+
+
+
+                                                                                                                      569
+The experimental setup is as follows: the code for          Markov model, with λNA = 1/90 and α = 0.999. It is
+training GAN recurrent networks for time series has         expected that only one of the detectors reacts to this
+been adapted from the publicly available code at            artificial sequence, and this is in fact the result (dark
+https://github.com/ratschlab/RGAN [2]. The in-              red area at β = 90 and α = 0.999)
+put to the net has a batch size of 28, sequence length
+                                                            In the right part of the same Figure there is a second
+of 73 and one feature. The loss function of the discrim-
+                                                            map with a projection of a sequence of AMS events
+inator net is the fraction of misclassifications. A total
+                                                            taken from an actual pacemaker (see also Figure 7,
+of 14000 sequences have been generated for each com-
+                                                            where these episodes are shown). The dates of these
+bination of parameters chosen for the Markov model.
+                                                            AMS events are shown in the lower part of the same
+                                                            figure. The sequence of events does not follow the
+4.1   Sensibility of the LSTM detector                      Markov model anymore, thus a clear identification as
+                                                            that shown in the map to the left is nowhere to be
+A brief study about the sensibility of the LSTM detec-
+                                                            found, but nonetheless the projection of the sequence
+tor has been included in Tables 1 and 2. The first table
+                                                            in the parameter spaces gives us a clear insight about
+collects the results for α = 0.998 (fast progression),
+                                                            the evolution of the patient. In particular, the dark
+and the second table contains the same experiments
+                                                            red area in the bottom part of the map is compat-
+for α = 0.999 (slow progression).
+                                                            ible with a value of λNA ≈ 1/200 and also with a
+The meaning of the rows and columns of these tables is      fast progression to permanent AF, α = 0.998. The
+as follows: each column contains the fraction of correct    red region is also compatible with arrhythmias in the
+classifications of a discriminator that has been trained    range of 100 < β < 250, i.e. slower evolutions from
+with sequences produced by the Markov model seen            starting points with more frequent episodes cannot be
+before. The values of λNA (0) used for computing these      discarded because the number of episodes is not too
+sequences are indicated in the column labels. The first     high, but the most probable diagnosis is that of quick
+and second rows, “Train” and “Test” are the percent-        progression to permanent AF.
+age of correct detections of “True” sequences (Markov
+models) vs. “False” sequences (produced by the gen-
+erator net). The rows labelled α = 0.997 . . . 0.999 are    5   Concluding remarks and future
+the fraction of sequences with the same parameters as           work
+those used for training the net but a different param-
+eter α. The remaining rows are the fraction of correct
+                                                            We have shown that iECGs from ICDs and pacemak-
+classifications when the net is fed with sequences with
+                                                            ers can be used to a certain extent for predicting the
+a different value of λNA .
+                                                            change from paroxysmal to permanent AF. The main
+These results show that the detectors are highly re-        difficulty is with the short length of the pacemaker
+sponsive when the arrhythmia is paroxysmal (low val-        records, that has been addressed here by means of a
+ues of λNA , thus time between episodes is high). This      graphical projection of the sequence of AMS events
+is the desired result, because these are the cases with     in the parameter space of a continuous-time Markov
+clinical interest. The net is less capable when λNA is      model. If the data is enough for a clear diagnosis,
+high, however these are the cases where the patient is      the map produces an estimation of the patient con-
+in a permanent arrhythmia condition at the beginning        dition and future evolution, and in those cases where
+of the experiments thus the evolution of the patient is     the data is insufficient the map produces a set of esti-
+self-evident.                                               mations that can be subjectively assessed in order to
+                                                            determine whether the evolution is positive or not.
+4.2   Projection map                                        This is a work in progress and there are some unsolved
+                                                            difficulties. There are five variables, thus each pa-
+Two maps (see Figure 6) were selected for illustrating
+                                                            tient produces a hyper-cube that has to be sliced and
+the method. The horizontal axis is labelled β, which
+                                                            presented to the user in different graphics. A second
+is the inverse of the parameter λNA , and can be un-
+                                                            projection that puts all the information in a 2D map
+derstood as the expected number of days between two
+                                                            would be preferred. On the other hand, the degrees of
+AF episodes at time t = 0. The vertical axis is la-
+                                                            truth of the detectors are not easily equalized and a
+belled α and measures the speed of the progression.
+                                                            method different that the weighted vote of the LSTM
+The lower the value of α, the quickest the progression
+                                                            elements should be studied. Lastly, the use of GANs
+to permanent AF.
+                                                            has an intrinsic advantage, that is the obtention of
+The first map (Figure 6, left) depicts the output of an     the generator network. This second network has not
+array of discriminators when the input is a synthetic       been used yet in this study, but we intend to use it
+sequence of AMS events, generated by means of the           to extend the pacemaker records into the future and
+
+
+
+
+                                                                                                              570
+                      λNA = 1.0/10     λNA = 1.0/30    λNA = 1.0/90     λNA = 1.0/180   λNA = 1.0/260
+       train             0.9794           0.9804          0.9830           0.9868          0.9800
+       test              0.9779          0.97978          0.9811           0.9847          0.9797
+       α = 0.997         0.5299           0.2523          0.5373           0.4324          0.4878
+       α = 0.999         1.0000           1.0000          0.9979           0.3475          0.4424
+       λNA = 1/5         0.3333           1.0000          1.0000           1.0000          1.0000
+       λNA = 1/10           -             0.8162          1.0000           1.0000          1.0000
+       λNA = 1/30        0.9967              -            0.9505           0.9970          0.9983
+       λNA = 1/90        1.0000           0.9703             -             0.1369          0.1969
+       λNA = 1/180       1.0000           0.9994          0.0914              -            0.0312
+       λNA = 1/260       1.0000           1.0000          0.1494           0.0008             -
+
+                            Table 1: Sensitivity of the discriminator for α = 0.998.
+
+
+
+
+                       λNA = 1.0/8    λNA = 1.0/30     λNA = 1.0/90     λNA = 1.0/145   λNA = 1.0/180
+        train            0.9832          0.9823           0.9809           0.9825          0.9838
+        test             0.9821          0.9818           0.9818           0.9853          0.9783
+        α = 0.997        0.9986          0.9987           0.9986           0.9986          0.9997
+        α = 0.998        0.9998          0.9998           0.9956           0.9485          0.9809
+        λNA = 1/5        0.1543          1.0000           1.0000           1.0000          1.0000
+        λNA = 1/8           -            1.0000           1.0000           1.0000          1.0000
+        λNA = 1/30       1.0000             -             0.9988           0.9997          0.9996
+        λNA = 1/90       1.0000          0.9978              -             0.1703          0.2002
+        λNA = 1/120      0.9800          0.9800           0.0012           0.0516          0.0566
+        λNA = 1/145      1.0000          1.0000           0.0001              -            0.0357
+        λNA = 1/260      1.0000          1.0000           0.0000           0.0008          0.0089
+
+                            Table 2: Sensitivity of the discriminator for α = 0.999.
+
+
+
+
+Figure 6: Left: projection of a sequence of AMS events generated by means of the Markov model, with λNA = 1/90
+and α = 0.999. Right: Projection of a sequence of AMS events from an actual pacemaker (see Figure 7). The
+map is compatible with a value of λNA ≈ 1/200 and a fast progression to permanent AF, α = 0.998
+
+
+
+
+                                                                                                                 571
+                                                            [4] V. Fortuin, M. Häser, F. Locatello, H. Strathmann,
+                                                                G. Rätsch, Deep self-organization: Interpretable
+                                                                discrete representation learning on time series, in:
+                                                                International Conference on Learning Representa-
+                                                                tions, 2019.
+                                                            [5] M. González, C. Bergmeir, I. Triguero,
+                                                                Y. Rodrı́guez, J. M. Benı́tez, Self-labeling
+                                                                techniques for semi-supervised time series clas-
+                                                                sification: an empirical study, Knowledge and
+                                                                Information Systems 55 (2) (2018) 493–528.
+                                                            [6] F. Holmqvist, S. Kim, B. A. Steinberg, J. A. Reif-
+                                                                fel, K. W. Mahaffey, B. J. Gersh, G. C. Fonarow,
+                                                                G. V. Naccarelli, P. Chang, J. V. Freeman, et al.,
+                                                                Heart rate is associated with progression of atrial
+                                                                fibrillation, independent of rhythm, Heart 101 (11)
+Figure 7: Dates of the AMS events for the patient in            (2015) 894–899.
+the right part of Figure 6
+                                                            [7] H. Ogawa, Y. An, S. Ikeda, Y. Aono, K. Doi,
+                                                                M. Ishii, M. Iguchi, N. Masunaga, M. Esato,
+combine these extrapolated records with the estima-             H. Tsuji, et al., Progression from paroxysmal to
+tion of α to improve the reliability of the estimation of       sustained atrial fibrillation is associated with in-
+the most important parameter, the speed of progress             creased adverse events, Stroke 49 (10) (2018) 2301–
+of the arrhythmia. In any case, a method is needed to           2308.
+prime the LSTM generator that can synchronize the
+state of this network with the sequence of measured         [8] G. J. Padfield, C. Steinberg, J. Swampillai,
+records, and this method has yet to be developed.               H. Qian, S. J. Connolly, P. Dorian, M. S. Green,
+                                                                K. H. Humphries, G. J. Klein, R. Sheldon, et al.,
+Acknowledgement
+                                                                Progression of paroxysmal to persistent atrial fib-
+This work has been partially supported by the                   rillation: 10-year follow-up in the Canadian reg-
+Ministry of Economy, Industry and Competitiveness               istry of atrial fibrillation, Heart rhythm 14 (6)
+(“Ministerio de EconomÃa, Industria y Competi-                 (2017) 801–807.
+tividad”) from Spain/FEDER under grant TIN2017-
+84804-R and by the Regional Ministry of the Princi-         [9] M. D. Peláez-Aguilera, M. Espinilla, M. R.
+pality of Asturias (“ConsejerÃa de Empleo, Industria           Fernández Olmo, J. Medina, Fuzzy linguistic
+y Turismo del Principado de Asturias”) under grant              protoforms to summarize heart rate streams of
+GRUPIN18-226.                                                   patients with ischemic heart disease, Complexity
+                                                                2019.
+
+References
+[1] D. Calvo, J. Rubı́n, D. Pérez, J. Jalife, Spectral
+    analysis of electrograms in a substrate modified
+    by radiofrequency ablation reveals similarities be-
+    tween organized and disorganized atrial rhythms,
+    Heart rhythm 11 (12) (2014) 2306–2309.
+
+[2] C. Esteban, S. L. Hyland, G. Rätsch, Real-
+    valued (medical) time series generation with
+    recurrent conditional GANs, arXiv preprint
+    arXiv:1706.02633.
+
+[3] J. Fernández, J. Velasco, L. Sánchez, Detection
+    of cardiac arrhythmias through singular spectrum
+    analysis of a time-distorted EGM signal, in: In-
+    ternational Joint Conference SOCO’17–CISIS’17–
+    ICEUTE’17 León, Spain, September 6–8, 2017,
+    Proceeding, Springer, 2017, pp. 137–146.
+
+
+
+
+                                                                                                             572
+

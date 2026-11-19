@@ -1,0 +1,629 @@
+                                 A Framework for Determining the
+                                   Fairness of Outlier Detection
+                                                           Ian Davidson 1 and S. S. Ravi 2
+
+
+Abstract. Outlier detection (OD) is a widely studied problem                                         Person      Gender         Status
+whose goal is to identify points from a data set that are considered                                   1          Male         Married
+anomalous. Among all methods used in AI and data science, OD is                                        2         Female       Unmarried
+                                                                                                       3          Male         Married
+perhaps the most controversial as common applications such as credit                                   4         Female       Unmarried
+card fraud, cyber-intrusion and terrorist activity all involve suggest-
+                                                                                                       5          Male        Unmarried
+ing that someone is committing a serious crime. However, there is                                      6         Female        Married
+little work on fair outlier detection. We show how to determine if an                                  7          Male        Unmarried
+outlier detection algorithm’s output is fair with respect to multiple                                  8         Female        Married
+protected status variables (PSVs) by formulating various combinato-
+rial problems which attempt to find an explanation (using the PSVs)
+that differentiates the outlier group from the normal group. We argue                Table 1. An illustrative collection of four points identified as outliers
+                                                                                       (Persons 1–4) and four points identified as normal (Persons 5–8).
+that if there is no solution for these explanation problems, then the
+output of an algorithm can be considered fair, and give a probabilistic
+                                                                                   averages and the normal group’s averages. However, analyzing the
+interpretation of our work. Since we prove that the underlying com-
+                                                                                   two PSVs together, we see an indication of unfairness: all Male and
+binatorial problems are computationally intractable (i.e., NP-hard),
+                                                                                   Married individuals and all Female and Unmarried individuals
+our approaches cannot be efficiently gamed/side-stepped.
+                                                                                   are in the outlier group and none in the normal group. Our combina-
+                                                                                   torial optimization formulations attempt to find combinations of PSV
+1     Introduction & Motivation                                                    values that are more probable in the outlier group than the population
+                                                                                   or normal group. How more probable they are is defined by the pa-
+Given a collection of points, the goal of outlier detection (OD)                   rameters set by the domain expert.
+   The notion of fairness has recently received much attention in su-                 In this paper we explore a method to check whether an OD algo-
+pervised learning (see e.g., [27]) with only recent work exploring                 rithm’s output is fair. We take a combinatorial optimization approach
+unsupervised learning such as clustering (see e.g., [25, 7, 18, 13]).              to make the method general purpose and independent of the outlier
+To our knowledge, there is no work on fairness in the context of                   detection algorithm. While presenting our analytical results, we limit
+OD. The fairness of an algorithm’s output is typically measured with               our attention to binary PSVs. However, when conducting our exper-
+respect to a single protected status variable (PSV) such as gender,                iments, we use one-hot encoding to convert non-binary PSVs to a
+age, marital status, sexual-orientation, etc., which is not given to the           binary encoding.
+algorithm. Measures of fairness can be divided at a high-level into
+                                                                                   Core Idea and Role of the Human. With m PSVs, there are 2m − 1
+two types [8]: (i) group-level fairness where we ensure that the PSV
+                                                                                   combinations (nonempty subsets) of them. In our work, an explana-
+values are uniformly divided across both the normal points and the
+                                                                                   tion is comprised of a combination of PSVs. We define a computa-
+outlier points and (ii) individual-level fairness where we require two
+                                                                                   tionally intractable (i.e., NP-hard) combinatorial problem which at-
+points which are very similar but with different protected status to be
+                                                                                   tempts to find explanations under different constraints on how many
+treated the same (i.e., both identified as normal or outlier).
+                                                                                   of the outlier and normal group are explained/covered. If the prob-
+A Motivating Example For Considering Multiple PSVs. Consider
+                                                                                   lem has a solution, then the OD algorithm’s output can be regarded
+the simple example of an outlier detection method which outputs four
+                                                                                   as unfair and our method gives the explanation why. If there is no
+people (Persons 1-4) as outliers and four people (Persons 5-8) as
+                                                                                   solution, then the output can be deemed fair, given the constraints
+normal as shown in Table 1. Studying each PSV3 individually, we
+                                                                                   we imposed on the optimization problem. For example, we may say
+see that the collection of outliers is group-wise fair: there are 50%
+                                                                                   that the OD algorithm’s output is unfair if the probability of a PSV
+Females and 50% Males and there are 50% Unmarried peo-
+                                                                                   combination (an explanation) occurring in the outlier group is greater
+ple and 50% Married people which is the same as the population
+                                                                                   than 50% or the population average. Most importantly, the use of a
+1 Department of Computer Science, University of California - Davis, CA,            computationally intractable problem for assessing the fairness means
+    USA. Email: davidson@cs.ucdavis.edu                                            that no OD algorithm can efficiently overcome/game the assessment
+2 Biocomplexity Institute & Initiative, University of Virginia, Charlottesville,
+                                                                                   method, under the common assumption that the complexity classes
+    VA, USA. Email: ssravi0@gmail.com
+3 Throughout the technical discussion in this paper, we assume for simplicity      P and NP are different [16]. The human plays a pivotal role in our
+    that PSVs such as Gender, Martial Status, etc. are binary. But in              work, they set the parameters of our algorithms to determine what is
+    our experiments we show that our method can handle multi-state PSVs by         “unfair” and interpret the explanation to determine if it is indeed a
+    using one-hot encoding.                                                        case of unfairness.
+   We begin this paper in Section 2 by formalizing the notions of ex-         described by a binary vector with m components, with the kth com-
+planation and coverage used throughout our work. We then formulate            ponent giving the value x(pk ), 1 ≤ k ≤ m. We use Oi to denote
+our approach of determining whether an OD algorithm’s output is fair          the binary vector corresponding to the ith point in O. Similarly, we
+as an integer linear programs in Section 3 and how a human expert             use Nj to denote the binary vector corresponding to the j th point in
+can use them in Section 4. In Section 5 we establish the complexity           N. Any subset P 0 of P can also be represented by a Boolean vector
+of our formulations to show that efficient OD methods cannot readily          x with m components, where the kth component is 1 if pk ∈ P 0 and
+game or sidestep our approach (under a commonly used assumptions              0 otherwise, 1 ≤ k ≤ m. For a vector x, we use xT to denote its
+in complexity theory). Section 6 shows experimental results to com-           transpose.
+plement our theoretical contributions after which we conclude.                   Under this notation, if a subset P 0 of PSVs, represented by the
+                                                                              vector x, forms a cover for O and anti-cover for N, then it can be
+                                                                              seen that the following conditions hold:
+2     Notation and Definitions
+                                                                                          xT Oi     ≥    1       ∀i, 1 ≤ i ≤ |O| and
+2.1      Cover and Anti-Cover                                                             xT Nj     =    0        ∀j, 1 ≤ j ≤ |N|.
+Let O and N denote the set of outlier and normal points so that D =
+O ∪ N denotes the set of all data points. It is assumed that sets N and       3     ILP Formulations and Probabilistic
+O are disjoint and produced by an OD algorithm. Let P denote the set                Interpretation
+of PSVs. Each PSV p ∈ P is assumed to take on a value from {0,1}.
+As mentioned earlier and as we do in our experiments, multi-state             3.1    Overview
+PSVs which can take on one of r values can be encoded as r binary             The previous section outlined constraints for a subset of PSVs to
+PSVs. For any point x ∈ D and any PSV p ∈ P, let x(p) denote the              form a cover or an anti-cover. Here we use those to construct sev-
+value of p for x.                                                             eral optimization problems with each being a test of fairness. In each
+                                                                              case, the optimization problem tries to find an explanation (using the
+Definition 2.1 (Cover)                                                        PSVs) that differentiates the outlier points from the normal points. If
+(a) Given a point x ∈ D, a PSV p ∈ P covers x if x(p) = 1.                    such an explanation exists, then the OD algorithm’s output is unfair
+(b) A subset P 0 of P forms a cover for a set S ⊆ D of points if              and our method produces the explanation why. If there is no expla-
+for each point x ∈ S, there is a PSV p ∈ P 0 that covers x (i.e.,             nation then the output is fair, given the constraints used.
+x(p) = 1).
+                                                                              High Level Description. We now outline the three optimization
+                                                                              problems explored in this paper descending from most strict to least
+Definition 2.2 (Anti-cover)
+                                                                              strict. The most strict version, called valid outlier description (or
+A subset P 0 of P forms an anti-cover for a set S ⊆ D of points if for
+                                                                              VOD), is only for illustrative purposes and not used in our ex-
+each point x ∈ S and every PSV p ∈ P 0 , x(p) = 0 (i.e., no PSV in
+                                                                              perimental results. It can be seen that each is a variant of the other.
+P 0 covers any point in S).
+                                                                              The objectives of these three problems are shown diagrammatically
+                                                                              in Figure 2. That figure shows a Venn diagram where the points are
+   One can visualize a cover and anti-cover in a Venn diagram as
+                                                                              divided into two groups (normal and outliers) and the coverage of
+follows and shown in Figure 1. If Y is a region representing a set of
+                                                                              the explanation (x) is denoted by a black dashed rectangle. This en-
+points, then a cover for Y is a region which contains all of Y . Further,
+                                                                              ables one to easily understand the three objectives of our optimiza-
+an anti-cover for Y is a region which has no overlap with Y .
+                                                                              tion problems:
+      A Cover for Y   An Anti-Cover   A f-cover for Y       An g-anti-Cover
+                          for Y                                  for Y
+                                                                              • VOD-Unfairness. (Left panel in Figure 2). Here we require find-
+                                                                                ing an explanation to cover only the outlier points and none of the
+           Y                            At least f      Y       At most g       normal points; that is, it is an anti-cover for them. This is included
+                                      fraction of y           fraction of y     for illustrative purposes.
+Figure 1. A Venn diagram view of the notion of cover, anti-cover, f -cover    • α-VOD Unfairness. (Middle panel in Figure 2). Here we require
+               and g-anti-cover for a set of points Y .                         finding an explanation to cover all the outlier points; however,
+                                                                                such an explanation may cover some (at most α) of the normal
+                                                                                points and hence is an (α/|N|)-anti-cover for them.
+  We can relax the definition of cover via the notion of an f -cover          • (α, β)-VOD-Unfairness. (Right panel in Figure 2). Here we re-
+which only requires that at least a fraction f of a set of points are           quire simultaneously finding a subset O0 of the outliers obtained
+covered. Similarly, a g-anti-cover is a relaxation of the notion of anti-       by removing at most β points from O and an α-VOD for the set N
+cove; a g-anti-cover permits at most a fraction g of a set points to be         and O0 . In other words, the chosen descriptor must cover at least
+covered.                                                                        |O| − β points of O and at most α points of N; in other words, it
+                                                                                is a (1 − β/|O|)-cover for O and an (α/|N|)-anti-cover for N.
+2.2      A Vector-Based Notation
+                                                                              3.2    A Probabilistic Interpretation
+For convenience in formulating integer linear programs (ILPs) of our
+combinatorial problems, we introduce a vector based notation. All             We explore a probabilistic interpretation of our work when an ex-
+vectors are assumed to be column vectors. Recall that any OD al-              planation is found; that is, the OD algorithm output is deemed to be
+gorithm effectively partitions the given data set D into two subsets,         unfair.
+namely O and N. Let P = {p1 , p2 , . . . , pm }, where m = |P|, denote        VOD. Suppose we apply the VOD problem formulation to a data
+the set of PSVs. For fairness considerations, each point in x ∈ D is          set. For VOD-unfairness, when there is no solution to the problem,
+we can conclude that for every descriptor (i.e., subset of PSVs) that                                 xT Oi       ≥ 1      ∀i
+occurs in the outlier group, there is at least one point in the normal                                 T
+                                                                                                      x Nj        = 0      ∀j
+group for which the descriptor is true. Conversely, if the problem has
+a solution such as X = female OR poor, then it means every-
+one who is ¬(female OR poor) must be in the normal group                       When there is a solution, the output of the above optimization
+(due to the anti-cover requirement for N ). Hence, the output is un-        problem is be a subset of PSVs (encoded in the vector x) that can
+fair to anyone who is either female OR poor because there exists            be used to differentiate outliers from normal points. If no solution
+an X such that: P (Outlier|X) = 1 and P (Normal|X) = 0.                     exists, then the OD algorithm’s output can be regarded as fair under
+                                                                            the strict definition of fairness.
+α-VOD. Suppose we apply the α-VOD problem formulation. Sup-                    We show in Section 5 that the argmax version of the above prob-
+pose (for simplicity) the same explanation (X= female OR poor)              lem can be solved efficiently while the argmin version is NP-hard.
+was found (because the dataset has changed) for α-VOD where
+α = |O|. Thus, the number of people satisfying the condition
+female OR poor in O is |O| and the number of people satisfy-                3.4    An ILP for the α-VOD-Unfairness Detection
+ing the same condition in N is some integer α0 ≤ α = |O|. Hence,                   Problem
+P (Outlier|X) = |O|/(|O| + α0 ) ≥ 0.5 since α0 ≤ |O|. This makes
+the output of the OD algorithm unfair since there is a PSV combina-         Definition 3.1 is quite a strict definition of unfairness. If just one point
+tion that is more probable in the outlier group than the normal group.      in the normal group satisfies the description corresponding to x for
+(α, β)-VOD. A limitation with the previous two formulations is that         the outlier points, the output would be deemed fair. Thus, it is useful
+they assumes an explanation for all points in O. This precludes iden-       to relax this condition by requiring that of the |N| normal points, at
+tifying the situation where a small fraction of individuals with a rare     most α of them also be covered by x, for some integer α.
+PSV combination are discriminated against. (α, β)-VOD addresses                Let m = |P| be the number of PSVs. To develop an ILP for this
+this situation. The (α, β)-VOD formulation searches for an explana-         version, in addition to the {0,1}-valued variables in x, we introduce
+tion for at least |O| − β instances from O but also explains at most α      γ = |N| additional {0,1}-valued variables, denoted by y1 , y2 , . . .,
+instances from N. Suppose we set α = |O|−β and there is a solution          yγ , one corresponding to each point in N. We will create constraints
+X. Then the number of points covered in O is at least |O| − β and           so that yj = 1 if a chosen vector x covers thePj th point in N; oth-
+the number α0 of points covered in N is at most α = |O| − β. Thus,          erwise, yj = 0, 1 ≤ j ≤ γ. In this manner, γj=1 yj will give us
+P (Outlier|X) ≥ (|O| − β)/[(|O| − β) + (|O| − β)] ≥ 0.5 if there is         the number of points of N covered by the vector x. The ILP is given
+a solution. If there is no solution, then no subset of PSV values exist     below.
+that are more probable in the outlier group than in the normal group.
+                                                                            Definition 3.2 α-VOD-Unfairness Detection.
+
+                                                                                           {argmin, argmax}x ||x|| such that
+
+        Normal Points         Normal Points           Normal Points                               xT Oi       ≥    1            ∀i
+                                                                                                  yj          ≤    xT Nj        ∀j
+                                       α                       α                                  m yj        ≥    xT Nj        ∀j
+                                                                                                  P
+        Outlier Points         Outlier Points                                                                 ≤
+                                                       Outlier Points   β                            j yj          α
+        VOD Unfairness       α-VOD Unfairness       α,β-VOD Unfairness
+          Criterion              Criterion               Criterion          In the above ILP, all the variables in x and all the auxiliary variables
+                                                                            y1 , y2 , . . ., yγ take on values from {0,1}.
+                                                                                We now explain how the above ILP correctly models the α-VOD-
+ Figure 2. A Venn diagram view of the three optimization problems we        Unfairness Detection Problem. The constraint on O ensures that
+ address in this paper and formalize in Section 3. The explanation of the   each point of O is covered by the chosen vector x. The constraint
+           instances found is shown by the black dashed line.
+                                                                            yj ≤ xT Nj (∀j) ensures that when the right hand side of this con-
+                                                                            straint is 0, yj must be set to 0. (In other words, if x does not cover the
+                                                                            j th point in N, then yj = 0.) Similarly, the constraint myj ≥ xT Nj
+                                                                            (∀j) ensures that when the right hand side is ≥ 1, yj must be set to 1.
+3.3    An ILP for the VOD-Unfairness Detection                              (Thus, if x does cover the j th point in N, then yj = 1.) It may help
+       Problem                                                              the reader to recall that the size of x is m so the maximum value of
+                                                                            the RHS of this constraint is m. Hence, these constraints ensure that
+Using the concepts in Section 2 we can construct an optimization            the value of yj correctly indicates whether or not the   P corresponding
+problem to determine if a VOD exists. As mentioned earlier, our             point of N is covered by x. Finally, the constraint j yj ≤ α en-
+method can handle single and multiple variable unfairness using one-        sures that at most α normal points are covered, as required by the
+hot encoding. Here argmax finds the most specific combination               problem specification.
+whilst argmin finds the most general. For the remainder of this pa-         Setting the Parameter α. If α = |N| and no solution is found, this
+per, we use ||x|| to denote the number of 1’s in the vector x.              can be interpreted that any explanation that covers all |O| outliers
+                                                                            also explains at least that many normal points, making the output
+Definition 3.1 The VOD-Unfairness Detection.                                fair. This naturally gives us a quantitative measure of fairness: the
+                                                                            larger the value of α for which there is no solution for a given data
+                {argmin, argmax}x ||x|| such that                           set, the fairer is the output.
+   In Section 5, we will show that even the problem of determining              The α VOD approach is a method of detecting systemic (or
+whether there is a solution x that satisfies all the constraints of α-       global/wide-scale) bias in the identified outliers. This is because
+VOD-Unfairness Detection problem is NP-complete. Thus, the prob-             all instances in the outlier group must be covered by the explana-
+lem is computationally intractable even without any optimization ob-         tion X (e.g., everyone flagged as an outlier satisfies the condition
+jective for ||x||.                                                           unmarried OR female. The parameter α determines how many
+                                                                             people in the normal group are also covered by X. How we set α can
+                                                                             determine what threshold we use to determine unfairness. Several
+3.5    An ILP for the (α, β)-VOD-Unfairness
+                                                                             possible examples are given below.
+       Detection Problem
+Our previous formulations require coverage of all outlier detection          • Outlier/Normal ratio unfairness: Here if a pattern is more probable
+points. However, there maybe situations where we wish to just iden-            in the outlier group than in the normal group, then it is deemed
+tify a very precise subset of outliers which are unfair. We formulate          unfair. For example, suppose we set α = |O| (as describe earlier).
+this problem as a combinatorial optimization problem that involves             Then if an explanation X is found, we have then P (Outlier|X) >
+explaining at most α points in N as before (i.e., at most α points in          0.5.
+N may be covered) but now require ignoring/not-explaining β points           • Outlier/Population ratio unfairness: Here if a pattern is more prob-
+in O. The ILP formulation for this problem, discussed below, is sim-           able in the outlier group than in the entire population, then it
+ilar to that for the α-VOD-Unfairness Detection problem discussed              is deemed unfair. Suppose we set α = (|O|/|D|) ∗ |N|. Then
+in the previous subsection.                                                    if an explanation X is found, we have then P (Outlier|X) >
+    Recall that m = ||P| denotes the number of PSVs. To develop an             P (Normal|X). That is, the probability of finding the X in the
+ILP for this version, in addition to the {0,1}-valued variables in x, as       outlier group is greater than finding X in the normal group.
+above we introduce (i) γ = |N| additional {0,1}-valued variables,
+denoted by y1 , y2 , . . ., yγ , one corresponding to each point in N, and      The (α, β)-VOD approach is useful for finding specific (or local,
+(ii) τ = |O| additional {0,1}-valued variables, denoted by z1 , z2 ,         fine-grained) bias. It allows a small subset of the outlier group (no
+. . ., zτ , one corresponding to each point in O. As done previously,        less than |O| − β) to be explained/identified using X. This approach
+we create the constraints so that yj = 1 (zi = 1) if a chosen vector         has several benefits.
+x covers the j th (ith ) point in N (O); P  otherwise,Pyj = 0, 1 ≤ j ≤ γ
+(zi = 0, 1 ≤ i ≤ τ ). In this manner, γj=1 yj τi=1 zi will give us           • It can model the classic disparate impact unfairness [3]. The
+the number of points of N and O covered by the vector x respectively.          80% rule of disparate impact requires that if for example 4 men
+The ILP is given below.                                                        are identified as outliers then no more than 5 woman should be
+                                                                               identified as outliers. To enforce this, we can simply require that
+Definition 3.3 (α, β)-Unfairness Detection.                                    β = 0.55555 ∗ |O|. If a solution X is found, then the ratio of X
+                                                                                                        0.55555
+                                                                               found in O must be ≥ 0.44444     ≥ 0.8.
+               {argmin, argmax}x ||x|| such that                             • It can model Outlier/Population ratio unfairness described above
+                    yj         ≤     xT Nj        ∀j                           but now for a subset of the outliers. Suppose we set α = ((|O| −
+                                                                               β)/|D|) ∗ |N|. Then, if an explanation X is found, we have
+                    m yj       ≥     xT Nj        ∀j
+                                                                               P (Outlier|X) > P (Normal|X).
+                    zi         ≤     xT Oi        ∀i
+                    m zi       ≥     xT Oi        ∀i
+                    P                                                        Human in the Loop Extensions. The identification of unfairness
+                         y     ≤     α
+                    Pj j                                                     in an OD algorithm’s output can be used as a filter for further hu-
+                       i zi    ≥     |O| − β                                 man examination. Here we describe a Test→Exclude→Test Loop
+                                                                             that allows our work and results to be used together. Let there be
+In the above ILP, all the variables in x and all the auxiliary variables
+                                                                             m binary PSVs. There are 2m − 1 possible (nonempty) subsets (i.e.,
+yj (1 ≤ j ≤ γ) and    P zi (1 ≤ P i ≤ τ ) take on values from {0,1}.
+                                                                             disjunctions) of the PSVs. All our methods will discover if any of
+The constraints on j yj and i zi ensure that at most α normal
+                                                                             these 2m − 1 disjunctions is unfair given various definitions of fair-
+points are covered and at most β outlier points are not covered. The
+                                                                             ness (whose probabilistic interpretation was discussed above). The
+rest of the argument to show that the above ILP correctly represents
+                                                                             domain expert can then examine the explanation (X) found to de-
+the (α, β) Unfairness Detection Problem is similar to the one given
+                                                                             termine if it is a true example of unfairness. If it is, then the loop
+for the α-VOD-Unfairness Detection problem.
+                                                                             is terminated and the output of the OD algorithms is deemed unfair.
+   In Section 5, we will show a complexity result for this problem
+                                                                             If not, then X can be excluded from future searches with a simple
+similar to that for the α-VOD-Unfairness Detection problem.
+                                                                             constraint, namely X 6= XOld .
+                                                                                Having a human verify that the discovered combinatorial unfair-
+4     Using Our Work In Practice and the Role of the                         ness is an actual case of unfairness is the only “iron-clad” way to
+      Domain Expert                                                          determine fairness in this context.
+We have presented in the prior sections the fundamentals of our ap-
+proach. Here we discuss how a domain expert can use them in prac-            5     Complexity of Unfairness Detection
+tice. We omit discussion of VOD as it is only an illustrative setting.
+We first overview how a user can set the parameters α and β and then         5.1    Overview
+how to use our method systemically.
+Setting Parameters. Each domain will have different thresholds for           This section outlines the complexity of the three unfairness detection
+identifying unfairness and these can naturally be modeled using the          problems defined by ILPs in Section 3. The results presented in this
+parameters α and β.                                                          section include the following.
+1. We show that the argmax version of the strict VOD-unfairness           P1 does not cover all the points in O and Q ⊆ P1 , Q also cannot
+   problem can be solved efficiently, while the argmin version of         cover all the points in O. This contradicts the assumption that Q is
+   the same problem (formulated suitably as a decision problem) is        a solution. Thus, if P1 cannot cover all the points in O, there is no
+   NP-complete.                                                           solution.
+2. For the α-VOD-Unfairness Detection and (α, β)-VOD-                        We now observe that if the set P1 constructed above is a solution to
+   Unfairness problems, we show that even determining whether a           the VODE problem instance, then no other solution can have a larger
+   solution exists is NP-complete. Thus, these problems are compu-        cardinality. This follows from the argument presented in Part 2 above
+   tationally intractable even without any optimization requirement       where it is shown that if Q is another solution, then Q ⊆ P1 .
+   on the number of PSVs chosen in the descriptor.                           We will present a simple running time analysis to show that Algo-
+                                                                          rithm 1 runs in polynomial time. Assume that N is represented by a
+   To prove complexity results, we need to reformulate each of the        |N| × |P| matrix MN such that the entry MN [i, j] gives the value of
+problems defined in the previous section as a decision problem.           the PSV pj ∈ P for the ith point in N. In a similar fashion, assume
+These reformulations are presented in the ensuing subsections. It is      that O is represented by a |O| × |P| matrix MO . Each iteration of the
+straightforward to verify that these decision versions indeed correctly   loop in Step 2 can be implemented to run in O(|N|) time using the
+represent the corresponding unfairness problems.                          matrix MN . Thus, Step 2 runs in O(|N| |P|) time. To check whether
+                                                                          P1 covers O (Step 5) we again need to check that each point in O
+5.2     Results for VOD-Unfairness Detection                              is covered by some PSV in P 0 . This can be done in O(|O| |P 0 |) =
+                                                                          O(|O| |P|) time using the matrix MO . So, the overall running time is
+We begin with the basic decision problem corresponding to the VOD-        O(|P| (|N| + |O|)).
+Unfairness Detection problem.
+                                                                             As shown above, one can efficiently check whether there is a valid
+(a) Valid Outlier Descriptor Existence (VODE)                             outlier descriptor, and if so, find one of maximum size. It is of interest
+Given: Sets O and N of outlier and normal points and the set P of         to investigate whether one can find such a descriptor of minimum
+PSVs.                                                                     size (i.e., a descriptor with the smallest number of PSVs). We now
+Question: Is there a subset P 0 ⊆ P such that P 0 is a valid outlier      show that this minimization version is NP-complete. We begin with
+descriptor for O and N (i.e., P 0 covers O and is an anti-cover for N)?   a formulation the corresponding decision problem.
+                                                                          (b) Minimum Valid Outlier Descriptor (MVOD)
+    Algorithm 1: An algorithm for VODE                                    Given: Sets O and N of outlier and normal points, the set P of PSVs
+1 Set P1 = P.                                                             and an integer k ≤ |P|.
+2 for each p ∈ P do                                                       Question: Is there a subset P 0 ⊆ P such that |P 0 | ≤ k and P 0 is a
+3      If p covers some point in N, then remove p from P1 .               valid outlier descriptor for O and N?
+4 end
+5 if P1 is a cover for O then                                             Theorem 2 The MVOD problem is NP-complete.
+6      output P1 as the solution.
+7 else                                                                    Proof: It is easy to see that MVOD is in NP since given a subset P 0
+8      output “No solution”.                                              of PSVs one can efficiently check that P 0 forms a cover for O and an
+9 end                                                                     anti-cover for N.
+                                                                              To prove NP-hardness, we use a reduction from the Minimum Set
+                                                                          Cover (MSC) problem: given a universe U = {u1 , u2 , . . . , un }, a
+                                                                          collection C = {C1 , C2 , . . . , Cm }, where each Cj is a subset of U
+Theorem 1 The VODE problem can be solved efficiently. If a valid          (1 ≤ j ≤ m) and an integer k ≤ m, is there is a subcollection C 0 of
+outlier descriptor exists, then such a descriptor of maximum size can     C such that |C 0 | ≤ k and the union of the sets in C 0 is equal to U ?
+also be found efficiently.                                                It is well known that MSC is NP-complete [16]. The reduction from
+                                                                          MSC to MVOD is as follows.
+Proof: A simple algorithm for VODE is given in Algorithm 1. The
+idea is to find a subset P1 of P such that P1 contains only those         1. The set O = {o1 , o2 , . . . , on } of outliers is in one-to-one corre-
+PSVs which do not cover any point in N. The algorithm then checks            spondence with the set U = {u1 , u2 , . . . , un }.
+whether P1 forms a cover for O. If so, the algorithm outputs P1 as        2. The set N = {ν1 , ν2 , . . . , νn } has n normal points. (The size of
+the solution; otherwise, the algorithm outputs the message “No solu-         N doesn’t play any role in the reduction.)
+tion”. We now prove the correctness of the algorithm. We also show        3. The set of PSVs P = {p1 , p2 , . . . , pm } is in one-to-one corre-
+that if P1 is a solution, then it has the largest cardinality among all      spondence with the collection C = {C1 , C2 , . . ., Cm }.
+the solutions.                                                            4. Suppose the element ui , 1 ≤ i ≤ n, appears in subsets Ci1 , Ci2 ,
+Part 1: Suppose P1 is a cover for O. Since P1 does not contain any           . . ., Cir for some r ≥ 1. Then, for the outlier point oi , PSVs pi1 ,
+PSV which covers a point in N, P1 is also an anti-cover for N. Hence,        pi2 , . . ., pir have the value 1 and the remaining PSVs have the
+P1 is a valid outlier descriptor.                                            value 0.
+Part 2: Suppose P1 does not cover all the points in O. We will prove      5. The limit k on the size of the required subset of PSVs is the same
+by contradiction that there is no VOD for the given VODE problem             as the parameter k for the MSC problem.
+instance. So, assume that Q is a solution and consider any variable
+q ∈ Q. Since Q is an anti-cover for N, q cannot cover any point in        This completes the polynomial time reduction. We now prove that
+N. Thus, the iterative procedure that constructs P1 would not have        there is a solution to the MVOD problem iff there is a solution to the
+eliminated q. In other words, q ∈ P1 and thus, Q ⊆ P1 . Now, since        MSC problem.
+   Suppose C 0 = {Cj1 , Cj2 , . . . , Cj` }, where ` ≤ k, is a so-                pj has the value 1 and the remaining PSVs (including pm+1 ) have
+lution to the MSC problem. We claim that the subset P 0 =                         the value 0. For each normal point νj ∈ N, m + 1 ≤ j ≤ γ, the
+{pj1 , pj2 , . . . , pj` } is a solution to the MVOD problem. Since ` ≤ k,        PSV pm+1 has the value 1 and all the remaining PSVs have the
+the constraint on |P 0 | is satisfied. To see that P 0 forms a cover for O,       value 0.
+consider any element oi ∈ O. Since C 0 is a solution to MSC, the ele-          5. The upper bound α on the number of normal points that can be
+ment ui ∈ U corresponding to oi appears in some set, say Cjy ∈ C 0 .              covered is set to k (from the MSC problem).
+By our construction of P 0 , the PSV pjy is in P 0 and oi is covered by
+pjy . Thus, P 0 forms a cover for O. Moreover, for each variable p             This completes the polynomial time reduction. We now prove that
+in P 0 , the value of p is 0 for each point in N. Thus, P 0 also forms         there is a solution to the α-VOD problem iff there is a solution to the
+an anti-cover for N. In other words, P 0 is a solution to the MVOD             MSC problem.
+problem.                                                                          Suppose C 0 = {Cj1 , Cj2 , . . . , Cj` }, where ` ≤ k, is a so-
+               0
+   Suppose P = {pj1 , pj2 , . . . , pj` }, where ` ≤ k, is a solution          lution to the MSC problem. We claim that the subset P 0 =
+to the MVOD problem. We claim that the subcollection C 0 defined               {pj1 , pj2 , . . . , pj` } is a solution to the α-VOD problem. We first
+by C 0 = {Cj1 , Cj2 , . . . , Cj` } is a solution to the MSC problem.          show that P 0 forms a cover for O. To see this, consider any ele-
+Since ` ≤ k, the constraint on |C 0 | is satisfied. To see that C 0 forms      ment oi ∈ O. Since C 0 is a solution to MSC, the element ui ∈ U
+a solution to MSC, consider any element ui ∈ U . Since P 0 is a                corresponding to oi appears in some set, say Cjy ∈ C 0 . By our con-
+solution to MVOD, there is a variable, say pjy ∈ P 0 , that covers oi ,        struction of P 0 , the variable pjy is in P 0 and oi is covered by pjy .
+the point corresponding to ui ∈ U . By our construction of C 0 , the           Thus, P 0 forms a cover for O. We now argue that P 0 covers at most
+element ui is covered by the set Cjy ∈ C 0 . Thus, C 0 forms a solution        ` ≤ k = α elements in N. To see this, notice that in the subset
+to the MSC problem, and this completes our proof of Theorem 2.                 N0 = {ν1 , ν2 , . . . , νm }, each point νj can be covered by only one
+                                                                               PSV, namely pj , 1 ≤ j ≤ m. Since |P 0 | = `, only ` points in N0 can
+                                                                               be covered by P 0 . Since P 0 does not contain pm+1 and each point in
+5.3     Complexity of α-VOD-Unfairness                                         N − N0 can only be covered by pm+1 , we see that P 0 does not cover
+Here, we consider the α-VOD-Unfairness problem and show that the               any point of N − N0 . Thus, P 0 covers only ` ≤ α points of N. In
+problem of determining whether a descriptor exists (with no con-               other words, P 0 is a solution to the α-VOD problem.
+straint on the number of PSVs in the descriptor) is NP-complete. It                Suppose P 0 = {pj1 , pj2 , . . . , pj` } is a solution to the α-VOD
+follows that both argmin and argmax versions of the problem (as                problem. We first show by contradiction that pm+1 6∈ P 0 . To see
+formulated in Section 3) are NP-hard. The decision version of the              this, suppose pm+1 ∈ P 0 . Then, all the points in N − N0 would be
+problem is as follows.                                                         covered by P 0 . Since |N − N0 | ≥ m + 1 > k = α, P 0 would
+α-VOD-Unfairness (α-VOD)                                                       cover more than α points of N; in other words, P 0 cannot be a valid
+                                                                               solution to α-VOD problem. This is a contradiction and we conclude
+Given: Sets O and N of outlier and normal points, the set P of PSVs
+                                                                               that pm+1 6∈ P 0 . We also claim that |P 0 | = ` ≤ α = k. To see this,
+and an integer α ≤ |N|.
+                                                                               if |P 0 | > α + 1, then since each PSV in P 0 covers one normal point
+Question: Is there a subset P 0 ⊆ P of PSVs such that P 0 covers O             in N0 , the number of normal points covered by P 0 would exceed α.
+and at most α points in N?                                                     Thus, P 0 ⊆ {p1 , p2 , . . . , pm } and |P 0 | ≤ α = k. Now, it is easy to
+   Note that this decision problem is a generalization of the VODE             verify that the subcollection C 0 = {Cj1 , Cj2 , . . . , Cj` } is a solution
+problem considered earlier; if we set α = 0, we obtain exactly the             to the MSC problem.
+VODE problem. However, unlike the VODE problem, this problem
+is NP-complete as shown below.
+                                                                               5.4    Complexity of (α, β)-VOD-Unfairness
+Theorem 3 The α-VOD problem is NP-complete.
+                                                                               Recall that the goal of (α, β)-VOD-Unfairness is to determine
+Proof: It is easy to see that α-VOD is in NP. We prove the NP-                 whether there is a subset of PSVs that can cover at least |O| − β
+hardness is through the following reduction from Minimum Set                   points of O while covering at most α points of N. A formal state-
+Cover (MSC).                                                                   ment of this decision problem is as follows.
+
+1. The set O = {o1 , o2 , . . . , on } of outliers is in one-to-one corre-     (α, β)-VOD-Unfairness ((α, β)-VOD)
+   spondence with the set U = {u1 , u2 , . . . , un }.                         Given: Sets O and N of outlier and normal points, the set P of PSVs
+2. The set N = {ν1 , ν2 , . . . , νγ } has γ = 1 + max{n2 , 2m} nor-           and positive integers α and β.
+   mal points. Of these, the subset N0 = {ν1 , ν2 , . . . , νm } consisting    Question: Is there a subset P 0 ⊆ P such that P 0 covers at least
+   of the first m elements is in one-to-one correspondence with the            |O| − β points in O and at most α points in N?
+   collection C = {C1 , C2 , . . ., Cm }. (The choice of γ ensures that
+   |N| > |O|.)                                                                 Theorem 4 The (α, β)-VOD-Unfairness problem is NP-complete.
+3. The set of PSVs P = {p1 , p2 , . . . , pm , pm+1 } has m+1 elements.
+   Of these, the subset P1 = {p1 , p2 , . . . , pm } consisting of the first   Proof: It is easy to see that (α, β)-VOD is in NP. The reduction
+   m PSVs is in one-to-one correspondence with the collection C =              from MSC to VODE is as follows.
+   {C1 , C2 , . . ., Cm }.
+4. Suppose the element ui , 1 ≤ i ≤ n, appears in subsets Ci1 , Ci2 ,          1. We set β = |U | = n. The set O = {o1 , o2 , . . . , o2n } has 2n
+   . . ., Cir for some r ≥ 1. Then, for the outlier point oi , the PSVs           points. Of these, the subset O0 = {o1 , o2 , . . . , on } consisting of
+   pi1 , pi2 , . . ., pir have the value 1 and the remaining PSVs have            the first n points is in one-to-one correspondence with the universe
+   value 0. For each normal point νj ∈ N0 , 1 ≤ j ≤ m, the PSV                    U = {u1 , u2 , . . . , un }.
+2. The set N = {ν1 , ν2 , . . . , νγ } has γ = 1 + max{n2 , 2m} nor-           one-hot encoding; the encoded values are shown in Table 2. Thus,
+   mal points. Of these, the subset N0 = {ν1 , ν2 , . . . , νm } consisting    the vector x that we solve for is not simply of length equal to the
+   of the first m elements is in one-to-one correspondence with the            number of PSVs.
+   collection C = {C1 , C2 , . . ., Cm }.
+                                                                                 PSV                        Possible Values
+3. The set of PSVs P = {p1 , p2 , . . . , pm , pm+1 } has m+1 elements.          Education                  Bachelors, Some-college, 11th, HS-grad,
+   Of these, the subset P1 = {p1 , p2 , . . . , pm } consisting of the first                                Prof-school, Assoc-acdm, Assoc-voc, 9th,
+   m PSVs is in one-to-one correspondence with the collection C =                                           7th-8th, 12th, Masters, 1st-4th, 10th, Doctor-
+   {C1 , C2 , . . ., Cm }.                                                                                  ate, 5th-6th, Preschool
+                                                                                 Marital-status             Married-civ-spouse,      Divorced,      Never-
+4. Suppose the element ui , 1 ≤ i ≤ n, appears in subsets Ci1 ,                                             married, Separated, Widowed, Married-
+   Ci2 , . . ., Cir for some r ≥ 1. Then, for the outlier point oi , the                                    spouse-absent, Married-AF-spouse
+   PSVs pi1 , pi2 , . . ., pir have the value 1 and the remaining PSVs           Relationship               Wife, Own-child, Husband, Not-in-family,
+   have value 0. For each outlier point oi ∈ N − N0 , the value of PSV                                      Other-relative, Unmarried
+   pm+1 is 1 and the values of the other PSVs are 0, n + 1 ≤ i ≤ 2n.             Race                       White, Asian-Pac-Islander, Amer-Indian-
+                                                                                                            Eskimo, Other, Black
+   For each normal point νj ∈ N0 , 1 ≤ j ≤ m, the PSV pj has the                 Sex                        Female, Male
+   value 1 and the remaining PSVs (including pm+1 ) have the value
+   0. For each normal point νj ∈ N, m + 1 ≤ j ≤ γ, the PSV pm+1
+   has the value 1 and all the remaining PSVs have the value 0.
+                                                                               Table 2. The PSVs Used in our Experiments on the Census Data. In total,
+5. The upper bound α on the number of normal points that can be                                       the length of x is 36.
+   covered is set to the value k in the MSC problem.
+
+This completes our polynomial time reduction. We will now prove                   We then apply several standard outlier detection methods from the
+that there is a solution to the (α, β)-VOD problem iff there is a solu-        classic styles of outlier detection [20] (which are given in paren-
+tion to the MSC problem.                                                       theses): i) Oddball [1] (graph-based), ii) DB(, π) [19] (distance-
+   Suppose C 0 = {Cj1 , Cj2 , . . . , Cj` }, where ` ≤ k, is a solu-           based), iii) LOF [5] (density-based), iv) ISODepth [24] (depth-
+tion to the MSC problem. It can be verified that the subset P 0 =              based), v) Model [2] (deviation-based). We then apply our two tests
+{pj1 , pj2 , . . . , pj` } covers the subset O0 consisting of n = |O| − β      of unfairness as per Definitions 3.1 and 3.2 with results reported in
+points. The proof that P 0 covers at most α points in N is similar to          Table 3. Unsurprisingly, all methods were found to be fair according
+that presented in the proof of Theorem 3. Thus, P 0 is a solution to           to strict illustrative test in Definition 3.1 and it is omitted from future
+the (α, β)-VOD problem.                                                        experiments.
+   Suppose P 0 = {pj1 , pj2 , . . . , pj` } is a solution to the α-VOD            For Definition 3.2 we report the smallest value of α that yield no
+problem. As in the proof of Theorem 3, it can be seen that pm+1 6∈             feasible solution and hence makes the OD algorithm output fair. This
+P 0 and that |P 0 | ≤ α = k. Thus, P 0 ⊆ {p1 , p2 , . . . , pm }. Let          value of the smallest α to obtain fairness can be interpreted as a mea-
+C 0 = {Cj1 , Cj2 , . . . , Cj` } be the subcollection of C constructed         sure of how fair is the algorithm’s outputs; the larger the value, the
+from P 0 . Since ` ≤ α = k, the constraint on |C 0 | is satisfied. To see      more fair is the method.
+that C 0 forms a solution to MSC, consider any element ui ∈ U . Since
+                                                                                  OD Algorithm               VOD       Unfair?    Smallest α-VOD En-
+P 0 is a solution to (α, β)-VOD, there is a variable, say pjy ∈ P 0 ,                                        (Definition 3.1)     suring Fairness (Defi-
+that covers oi ∈ O0 , the point corresponding to ui ∈ U . By our                                                                  nition 3.2)
+construction of C 0 , the element ui is covered by the set Cjy ∈ C 0 .            Graph-Based [1]            10:No, 0:Yes         0.63
+Thus, C 0 forms a solution to the MSC problem, and this completes                 Distance-Based [19]        10:No, 0:Yes         0.41
+                                                                                  Density-Based [5]          10:No, 0:Yes         0.53
+our proof of Theorem 4.                                                           Depth-Based [24]           10:No, 0:Yes         0.61
+                                                                                  Deviation-Based [2]        10:No, 0:Yes         0.54
+6    Experimental Results
+Our experiments attempt to address several questions that comple-              Table 3. The results of our two tests of fairness. Results are averaged over
+ment our theoretical results in the previous section.                             10 trials as some algorithms are randomly seeded. Note the α value is
+                                                                                reported as a fraction of total number of outliers identified by the method.
+• How fair are existing OD algorithm’s output according to α-VOD               This allows direct comparison as each OD method returns a different number
+  Definition 3.2 and (α, β)-VOD (Definition 3.3)? (Tables 3, 4)                         of outliers. The larger the number the more fairer the output.
+• Can existing rule discovery methods be used to detect fairness (Ta-
+  ble 6)? This forms a series of baselines for comparison albeit for
+  method not designed for the OD output fairness evaluation.                      We then applied our fine grain approach (Definition 3.3) that ig-
+• What is the typical runtime of our algorithm on a variety of data            nores up to β outlier instances until no α-VOD solution is found.
+  sets where the outliers are already given? (Table 5).                        Here we set α so as to require as many normal points as there are
+                                                                               outlier points to be covered by the explanation. Results are shown in
+Fairness of Existing OD Algorithm’s Output. We begin our ex-                   Table 4. Again we search for the smallest β value to obtain fairness
+periments using a classic dataset used in many fairness papers                 and here the smaller the value of β the better (as it means we have
+(see e.g., [7]), namely Census. This data set consists of census               to ignore fewer outliers). Overall we found that OD methods that
+information along continuous dimensions such as age, wage,                     construct data structures (i.e. graph-based and depth-based) covered
+hours worked, etc. and contains many PSVs. We experiment                       more normal points (α) and ignored fewer outlier points (β).
+with the following PSVs: Education, Married-status,                            Tests On More Datasets and Scalability. Previously we measured
+Relationship, Race, Sex. For non-binary PSVs, we use a                         the fairness of standard outlier detection algorithms. Here we re-
+  OD Algorithm                Smallest β for (Definition 3.3) for α = |O|             The failure of these methods is not unexpected as their aim is to
+                              fairness                                             generate a predictive model to maximize accuracy and not an ex-
+  Graph-Based                 0.31                                                 planation. Hence for data sets with a small number of outlier points
+  Distance-Based              0.53
+  Density-Based               0.41                                                 and/or small number of PSVs, they are more likely to predict the null
+  Depth-Based                 0.33                                                 model (i.e., always predict the normal class) as it has a very large
+  Deviation-Based             0.39                                                 accuracy.
+
+                                                                                       Data Set: |N|/|O|                 J48          Ripper        BRI
+                                                                                       Lympho 142/6                      No           No            No
+   Table 4. The results of our fine grained approach to ensure fairness as             Glass 205/9                       No           No            No
+defined in Definition 3.3 and averaged over 10 runs. For all experiments α is          Thyroid 3670/93                   No           Yes           No
+set to equal the number of outliers the method generated. Note the β value is          Satimage-2 5732/71                No           No            No
+ reported as a fraction of total number of outliers identified by the method.          Pima 500/268                      Yes          No            No
+          The smaller the value of β the more fairer the algorithm.                    Shuttle 45586/3511                No           Yes           No
+                                                                                       Http (KDDCUP99) 56226/2211        No           Yes           No
+                                                                                       Smtp (KDDCUP99) 95126/30          No           No            No
+port further results and test the scalability of our method on stan-
+dard outlier detection data sets. For a number of outlier data sets
+where the outliers are already given (see http://odds.cs.                          Table 6. Baseline tests of unfairness by determining if rule-based methods
+stonybrook.edu/), we applied our method using only the dis-                         can differentiate N and O using the PSVs with a non null-model. The data
+crete/categorical variables in those data sets as the PSVs. Note that              set and number of normal (|N|) and outlier (|O|) points are given. Compare
+these variables would not always be considered PSVs but the main                                            with our results in Table 5.
+aim here is to test scalability. We see that our approach overall is quite
+efficient but becomes less efficient as the number of outliers grows.
+This is as we need to find a cover for all outlier points. Results are
+shown in Table 5. For all the data sets, we find that our α-VOD test
+                                                                                   7     Conclusions, Limitations & Future Work
+of unfairness identify the results as being unfair.                                We propose novel tests of fairness for the output of outlier detection
+                                                                                   algorithms based on on combinatorial optimization problems. The
+           Data Set: |N|/|O|                      Run Time (α-                     optimization problems attempt to find the shortest explanation (using
+                                                  VOD Unfair?)                     protected state variables) that differentiates the outlier class from the
+           Lympho 142/6                           0.5 (Yes)
+           Glass 205/9                            0.3 (Yes)                        normal class. If such an explanation exists then the output is deemed
+           Thyroid 3670/93                        18.8 (Yes)                       unfair. Our tests have the benefit of having a user tunable parameters
+           Satimage-2 5732/71 (No)                32.7 (Yes)                       that can encode the user’s tolerance to fairness. Our α-VOD approach
+           Pima 500/268                           4.2 (Yes)                        can find global unfairness by identifying a subset of PSVs (X) that
+           Shuttle 45586/3511                     195.7 (Yes)
+                                                                                   all individuals in the outlier group have and that at most α people in
+           Http (KDDCUP99) 56226/2211             221.3 (Yes)
+           Smtp (KDDCUP99) 95126/30               1.6 (Yes)                        the normal group have. If α is set to be the number of outliers then
+                                                                                   the criteria for unfairness is then simply P (Outlier|X) > 0.5. Our
+                                                                                   (α, β)-VOD allows finding local (finer-grained) unfairness by iden-
+                                                                                   tifying a subset of outlier points that exhibit α-VOD unfairness. Our
+ Table 5. The data set and number of normal (N) and outlier (O) points.
+The run time in seconds using Gurobi on a 4 CPU Xeon Machine for our two           empirical results show that not surprisingly the output of five clas-
+measures of fairness. We report in parentheses if a solution is found (i.e., the   sic outlier detection methods are unfair (see Table 5) whilst baseline
+                output is unfair). For α-VOD we set α = |O|.                       rule-based methods are easily misled into concluding that their out-
+                                                                                   puts are fair, especially when the number of outliers is small and the
+                                                                                   number of PSVs is small. (see Table 6). This is not surprising as these
+Baseline Comparison Results. Creating baselines for comparison is                  baselines were created for predictive purposes.
+challenging since to our knowledge, our method is the first one for                   We now point out some limitations of our work. Because our com-
+assessing fairness for outlier detection. We create baseline methods               putational problems are intractable they cannot be easily game/side-
+from rule generation methods, which attempt to find a set of rules                 stepped. However, our computational intractability results are most
+that differentiate between the two classes Normal and Outlier. The                 useful when the number of PSVs is not small. (Formally, the un-
+reasoning here is similar to our own method but without the guaran-                fairness detection problems defined in Section 3 are fixed parameter
+tees that our computational intractability results give, namely that if a          tractable [21] with respect to the parameter |P|, that is, the number
+non-null model exists that can differentiate the outlier points from the           of PSVs.) If |P| = m is small, one can try all the 2m subsets of P
+normal points using the PSVs, then the OD algorithm’s output can be                to check if any of them is a solution. (Even for m = 20, the number
+regarded as unfair. Results are shown in Table 6. All rule generation              of subsets is only about a million.) Likewise, our intractability re-
+methods are in the Weka package: J48 (equivalent of C4.5 [22]), Rip-               sults are not as useful when the number of outliers is very small. For
+per [10], Bayesian Rule Induction - cn2 (BRI) [9]. We find that these              example, if |O| ≤ c log |N| for some constant c > 0, the combinato-
+methods are remarkably consistent with each other and predict fair-                rial problems formulated in the paper can be solved efficiently. This
+ness (only the null model was found) for most data sets where as our               is because in such a case, one can find a subset P 0 of PSVs, where
+methods indicate that they are unfair. For many large data sets, the               |P 0 | ≤ |O|, to cover all the outliers. Thus, the number of subsets of
+output is also said to be fair by these methods (Thyroid, Satimage,                P 0 to be tried is 2c log |N| = Nc , which is a polynomial since c is a
+Pima, Shuttle, Http (KDDCUP99)). This may seem counter-intuitive,                  constant.
+but it is important to realize we limit ourselves to only the categorical             In this paper we limited ourselves to studying traditional OD meth-
+variables (the PSVs) when building these models.                                   ods that just identify the outliers. We leave to future work the study of
+other styles of OD detection such as group, collective and contextual   REFERENCES
+[6].
+                                                                         [1] Leman Akoglu, Mary McGlohon, and Christos Faloutsos, ‘Oddball:
+                                                                             Spotting anomalies in weighted graphs’, in Pacific-Asia Conference on
+                                                                             Knowledge Discovery and Data Mining, pp. 410–421. Springer, (2010).
+                                                                         [2] Andreas Arning, Rakesh Agrawal, and Prabhakar Raghavan, ‘A linear
+                                                                             method for deviation detection in large databases’, in Proc. ACM KDD,
+                                                                             pp. 164–169, (1996).
+                                                                         [3] Arturs Backurs, Piotr Indyk, Krzysztof Onak, Baruch Schieber, Ali
+                                                                             Vakilian, and Tal Wagner, ‘Scalable fair clustering’, To Appear in
+                                                                             ICML, (2019).
+                                                                         [4] S. Barocas and A. D. Selbst, ‘Big data’s disparate impact’, California
+                                                                             Law Review, 671, 671–732, (2016).
+                                                                         [5] Markus M Breunig, Hans-Peter Kriegel, Raymond T Ng, and Jörg
+                                                                             Sander, ‘Lof: identifying density-based local outliers’, in SIGMOD
+                                                                             Record, pp. 93–104. ACM, (2000).
+                                                                         [6] V. Chandola, A. Banerjee, and V. Kumar, ‘Anomaly detection: A sur-
+                                                                             vey’, ACM computing surveys (CSUR), 41(3), 15:1–15:58, (2009).
+                                                                         [7] Flavio Chierichetti, Ravi Kumar, Silvio Lattanzi, and Sergei Vassil-
+                                                                             vitskii, ‘Fair clustering through fairlets’, in Proc. NeurIPS, pp. 5036–
+                                                                             5044, (2017).
+                                                                         [8] A. Chouldechova and A. Roth. The frontiers of fairness in machine
+                                                                             learning. ArXiv: 1810.08810v1, 2018.
+                                                                         [9] Peter Clark and Tim Niblett, ‘The cn2 induction algorithm’, Machine
+                                                                             learning, 3(4), 261–283, (1989).
+                                                                        [10] William W Cohen, ‘Fast effective rule induction’, in Machine learning
+                                                                             proceedings 1995, 115–123, Elsevier, (1995).
+                                                                        [11] George Bernard Dantzig, Richard James Duffin, Ky Fan, and Al-
+                                                                             bert William Mather, Linear inequalities and related systems, num-
+                                                                             ber 38, Princeton university press, 1956.
+                                                                        [12] Ian Davidson and S. S. Ravi, ‘Towards determining the fairness of
+                                                                             outlier detection’, Technical report, Univeristy of California - Davis,
+                                                                             Davis, CA, USA, (2019). www.cs.ucdavis.edu/˜davidson/
+                                                                             Publications/TR.pdf.
+                                                                        [13] Ian Davidson and S. S. Ravi, ‘Making existing clusterings fairer: Algo-
+                                                                             rithms, complexity results and insights.’, in Proc. AAAI, p. To Appear,
+                                                                             (2020).
+                                                                        [14] Dua Dheeru and Efi Karra Taniskidou. UCI machine learning reposi-
+                                                                             tory, 2017.
+                                                                        [15] Michael Feldman, Sorelle A. Friedler, John Moeller, Carlos Scheideg-
+                                                                             ger, and Suresh Venkatasubramanian, ‘Certifying and removing dis-
+                                                                             parate impact’, in Proceedings of the 21th ACM SIGKDD International
+                                                                             Conference on Knowledge Discovery and Data Mining, Sydney, NSW,
+                                                                             Australia, August 10-13, 2015, pp. 259–268, (2015).
+                                                                        [16] M. R. Garey and D. S. Johnson, Computers and Intractability: A Guide
+                                                                             to the Theory of NP-completeness, W. H. Freeman & Co., San Fran-
+                                                                             cisco, 1979.
+                                                                        [17] Jon Kleinberg, Sendhil Mullainathan, and Manish Raghavan, ‘Inher-
+                                                                             ent trade-offs in the fair determination of risk scores’, arXiv preprint
+                                                                             arXiv:1609.05807, (2016).
+                                                                        [18] Matthäus Kleindessner, Pranjal Awasthi, and Jamie Morgenstern, ‘Fair
+                                                                             k-center clustering for data summarization’, in Proc. ICML, pp. 3448–
+                                                                             3457, (2019).
+                                                                        [19] Edwin M Knorr, Raymond T Ng, and Vladimir Tucakov, ‘Distance-
+                                                                             based outliers: algorithms and applications’, The VLDB JournalThe
+                                                                             International Journal on Very Large Data Bases, 8(3-4), 237–253,
+                                                                             (2000).
+                                                                        [20] H-P. Kriegel, P. Kröger, and A. Zimek. Outlier detection techniques.
+                                                                             Tutorial at SDM 2010, 2010. Slides available from: https://
+                                                                             archive.siam.org/meetings/sdm10/tutorial3.pdf.
+                                                                        [21] R. Neidermeier, Invitation to fixed parameter algorithms, Oxford Uni-
+                                                                             versity Press, New York, NY, 2006.
+                                                                        [22] J Ross Quinlan, C4. 5: programs for machine learning, Elsevier, 2014.
+                                                                        [23] K. Rosen, Discrete Mathematics and its Applications, McGraw-Hill,
+                                                                             New York, NY, sixth edn., 2007.
+                                                                        [24] I Ruts and PJ Rousseeuw, ‘Isodepth: A program for depth contours’, in
+                                                                             COMPSTAT, pp. 441–446. Springer, (1996).
+                                                                        [25] M. Schmidt, C. Schwiegelshohn, and C. Sholer, ‘Fair coresets
+                                                                             and streaming algorithms for fair k-means clustering’, CoRR,
+                                                                             abs/1812.10854v1, (2018).
+                                                                        [26] Alexander Schrijver, Theory of linear and integer programming, John
+                                                                             Wiley & Sons, 1998.
+                                                                        [27] Binh Luong Thanh, Salvatore Ruggieri, and Franco Turini, ‘k-NN as
+                                                                             an implementation of situation testing for discrimination discovery and
+     prevention’, in Proceedings of the 17th ACM SIGKDD International
+     Conference on Knowledge Discovery and Data Mining, San Diego, CA,
+     USA, August 21-24, 2011, pp. 502–510, (2011).
+[28] Uniform guidelines on employee selection procedures, 1979. (Docu-
+     ment date: March 2, 1979).
+[29] Richard S. Zemel, Yu Wu, Kevin Swersky, Toniann Pitassi, and Cyn-
+     thia Dwork, ‘Learning fair representations’, in Proceedings of the 30th
+     International Conference on Machine Learning, ICML 2013, Atlanta,
+     GA, USA, 16-21 June 2013, pp. 325–333, (2013).
+

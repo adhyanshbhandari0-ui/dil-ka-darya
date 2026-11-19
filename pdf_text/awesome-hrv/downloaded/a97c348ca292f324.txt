@@ -1,0 +1,531 @@
+                                                           Time-Series Anomaly Detection Service at Microsoft
+                                                              Hansheng Ren, Bixiong Xu, Yujing Wang, Chao Yi, Congrui Huang, Xiaoyu Kou∗
+                                                                                Tony Xing, Mao Yang, Jie Tong, Qi Zhang
+                                                                                                       Microsoft
+                                                                                                     Beijing, China
+                                                              {v-hanren,bix,yujwang,t-chyi,conhua,v-xiko,tonyxin,maoyang,jietong,qizhang}@microsoft.com
+
+                                         ABSTRACT                                                                                      1   INTRODUCTION
+                                         Large companies need to monitor various metrics (for example,                                 Anomaly detection aims to discover unexpected events or rare
+                                         Page Views and Revenue) of their applications and services in real                            items in data. It is popular in many industrial applications and
+
+
+
+
+arXiv:1906.03821v1 [cs.LG] 10 Jun 2019
+                                         time. At Microsoft, we develop a time-series anomaly detection ser-                           is an important research area in data mining. Accurate anomaly
+                                         vice which helps customers to monitor the time-series continuously                            detection can trigger prompt troubleshooting, help to avoid loss in
+                                         and alert for potential incidents on time. In this paper, we intro-                           revenue, and maintain the reputation and branding for a company.
+                                         duce the pipeline and algorithm of our anomaly detection service,                             For this purpose, large companies have built their own anomaly
+                                         which is designed to be accurate, efficient and general. The pipeline                         detection services to monitor their business, product and service
+                                         consists of three major modules, including data ingestion, exper-                             health [11, 20]. When anomalies are detected, alerts will be sent
+                                         imentation platform and online compute. To tackle the problem                                 to the operators to make timely decisions related to incidents. For
+                                         of time-series anomaly detection, we propose a novel algorithm                                instance, Yahoo releases EGADS [11] to automatically monitor and
+                                         based on Spectral Residual (SR) and Convolutional Neural Network                              raise alerts on millions of time-series of different Yahoo properties
+                                         (CNN). Our work is the first attempt to borrow the SR model from                              for various use-cases. At Microsoft, we build an anomaly detection
+                                         visual saliency detection domain to time-series anomaly detection.                            service to monitor millions of metrics coming from Bing, Office
+                                         Moreover, we innovatively combine SR and CNN together to im-                                  and Azure, which enables engineers move faster in solving live site
+                                         prove the performance of SR model. Our approach achieves superior                             issues. In this paper, we focus on the pipeline and algorithm of our
+                                         experimental results compared with state-of-the-art baselines on                              anomaly detection service specialized for time-series data.
+                                         both public datasets and Microsoft production data.                                              There are many challenges in designing an industrial service for
+                                                                                                                                       time-series anomaly detection:
+                                         CCS CONCEPTS                                                                                     Challenge 1: Lack of Labels. To provide anomaly detection
+                                         • Computing methodologies → Machine learning; Unsuper-                                        services for a single business scenario, the system must process mil-
+                                         vised learning; Anomaly detection; • Mathematics of com-                                      lions of time-series simultaneously. There is no easy way for users
+                                         puting → Time series analysis; • Information systems → Traffic                                to label each time-series manually. Moreover, the data distribution
+                                         analysis.                                                                                     of time-series is constantly changing, which requires the system
+                                                                                                                                       recognizing the anomalies even though similar patterns have not
+                                         KEYWORDS                                                                                      appeared before. That makes the supervised models insufficient in
+                                                                                                                                       the industrial scenario.
+                                         anomaly detection; time-series; Spectral Residual                                                Challenge 2: Generalization. Various kinds of time-series from
+                                         ACM Reference Format:                                                                         different business scenarios are required to be monitored. As shown
+                                         Hansheng Ren, Bixiong Xu, Yujing Wang, Chao Yi, Congrui Huang, Xi-                            in Figure 1, there are several typical categories of time-series pat-
+                                         aoyu Kou and Tony Xing, Mao Yang, Jie Tong, Qi Zhang. 2019. Time-                             terns; and it is important for industrial anomaly detection services
+                                         Series Anomaly Detection Service at Microsoft. In The 25th ACM SIGKDD                         to work well on all kinds of patterns. However, existing approaches
+                                         Conference on Knowledge Discovery and Data Mining (KDD ’19), August                           are not generalized enough for different patterns. For example, Holt
+                                         4–8, 2019, Anchorage, AK, USA. ACM, New York, NY, USA, 9 pages. https:                        winters [5] always shows poor results in (b) and (c); and Spot [19]
+                                         //doi.org/10.1145/3292500.3330680
+                                                                                                                                       always shows poor results in (a). Thus, we need to find a solution
+                                                                                                                                       of better generality.
+                                         ∗ Hansheng Ren is a student in University of Chinese Academy of Sciences; Chao Yi
+                                         and Xiaoyu Kou are students in Peking University. The work was done when they
+                                         worked as full-time interns at Microsoft.
+
+
+                                         Permission to make digital or hard copies of all or part of this work for personal or
+                                         classroom use is granted without fee provided that copies are not made or distributed
+                                         for profit or commercial advantage and that copies bear this notice and the full citation
+                                         on the first page. Copyrights for components of this work owned by others than ACM
+                                         must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,
+                                         to post on servers or to redistribute to lists, requires prior specific permission and/or a
+                                         fee. Request permissions from permissions@acm.org.
+                                                                                                                                               (a) seasonal          (b) stable           (c) unstable
+                                         KDD ’19, August 4–8, 2019, Anchorage, AK, USA
+                                         © 2019 Association for Computing Machinery.
+                                         ACM ISBN 978-1-4503-6201-6/19/08. . . $15.00
+                                         https://doi.org/10.1145/3292500.3330680                                                                   Figure 1: Different types of time-series.
+   Challenge 3: Efficiency. In business applications, a monitor-                 in time-series data. The inspiring results prove the possibil-
+ing system must process millions, even billions of time-series in                ity of using computer vision technologies to solve anomaly
+near real time. Especially for minute-level time-series, the anom-               detection problems.
+aly detection procedure needs to be finished within limited time.              • We combine the SR and CNN model to improve the accuracy
+Therefore, efficiency is one of the major prerequisites for online               of time-series anomaly detection. The idea is innovative and
+anomaly detection service. Even though the models with large time                the approach outperforms current state-of-the-art methods
+complexity are good at accuracy, they are often of little use in an              by a large margin. Especially, the F 1 -score is improved by
+online scenario.                                                                 more than 20% on Microsoft production data.
+   To tackle the aforementioned problems, our goal is to develop               • From the practical perspective, the proposed solution has
+an anomaly detection approach which is accurate, efficient and                   good generality and efficiency. It can be easily integrated
+general. Traditional statistical models [5, 14–17, 19, 20, 24] can be            with online monitoring systems to provide quick alerts for
+easily adopted online, but their accuracies are not sufficient for               important online metrics. This technique has enabled prod-
+industrial applications. Supervised models [13, 18] are superior in              uct teams to move faster in detecting issues, save manual
+accuracy, but they are insufficient in our scenario because of lacking           efforts, and accelerate the process of diagnostics.
+labeled data. There are other unsupervised approaches, for instance,
+Luminol [1] and DONUT [23]. However, these methods are either              The rest of this paper is organized as follows. First, in Section 2,
+too time-consuming or parameter-sensitive. Therefore, we aim to          we describe the details of system design, including data ingestion,
+develop a more competitive method in the unsupervised manner             experimentation platform and online compute. Then, we share
+which favors accuracy, efficiency and generality simultaneously.         our experience of real applications in Section 3 and introduce the
+   In this paper, we borrow the Spectral Residual model [10] from        methodology in Section 4. Experimental results are analyzed in
+the visual saliency detection domain to our anomaly detection appli-     Section 5 and related works are presented in Section 6. Finally, we
+cation. Spectral Residual (SR) is an efficient unsupervised algorithm,   conclude our work and put forward future work in Section 7.
+which demonstrates outstanding performance and robustness in the
+visual saliency detection tasks. To the best of our knowledge, our
+work is the first attempt to borrow this idea for time-series anomaly    2     SYSTEM OVERVIEW
+detection. The motivation is that the time-series anomaly detection
+task is similar to the problem of visual saliency detection essen-       The whole system consists of three major components: data inges-
+tially. Saliency is what "stands out" in a photo or scene, enabling      tion, experimentation platform and online compute. Before
+our eye-brain connection to quickly (and essentially unconsciously)      going into more detail about these components, we will introduce
+focus on the most important regions. Meanwhile, when anomalies           the whole pipeline first. Users can register monitoring tasks by
+appear in time-series curves, they are always the most salient part      ingesting time-series to the system. Ingesting time-series from dif-
+in vision.                                                               ferent data sources (including Azure storage, databases and online
+   Moreover, we propose a novel approach based on the combina-           streaming data) is supported. The ingestion worker is responsible
+tion of SR and CNN. CNN is a state-of-the-art method for supervised      for updating each time-series according to the designated granu-
+saliency detection when sufficient labeled data is available; while      larity, for example, minute, hour, or day. Time-series points enter
+SR is a state-of-the-art approach in unsupervised setting. Our inno-     the streaming pipeline through Kafka and is stored into the time-
+vation is to unite these two models by applying CNN on the basis         series database. Anomaly detection processor calculates the anomaly
+of SR output directly. As the problem of anomaly discrimination be-      status for incoming time-series points online. In a common sce-
+comes much easier upon the output of SR model, we can train CNN          nario of monitoring business metrics, users ingest a collection of
+through automatically generated anomalies and achieve significant        time-series simultaneously. As an example, Bing team ingests the
+performance enhancement over the original SR model. Because the          time-series representing the the usage of different markets and plat-
+anomalies used for CNN training is fully synthetic, the SR-CNN ap-       forms. When incident happens, alert service combines anomalies
+proach remains unsupervised and establishes a new state-of-the-art       of related time-series and sends them to users through emails and
+performance when no manually labeled data is available.                  paging services. The combined anomalies show the overall status of
+   As shown in the experiments, our proposed algorithm is more           an incident and help users to shorten the time in diagnosing issues.
+accurate and general than state-of-the-art unsupervised models.          Figure 2 illustrates the general pipeline of the system.
+Furthermore, we also apply it as an additional feature in the su-
+pervised learning model. The experimental results demonstrate
+that the performance can be further improved when labeled data is        2.1     Data Ingestion
+available; and the additional features do provide complementary          Users can register a monitor task by creating a Datafeed. Each
+information to existing anomaly detectors. Up to the date of pa-         datafeed is identified by Connect String and Granularity. Connect
+per submission, the F 1 -score of our unsupervised and supervised        String is used to connect user’s storage system to the anomaly
+approaches are both the best ever achieved on the open datasets.         detection service. Granularity indicates the update frequency of a
+   The contributions of this paper are highlighted as below:             datafeed; and the minimum granularity is one minute. An ingestion
+                                                                         task will ingest the data points of time-series to the system accord-
+    • For the first time in the anomaly detection field, we borrow       ing to the given granularity. For example, if a user sets minute as
+      the technique of visual saliency detection to detect anomalies     the granularity, ingestion module will create a task every minute
+                                                        Figure 2: System Overview
+
+
+to ingest a new data point. Time-series points are ingested into in-    data is used to evaluate the accuracy of the anomaly detection
+fluxDB1 and Kafka2 . Throughput of this module varies from 10,000       model. We also evaluate the efficiency and generality of each model
+to 100,000 data points per second.                                      on the platform. In online experiments, we flight several datafeeds
+                                                                        to the new model. A couple of metrics, such as click through rate
+2.2      Online Compute                                                 of alerts, percentage of anomalies and false anomaly rate is used
+The online compute module processes each data point immediately         to decide whether the new model can be deployed to production.
+after it enters the pipeline. To detect anomaly status of an incoming   The experimentation platform is built on Azure machine learning
+point, a sliding window of the time-series data points is required.     service4 . If a model is verified to be effective, the platform will
+Therefore, we use Flink3 to manage the points in memory to opti-        expose it as a web service and host it on K8s5 .
+mize the computation efficiency. Currently, the streaming pipeline
+processes more than 4 million time-series every day in production.      3    APPLICATIONS
+The maximum throughput can be 4 million every minute. Anomaly           At Microsoft, it is a common need to monitor business metrics and
+detection processor detects anomalies for each single time-series.      act quickly to address the issue if there is anything outside of the
+In practice, a single anomaly is not enough for users to diagnose       normal pattern. To tackle the problem, we build a scalable system
+their service efficiently. Thus, smart alert processor correlates the   with the ability to monitor minute-level time-series from various
+anomalies from difference time-series and generates an incident         data sources. Automated diagnostic insights are provided to assist
+report accordingly. As anomaly detection is the main topic in this      users to resolve their issues efficiently. The service has been used
+paper, smart alert is not discussed in more detail.                     by more than 200 product teams within Microsoft, across Office
+                                                                        365, Windows, Bing and Azure organizations, with more than 4
+2.3      Experimentation Platform                                       million time-series ingested and monitored continuously.
+We build an experimentation platform to evaluate the performance           As an example, Michael from Bing team would like to monitor
+of anomaly detection models. Before we deploy a new model, offline      the usage of their service in the global marketplace. In the anomaly
+experiments and online A/B tests will be conducted on the platform.     detection system, he created a new datafeed to ingest thousands of
+Users can mark a point as anomaly or not on the portal. A labeling      time-series, each indicating the usage of a specific market (US, UK,
+service is provided to human editors. Editors will first label true     etc.), device (PC, windows phone, etc.) or channel (PORE, QBRE,
+anomaly points of a single time-series and then label false anomaly     etc.). Within 5 minutes, Michael saw the ingested time-series on
+points from anomaly detection results of a specific model. Labeled      the portal. At 9am, Oct-14, 2017, the time-series associated to the
+                                                                        UK market encountered an incident. Michael was notified through
+1 https://www.influxdata.com/
+2 https://kafka.apache.org/                                             4 https://azure.microsoft.com/en-us/services/machine-learning-service/
+3 https://flink.apache.org/                                             5 https://kubernetes.io/docs/concepts/overview/what-is-kubernetes/
+                              (a) Alert Page                                                                  (b) Incident Report
+
+
+                                    Figure 3: An illustration of example application from Microsoft Bing
+
+
+E-mail alerts (as shown in Figure 3(a)) and started to investigate the            (CNNs) when sufficient labeled data is available [25]. Nevertheless,
+problem. He opened the incident report where the top correlated                   it is prohibitive for our application as large-scale labeled data is
+time-series with anomalies are selected from a set of time-series                 difficult to be collected online. As a trade-off, we propose a novel
+around 9am. As shown in Figure 3(b), usage on PC devices and                      method, SR-CNN, which applies CNN on the output of SR model di-
+PORE channel can be found in the incident report. Michael brought                 rectly. CNN is responsible to learn a discriminate rule to replace the
+this insight to the team and finally found that the problem was                   single threshold adopted by the original SR solution. The problem
+caused by a relevance issue which made users do lots of pagination                becomes much easier to learn the CNN model on SR results than
+requests (PORE) to get satisfactory search results.                               on the original input sequence. Specifically, we can use artificially
+   As another example, the Outlook anti-spam team used to lever-                  generated anomaly labels to train the CNN-based discriminator.
+age a rule-based method to monitor the effectiveness of their spam                In the following sub-sections, we introduce the details of SR and
+detection system. However, this method was not easy to be main-                   SR-CNN methods respectively.
+tained and usually showed bad cases on some Geo-locations. There-
+fore, they ingested key metrics to our anomaly detection service
+to monitor the effectiveness of their spam detection model across                 4.1    SR (Spectral Residual)
+different Geo-locations. Through our API, they have integrated
+                                                                                  The Spectral Residual (SR) algorithm consists of three major steps:
+anomaly detection ability into the Office DevOps platform. By
+                                                                                  (1) Fourier Transform to get the log amplitude spectrum; (2) calcu-
+using this automatic detection service, they have covered more
+                                                                                  lation of spectral residual; and (3) Inverse Fourier Transform that
+Geo-locations and received less false positive cases compared to
+                                                                                  transforms the sequence back to spatial domain. Mathematically,
+the original rule-based solution.
+                                                                                  given a sequence x, we have
+4    METHODOLOGY
+The problem of time-series anomaly detection is defined as below.
+                                                                                                   A(f ) = Amplitude(F(x))                          (1)
+   Problem 1. Given a sequence of real values, i.e., x = x 1 , x 2 , ..., x n ,
+                                                                                                   P(f ) = Phrase(F(x))                             (2)
+the task of time-series anomaly detection is to produce an output
+sequence, y = y1 , y2 , ..., yn , where yi ∈ {0, 1} denotes whether x i is                         L(f ) = loд(A(f ))                               (3)
+an anomaly point.                                                                                  AL(f ) = hq (f ) · L(f )                         (4)
+   As emphasized in the Introduction, our challenge is to develop                                  R(f ) = L(f ) − AL(f )                           (5)
+                                                                                                              −1
+a general and efficient algorithm with no labeled data. Inspired                                   S(x) = F (exp(R(f ) + iP(f )))                   (6)
+by the domain of visual computing, we adopt Spectral Residual
+(SR) [10], a simple yet powerful approach based on Fast Fourier
+Transform (FFT) [21]. The SR approach is unsupervised and has
+been proved to be efficient and effective in visual saliency detection            where F and F−1 denote Fourier Transform and Inverse Fourier
+applications. We believe that the visual saliency detection and time-             Transform respectively. x is the input sequence with shape n × 1;
+series anomaly detection tasks are similar essentially, because the               A(f ) is the amplitude spectrum of sequence x; P(f ) is the corre-
+anomaly points are usually salient in the visual perspective.                     sponding phase spectrum of sequence x; L(f ) is the log represen-
+   Furthermore, recent saliency detection research has shown fa-                  tation of A(f ); and AL(f ) is the average spectrum of L(f ) which
+vor to end-to-end training with Convolutional Neural Networks                     can be approximated by convoluting the input sequence by hq (f ),
+                                                                                                     Figure 5: SR-CNN architecture
+
+
+
+              Figure 4: Example of SR model results
+
+                                                                                    point plays a decisive role. Thus, we just copy x n+1 for κ times and
+where hq (f ) is an q × q matrix defined as:                                        add the points to the tail of the sequence.
+                                 1         1     1     ...
+                                                        1                            To summarize, the SR algorithm contains only a few hyper-
+                                 
+                                                        ...                         parameters, i.e., sliding window size ω, estimated points number
+                              1 1         1     1     1
+                    hq (f ) = 2  .         ..    ..    .. 
+                                                        ..                          κ, and anomaly detection threshold τ . We set them empirically
+                             q  ..          .     .       .
+                                                         .                        and show their robustness in our experiments. Therefore, the SR
+                                 
+                                 1
+                                           1     1     ...
+                                                        1                         algorithm is a good choice for online anomaly detection service.
+   R(f ) is the spectral residual, i.e., the log spectrum L(f ) subtracting
+the averaged log spectrum AL(f ). The spectral residual serves as a                 4.2    SR-CNN
+compressed representation of the sequence while the innovation
+part of the original sequence becomes more significant. At last, we                 The original SR method utilizes a single threshold upon the saliency
+transfer the sequence back to spatial domain via Inverse Fourier                    map to detect anomaly points, as defined in Equation (7). However,
+Transform. The result sequence S(x) is called the saliency map.                     this rule is so naïve that it is natural to seek for more sophisticated
+   Figure 4 shows an example of the original time-series and the                    decision rules. Our philosophy is to train a discriminative model on
+corresponding saliency map after SR processing. As shown in the                     well-designed synthetic data as the anomaly detector. The synthetic
+figure, the innovation point (shown in red) in the saliency map is                  data can be generated by injecting anomaly points into a collection
+much more significant than that in the original input. Based on the                 of saliency maps that are not included in the evaluated data. The
+saliency map, it is easy to leverage a simple rule to annotate the                  injection points are labeled as anomalies while others are labeled as
+anomaly points correctly. We adopt a simple threshold τ to annote                   normal. Concretely, we randomly select several points in the time
+anomaly points. Given the saliency map S(x), the output sequence                    series, calculate the injection value to replace the original point and
+O(x) is computed by:                                                                get its saliency map. The values of anomaly points are calculated
+                                                                                    by:
+                                            S (x i )−S (x i )
+                                                              ) > τ,
+                                
+                                
+                                 1,   if
+                    O(x i ) =
+                                
+                                  
+                                                S (x i )                      (7)                     x = (x + mean)(1 + var ) · r + x                (10)
+                                   0, otherwise,
+                                  
+where x i represents an arbitrary point in sequence x; S(x i ) is the
+                                                                                    where x is the local average of the preceding points; mean and var
+corresponding point in the saliency map; and S(x i ) is the local                   are the mean and variance of all points within the current sliding
+average of the preceding z points of S(x i ).                                       window; and r ∼ N (0, 1) is randomly sampled.
+     In practice, the FFT operation is conducted within a sliding win-                 We choose CNN as our discrimative model architecture. CNN
+dow of the sequence. Moreover, we expect the algorithm to dis-                      is a commonly used supervised model for saliency detection [25].
+cover the anomaly points with low latency. That is, given a stream                  However, as we do not have enough labeled data in our scenario,
+x 1 , x 2 , ..., x n where x n is the recent point, we want to tell if x n is an    we apply CNN on the basis of saliency map instead of raw input,
+anomaly point as soon as possible. However, the SR method works                     which makes the problem of anomaly annotation to be much eas-
+better if the target point locates in the center of the sliding window.             ier. In practice, we collect production time-series with synthetic
+Thus, we add several estimated points after x n before inputting                    anomalies as training data. The advantage is that the detector can
+the sequence to SR model. The value of estimated point x n+1 is                     be adaptive to the change of time-series distribution, while no man-
+calculated by:                                                                      ually labeled data is required. In our experiments, we use totally 65
+                                        m
+                                     1 Õ                                            million points for training. The architecture of SR-CNN is visualized
+                               д=          д(x n , x n−i )                    (8)
+                                     m i=1                                          in Figure 5. The network is composed of two 1-D convolutional
+                                                                                    layers (with filter size equals to the sliding window size ω) and two
+                          x n+1 = x n−m+1 + д · m                            (9)    fully connected layers. The channel size of the first convolutional
+where д(x i , x j ) denotes the gradient of the straight line between               layer is equal to ω; while the channel size is doubled in the second
+point x i and x j ; and д represents the average gradient of the preced-            convolutional layer. Two full connected layers are stacked before
+ing points. m is the number of preceding points considered, and we                  Sigmoid output. Cross entropy is adopted as the loss function; and
+set m = 5 in our implementation. We find that the first estimated                   SGD optimizer is utilized in the training process.
+                       Table 1: Statistics of datasets
+
+   DataSet           Total Curves          Total Points          Anomaly Points
+    KPI                      58                5922913               134114/2.26%
+  Yahoo                     367                572966                 3896/0.68%
+ Microsoft                  372                 66132                 1871/2.83%
+
+
+                                                                                                Figure 6: Illustration of the evaluation strategy. There are
+5 EXPERIMENTS                                                                                   10 contiguous points in the time-series, where the first row
+5.1 Datasets                                                                                    indicates ground truth; the second row shows the point-wise
+                                                                                                anomaly detection results; and the third row shows adjusted
+We use three datasets to evaluate our model. KPI and Yahoo are
+                                                                                                results according to the evaluation strategy.
+public datasets6 that are commonly used for evaluating the per-
+formance of time-series anomaly detection; while Microsoft is an
+internal dataset collected in the production. These datasets cover
+time-series of different time intervals and cover a broad spectrum of                           treated as correct, and the points outside the anomaly segments are
+time-series patterns. In these datasets, anomaly points are labeled                             treated as normal.
+as positive samples and normal points are labeled as negative. The                                  The evaluation strategy is illustrated in Figure 6. As shown in the
+statistics of these datasets are shown in Table 1.                                              first row of Figure 6, there are 10 contiguous points and two anomaly
+   KPI is released by AIOPS data competition [2, 3]. The dataset                                segments in the example time-series. The prediction results are
+consists of multiple KPI curves with anomaly labels collected from                              shown in the second row. In this case, if we allow the delay as
+various Internet Companies, including Sogou, Tecent, eBay, etc.                                 one point, i.e., k = 1, the first segment is treated as correct and
+Most KPI curves have an interval of 1 minute between two adjacent                               the second is treated as incorrect (because the delay is more than
+data points, while some of them have an interval of 5 minutes.                                  one point). Thus, the adjusted results are illustrated in the third
+   Yahoo is an open data set for anomaly detection released by Ya-                              row. Based on the adjusted results, the value of precision, recall
+hoo lab7 . Part of the time-series curves is synthetic (i.e., simulated);                       and F 1 -score can be calculated accordingly. In our experiments, we
+while the other part comes from the real traffic of Yahoo services.                             set k = 7 for minutely time-series, k = 3 for hourly time-series
+The anomaly points in the simulated curves are algorithmically                                  and k = 1 for daily time-series following the requirement of real
+generated and those in the real-traffic curves are labeled by editors                           application.
+manually. The interval of all time-series is one hour.                                              Efficiency is another key indicator of anomaly detection models,
+   Microsoft is a dataset obtained from our internal anomaly de-                                especially for those be applied in online services. In the system, we
+tection service at Microsoft. We select a collection of time-series                             must complete hundreds of thousands of calculations per second.
+randomly for evaluation. The selected time-series reflect different                             The latency of the model needs to be small enough so that it won’t
+KPIs, including revenues, active users, number of pageviews, etc.                               block the whole computation pipeline. In our experiments, we
+The anomaly points are labeled by customers or editors manually;                                evaluate total execution time on the three datasets to compare the
+and the interval of these time-series is one day.                                               efficiency of different anomaly detection approaches.
+                                                                                                    Besides accuracy and efficiency, we also emphasize generality
+5.2      Metrics                                                                                in our evaluation. As illustrated previously, an industrial anomaly
+                                                                                                detection model should have the ability to handle different types
+We evaluate our model from three aspects, accuracy, efficiency
+                                                                                                of time-series. To evaluate generality, we group the time-series in
+and generality. We use precision, recall and F 1 -score to indicate the
+                                                                                                Yahoo dataset into 3 major classes (for example, seasonal, stable and
+accuracy of our model. In real applications, the human operators
+                                                                                                unstable as shown in Figure 1) manually and compare the F 1 -score
+do not care about the point-wise metrics. It is acceptable for an
+                                                                                                on different classes separately.
+algorithm to trigger an alert for any point in a contiguous anomaly
+segment if the delay is not too long. Thus, we adopt the evaluation
+                                                                                                5.3    SR/SR-CNN Experiment
+strategy8 following [23]. We mark the whole segment of continuous
+anomalies as a positive sample which means no matter how many                                   We compare SR and SR-CNN with state-of-the-art unsupervised
+anomalies have been detected in this segment, only one effective                                time-series anomaly detection methods. The baseline models in-
+detection will be counted. If any point in an anomaly segment can                               clude FFT (Fast Fourier Transform) [16], Twitter-AD (Twitter Anom-
+be detected by the algorithm, and the delay of this point is no more                            aly Detection) [20], Luminol (LinkedIn Anomaly Detection) [1],
+than k from the start point of the anomaly segment, we say this                                 DONUT [23], SPOT and DSPOT [19]. Among these methods, FFT,
+segment is detected correctly. Thus, all points in this segment are                             Twitter-AD and Luminol do not need additional data to start, so
+                                                                                                we compare these models in a cold-start setting by treating all
+6 These two datasets are used only for research purpose and do not leveraged in
+                                                                                                the time-series as test data. On the other hand, SPOT, DSPOT and
+production.                                                                                     DONUT need additional data to train their models. Therefore, we
+7 https://yahooresearch.tumblr.com/post/114590420346/
+a-benchmark-dataset-for-time-series-anomaly                                                     split the points of each time-series as two halves according to the
+8 The evaluation script is available at https://github.com/iopsai/iops/tree/master/evaluation   time order. The first half is utilized for training those unsupervised
+                                                               Table 2: Result comparison of cold-start
+
+                                            KPI                                                   Yahoo                                      Microsoft
+ Model              F 1 -score Precision Recall                Time(s)       F 1 -score Precision Recall          Time(s)     F 1 -score Precision Recall T ime(s)
+ FFT                  0.538           0.478        0.615       3756.63         0.291          0.202      0.517     356.56       0.349       0.812      0.218     8.38
+ Twitter-AD           0.330           0.411        0.276      523232.0         0.245          0.166      0.462    301601.50     0.347       0.716      0.229    6698.80
+ Luminol              0.417           0.306        0.650      14244.92         0.388          0.254      0.818     1071.25      0.443       0.776      0.310     16.26
+ SR                   0.666           0.637        0.697       1427.08         0.529          0.404      0.765      43.59       0.484       0.878      0.334     2.45
+ SR-CNN               0.732           0.811        0.667       6805.13         0.655          0.786      0.561     279.97       0.537       0.468      0.630     25.26
+
+                                                               Table 3: Result comparison on test data
+
+                                          KPI                                                     Yahoo                                       Microsoft
+ Model           F 1 -score     Precision        Recall      Time(s)         F 1 -score      Precision   Recall    Time(s)    F 1 -score   Precision   Recall    T ime(s)
+ SPOT              0.217           0.786         0.126        9097.85         0.338            0.269      0.454    2893.08      0.244        0.702      0.147      9.43
+ DSPOT             0.521           0.623         0.447        1634.41         0.316            0.241      0.458    339.62       0.190        0.394      0.125      1.37
+ DONUT             0.347           0.371         0.326       24248.13         0.026            0.013      0.825    2572.76      0.323        0.241      0.490     288.36
+ SR                0.622           0.647         0.598        724.02          0.563            0.451      0.747     22.71       0.440        0.814      0.301     1.55
+ SR-CNN            0.771           0.797         0.747        2724.33         0.652            0.816      0.542    125.37       0.507        0.441      0.595     16.13
+
+
+      Table 4: Generality Comparison on Yahoo dataset                                            KPI, 64 on Yahoo and 30 on Microsoft. For SR-CNN, q, z, κ and ω
+                                                                                                 are set to the same value.
+                     Seasonal        Stable      Unstable        Overall        V ar                We report (1) F 1 -score; (2) Precision; (3) Recall; and (4) CPU exe-
+     FFT                0.446        0.370         0.301          0.364        0.060             cution times separately for each dataset. We can see that SR signifi-
+                                                                                                 cantly outperforms current state-of-the-art unsupervised models.
+ Twitter-AD             0.397        0.924         0.438          0.466        0.268
+                                                                                                 Furthermore, SR-CNN achieves further improvement on all three
+  Luminol               0.374        0.763         0.428          0.430        0.195             datasets, which shows the advantage of replacing the single thresh-
+    SPOT                0.199        0.879         0.356          0.338        0.322             old by a CNN discriminator. Table 2 shows comparison results of
+   DSPOT                0.211        0.485         0.379          0.316        0.120             FFT, Twitter-AD and Luminol in the cold-start scenario. We improve
+  DONUT                 0.023        0.032         0.029          0.026        0.004             the F 1 -score by 36.1% on KPI dataset, 68.8% on Yahoo dataset and
+                                                                                                 21.2% on Microsoft dataset compared to the best results achieved
+     SR                 0.558        0.601         0.556          0.563        0.023
+                                                                                                 by baseline solutions. Table 3 demonstrates the comparison results
+   SR-CNN               0.716        0.752         0.464          0.652        0.128             of those unsupervised models which need to be trained on the
+    V ar indicates the standard deviation of the overall F 1 -scores for the three classes       first half of the dataset (labels are excluded). As shown in Table 3,
+                                                                                                 the F 1 -score is improved by 48.0% on KPI dataset, 92.9% on Yahoo
+                                                                                                 dataset and 57.0% on Microsoft dataset than the best state-of-the-art
+models while the second half is leveraged for evaluation. Note that                              results.
+DONUT can leverage additional labeled data to benefit the anomaly                                   Moreover, SR is the most efficient method as indicated by the
+detection performance. However, as we are aiming to get a fair com-                              total CPU execution time in Table 2 and 3. SR-CNN achieves better
+parison in the fully unsupervised setting, we do not use additional                              accuracy with a reasonable latency increase. For generality com-
+labeled data in the implementation9 .                                                            parison, we conduct the experiments on the second half of Yahoo
+   The experiments are conducted in a streaming pipeline. The                                    dataset, which is classified into three classes manually. F 1 -score on
+points of a time-series are ingested to the evaluation pipeline se-                              different classes of Yahoo dataset is reported separately in Table 4.
+quentially. In each turn, we only detect if the recent point is anomaly                          SR and SR-CNN achieve outstanding results on various patterns
+or not while the succeeding points are invisible. In the setting of                              of time-series. SR is the most stable one across the three classes.
+cold-start, recommended configurations are applied to the baseline                               SR-CNN also demonstrates good capability of generalization.
+models which come from papers or codes published by the authors.
+For SR and SR-CNN, we set the hyper-parameters empirically. In SR,                               5.4     SR+DNN
+shape of hq (f ) q is set as 3, number of local average of preceding                             In the previous experiments, we can see that the SR model shows
+points z is set as 21, threshold τ is set as 3, number of estimated                              convincing results in the unsupervised anomaly detection scenario.
+points κ is set as 5, and the sliding window size ω is set as 1440 on                            However, when labels of anomalies are available, we can obtain
+                                                                                                 more satisfactory results as illustrated in previous works [13]. Thus,
+9 https://github.com/haowen-xu/donut                                                             we would like to know whether our methodology contributes to the
+                                           Table 5: Features used in the supervised DNN model
+
+ Feature               Description
+ Transformations       Transformations to the value of each data point. We use logarithm as our transformation function and leverage the
+                       result value as a feature.
+ Statistics            We applied sliding windows to the time-series and treat the statistics calculated in each sliding window as features.
+                       The statistics we used include mean, exponential weighted mean, min, max, standard deviation, and the quantity
+                       of the data point values within a sliding window. We use multiple sizes of the sliding window to generate different
+                       features. The sizes are [10, 50, 100, 200, 500, 1440]
+ Ratios                The ratios of current point value against other statistics or transformations
+ Differences           The differences of current point value against other statistics or transformations
+
+
+           Table 6: Train and test split of KPI dataset
+
+           DataSet     Total points     Anomaly points
+           Train          3004066          79554/2.65%
+           Test           2918847          54560/1.87%
+
+
+           Table 7: Supervised results on KPI dataset
+
+              Model      F 1 -score   Precision    Recall                                     Figure 7: DNN architecture
+              DNN          0.798        0.849       0.753
+              SR+DNN      0.811         0.915       0.728
+
+
+
+supervised scenario as well. Concretely, we treat the intermediate
+results of SR as an additional feature in the supervised anomaly
+detection model. We conduct the experiment on KPI dataset as it
+has been extensively studied in the AIOPS data competition [3].
+    We adopt the DNN-based supervised model [4] which is the
+champion in the AIOPS data competition. The DNN architecture
+is composed by an input layer, an output layer and two hidden
+layers (shown in Figure 7). We add a dropout layer after the second
+hidden layer and set dropout ratio as 0.5. In addition, we apply
+L 1 = L 2 = 0.0001 regularization to the weights of all layers. Since           Figure 8: P-R curves of SR+DNN and DNN methods
+the output of the model indicates the likelihood of a data point being
+an anomaly, we search for the optimal threshold on the training
+set.                                                                       6 RELATED WORKS
+    Each data point is associated with a feature vector, which consists
+of different types of features including transformations, statistics,      6.1 Anomaly detectors
+ratios, and differences (Table 5). We follow the official train/test       Previous works can be categorized into statistical, supervised and
+split of the dataset, where the statistics is shown in Table 6. We         unsupervised approaches. In the past years, several models were
+can see that the proportion of positive and negative samples is            subsequently proposed in the statistics literature, including hypoth-
+extremely imbalanced. Thus, we train our model by over-sampling            esis testing [17], wavelet analysis [14], SVD [15] and auto-regressive
+anomalies to keep the positive/negative proportion to 1:2.                 integrated moving average (ARIMA) [24]. Fast Fourier Transform
+    Experimental results are shown in Table 7. We can see that the         (FFT) [21] is another traditional method for time-series processing.
+SR feature brings 1.6% improvement in F 1 -score to the vanilla DNN        For example, [16] highlighted the areas with high frequency change
+model. Especially, the SR-powered DNN model establishes a new              by FFT and reconfirmed it with Z-value test. In 2015, Twitter [20]
+state-of-the-art on the KPI dataset. To the best of our knowledge, it      proposed a model to detect anomalies in time-series of both appli-
+is the best-ever result reported on the KPI dataset up to the date of      cation metrics (e.g., Tweets Per Sec) and system metrics (e.g., CPU
+paper submission. Moreover, we draw the P-R curve of the SR+DNN            utilization). In 2017, SPOT and DSPOT [19] were proposed on the
+and DNN methods. As illustrated in Figure 8, SR+DNN outperforms            basis of Extreme Value Theory [6], the threshold of which can be
+the vanilla DNN consistently on various threshold.                         selected automatically.
+   The performances of traditional statistical models are not sat-       service to our customers. Besides internal serving, our time-series
+isfactory in real applications. Thus, researchers have investigated      anomaly detection service will be published on Microsoft Azure as
+supervised models to improve the anomaly detection accuracy. Op-         part of Cognitive Service10 shortly to external customers.
+prentice [13] outperformed other traditional detectors by using
+statistical detectors as feature extractors and leveraged a Random       REFERENCES
+Forest classifier [12] to detect anomalies. Yahoo EGADS [11] uti-         [1] [n. d.]. https://github.com/linkedin/luminol.
+                                                                          [2] [n. d.]. http://iops.ai/dataset_detail/?id=10.
+lized a collection of anomaly detection and forecasting models with       [3] [n. d.]. http://iops.ai/competition_detail/?competition_id=5&flag=1.
+an anomaly filtering layer for scalable anomaly detection on time-        [4] [n. d.]. http://workshop.aiops.org/files/logicmonitor2018.pdf.
+series data. In 2017, Google leveraged deep learning models to detect     [5] Chris Chatfield. 1978. Holt-Winters forecasting Procedure. Journal of the Royal
+                                                                              Statistical Society, Applied Statistics 27, 3 (1978), 264âĂŞ–279.
+anomalies on their own dataset [18] and achieved promising results.       [6] Laurens De Haan and Ana Ferreira. 2007. Extreme value theory: an introduction.
+However, continuous labels can not be obtained in industrial envi-            Springer Science & Business Media.
+ronment, which makes these supervised approaches insufficient in          [7] Carl Doersch. 2016. Tutorial on variational autoencoders. arXiv preprint
+                                                                              arXiv:1606.05908 (2016).
+online applications.                                                      [8] Chenlei Guo, Qi Ma, and Liming Zhang. 2008. Spatio-temporal saliency detection
+   As a result, advanced unsupervised approaches have been stud-              using phase spectrum of quaternion fourier transform. (2008).
+                                                                          [9] Xiaodi Hou, Jonathan Harel, and Christof Koch. 2012. Image signature: High-
+ied to tackle the problem in industrial application. In 2018, [23]            lighting sparse salient regions. IEEE transactions on pattern analysis and machine
+proposed DONUT, an unsupervised anomaly detection method                      intelligence 34, 1 (2012), 194–201.
+based on Variational Auto-Encoder (VAE) [7]. VAE was leveraged           [10] Xiaodi Hou and Liqing Zhang. 2007. Saliency detection: A spectral residual
+                                                                              approach. In Computer Vision and Pattern Recognition, 2007. CVPR’07. IEEE Con-
+to model the reconstruction probabilities of normal time-series,              ference on. IEEE, 1–8.
+while the abnormal points were reported if the reconstruction error      [11] Nikolay Laptev, Saeed Amizadeh, and Ian Flint. 2015. Generic and Scalable
+was larger than a threshold. Besides, LinkedIn developed Luminol              Framework for Automated Time-series Anomaly Detection. In Proceedings of the
+                                                                              21th ACM SIGKDD International Conference on Knowledge Discovery and Data
+[1] based on [22], which segmented time-series into chunks and                Mining. ACM, New York, NY, USA, 1939–1947.
+used the frequency of similar chunks to calculate anomaly scores.        [12] Andy Liaw, Matthew Wiener, et al. 2002. Classification and regression by ran-
+                                                                              domForest. R news 2, 3 (2002), 18–22.
+                                                                         [13] Dapeng Liu, Youjian Zhao, Haowen Xu, Yongqian Sun, Dan Pei, Jiao Luo, Xi-
+6.2    Saliency detection approaches                                          aowei Jing, and Mei Feng. 2015. Opprentice: Towards practical and automatic
+                                                                              anomaly detection through machine learning. In Proceedings of the 2015 Internet
+Our work has been inspired by visual saliency detection models.               Measurement Conference. ACM, 211–224.
+Hou et al. [10] invented the Spectral Residual (SR) model for saliency   [14] Wei Lu and Ali A Ghorbani. 2009. Network anomaly detection based on wavelet
+                                                                              analysis. EURASIP Journal on Advances in Signal Processing 2009 (2009), 4.
+detection and demonstrated impressive performance in their exper-        [15] Ajay Mahimkar, Zihui Ge, Jia Wang, Jennifer Yates, Yin Zhang, Joanne Emmons,
+iments. They assumed that an image can be divided into redundant              Brian Huntley, and Mark Stockert. 2011. Rapid detection of maintenance induced
+part and innovation part, while people’s vision is more sensitive             changes in service performance. In Proceedings of the Seventh COnference on
+                                                                              emerging Networking EXperiments and Technologies. ACM, 13.
+to the innovation part. Meanwhile, the log amplitude spectrum of         [16] Faraz Rasheed, Peter Peng, Reda Alhajj, and Jon Rokne. 2009. Fourier trans-
+an image subtracting the average log amplitude spectrum captures              form based spatial outlier mining. In International Conference on Intelligent Data
+                                                                              Engineering and Automated Learning. Springer, 317–324.
+the saliency part of the image. Guo et al. [8] argued that only phase    [17] Bernard Rosner. 1983. Percentage points for a generalized ESD many-outlier
+spectrum was enough to detect the saliency part of an image and               procedure. Technometrics 25, 2 (1983), 165–172.
+simplified the algorithm in [10]. Hou et al. [9] also proposed an        [18] Dominique Shipmon, Jason Gurevitch, Paolo M Piselli, and Steve Edwards. 2017.
+                                                                              Time Series Anomaly Detection: Detection of Anomalous Drops with Limited Features
+image signature approach for highlighting sparse salient regions              and Sparse Examples in Noisy Periodic Data. Technical Report. Google Inc.
+with theoretical proof. Although the latter two solutions showed         [19] Alban Siffer, Pierre-Alain Fouque, Alexandre Termier, and Christine Largouet.
+improvement in their publications, we found that Spectral Resid-              2017. Anomaly detection in streams with extreme value theory. In Proceedings of
+                                                                              the 23rd ACM SIGKDD International Conference on Knowledge Discovery and Data
+ual (SR) was more effective in our time-series anomaly detection              Mining. ACM, 1067–1075.
+scenario. Moreover, supervised models based on neural networks           [20] Owen Vallis, Jordan Hochenbaum, and Arun Kejariwal. 2014. A Novel Technique
+                                                                              for Long-Term Anomaly Detection in the Cloud. In 6th USENIX Workshop on Hot
+are also used in saliency detection. For instance, Zhao et al. [25]           Topics in Cloud Computing (HotCloud 14). USENIX Association, Philadelphia, PA.
+tackled the problem of salient object detection by a multi-context       [21] Charles Van Loan. 1992. Computational frameworks for the fast Fourier transform.
+deep learning framework based on CNN architecture.                            Vol. 10. Siam.
+                                                                         [22] Li Wei, Nitin Kumar, Venkata Lolla, Eamonn J. Keogh, Stefano Lonardi, and Choti-
+                                                                              rat Ratanamahatana. 2005. Assumption-free Anomaly Detection in Time Series.
+7     CONCLUSION & FUTURE WORK                                                In Proceedings of the 17th International Conference on Scientific and Statistical
+                                                                              Database Management (SSDBM’2005). 237–240.
+Time-series anomaly detection is a critical module to ensure the         [23] Haowen Xu, Wenxiao Chen, Nengwen Zhao, Zeyan Li, Jiahao Bu, Zhihan Li,
+                                                                              Ying Liu, Youjian Zhao, Dan Pei, Yang Feng, et al. 2018. Unsupervised Anomaly
+quality of online services. An efficient, general and accurate anom-          Detection via Variational Auto-Encoder for Seasonal KPIs in Web Applications.
+aly detection system is indispensable in real applications. In this           In Proceedings of the 2018 World Wide Web Conference on World Wide Web. Inter-
+paper, we have introduced a time-series anomaly detection service             national World Wide Web Conferences Steering Committee, 187–196.
+                                                                         [24] Yin Zhang, Zihui Ge, Albert Greenberg, and Matthew Roughan. 2005. Network
+at Microsoft. The service has been used by more than 200 teams                anomography. In Proceedings of the 5th ACM SIGCOMM conference on Internet
+within Microsoft, including Bing, Office and Azure. Anomalies are             Measurement. USENIX Association, 30–30.
+detected from 4 million time-series per minute maximally in the pro-     [25] Rui Zhao, Wanli Ouyang, Hongsheng Li, and Xiaogang Wang. 2015. Saliency
+                                                                              detection by multi-context deep learning. In Proceedings of the IEEE Conference
+duction. Moreover, we for the first time apply the Spectral Residual          on Computer Vision and Pattern Recognition. 1265–1274.
+(SR) model in the time-series anomaly detection task and innova-
+tively combine the SR and CNN model to achieve an outstanding
+performance. In the future, we plan to ensemble the state-of-the-
+art methods together to provide a more robust anomaly detection          10 https://azure.microsoft.com/en-us/services/cognitive-services/
+

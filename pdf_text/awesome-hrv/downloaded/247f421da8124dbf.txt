@@ -1,0 +1,861 @@
+                                                 Learning Representations for Outlier Detection
+                                                                 on a Budget
+
+                                                       Barbora Micenková                             Brian McWilliams                             Ira Assent
+                                                       Aarhus University                        Department of Informatics                      Aarhus University
+                                                       Aarhus, Denmark                           ETH Zürich, Switzerland                      Aarhus, Denmark
+                                                     Email: barbora@cs.au.dk                Email: brian.mcwilliams@inf.ethz.ch               Email: ira@cs.au.dk
+
+
+                                             Abstract—The problem of detecting a small number of outliers          In this work we take an entirely different approach to
+
+
+
+
+arXiv:1507.08104v1 [cs.LG] 29 Jul 2015
+                                         in a large dataset is an important task in many fields from fraud     combining the strengths of unsupervised and supervised outlier
+                                         detection to high-energy physics. Two approaches have emerged         detection: we propose a supervised algorithm that first learns a
+                                         to tackle this problem: unsupervised and supervised. Supervised       feature representation which successfully differentiates outliers
+                                         approaches require a sufficient amount of labeled data and are        from inliers using the unlabeled data. Our method is not only
+                                         challenged by novel types of outliers and inherent class imbalance,
+                                                                                                               an entirely novel approach that is able to make use of both
+                                         whereas unsupervised methods do not take advantage of available
+                                         labeled training examples and often exhibit poorer predictive         unsupervised and supervised information, but also a simple and
+                                         performance. We propose BORE (a Bagged Outlier Representa-            easily generalizable framework that allows incorporation of
+                                         tion Ensemble) which uses unsupervised outlier scoring functions      different outlier detection methods. It avoids the considerable
+                                         (OSFs) as features in a supervised learning framework. BORE           effort in tuning parameters in existing work (e.g. kernels for
+                                         is able to adapt to arbitrary OSF feature representations, to the     non-linear feature transformations), and handles class imbal-
+                                         imbalance in labeled data as well as to prediction-time constraints   ance in a straightforward fashion. Its final output can be easily
+                                         on computational cost. We demonstrate the good performance            interpreted as outlier probabilities. Finally, our algorithm can
+                                         of BORE compared to a variety of competing methods in the             adapt to computational budgets at prediction time, providing
+                                         non-budgeted and the budgeted outlier detection problem on 12         good detection performance within user defined budget con-
+                                         real-world datasets.
+                                                                                                               straints.
+                                                                                                                  Our contribution is two-fold:
+                                                               I.   I NTRODUCTION
+                                                                                                                  1)    We propose a Bagged Outlier Representation En-
+                                             The aim of outlier or anomaly detection is to identify                     semble (BORE); a unified framework for incorpo-
+                                         points in a dataset which deviate in some way from the usually                 rating unsupervised and supervised data for outlier
+                                         observed patterns. Outliers typically represent a small portion                detection. BORE first learns a representation of the
+                                         of the data and can be very diverse in nature.                                 outlierness of each point in an unsupervised fashion
+                                                                                                                        which are then used as features in a classifier trained
+                                             In applications where the semantics of outliers are known                  on imbalanced data.
+                                         in advance (e.g., detection of fraud, intrusions or mislabeled           2)    We consider the case where computational resources
+                                         data), labeled training examples for supervised outlier detec-                 at prediction time are limited and introduce a feature
+                                         tion may be available [11]. Because outliers are naturally                     selection technique that respects a computational bud-
+                                         scarce, such data will be heavily imbalanced which poses a                     get while retaining good predictive performance.
+                                         problem for most classifiers. Another challenge for supervised
+                                         outlier detection is the heterogeneity of the outlier class.              The key idea underlying BORE is to view the output
+                                         This makes generalising from a small number of labeled                scores of unsupervised outlier scoring function (OSF) algo-
+                                         samples difficult. Furthermore, supervised methods are unable         rithms as non-linear transformations of the original feature
+                                         to detect novel types of anomalies for which no labeled training      space. Crucially, this new set of features provides a richer
+                                         examples have been collected.                                         representation which better distinguishes outliers from normal
+                                                                                                               points. This representation is then used for supervised learning,
+                                             Unsupervised algorithms for outlier detection (see e.g. [2]       where we adopt an ensemble approach that elegantly handles
+                                         for a review) are suitable for purely exploratory tasks where         class imbalance. Thus, an advantage of BORE is that its
+                                         very few or no labeled examples of outliers are available.            performance can be boosted by including a larger or more
+                                         These methods are based mainly on geometric properties of             diverse set of outlier detectors – particularly those which are
+                                         the data and typically assign a real-valued “outlierness” score       known to be suited to the task at hand. This idea complements
+                                         to each data point. As such unsupervised algorithms are suited        a recent line of research on outlier ensembles that strives
+                                         to detecting new types of outliers. However, they often exhibit       to combine outlier scoring functions [1], [39] in an entirely
+                                         poor predictive performance [12].                                     unsupervised manner.
+                                             Recently, semi-supervised methods which modify unsuper-              Since each feature is the output of an OSF learned on
+                                         vised approaches to take advantage of labeled examples have           the whole dataset, adding features is costly. While this can
+                                         been shown their promise [12].                                        be easily parallelized at training time, at prediction time, this
+issue is compounded with the fact that OSFs need to be run          building an ensemble is difficult in completely unsupervised
+on the entire dataset including the new unseen test points in       settings and only heuristic approaches have been proposed
+order to make predictions. Clearly this can be prohibitively        so far [30], [28]. Open questions concern, e.g., the tradeoff
+expensive for large numbers of OSFs. This is particularly           between accuracy of single outlier scoring functions and their
+important when the prediction must be performed under time          diversity or the normalization and the combination function of
+or computational constraints such as a real-time or embedded        the outlier scores [39]. No supervised approaches have been
+system. To overcome this, we introduce a budget-aware feature       studied yet in this context except for an initial idea for a semi-
+selection approach which identifies a small subset of the           supervised ensemble presented in [26]. Our proposed approach
+OSFs that represent the best tradeoff between computational         could be viewed as an ensemble selection technique guided by
+budget and prediction accuracy. Therefore at prediction time        the available training data, providing an elegant solution to the
+we obtain good performance which only requires computing            above stated problems.
+a subset of features. This is a considerable improvement over
+                                                                        Semi-supervised Outlier Detection. Semi-supervised
+existing approaches to representation learning that require large
+                                                                    techniques make use of both labeled and unlabeled data
+amounts of resources at both training and prediction time.
+                                                                    for training. Recently, a semi-supervised anomaly detector
+    Paper outline. In the following section we briefly review       (SSAD) was proposed [12]. While BORE incorporates the
+current approaches to unsupervised and supervised outlier           unsupervised information in its features, SSAD is based on an
+detection. We then detail BORE, our novel approach for              unsupervised technique, support vector data description [34],
+learning representations for outlier detection. In order to deal    which learns a hypersphere enclosing the normal data, and
+with computational budgets at prediction time we then pro-          uses this as a regularizer for supervised learning. It requires to
+pose a budget-aware variable selection procedure. Finally, we       specify an appropriate kernel on input. The goal is, similarly
+present extensive empirical results on 12 real-world datasets       to BORE, to achieve a good performance using labels while
+demonstrating the predictive outlier detection performance of       retaining the possibility of revealing novel anomalies through
+BORE both with and without budget constraints.                      the unsupervised information. We experimentally compare
+                                                                    BORE to this technique.
+                    II.   R ELATED W ORK
+                                                                                III.   L EARNING A R EPRESENTATION
+    Feature representations. In recent years, the field of                             FOR O UTLIER D ETECTION
+representation learning [6] has become increasingly popu-
+lar. In particular, a wide class of techniques based on deep            In this section we will detail our basic framework for out-
+neural networks have been proposed which learn rich feature         lier detection. First we describe the feature space construction
+representations of input data in a supervised or unsupervised       which we use to learn a good representation of the outliers in
+fashion which can then be used for prediction. Such feature         the data in an unsupervised manner. We then use these features
+learning approaches have become the keystone of achieving           as input to a supervised learning procedure which adapts to
+state-of-the-art performance in a variety of problem domains.       the heterogeneity and class imbalance inherent in the outlier
+Elsewhere, less complex feature representations can be learned      detection problem.
+using correlations between features which have been shown
+to greatly improve prediction when few labeled examples are         A. Outlier Scoring Functions
+available [24]. However, these methods require vast amounts of
+training data to learn good representations which are typically         An outlier is broadly characterized as a point that deviates
+not available in outlier detection problems.                        in some way from the rest of the data. The exact form of
+                                                                    deviation depends on the data and the application. Diverse
+    The key idea in feature learning is that good representations   detection and scoring functions have been proposed including
+of the data can be obtained by means of solving an unsuper-         approaches based on statistical methods, PCA, and other
+vised learning problem. In this work, we leverage this idea         subspace analysis methods [5], [17], [27], [36]. A large body of
+with the addition of domain knowledge encoded in the zoo            work is based on the analysis of distances and density around
+of existing specialised OSFs. In this respect, training OSFs        data points, e.g. via kNN distance or relative local density
+on a particular dataset and using their outputs as input to a       [29], [9]. Our method supports any such detector that provide
+supervised learning problem can be viewed as unsupervised           outlier scores.
+learning of a suitable representation for many possible types
+of outliers.                                                            For the discussion that follows, we require the following
+                                                                    definition of an outlier scoring function which will form the
+    Outlier Detection and Class-Imbalance Learning. Out-            basis of our feature representation.
+lier detection naturally faces the problem of class imbalance.
+                                                                    Definition 1 (Outlier Scoring Functions). Given a data matrix
+Therefore, for the supervised case, well-established approaches
+                                                                    X ∈ X ⊆ Rn×k , an outlier scoring function (OSF) is a
+from class-imbalance learning can be adopted including sam-
+                                                                    mapping Φ : X → Rn . That is, an OSF assigns a real valued
+pling, bagging and boosting, one-class classification and cost-
+                                                                    output to each row of the data matrix corresponding to the
+sensitive learning (see e.g. in [2], [37]). Our proposed tech-
+                                                                    degree of outlierness of each point.
+nique is not dependent on any of these models and can readily
+complement each of them.
+                                                                        The scale and interpretation of different scoring approaches
+    Outlier Ensembles. An appropriate combination of mul-           may vary. For example, they may be normalised between 0 and
+tiple unsupervised outlier scoring functions into ensembles         1 so as to be interpreted as a probability or may be thresholded
+can increase outlier detection performance [1], [39]. However,      to assign binary labels to points. This makes standard ensemble
+       Bag 1          Bag 2           Bag 3          Bag 1             Bag 2             Bag 3             Bag 1           Bag 2           Bag 3
+
+
+
+
+                   (a) Letter.                                (b) Ionosphere.                                       (c) Pageblocks.
+
+Fig. 1: t-SNE visualisation of three different bags each subsampled from the (a) Letter, (b) Ionosphere and (c) Pageblocks
+data sets. The top line shows the original features and the bottom line shows the corresponding learned outlier
+representation. In each bag, the outlier representation exhibits a better separation between outlying points (shown
+in red) and non-outlying points (blue).
+
+
+approaches to combining OSFs difficult and highly dependent                    C. Learning Setup
+on scaling and normalization.
+                                                                                   We are now ready to incorporate supervised information
+B. Feature Space Construction                                                  on labeled outliers into our method. The outlier representa-
+                                                                               tion learned in the previous section is a highly non-linear
+    Individually, the OSFs detailed above are limited in their                 transformation of the original space. As such we can use a
+ability to detect multiple types of outliers. The key insight we               linear classifier in this new space to detect outliers. To make
+provide is that when combined, the output of multiple outlier                  the discussion concrete, we adopt logistic regression, but in
+detectors provide a good feature representation which can be                   practise any linear classifier could be used instead.
+used to detect many outlier types.
+                                                                                    Logistic regression (see e.g. [14]) models the probability of
+    Let Φ = {Φ1 , . . . , Φm } be a set of outlier scoring functions           a point i being an outlier by means of a binary random variable,
+as in Definition 1. Each Φj ∈ Φ is applied to the data, X and                  y (i) ∈ {0, 1} conditioned on the outlier representation Φ(i) and
+returns a vector Φj (X) ∈ Rn . Our feature representation is                   a parameter vector, β ∈ Rd through the logistic function:
+then
+                Φ(X) = [Φ1 (X), · · · , Φm (X)] .                (1)                                               1
+                                                                                p(y (i) = 1|Φ(i) ; β) =                        = σ(β > Φ(i) ), (3)
+Instead of the original data set, we now work with the                                                    1 + exp (−β > Φ(i) )
+transformed data set Φ(X) in the OSF feature space. Each                       predicting 1 if σ(β > Φ(i) ) > 0.5 and 0 otherwise. The
+individual Φj (X) can be viewed as a feature vector of the                     maximum likelihood estimator for β is the solution to
+data.
+                                                                                                 n
+    To construct the set of functions Φ, we may use any
+                                                                                                 X
+                                                                                β̂ = argmin −          log σ(β > Φ(i) )yi (1 − σ(β > Φ(i) ))(1−yi ) ,
+existing unsupervised OSF where the goal is to capture diverse                           β       i=1
+aspects of the outliers in a particular dataset. It is therefore                                                                       (4)
+beneficial to expand the feature space by applying each OSF                    which can be solved efficiently using gradient descent or a
+under a set of perturbations. For example multiple parameter                   pseudo second-order method such as L-BFGS [14].
+settings, different distance metrics and different subspaces of
+the original features.                                                             In practise, any classifier can be used in place of logistic
+                                                                               regression. However, since we already learn a highly non-
+   In practise the original features of the data also contain                  linear feature representation, there is little additional utility
+useful information for identifying outliers. Therefore, we will                to be gained by using a non-linear classifier compared with
+use an augmented version of (1) where                                          the additional cost in optimization and hyper-parameter tuning.
+           Φ(X) = [X, Φ1 (X), . . . , Φm (X)] ∈ Rn×d            (2)            This is illustrated in Section V-B3 where we present results
+                                                                               comparing BORE with a non-linear method, SSAD.
+where the combined feature space dimension is d = (k + m).
+With some abuse of notation we will denote Φ(i) ∈ Rd as the                        Another benefit of logistic regression in the context of
+ith row of the matrix Φ(X) and Φj ∈ Rn as the j th column.                     outlier ensembles is that the output is easily interpreted since
+                                                                               it directly models the probability of outlierness for a given
+    Using the original data and OSF features, we exploit the                   datapoint given the outlier representation.
+strength of unsupervised outlier detection to detect novel types
+of outliers within a supervised framework. To this end we
+will refer to the combined feature space in (2) as an outlier                  Re-sampling and Bagging. There are two challenges for the
+representation (OR).                                                           straightforward application of a standard classifier to outlier
+detection: The inherent class imbalance problem and the              equivalent predictive performance might be obtainable by
+heterogeniety of the outlier class. We deal with both of these       instead combining a number of cheaply computed features.
+issues in a unified manner by adapting a standard re-sampling        Our goal is good detection of outliers forPany budget C such
+method: bootstrap aggregating, or bagging [7]. Bagging con-          that the sum of costs of utilised features j∈A c(j) ≤ C. We
+structs B bags consisting of uniformly subsampling datapoints        select features that are expected to have high utility for the
+with replacement. It then averages the output of the models          outlier detection task while incurring low cost. In order to do
+trained on each of the bags.                                         so we adopt a strategy that also handles potential issues when
+                                                                     the number of OSF features grows.
+    Since uniform sampling would result in bags containing
+very few outliers, instead we use biased sampling to construct           A challenge is statistical estimation in high dimensions (i.e.
+bags with balanced classes. For every bag b = 1, . . . , B, an       when the dimensionality of the feature space approaches the
+equal number of outliers and inliers are sampled uniformly           number of samples) where the maximum likelihood estimator
+from their respective populations. Since the number of outliers      for β in (4) is ill-defined. This becomes a problem when the
+is small compared with size of the inlier class, the same outliers   set of OSFs becomes large. We tackle the budgeted detection
+will be appear in multiple bags while the inlier class will be       problem and the high-dimensional estimation problem in a
+substantially different between bags.                                unified manner by considering the set of γ−sparse models
+                                                                     {β : kβk0 ≤ γ} where γ is a positive integer and kβk0 is the
+    Due to the inhomogeneity in the data, a different aggre-         `0 “norm” which counts the number of non-zero elements in
+gation scheme such as Stacking [8] or maximin aggregation            β.
+[10] could be considered. However, we found empirically that
+neither performed as well as standard bagging.                           We enforce this condition by updating our estimate of β in
+                                                                     a coordinate-wise manner using Orthogonal Matching Pursuit
+Algorithm 1 Orthogonal Matching Pursuit.                             (OMP) as described in Algorithm 1. OMP for logistic regres-
+Input: Data: {Φ ∈ Rn×d , y ∈ Rn }, # non-zeros: γ                    sion is an iterative algorithm which starts with a candidate
+Initialize: A = {}, R0 = y, β 0 = 0                                  solution β 0 consisting of the zero vector [23]. At each step
+ 1: for t = 1 . . . γ do                                             t it adds a single non-zero coordinate to the solution. This
+                          |Φ> Rt−1 |                                 coordinate j is selected according to the criterion in line 2
+ 2:    j = argmaxj /∈A Φj > Φj                                       and is added to the set of selected coordinates, A ← {j} ∪ A.
+                             j
+       A ← {j} ∪ A                                                                 t >
+ 3:                                                                  Rt = y−σ(βA       ΦA ) is the vector of residual errors at iteration
+         t
+ 4:    βA  : solve (4) with ΦA .                                     t. The model is then updated by solving the logistic regression
+                       t >
+ 5:    Rt = y − σ(βA       ΦA )                                      problem as in line 4 where the subscript A considers only the
+ 6: end for                                                          coordinates indexed in A and all others remain zero.
+Output: β γ                                                              These steps are repeated for t = 1, . . . , γ, that is until there
+                                                                     are at most γ non-zero elements in β.
+         IV.   O UTLIER D ETECTION ON A B UDGET                          Recently, a variant of OMP, budgeted OMP, which takes
+                                                                     feature cost into account has been proposed [13]. The only
+    BORE learns a representation of arbitrary types of outliers      difference is to line 2 of Algorithm 1. Given an active set A of
+by combining the output of many different outlier detectors in       selected features, the next feature is instead selected according
+a bagging framework. Crucially, when the original dimension-         to:
+ality and the number of samples is large, learning this repre-                                            |Φ>j r|
+sentation may be computationally intensive. This is typically                            j = arg max                .
+                                                                                                  ∈A c(j) · Φ>
+                                                                                                 j/            j Φj
+not a problem since learning the outlier representation and
+training classifiers on individual bags can easily be computed       This introduces a trade-off between the utility of a particular
+in parallel. However, at test time when new instances must be        feature (in terms of reducing the residual training error) and
+classified this computational burden can be problematic.             the cost of that feature. As such when |A| = d, we also obtain
+    As a concrete example, the pre-trained outlier detection         an ordering of the features according to this trade-off. This
+system might be deployed on less powerful hardware or might          allows predictions to be made at test-time to fit a particular
+have to classify a point as an outlier under time constraints.       computational
+                                                                          Pg         budget C by selecting the top g features such
+                                                                                                                  th
+The more OSFs used in the representation, the more resources         that    j=1 c(A  j ) ≤ C, where Aj is the j     element added
+required at test time to compute the representation of the new       to the active set. [13] show that for a given budget, budgeted
+points.                                                              OMP returns a solution which is close to optimal.
+
+    To overcome this problem, we propose a classification            B. Stability Selection
+strategy under a computational budget.
+                                                                         As explained in Section III-C, since the outlier detection
+A. Cost-aware Feature Selection                                      problem is highly imbalanced, bagging with non-uniform
+                                                                     sampling is necessary to learn a good classifier. This presents
+    Associated with each feature transformation Φj (X) is a          the problem that due to random fluctuations introduced in the
+computational cost c(j). For example, this cost could be             sub-sampling step, the order in which features are selected by
+directly related to the time or space complexity required to         budgeted OMP in each bag may be different. The question of
+compute a particular feature. Some of the features may be            which features to include in the final model is answered by
+too computationally expensive to generate at test time and           stability selection [25]. Stability selection is a model selection
+             TABLE I: Datasets used for evaluation. Outlier ratio in % (r), dataset size (n), dimensionality (d).
+    Name             r       n      d      Name             r       n        d    Name            r       n       d    Name            r      n    d
+    Cardio           5    1734     21      Heart Disease   10     166       13    Hepatitis       9      74      19    Higgs           5   5000   30
+    Ionosphere      36     351     32      Letter           6    1600       32    Pageblocks      5    5139      10    Parkinson      20     60   22
+    Pima             5     526      8      Spambase         2    2579       57    Waveform        3    3443      21    Wilt            5   4839    5
+
+
+
+based on comparing multiple models trained on subsamples                         it is kNN [29], kNN-weight [3], ODIN [15], LOF [9], Sim-
+of the data. Under certain conditions for a linear model (and                    plifiedLOF [32], COF [33], INFLO [16], LoOP [18], LDOF
+assuming uniform n/2 bootstrap sampling), it has been shown                      [38], LDF [21], KDEOS [31] and FastABOD [20].3 Each
+that the set of features returned by stability selection for OMP                 OSF depends on a neighbourhood parameter which we set as
+correspond to the true underlying model [25]. In order to deal                   k ∈ {1, 10, 20, . . . , 100} (or less for smaller data sets). Each
+with our budget constraint, we present a slightly modified                       value of k results in a distinct OSF. In total we obtain 71-132
+version of stability selection.                                                  transformed features per data set.
+    For each bag b = 1, . . . , B we obtain the solution vector                      For two data sets, Letter and Higgs, we alternatively use
+which satisfies a given budget constraint C using budgeted                       kNN and LOF combined with feature bagging [22]. That is,
+OMP which we denote as β (b) . The set of selected features is                   we compute the OSFs in different subspaces of the original
+                    (b)                                                          domain, resulting in 50 and 40 transformed features for these
+then A(b) = {j : βj 6= 0, j = 1, . . . , d}. For each feature
+j we count the proportion   of times it was selected across the                  datasets, respectively.
+                   PB
+bags as Jj = B1 b=1 I{j ∈ A(b) }, where I is the binary                              We begin with a visual analysis of the learned outlier repre-
+indicator function.                                                              sentations (ORs). Figure 1 compares the original features (top
+    Now, in order to ensure that the constraint is satisfied in the              row) and the OR (bottom row) for three datasets. For the vi-
+final model, we construct a stable set of features as the set of                 sualisation we applied t-distributed Stochastic Neighbourhood
+most commonly selected features across all bags which satisfy                    Embedding (t-SNE) [35] to bags of points subsampled accord-
+the budget constraint. Denoting Π(J) as the permutation which                    ing to the procedure described in Section III-C. t-SNE finds
+sorts the elements of J in descending order, the stable set is                   a low-dimensional non-linear embedding of high-dimensional
+then                                                                             data which groups similar points together and enforces greater
+                              X                                                  distances between dissimilar points. The visualisations reveal
+                 SC = {j :          c(j) ≤ C}.
+                                                                                 that the learned ORs provide a better separation between the
+                                 j∈Π(J)
+                                                                                 outlying points and the non-outlying points. In contrast, in the
+That is, we add features to SC in order corresponding to                         original feature space the outliers tend to be more uniformly
+how often they were selected across the B bags, until their                      distributed amongst the non-outlying points. This suggests that
+combined cost matches the specified budget C.                                    classifiers trained on the bags consisting of the OR should
+                                                                                 achieve higher accuracy than those trained on the original
+    Finally, a classifier in each bag is trained using the set of                features.
+features indexed by SC . Although the theoretical guarantees
+about the final model no longer hold due to our imbalanced                       B. Learning Outlier Representations
+sampling procedure, we find that our modified stability selec-
+tion procedure performs well empirically.                                            1) Algorithms: To demonstrate the effectiveness of BORE,
+                                                                                 we perform extensive comparisons with a diverse set of
+                                                                                 state-of-the-art approaches, both supervised and unsupervised.
+               V.    E XPERIMENTAL E VALUATION                                   Greedy ensemble (GE) is a purely unsupervised technique of
+A. Datasets and Features                                                         combining OSFs [30]. This baseline uses all OSFs but no
+                                                                                 label information. The Best OSF baseline is a single OSF that
+    We evaluate the performance of BORE on 12 real world                         exhibits best performance in hindsight. It should be noted that
+datasets summarised in Table I. The dataset Higgs consists                       this cannot be realised in practice since it requires knowing
+of the training set of the Higgs Boson Machine Learning                          the out-of-sample performance of each method a priori. Mean
+Challenge1 where the goal was to distinguish measurements of                     of OSFs simply averages the output of all OSFs. SSAD [12]
+Higgs boson particles from the background. We subsampled                         is a semi-supervised outlier detection technique using exactly
+Higgs bosons such that they form a minority class. The                           the same label information as BORE.
+rest of the datasets come from UCI [4] and they were also
+                                                                                     To evaluate our bagging procedure for dealing with im-
+preprocessed (by subsampling one or multiple classes) such
+                                                                                 balance and heterogeneity in the outlier class, we also run
+that they are suitable for the outlier detection task2 . We split
+                                                                                 SSAD on the data augmented by the new outlier represen-
+each dataset into 60% training and 40% testing data.
+                                                                                 tations SSAD+OR. To judge the effectiveness of the outlier
+   Outlier Scoring Functions. We use a range of distance and                     representation, we compare against bagged ensemble (BE)
+density-based OSFs as our feature transformations. Precisely,                    which builds a bagged model in a manner identical to BORE
+                                                                                 except only in the original feature space (i.e. it does not learn
+  1 https://www.kaggle.com/c/higgs-boson
+                                                                                 the outlier representations).
+   2 Datasets and detailed information about preprocessing available from
+http://www.dbs.ifi.lmu.de/research/outlier-evaluation.                             3 Any other OSF (fitting Def. 1) could also be used.
+                                  higgs                                                     pageblocks                                                     hepatitis
+        1                                                                  1                                                          1
+
+
+       0.8                                                                0.8                                                        0.8
+
+
+       0.6                                                                0.6                                                        0.6
+ tpr                                                                tpr                                                        tpr
+                                                 BORE                                                       BORE                                                             BORE
+       0.4                                       BE                       0.4                               BE                       0.4                                     BE
+                                                 SSAD+OR                                                    SSAD+OR                                                          SSAD+OR
+                                                 SSAD                                                       SSAD                                                             SSAD
+       0.2                                       Best OSF                 0.2                               Best OSF                 0.2                                     Best OSF
+                                                 Mean of OSFs                                               Mean of OSFs                                                     Mean of OSFs
+                                                 GE                                                         GE                                                               GE
+        0                                                                  0                                                          0
+             0       0.2    0.4            0.6    0.8           1               0   0.2   0.4         0.6    0.8           1               0   0.2   0.4               0.6    0.8           1
+                                   fpr                                                          fpr                                                           fpr
+                                  cardio                                                   heartdisease                                                      iono
+        1                                                                  1                                                          1
+
+
+       0.8                                                                0.8                                                        0.8
+
+
+       0.6                                                                0.6                                                        0.6
+ tpr                                                                tpr                                                        tpr
+                                                 BORE                                                       BORE                                                             BORE
+       0.4                                       BE                       0.4                               BE                       0.4                                     BE
+                                                 SSAD+OR                                                    SSAD+OR                                                          SSAD+OR
+                                                 SSAD                                                       SSAD                                                             SSAD
+       0.2                                       Best OSF                 0.2                               Best OSF                 0.2                                     Best OSF
+                                                 Mean of OSFs                                               Mean of OSFs                                                     Mean of OSFs
+                                                 GE                                                         GE                                                               GE
+        0                                                                  0                                                          0
+             0       0.2    0.4            0.6    0.8           1               0   0.2   0.4         0.6    0.8           1               0   0.2   0.4               0.6    0.8           1
+                                   fpr                                                          fpr                                                           fpr
+                 Fig. 2: ROC curves comparing the performance of BORE against 6 competitors on a selection of datasets.
+
+
+    2) Experimental Setup: For both BORE and BE we con-                                           learned by combining OSFs is better for outlier detection
+struct 50 balanced bags from the training set by subsampling                                      than using the original features as also suggested by the
+70% of the labeled outliers and an equivalent number of                                           visualisations in Figure 1.
+labeled normal points into each bag. We use BORE and
+                                                                                                      However, combining our outlier representation with SSAD
+BE without `2 regularization. Empirically, we observe that
+                                                                                                  does not always yield improved performance. This is perhaps
+the bagging procedure performs implicit regularization and
+                                                                                                  due to the additional feature transformation that SSAD per-
+the additional `2 penalty is chosen as 0 by cross validation.
+                                                                                                  forms using the Gaussian kernel. The use of different kernel
+Importantly, this means that for a fixed number and size of
+                                                                                                  functions may improve the performance of SSAD+OR but was
+bags, BORE requires no additional tuning parameters.
+                                                                                                  not explored. Since the OR feature space is already a non-
+    For SSAD and SSAD+OR, we require setting the Gaus-                                            linear transformation of the data, it is not clear which kernel
+sian kernel width σ, and a regularization parameter, κ. We                                        function would be appropriate in combination with the OSFs
+selected the optimal parameters using 5-fold cross validation                                     to improve performance. Alternatively, multiple kernel learning
+for σ = [0.005, 5] and κ = [0.5, 20]. SSAD requires the                                           could be used to find a good combination of kernels but this
+setting of further parameters which control the regularization                                    would increase the number of tuning parameters. In this regard,
+of outlier and inliers separately as well as unlabeled data. We                                   BORE is far less sensitive to its hyperparameters (bag size
+leave these at their default values. We scale the data between                                    and number of bags, shown below) whereas SSAD is highly
+[0, 1] for BORE and normalize by standard deviation for SSAD                                      sensitive to kernel width and regularization strength.
+(this provides the best empirical performance). For GE, we
+                                                                                                     Greedy ensemble is often worse than the Mean of OSFs
+initialize the target vector with the ground truth number of
+                                                                                                  but it only selects a small number of OSFs (between 1 and
+outlier candidates—in reality this is typically not available.
+                                                                                                  13).
+    3) Results: Figure 2 shows receiver operator characteristic
+                                                                                                      Sensitivity to parameters In Fig. 3, we compare the
+(ROC) curves comparing BORE with each of the competitors
+                                                                                                  sensitivity of BORE and SSAD to their respective parameter
+on 6 datasets. Table II contains results on all 12 datasets and
+                                                                                                  settings in terms of AUC. Recall that BORE requires setting
+it compares each of the methods in terms of standard outlier
+                                                                                                  on the number of bags and their size whereas SSAD requires
+detection measures (as used e.g. in [12], [2]), namely: area
+                                                                                                  a regularization parameter, κ and the kernel width, σ. The
+under the ROC curve (AUC), area under the false positive rate
+                                                                                                  AUC achieved by BORE is similar among all parameter values
+interval [0, 0.1] of the ROC curve (AUC 0.1) and precision@no
+                                                                                                  already for a small number of bags. On the other hand,
+where no is the ground-truth number of outliers.
+                                                                                                  the performance of SSAD varies significantly for different
+    BORE is the best performing method in all three measures                                      parameters, highlighting the need for cross-validation.
+for 6 datasets and performs best in at least one of the measures
+in 9 of the 12 datasets. For the remaining datasets, BORE is                                      C. Budgeted Outlier Detection
+always among the best performing methods. The order of the
+competing methods changes.                                                                            1) Algorithms and Experimental Setup: We now evaluate
+                                                                                                  the proposed feature selection technique for BORE in the
+   As expected, the methods which use label information                                           setting where a prediction-time budget is imposed. We report
+outperform the unsupervised methods. Crucially, BORE almost                                       ROC AUC and AUC under the beginning of the ROC curve
+always outperforms BE which implies that the representation                                       (AUC 0.1). Due to space limitations we omit the results for
+TABLE II: Results of outlier detection for all 12 data sets (in %). Algorithms marked with ∗ are unsupervised, others
+are supervised. AUC refers to the area under the ROC curve, AUC 0.1 is the area under the beginning of the ROC
+curve (fpr interval [0, 0.1]) and precision@no is precision at the no -th position in the outlier ranking where no is the
+ground-truth number of outliers in the data set. Bold denotes the best performance for a given evaluation measure and
+dataset.
+                                                                                                                cardio                                                           heartdisease                                   hepatitis
+                                                                       AUC               AUC 0.1                             precision@no                     AUC             AUC 0.1        precision@no       AUC         AUC 0.1         precision@no
+                                                  ∗
+                                Best OSF                               79.08                               26.00                                27.78             88.14          40.00               50.00       93.10          0.00                 0.00
+                                Mean of OSFs∗                          75.75                               31.19                                33.33             79.03          15.00               37.50       79.31          0.00                 0.00
+                                GE∗                                    74.75                               13.84                                13.89             71.82           7.50               25.00       79.31          0.00                 0.00
+                                SSAD                                   92.50                               48.66                                47.22             78.81          27.50               37.50       93.10          0.00                 0.00
+                                SSAD+OR                                92.49                               50.97                                52.78             86.44          37.50               50.00       96.55         50.00                 0.00
+                                BE                                     95.77                               65.72                                55.56             84.96          52.50               62.50       93.10          0.00                 0.00
+                                BORE                                   95.98                               66.83                                63.89             88.35          65.00               75.00      100.00        100.00               100.00
+
+
+                                                                                                                higgs                                                               iono                                          letter
+                                                                       AUC               AUC 0.1                             precision@no                         AUC         AUC 0.1        precision@no       AUC         AUC 0.1         precision@no
+                                                  ∗
+                                    Best OSF                           62.30                               11.19                                12.24             94.22          68.00               82.00      91.16          44.15                38.89
+                                    Mean of OSFs∗                      56.95                                2.63                                 3.06             93.38          73.89               84.00      89.41          35.79                36.11
+                                    GE∗                                56.31                                5.53                                 8.16             12.23           0.00                6.00      84.38          19.23                25.00
+                                    SSAD                               70.75                               20.98                                21.43             96.29          88.13               92.00      97.22          75.41                66.67
+                                    SSAD+OR                            73.55                               26.55                                25.51             95.41          86.56               88.00      96.22          75.80                69.44
+                                    BE                                 73.40                               26.55                                25.51             83.74          55.11               70.00      84.88          35.09                33.33
+                                    BORE                               81.47                               37.95                                35.71             97.47          91.11               94.00      96.42          76.70                66.67
+
+
+                                                                                                                pima                                                             pageblocks                                     parkinson
+                                                                       AUC               AUC 0.1                             precision@no                         AUC         AUC 0.1        precision@no       AUC         AUC 0.1         precision@no
+                                                  ∗
+                                    Best OSF                           71.27                               11.13                                15.38             91.13          40.61               37.25      91.58          40.00                60.00
+                                    Mean of OSFs∗                      64.82                                0.81                                 0.00             90.10          42.96               37.25      83.16          40.00                40.00
+                                    GE∗                                59.63                                0.00                                 0.00             29.36           5.90                6.86      85.26          40.00                60.00
+                                    SSAD                               62.53                                4.05                                 0.00             96.46          72.41               62.75      74.74          40.00                60.00
+                                    SSAD+OR                            66.20                                6.62                                 7.69             97.48          81.99               69.61      88.42          20.00                60.00
+                                    BE                                 67.50                               11.94                                15.38             94.23          73.22               62.75      76.84          60.00                60.00
+                                    BORE                               69.99                               17.81                                23.08             97.93          83.28               68.63      91.58          80.00                80.00
+
+
+                                                                                                  spambase                                                                        waveform                                             wilt
+                                                                 AUC               AUC 0.1                            precision@no                         ROC AUC              AUC 0.1         precision@no       AUC        AUC 0.1         precision@no
+                                            ∗
+                             Best OSF                            85.68                        42.16                                       36.84                       75.16          33.82              31.11       80.52         20.19                17.76
+                             Mean of OSFs∗                       85.15                        44.54                                       36.84                       73.07          33.62              28.89       74.66          3.94                 3.74
+                             GE∗                                 83.38                        43.94                                       31.58                       70.33          22.78              17.78       70.40          0.00                 0.00
+                             SSAD                                96.14                        72.95                                       42.11                       91.84          59.82              53.33       98.56         85.78                74.77
+                             SSAD+OR                             96.78                        65.65                                       21.05                       87.73          37.72              28.89       96.17         77.78                72.90
+                             BE                                  94.21                        66.59                                       52.63                       88.07          40.85              33.33       98.03         78.26                66.36
+                             BORE                                95.50                        67.12                                       47.37                       91.98          54.77              40.00       98.38         87.29                76.64
+
+
+
+                                                      BORE                                                                        SSAD
+                                                                                                                                                                     1
+
+                    2                                                                             1e−05
+                                                                                                                                                                     0.99
+                                                                                                                                                                                a random subset of features selected such that the budget
+                    5
+                                                                                                  0.0001                                                             0.98       constraint is satisfied (BORE-random).
+                                                                                                   0.001                                                             0.97
+
+                   10
+                                                                                                                                                                     0.96
+                                                                                                                                                                                    To every OSF, we assign a feature cost. We then evaluate
+ number of bags
+                                                                                                    0.01
+
+                   20                                                                     sigma                                                                      0.95
+
+                                                                                                     0.1
+                                                                                                                                                                     0.94
+                                                                                                                                                                                the detection performance of the three algorithms for a series of
+                   30
+                                                                                                      1                                                              0.93       budgets. We sample feature costs uniformly with replacement
+                   50
+                                                                                                      2                                                              0.92
+                                                                                                                                                                                from a pool of values and randomly assign them to the features.
+                                                                                                                                                                     0.91
+                  100                                                                                 5
+
+                                                                                                                                                                     0.9
+                                                                                                                                                                                The pool is constructed such that the costs correspond to
+                                                                                                                                                                                different computational complexities: {n, 2n, 5n, n2 , 2n2 , 3n2 ,
+                        60     76     90    106   120      136   152   228   286   362                      0     1      2    5     10     20    30   50    100
+                                                    bag size                                                                      kappa
+
+
+
+
+                                           (a) BORE                                                                          (b) SSAD                                           n3 , 2n3 }. Concretely, we instantiate the pool as {10, 20, 50,
+                                                                                                                                                                                100, 200, 300, 1000, 2000} for all data sets. We report on
+Fig. 3: Sensitivity of ROC AUC values to different choices                                                                                                                      average performance over 20 different random assignments of
+of tuning parameters (Ionosphere).                                                                                                                                              costs to features. The original features always have a uniform
+                                                                                                                                                                                cost of 1 in our experiments.
+precision@no but note that this measure exhibits similar trends
+to AUC 0.1.                                                                                                                                                                         Having assigned costs, we apply OMP and budgeted OMP
+                                                                                                                                                                                to get a feature ranking. We then evaluate outlier detection
+    We compare our proposed cost-aware feature selection                                                                                                                        performance for budgets ranging from 10 (the minimal cost of
+scheme BORE-Budget against BORE-OMP which uses the                                                                                                                              a transformed feature) to the maximum which is the sum of
+unmodified Algorithm 1 for feature selection. Note that none                                                                                                                    all feature costs. For every budget, each method selects a set
+of the competitors from the previous experiments are designed                                                                                                                   of features such that the budget constraints are satisfied. For
+to take into account feature costs. Therefore, as a baseline                                                                                                                    the baseline BORE-random, we randomly select a subset of
+we show the average detection performance of BORE using                                                                                                                         features which satisfy the budget constraint and report average
+                   cardio − ROC AUC                                          cardio − ROC AUC 0.1                                         heartdisease − ROC AUC                                   heartdisease − ROC AUC 0.1
+0.96                                                      0.7                                                        0.9                                                         0.75
+
+
+0.94                                                                                                                                                                               0.7
+                                                         0.65
+                                                                                                                   0.88
+0.92                                                                                                                                                                             0.65
+                                                          0.6
+
+  0.9                                                                                                              0.86                                                            0.6
+                                                         0.55
+
+0.88                                                                                                                                                                             0.55
+                                                          0.5                                                      0.84
+0.86                                                                                                                                                                               0.5
+
+                                                         0.45
+0.84                                                                                                               0.82                                                          0.45
+
+                                                          0.4
+0.82                                                                                                                                                                               0.4
+                                                                                                                     0.8
+  0.8                                   BORE−Budget      0.35                                        BORE−Budget                                                   BORE−Budget   0.35                                           BORE−Budget
+                                        BORE−OMP                                                     BORE−OMP                                                      BORE−OMP                                                     BORE−OMP
+                                        BORE−random                                                  BORE−random                                                   BORE−random                                                  BORE−random
+0.78                                                                                                               0.78
+     1        2                 3            4                  1        2                3              4              1         2                   3              4                    1    2                   3             4
+   10    10                10           10                    10     10               10             10               10         10                 10             10                   10    10                10              10
+
+
+                                                  (a) Cardio.                                                                                                       (b) Heartdisease.
+                                                                          hepatitis − ROC AUC 0.1
+                  hepatitis − ROC AUC                                                                                                       higgs − ROC AUC                                            higgs − ROC AUC 0.1
+                                                         1
+  1                                                                                                                 0.8                                                          0.32
+
+                                                        0.9
+0.95                                                                                                                                                                              0.3
+                                                                                                                   0.78
+ 0.9                                                    0.8                                                                                                                      0.28
+
+
+0.85                                                    0.7                                                        0.76                                                          0.26
+
+
+ 0.8                                                    0.6                                                                                                                      0.24
+                                                                                                                   0.74
+
+0.75                                                    0.5                                                                                                                      0.22
+
+                                                                                                                   0.72
+ 0.7                                                    0.4                                                                                                                       0.2
+
+
+0.65                                                    0.3                                                                                                                      0.18
+                                                                                                                    0.7
+
+ 0.6                                                    0.2                                                                                                                      0.16
+                                                                                                                   0.68
+                                        BORE−Budget                                                 BORE−Budget                                                    BORE−Budget                                               BORE−Budget
+0.55                                                    0.1                                                                                                                      0.14
+                                        BORE−OMP                                                    BORE−OMP                                                       BORE−OMP                                                  BORE−OMP
+                                        BORE−random                                                 BORE−random                                                    BORE−random                                               BORE−random
+ 0.5                                                     0                                                         0.66                                                          0.12
+     1    2                 3            4                 1         2                3              4                  1             2                   3               4           1            2                   3              4
+   10    10               10            10               10         10              10              10                10         10                      10              10         10        10                     10              10
+
+
+                                                 (c) Hepatitis.                                                                                                           (d) Higgs.
+Fig. 4: Evaluation of outlier detection on budget (first four data sets, see below for remaining data sets). Budgeted OMP
+is compared to standard OMP and random selection of features. For each data set, we report on ROC AUC and ROC
+AUC on the false positive rate interval [0, 0.1] (y-axis) for different budgets (x-axis, log-scaled).
+performance over 20 random subsamples.                                                                                                                             VI.        C ONCLUSION
+   The number of bags and outlier subsampling ratio for                                                                       We have introduced BORE, an approach to outlier detection
+BORE are the same as for the previous experiments (50 and                                                                 which combines unsupervised and supervised techniques in
+70%, respectively).                                                                                                       order to build a rich representation of the outliers in the
+                                                                                                                          data. One of the main benefits of BORE is its simplicity,
+    2) Results: Results are shown in Fig. 4. In 9 of the 12                                                               which takes advantage of decades of existing research in
+datasets, for any given budget BORE-Budget typically achieves                                                             designing outlier scoring functions to result in a powerful
+a larger AUC and AUC 0.1 than the competing methods. This                                                                 algorithm which is insensitive to tuning parameters. BORE
+is expected since BORE-Budget selects features taking their                                                               is based on effective supervised learning methods that are
+cost into account.                                                                                                        well studied, and leverages the recent wisdom that learning
+    In the setting with a single bag, the AUC is expected to                                                              a good representation is of utmost importance to training a
+increase monotonically [13] – i.e. as the budget increases, the                                                           simple yet highly predictive model. In this manner, we propose
+performance of the method should always improve. The lack of                                                              an entirely new way of integrating unsupervised information
+sctrict monotonicity exhibited by BORE-Budget and BORE-                                                                   into supervised outlier detection. We have shown that BORE
+OMP is explained due to the effects of bagging and stability                                                              outperforms existing unsupervised and supervised methods on
+selection which are necessary to provide good performance                                                                 a wide range of real world datasets.
+in the highly imbalanced setting. However BORE-Budget                                                                         Another key benefit of the BORE framework is its gen-
+exhibits smoother behaviour than the competitors as the budget                                                            erality and extendibility. For example, newly developed OSFs
+changes.                                                                                                                  can easily be incorporated as part of the feature representation.
+                                                                                                                          Specific domain knowledge can also be encoded implicitly by
+    The poor performance of random selection underlines                                                                   the choice of OSFs. Furthermore, existing supervised outlier
+the importance of a principled feature selection procedure.                                                               detection techniques could be complemented using the BORE
+Interestingly, the relatively monotonic behaviour of the random                                                           framework. This removes some of the guesswork inherent in
+baseline as more features are added to the model underscores                                                              designing non-linear feature transformations (i.e. kernels) for
+that BORE benefits from using a larger number of OSFs                                                                     specific tasks. We have tested this hypothesis empirically with
+as feature transformations. This further emphasises that in                                                               SSAD+OR and we have observed improved performance over
+the absence of strict computational constraints a large and                                                               standard SSAD for half of the data.
+diverse set of OSFs should be chosen to construct the outlier
+representation.                                                                                                              In the context of recent research on outlier ensembles
+                                                                                                                                                                                                     letter − ROC AUC 0.1
+                    iono − ROC AUC                                          iono − ROC AUC 0.1                                        letter − ROC AUC
+                                                                                                                                                                              0.8
+  1                                                     0.9                                                         1
+
+
+                                                       0.85
+                                                                                                                                                                              0.7
+                                                                                                                  0.95
+0.95                                                    0.8
+
+                                                                                                                   0.9                                                        0.6
+                                                       0.75
+
+
+ 0.9                                                    0.7
+                                                                                                                  0.85                                                        0.5
+
+                                                       0.65
+
+                                                                                                                   0.8                                                        0.4
+0.85                                                    0.6
+
+
+                                                       0.55                                                       0.75                                                        0.3
+
+ 0.8                                                    0.5
+                                                                                                                   0.7                                                        0.2
+                                         BORE−Budget                                                BORE−Budget                                            BORE−Budget                                                        BORE−Budget
+                                                       0.45                                                                                                                                                                   BORE−OMP
+                                         BORE−OMP                                                   BORE−OMP                                               BORE−OMP
+                                         BORE−random                                                BORE−random                                            BORE−random                                                        BORE−random
+0.75                                                    0.4                                                       0.65                                                        0.1
+     1    2                 3             4                 1    2                   3               4                 1        2                      3             4            1         2                          3                    4
+   10    10               10             10               10    10                 10               10               10     10                    10             10             10      10                         10                  10
+
+
+                                              (e) Ionosphere.                                                                                                            (f) Letter.
+                  pageblocks − ROC AUC                                   pageblocks − ROC AUC 0.1                                   parkinson − ROC AUC                                             parkinson − ROC AUC 0.1
+0.98                                                    0.9                                                       0.95                                                        0.85
+
+
+0.96                                                   0.85                                                                                                                    0.8
+
+
+                                                                                                                                                                              0.75
+0.94                                                    0.8
+                                                                                                                   0.9
+                                                                                                                                                                               0.7
+0.92                                                   0.75
+
+                                                                                                                                                                              0.65
+ 0.9                                                    0.7
+                                                                                                                  0.85                                                         0.6
+0.88                                                   0.65
+                                                                                                                                                                              0.55
+
+0.86                                                    0.6
+                                                                                                                                                                               0.5
+                                                                                                                   0.8
+0.84                                                   0.55
+                                                                                                                                                                              0.45
+
+0.82                                     BORE−Budget    0.5                                         BORE−Budget                                            BORE−Budget                                                        BORE−Budget
+                                                                                                                                                                               0.4
+                                         BORE−OMP                                                   BORE−OMP                                               BORE−OMP                                                           BORE−OMP
+                                         BORE−random                                                BORE−random                                            BORE−random                                                        BORE−random
+ 0.8                                                   0.45                                                       0.75                                                        0.35
+     1    2                 3             4                 1    2                   3               4                 1        2                  3             4                 1            2                      3                4
+   10    10               10             10               10    10                 10               10               10    10                 10                10               10     10                      10                 10
+
+
+                                              (g) Pageblocks.                                                                                                   (h) Parkinson.
+                    pima − ROC AUC                                         pima − ROC AUC 0.1                                       spambase − ROC AUC                                          spambase − ROC AUC 0.1
+0.69                                                   0.16                                                       0.98                                                        0.75
+
+
+0.68                                                                                                              0.96                                                         0.7
+                                                       0.14
+0.67                                                                                                              0.94
+                                                                                                                                                                              0.65
+
+0.66                                                   0.12                                                       0.92
+                                                                                                                                                                               0.6
+
+0.65                                                                                                               0.9
+                                                        0.1                                                                                                                   0.55
+0.64                                                                                                              0.88
+
+                                                                                                                                                                               0.5
+0.63                                                   0.08                                                       0.86
+
+                                                                                                                                                                              0.45
+0.62                                                                                                              0.84
+                                                       0.06
+0.61                                     BORE−Budget                                                BORE−Budget   0.82                                     BORE−Budget         0.4                                            BORE−Budget
+                                         BORE−OMP                                                   BORE−OMP                                               BORE−OMP                                                           BORE−OMP
+                                         BORE−random                                                BORE−random                                            BORE−random                                                        BORE−random
+ 0.6                                                   0.04                                                        0.8                                                        0.35
+     1        2                 3             4             1        2                   3               4             1    2                  3            4                      1        2                      3               4
+   10    10                10             10              10    10                  10               10              10    10                10            10                    10    10                     10              10
+
+
+                                                  (i) Pima.                                                                                                     (j) Spambase.
+                                                                                                                                                                                                      wilt − ROC AUC 0.1
+                  waveform − ROC AUC                                     waveform − ROC AUC 0.1                                       wilt − ROC AUC
+                                                                                                                                                                               1
+0.94                                                   0.55                                                         1
+
+
+0.92                                                                                                                                                                          0.9
+                                                        0.5
+                                                                                                                  0.95
+ 0.9                                                                                                                                                                          0.8
+                                                       0.45
+0.88                                                                                                               0.9
+                                                                                                                                                                              0.7
+
+0.86                                                    0.4
+
+                                                                                                                  0.85                                                        0.6
+0.84                                                   0.35
+                                                                                                                                                                              0.5
+0.82                                                                                                               0.8
+                                                        0.3
+                                                                                                                                                                              0.4
+ 0.8
+                                                                                                                  0.75
+                                                       0.25                                                                                                                   0.3
+0.78                                     BORE−Budget                                                BORE−Budget                                            BORE−Budget                                                        BORE−Budget
+                                         BORE−OMP                                                   BORE−OMP                                               BORE−OMP                                                           BORE−OMP
+                                         BORE−random                                                BORE−random                                            BORE−random                                                        BORE−random
+0.76                                                    0.2                                                        0.7                                                        0.2
+     1        2                3              4             1        2                  3                4             1    2                  3            4                     1     2                       3              4
+   10    10                10            10               10    10                  10              10               10    10                10            10                   10     10                     10              10
+
+
+                                              (k) Waveform.                                                                                                              (l) Wilt.
+
+Figure 4 (Continued): Evaluation of outlier detection on budget. The spikes in performance are due to using a single
+stable set of features, SC across all bags which could differ greatly from the individual active sets in each bag A(b) due to
+randomness introduced by subsampling. The smoother performance of BORE-Budget can be explained by the cost-aware
+feature selection procedure ensuring that since features are selected based on both cost and utility, the stable set is more
+similar to the active sets in each bag. Smoother performance might be obtained by downweighting the contribution of
+bags whose active sets differ too greatly from SC instead of simple averaging.
+[1], BORE can be viewed as the first supervised ensemble                           [23]   A. C. Lozano, G. Swirszcz, and N. Abe. Group orthogonal matching
+technique. It learns weights for OSFs and depending on the                                pursuit for logistic regression. In Int. Conf. on Artif. Intelligence and
+specific classifier used, its final output can be easily interpreted                      Statistics, 2011.
+as a probability. In contrast, existing unsupervised outlier                       [24]   B. McWilliams, D. Balduzzi, and J. Buhmann. Correlated random
+                                                                                          features for fast semi-supervised learning. In Advances in Neural
+ensembles struggle with proper normalization of the OSFs                                  Information Processing Systems, pages 440–448, 2013.
+outputs and are thus difficult to interpret [19], [30]. BORE                       [25]   N. Meinshausen and P. Bühlmann. Stability selection. Journal of the
+avoids this problem by learning appropriate thresholds between                            Royal Stat. Society. Series B, 72(4), 2010.
+inliers and outliers from the training data.                                       [26]   B. Micenková, B. McWilliams, and I. Assent. Learning outlier ensem-
+                                                                                          bles: The best of both worlds - supervised and unsupervised. In Proc.
+    Finally, we concentrate on the problem of reducing the                                of the ACM SIGKDD Workshop on Outlier Detection and Description,
+computational cost at test-time. We envisage a scenario where                             ODD’14, 2014.
+resources at training time are plentiful. For example, the OSFs                    [27]   E. Müller, M. Schiffer, and T. Seidl. Statistical selection of relevant
+can be trained in parallel (which is only required once for the                           subspace projections for outlier ranking. In Proc. of the 27th Int. Conf.
+full dataset) as can the supervised models on each subsam-                                on Data Engineering, ICDE’11, pages 434–445, 2011.
+pled bag of data. For context, most successful approaches to                       [28]   H. V. Nguyen, H. H. Ang, and V. Gopalkrishnan. Mining outliers with
+                                                                                          ensemble of heterogeneous detectors on random subspaces. In Proc.
+representation learning require large amounts of resources at                             of the 15th Int. Conf. on Database Syst. for Adv. Appl., DASFAA’10,
+training and test time (i.e. deep networks). BORE is the only                             2010.
+method capable of handling budget constraints at test time. We                     [29]   S. Ramaswamy, R. Rastogi, and K. Shim. Efficient algorithms for
+have shown that it successfully selects a subset of features that                         mining outliers from large data sets. In Proc. of the 19th Int. Conf.
+provide good overall outlier detection performance.                                       on Management of Data, SIGMOD’00, pages 427–438, 2000.
+                                                                                   [30]   E. Schubert, R. Wojdanowski, A. Zimek, and H.-P. Kriegel. On
+                                                                                          evaluation of outlier rankings and outlier scores. In SDM’12, 2012.
+                               R EFERENCES
+                                                                                   [31]   E. Schubert, A. Zimek, and H.-P. Kriegel. Generalized outlier detection
+ [1]   C. C. Aggarwal. Outlier ensembles: position paper. SIGKDD Explo-                   with flexible kernel density estimates. In SDM’14, pages 542–550,
+       rations, 14(2), 2012.                                                              2014.
+ [2]   C. C. Aggarwal. Outlier Analysis. Springer, 2013.                           [32]   E. Schubert, A. Zimek, and H.-P. Kriegel. Local outlier detection
+                                                                                          reconsidered: a generalized view on locality with applications to spatial,
+ [3]   F. Angiulli and C. Pizzuti. Outlier mining in large high-dimensional
+                                                                                          video, and network outlier detection. 28(1):190–237, 2014.
+       data sets. 17(2):203–215, 2005.
+                                                                                   [33]   J. Tang, Z. Chen, A. W.-C. Fu, and D. W. Cheung. Enhancing effec-
+ [4]   K. Bache and M. Lichman. UCI machine learning repository, 2013.
+                                                                                          tiveness of outlier detections for low density patterns. In PAKDD’02,
+ [5]   V. Barnett and T. Lewis. Outliers in Statistical Data. 3rd edition, 1994.          pages 535–548, 2002.
+ [6]   Y. Bengio, A. Courville, and P. Vincent. Representation learning: A re-     [34]   D. M. J. Tax and R. P. W. Duin. Support vector data description. Mach.
+       view and new perspectives. Pattern Analysis and Machine Intelligence,              Learn., 54(1), 2004.
+       IEEE Transactions on, 35(8):1798–1828, 2013.
+                                                                                   [35]   L. Van der Maaten and G. Hinton. Visualizing data using t-sne. Journal
+ [7]   L. Breiman. Bagging predictors. Machine Learning, 24(2), 1996.                     of Machine Learning Research, 9(2579-2605):85, 2008.
+ [8]   L. Breiman. Stacked regressions. Machine learning, 24(1):49–64, 1996.       [36]   N. H. Vu, V. Gopalkrishnan, and I. Assent. An unbiased distance-based
+ [9]   M. M. Breunig, H.-P. Kriegel, R. Ng, and J. Sander. LOF: Identifying               outlier detection approach for high-dimensional data. In DASFAA (1),
+       density-based local outliers. In SIGMOD’00, 2000.                                  volume 6587, pages 138–152, 2011.
+[10]   P. Bühlmann and N. Meinshausen. Magging: maximin aggregation for           [37]   M. Wasikowski and X. wen Chen. Combating the small sample class
+       inhomogeneous large-scale data. arXiv preprint arXiv:1409.2638, 2014.              imbalance problem using feature selection. IEEE Trans. on Knowledge
+[11]   V. Chandola, A. Banerjee, and V. Kumar. Anomaly detection: A survey.               and Data Engineering, 22(10), 2010.
+       CSUR, 41(3), 2009.                                                          [38]   K. Zhang, M. Hutter, and H. Jin. A new local distance-based outlier
+                                                                                          detection approach for scattered real-world data. In PAKDD’09, pages
+[12]   N. Goernitz, M. Kloft, K. Rieck, and U. Brefeld. Toward supervised
+                                                                                          813–822, 2009.
+       anomaly detection. J. Artif. Intell. Res. (JAIR), 46, 2013.
+                                                                                   [39]   A. Zimek, R. J. G. B. Campello, and J. Sander. Ensembles for
+[13]   A. Grubb. Anytime Prediction: Efficient Ensemble Methods for Any
+                                                                                          unsupervised outlier detection: challenges and research questions a
+       Computational Budget. PhD thesis, University of Maryland, 2014.
+                                                                                          position paper. SIGKDD Explorations, 15(1), 2013.
+[14]   T. Hastie, R. Tibshirani, J. Friedman, T. Hastie, J. Friedman, and
+       R. Tibshirani. The elements of statistical learning, volume 2. Springer,
+       2009.
+[15]   V. Hautamäki, I. Kärkkäinen, and P. Fränti. Outlier detection using
+       k-nearest neighbor graph. In Proc. od the 14th Int. Conf. on Pattern
+       Recognition, ICPR’04, pages 430–433, 2004.
+[16]   W. Jin, A. K. H. Tung, J. Han, and W. Wang. Ranking outliers using
+       symmetric neighborhood relationship. In PAKDD’06, pages 577–593,
+       2006.
+[17]   I. Jolliffe. Principal Component Analysis. 1986.
+[18]   H.-P. Kriegel, P. Kröger, E. Schubert, and A. Zimek. LoOP: local outlier
+       probabilities. In CIKM’09, pages 1649–1652, 2009.
+[19]   H.-P. Kriegel, P. Kröger, E. Schubert, and A. Zimek. Interpreting and
+       unifying outlier scores. In SDM’11, 2011.
+[20]   H.-P. Kriegel, M. Schubert, and A. Zimek. Angle-based outlier detection
+       in high-dimensional data. In KDD’08, pages 444–452, 2008.
+[21]   L. J. Latecki, A. Lazarevic, and D. Pokrajac. Outlier detection with
+       kernel density functions. In MLDM’07, pages 61–75, 2007.
+[22]   A. Lazarevic and V. Kumar. Feature bagging for outlier detection. In
+       KDD’05, 2005.
+

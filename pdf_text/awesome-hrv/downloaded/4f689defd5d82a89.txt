@@ -1,0 +1,800 @@
+                                              computers & security 28 (2009) 18–28
+
+
+
+                                              available at www.sciencedirect.com
+
+
+
+
+                                     journal homepage: www.elsevier.com/locate/cose
+
+
+
+    Anomaly-based network intrusion detection:
+Techniques, systems and challenges
+
+P. Garcı́a-Teodoroa,*, J. Dı́az-Verdejoa, G. Maciá-Fernándeza, E. Vázquezb
+a
+ Department of Signal Theory, Telematics and Communications – Computer Science and Telecommunications Faculty,
+University of Granada, Granada, Spain
+b
+ Department of Telematic Engineering - Universidad Politécnica de Madrid, Madrid, Spain
+
+
+
+article info                                 abstract
+
+Article history:                             The Internet and computer networks are exposed to an increasing number of security
+Received 9 January 2008                      threats. With new types of attacks appearing continually, developing flexible and adaptive
+Accepted 13 August 2008                      security oriented approaches is a severe challenge. In this context, anomaly-based network
+                                             intrusion detection techniques are a valuable technology to protect target systems and
+Keywords:                                    networks against malicious activities. However, despite the variety of such methods
+Network security                             described in the literature in recent years, security tools incorporating anomaly detection
+Threat                                       functionalities are just starting to appear, and several important problems remain to be
+Intrusion detection                          solved. This paper begins with a review of the most well-known anomaly-based intrusion
+Anomaly detection                            detection techniques. Then, available platforms, systems under development and research
+IDS systems and platforms                    projects in the area are presented. Finally, we outline the main challenges to be dealt with
+Assessment                                   for the wide scale deployment of anomaly-based intrusion detectors, with special
+                                             emphasis on assessment issues.
+                                                                                                 ª 2008 Elsevier Ltd. All rights reserved.
+
+
+
+
+1.        Introduction                                                 within IETF in 2000, and having adopted the new acronym
+                                                                       IDWG (‘‘Intrusion Detection Working Group’’), the group
+Intrusion Detection Systems (IDS) are security tools that, like        defined a general IDS architecture based on the consideration
+other measures such as antivirus software, firewalls and               of four types of functional modules (Fig. 1):
+access control schemes, are intended to strengthen the
+security of information and communication systems.                     - E blocks (‘‘Event-boxes’’): This kind of block is composed of
+Although, as shown in Kabiri and Ghorbani (2005) and Sobh                sensor elements that monitor the target system, thus acquiring
+(2006), several IDS approaches have been proposed in the                 information events to be analyzed by other blocks.
+specialized literature since the origins of this technology, two       - D blocks (‘‘Database-boxes’’): These are elements intended to
+highly relevant works in this direction are Denning (1987) and           store information from E blocks for subsequent processing
+Staniford-Chen et al. (1998).                                            by A and R boxes.
+   Noteworthy work has been carried out by CIDF (‘‘Common              - A blocks (‘‘Analysis-boxes’’): Processing modules for
+Intrusion Detection Framework’’), a working group created by             analyzing events and detecting potential hostile behaviour,
+DARPA in 1998 mainly oriented towards coordinating and                   so that some kind of alarm will be generated if necessary.
+defining a common framework in the IDS field. Integrated
+
+
+ * Corresponding author. Department of Signal Theory, Telematics and Communications – Computer Science and Telecommunications
+Faculty, University of Granada, C/ Periodista Daniel Saucedo Aranda, 18071 Granada, Spain. Tel.: þ34 958242305; fax: þ34 958240831.
+    E-mail addresses: pgteodor@ugr.es (P. Garcı́a-Teodoro), jedv@ugr.es (J. Dı́az-Verdejo), gmacia@ugr.es (G. Maciá-Fernández), enrique@
+dit.upm.es (E. Vázquez).
+0167-4048/$ – see front matter ª 2008 Elsevier Ltd. All rights reserved.
+doi:10.1016/j.cose.2008.08.003
+                                                    computers & security 28 (2009) 18–28                                                                19
+
+
+                                                                       in formal signature specifications, the rate of false positives
+                                                                       (or FP, events erroneously classified as attacks; see Section 2)
+
+
+
+
+    Monitored environment
+                            E-box           A-box
+                                                                       in anomaly-based systems is usually higher than in signature-
+                                                           A-box       based ones.
+                            E-box           A-box                          Given the promising capabilities of anomaly-based
+                                                                       network intrusion detection systems (A-NIDS), this approach
+                                                                       is currently a principal focus of research and development in
+                            E-box
+                                                                       the field of intrusion detection. Various systems with A-NIDS
+                                    D-box               R-box          capabilities are becoming available, and many new schemes
+                                                                       are being explored. However, the subject is far from mature
+                                                                       and key issues remain to be solved before wide scale deploy-
+    Fig. 1 – General CIDF architecture for IDS systems.
+                                                                       ment of A-NIDS platforms can be practicable.
+                                                                           Focusing, thus, on A-NIDS technologies, the rest of this paper
+                                                                       is organized as follows: Section 2 presents the various algorithms
+- R blocks (‘‘Response-boxes’’): The main function of this type        proposed for anomaly detection. Then, existing A-NIDS plat-
+  of block is the execution, if any intrusion occurs, of               forms, either currently available or under development, and
+  a response to thwart the detected menace.                            which include anomaly detection functionalities, are presented
+                                                                       in Section 3. This constitutes a valuable contribution of the
+    Other key contributions in the IDS field concern the defi-         present paper in comparison with other published work. The
+nition of protocols for data exchange between components               fourth section discusses open issues and challenges in this field,
+(e.g. IDXP, ‘‘Intrusion Detection eXchange Protocol’’, RFC             with special emphasis on A-NIDS assessment. Finally, Section 5
+4767), and the format considered for this (e.g. IDMEF, ‘‘Intru-        summarizes the main points of the paper.
+sion Detection MEssage Format’’, RFC 4765).
+    Depending on the information source considered (E boxes
+in Fig. 1), an IDS may be either host or network-based. A host-
+                                                                       2.                             A-NIDS techniques
+based IDS analyzes events such as process identifiers and
+system calls, mainly related to OS information. On the other
+                                                                       Although different A-NIDS approaches exist (Estévez-
+hand, a network-based IDS analyzes network related events:
+                                                                       Tapiador et al., 2004), in general terms all of them consist of
+traffic volume, IP addresses, service ports, protocol usage, etc.
+                                                                       the following basic modules or stages (Fig. 2):
+This paper focuses on the latter type of IDS.
+    Depending on the type of analysis carried out (A blocks in
+                                                                       - Parameterization: In this stage, the observed instances of the
+Fig. 1), intrusion detection systems are classified as either
+                                                                         target system are represented in a pre-established form.
+signature-based or anomaly-based. Signature-based schemes
+                                                                       - Training stage: The normal (or abnormal) behaviour of the
+(also denoted as misuse-based) seek defined patterns, or
+                                                                         system is characterized and a corresponding model is built.
+signatures, within the analyzed data. For this purpose, a signa-
+                                                                         This can be done in very different ways, automatically or
+ture database corresponding to known attacks is specified
+                                                                         manually, depending on the type of A-NIDS considered (see
+a priori. On the other hand, anomaly-based detectors attempt
+                                                                         classification below).
+to estimate the ‘‘normal’’ behaviour of the system to be pro-
+                                                                       - Detection stage: Once the model for the system is available, it
+tected, and generate an anomaly alarm whenever the devia-
+                                                                         is compared with the (parameterized) observed traffic. If the
+tion between a given observation at an instant and the normal
+                                                                         deviation found exceeds (or is below, in the case of abnor-
+behaviour exceeds a predefined threshold. Another possibility
+                                                                         mality models) a given threshold an alarm will be triggered
+is to model the ‘‘abnormal’’ behaviour of the system and to
+                                                                         (Estévez-Tapiador et al., 2004).
+raise an alarm when the difference between the observed
+behaviour and the expected one falls below a given limit.
+                                                                           According to the type of processing related to the
+    Signature and anomaly-based systems are similar in terms
+                                                                       ‘‘behavioural’’ model of the target system, anomaly
+of conceptual operation and composition. The main differ-
+ences between these methodologies are inherent in the
+concepts of ‘‘attack’’ and ‘‘anomaly’’. An attack can be defined
+as ‘‘a sequence of operations that puts the security of a system
+at risk’’. An anomaly is just ‘‘an event that is suspicious from
+
+
+
+
+                                                                            Monitored environment
+                                                                                                                                     Training
+
+
+
+
+                                                                                                                  Parameterization
+the perspective of security’’. Based on this distinction, the
+main advantages and disadvantages of each IDS type can be
+pointed out.
+                                                                                                                                         Model
+    Signature-based schemes provide very good detection
+results for specified, well-known attacks. However, they are
+not capable of detecting new, unfamiliar intrusions, even if                                                                                      Intrusion
+                                                                                                                                     Detection      report
+they are built as minimum variants of already known attacks.
+On the contrary, the main benefit of anomaly-based detection
+techniques is their potential to detect previously unseen
+intrusion events. However, and despite the likely inaccuracy                                        Fig. 2 – Generic A-NIDS functional architecture.
+20                                          computers & security 28 (2009) 18–28
+
+
+
+detection techniques can be classified into three main             as normal/innocuous; and true negative (TN), if the
+categories (Lazarevic et al., 2005) (see Fig. 3): statistical-     analyzed event is correctly classified as normal/innocuous.
+based, knowledge-based, and machine learning-based. In the         It is clear that low FP and FN rates, together with high TP
+statistical-based case, the behaviour of the system is rep-        and TN rates, will result in good efficiency values.
+resented from a random viewpoint. On the other hand,                   The fundamentals for statistical, knowledge and machine
+knowledge-based A-NIDS techniques try to capture the               learning-based A-NIDS, as well as the principal subtypes of
+claimed behaviour from available system data (protocol             each, are described below. The main features of all are
+specifications, network traffic instances, etc.). Finally,         summarized in Table 1. Above and beyond other possibilities,
+machine learning A-NIDS schemes are based on the                   the question of efficiency should be a prime consideration in
+establishment of an explicit or implicit model that allows         selecting and implementing A-NIDS methodologies.
+the patterns analyzed to be categorized.
+    Two key aspects concern the evaluation, and thus the           2.1.    Statistical-based A-NIDS techniques
+comparison, of the performance of alternative intrusion
+detection approaches: these are the efficiency of the              In statistical-based techniques, the network traffic activity
+detection process, and the cost involved in the operation.         is captured and a profile representing its stochastic
+Without underestimating the importance of the cost, at             behaviour is created. This profile is based on metrics such
+this point the efficiency aspect must be emphasized. Four          as the traffic rate, the number of packets for each protocol,
+situations exist in this context, corresponding to the rela-       the rate of connections, the number of different IP
+tion between the result of the detection for an analyzed           addresses, etc. Two datasets of network traffic are
+event (‘‘normal’’ vs. ’’intrusion’’) and its actual nature         considered during the anomaly detection process: one
+(‘‘innocuous’’ vs. ‘‘malicious’’). These situations are: false     corresponds to the currently observed profile over time,
+positive (FP), if the analyzed event is innocuous (or ‘‘clean’’)   and the other is for the previously trained statistical
+from the perspective of security, but it is classified as          profile. As the network events occur, the current profile is
+malicious; true positive (TP), if the analyzed event is            determined and an anomaly score estimated by compar-
+correctly classified as intrusion/malicious; false negative        ison of the two behaviours. The score normally indicates
+(FN), if the analyzed event is malicious but it is classified      the degree of irregularity for a specific event, such that the
+                                                                   intrusion detection system will flag the occurrence of an
+                                                                   anomaly when the score surpasses a certain threshold.
+                                A.1)                                  The earliest statistical approaches, both network oriented
+                                         Univariate
+                                                                   and host oriented IDS, corresponded to univariate models,
+                                                                   which modelled the parameters as independent Gaussian
+                                A.2)     Multivariate
+     A) Statistical based                                          random variables (Denning and Neumann, 1985), thus
+                                                                   defining an acceptable range of values for every variable. Later,
+                                A.3)     Time series model         multivariate models that consider the correlations between
+                                                                   two or more metrics were proposed (Ye et al., 2002). These are
+                                B.1)                               useful because experimental data have shown that a better
+                                         FSM                       level of discrimination can be obtained from combinations of
+                                                                   related measures rather than individually. Other studies have
+     B) Knowledge based         B.2)     Description languages     considered time series models (Detecting Hackers), which use
+                                                                   an interval timer, together with an event counter or resource
+                                B.3)                               measure, and take into account the order and the inter-arrival
+                                         Expert systems
+                                                                   times of the observations as well as their values. Thus, an
+                                                                   observed traffic instance will be labelled as abnormal if its
+                                C.1)     Bayesian networks         probability of occurrence is too low at a given time.
+                                                                      Apart from their inherent features for use as anomaly-
+                                C.2)
+                                         Markov models             based techniques, statistical A-NIDS approaches have
+                                                                   a number of virtues. Firstly, they do not require prior knowl-
+                                C.3)                               edge about the normal activity of the target system; instead,
+                                         Neural networks
+                                                                   they have the ability to learn the expected behaviour of the
+     C) Machine learning
+           based                                                   system from observations. Secondly, statistical methods can
+                                C.4)     Fuzzy logic               provide accurate notification of malicious activities occurring
+                                                                   over long periods of time.
+                                C.5)                                  However, some drawbacks should also be pointed out.
+                                         Genetic algorithms
+                                                                   First, this kind of A-NIDS is susceptible to be trained by an
+                                C.6)     Clustering & outlier      attacker in such a way that the network traffic generated
+                                         detection                 during the attack is considered as normal. Second, setting the
+                                                                   values of the different parameters/metrics is a difficult task,
+Fig. 3 – Classification of the anomaly detection techniques        especially because the balance between false positives and
+according to the nature of the processing involved in the          false negatives is affected. Moreover, a statistical distribution
+‘‘behavioural’’ model considered.                                  per variable is assumed, but not all behaviours can be
+                                                computers & security 28 (2009) 18–28                                                               21
+
+
+
+ Table 1 – Fundamentals of the A-NIDS techniques
+ Technique: basics                               -   Pros                                                    Subtypes
+
+                                                 -   Cons
+
+ A) Statistical-based:       - Prior knowledge about normal activity             A.1) Univariate models (independent Gaussian random variables)
+   stochastic behaviour          not required. Accurate notification of
+                                 malicious activities.
+                               - Susceptible to be trained by attackers.         A.2) Multivariate models (correlations among several metrics)
+                                 Difficult setting for parameters and metrics.   A.3) Time series (interval timers, counters and some
+                                 Unrealistic quasi-stationary                         other time-related metrics)
+                                 process assumption.
+ B) Knowledge-based:           - Robustness. Flexibility and scalability.        B.1) Finite state machines (states and transitions)
+    availability of prior      - Difficult and time-consuming availability       B.2) Description languages (N-grams, UML, .)
+    knowledge/data               for high-quality knowledge/data.                B.3) Expert systems (rules-based classification)
+ C) Machine                    - Flexibility and adaptability.                   C.1) Bayesian networks (probabilistic relationships among variables)
+    learning-based:              Capture of interdependencies.
+    categorization of patterns - High dependency on the assumption               C.2) Markov models (stochastic Markov theory)
+                                 about the behaviour accepted for the system.    C.3) Neural networks (human brain foundations)
+                                 High resource consuming.                        C.4) Fuzzy logic (approximation and uncertainty)
+                                                                                 C.5) Genetic algorithms (evolutionary biology inspired)
+                                                                                 C.6) Clustering and outlier detection (data grouping)
+
+
+
+
+modelled by using stochastic methods. Furthermore, most of                  methods for which the notion of normality is obtained
+these schemes rely on the assumption of a quasi-stationary                  exclusively by analyzing training data .
+process, which is not always realistic.
+                                                                            2.3.       Machine learning-based A-NIDS schemes
+2.2.    Knowledge-based techniques
+                                                                            Machine learning techniques are based on establishing an
+The so-called expert system approach is one of the most                     explicit or implicit model that enables the patterns analyzed
+widely used knowledge-based IDS schemes. However, like                      to be categorized. A singular characteristic of these schemes is
+other A-NIDS methodologies, expert systems can also be                      the need for labelled data to train the behavioural model,
+classified into other, different categories (Denning and Neu-               a procedure that places severe demands on resources.
+mann, 1985; Anderson et al., 1995). Expert systems are inten-                   In many cases, the applicability of machine learning prin-
+ded to classify the audit data according to a set of rules,                 ciples coincides with that for the statistical techniques,
+involving three steps. First, different attributes and classes are          although the former is focused on building a model that
+identified from the training data. Second, a set of classification          improves its performance on the basis of previous results.
+rules, parameters or procedures are deduced. Third, the audit               Hence, a machine learning A-NIDS has the ability to change its
+data are classified accordingly.                                            execution strategy as it acquires new information. Although
+   More restrictive/particular in some senses are specification-            this feature could make it desirable to use such schemes for all
+based anomaly methods, for which the desired model is                       situations, the major drawback is their resource expensive
+manually constructed by a human expert, in terms of a set of                nature.
+rules (the specifications) that seek to determine legitimate                    Several machine learning-based schemes have been
+system behaviour. If the specifications are complete enough, the            applied to A-NIDS. Some of the most important are cited
+model will be able to detect illegitimate behavioural patterns.             below, and their main advantages and drawbacks are
+Moreover, the number of false positives is reduced, mainly                  identified.
+because this kind of system avoids the problem of harmless
+activities, not previously observed, being reported as intrusions.          2.3.1.     Bayesian networks
+   Specifications could also be developed by using some kind                A Bayesian network is a model that encodes probabilistic
+of formal tool. For example, the finite state machine (FSM)                 relationships among variables of interest. This technique is
+methodology –a sequence of states and transitions among                     generally used for intrusion detection in combination with
+them– seems appropriate for modelling network protocols                     statistical schemes, a procedure that yields several advan-
+(Estévez-Tapiador et al., 2003). For this purpose, standard                tages (Heckerman, 1995), including the capability of encoding
+description languages such as N-grammars, UML and LOTOS                     interdependencies between variables and of predicting
+can be considered.                                                          events, as well as the ability to incorporate both prior
+   The most significant advantages of current approaches to                 knowledge and data.
+anomaly detection are those of robustness and flexibility.                     However, as pointed out in Kruegel et al. (2003), a serious
+Their main drawback is that the development of high-quality                 disadvantage of using Bayesian networks is that their results
+knowledge is often difficult and time-consuming (Sekar et al.,              are similar to those derived from threshold-based systems,
+2002). This problem, however, is common to other A-NIDS                     while considerably higher computational effort is required.
+22                                          computers & security 28 (2009) 18–28
+
+
+
+   Although the use of Bayesian networks has proved to be           circles, and it has been rejected by some engineers and by
+effective in certain situations, the results obtained are highly    most statisticians, who hold that probability is the only
+dependent on the assumptions about the behaviour of the             rigorous mathematical description of uncertainty.
+target system, and so a deviation in these hypotheses leads to
+detection errors, attributable to the model considered.             2.3.5.   Genetic algorithms
+                                                                    Genetic algorithms are categorized as global search heuristics,
+2.3.2.   Markov models                                              and are a particular class of evolutionary algorithms (also
+Within this category, we may distinguish two main                   known as evolutionary computation) that use techniques
+approaches: Markov chains and hidden Markov models. A               inspired by evolutionary biology such as inheritance, muta-
+Markov chain is a set of states that are interconnected through     tion, selection and recombination. Thus, genetic algorithms
+certain transition probabilities, which determine the topology      constitute another type of machine learning-based technique,
+and the capabilities of the model. During a first training phase,   capable of deriving classification rules (Li, 2004) and/or
+the probabilities associated to the transitions are estimated       selecting appropriate features or optimal parameters for the
+from the normal behaviour of the target system. The detection       detection process (Bridges and Vaughn, 2000).
+of anomalies is then carried out by comparing the anomaly              The main advantage of this subtype of machine learning A-
+score (associated probability) obtained for the observed            NIDS is the use of a flexible and robust global search method
+sequences with a fixed threshold.                                   that converges to a solution from multiple directions, whilst
+   In the case of a hidden Markov model, the system of              no prior knowledge about the system behaviour is assumed.
+interest is assumed to be a Markov process in which states and      Its main disadvantage is the high resource consumption
+transitions are hidden. Only the so-called productions are          involved.
+observable.
+   Markov-based techniques have been extensively used in            2.3.6.   Clustering and outlier detection
+the context of host IDS, normally applied to system calls           Clustering techniques work by grouping the observed data
+(Yeung and Ding, 2003). In network IDS, the inspection of           into clusters, according to a given similarity or distance
+packets has led to the use of Markov models in some                 measure. The procedure most commonly used for this
+approaches (Mahoney and Chan, 2002; Estévez-Tapiador et al.,       consists in selecting a representative point for each cluster.
+2005). In all cases, the model derived for the target system has    Then, each new data point is classified as belonging to a given
+provided a good approach for the claimed profile, while, as in      cluster according to the proximity to the corresponding
+Bayesian networks, the results are highly dependent on the          representative point (Portnoy et al., 2001). Some points may
+assumptions about the behaviour accepted for the system.            not belong to any cluster; these are named outliers and
+                                                                    represent the anomalies in the detection process.
+2.3.3.   Neural networks                                               Clustering and outliers are used at present in the field of
+With the aim of simulating the operation of the human brain         IDS (Barnett and Lewis, 1994; Sequeira and Zaki, 2002), with
+(featuring the existence of neurons and of synapses among           several variants depending on how the question ‘‘Is the iso-
+them), neural networks have been adopted in the field of            lated outlier an anomaly?’’ is answered. For example, the KNN
+anomaly intrusion detection, mainly because of their flexi-         (k-nearest neighbour) approach (Liao and Vemuri, 2002) uses
+bility and adaptability to environmental changes. This detec-       the Euclidean distance to define the membership of data
+tion approach has been employed to create user profiles (Fox        points to a given cluster, while other systems use the Maha-
+et al., 1990), to predict the next command from a sequence of       lanobis distance. Some detection proposals associate a certain
+previous ones (Debar et al., 1992), to identify the intrusive       degree of being an outlier for each point (Breunig et al., 2000).
+behaviour of traffic patterns (Cansian et al., 1997), etc.             Clustering techniques determine the occurrence of intru-
+    However, a common characteristic in the proposed vari-          sion events only from the raw audit data, and so the effort
+ants, from recurrent neural networks to self-organizing maps        required to tune the IDS is reduced.
+(Ramadas et al., 2003), is that they do not provide a descriptive
+model that explains why a particular detection decision has         2.4.  Additional considerations on A-NIDS processing.
+been taken.                                                         KDD and data mining
+
+2.3.4.   Fuzzy logic techniques                                     In addition to the above described A-NIDS techniques, there
+Fuzzy logic is derived from fuzzy set theory under which            are others that may help in the task of dealing with the
+reasoning is approximate rather than precisely deduced from         amount of information contained within a dataset. Two of
+classical predicate logic. Fuzzy techniques are thus used in the    these techniques are principal component analysis (PCA) and
+field of anomaly detection mainly because the features to be        association rule discovery.
+considered can be seen as fuzzy variables (Bridges and                  PCA is a technique that is used to reduce the complexity of
+Vaughn, 2000). This kind of processing scheme considers an          a dataset. It is not a detection scheme itself but an auxiliary
+observation as normal if it lies within a given interval (Dick-     one. A given data collection (or dataset), obtained by means of
+erson, 2000).                                                       the different sensors in the target environment, becomes
+    Although fuzzy logic has proved to be effective, especially     more and more extensive and complex as the number of
+against port scans and probes, its main disadvantage is the         different services and speed of the networks grow. To simplify
+high resource consumption involved. On the other hand, it           the dataset, PCA makes a translation on a basis by which n
+should also be noticed that fuzzy logic is controversial in some    correlated variables are represented in order to reduce the
+                                            computers & security 28 (2009) 18–28                                              23
+
+
+number of variables to d < n, which will be both uncorrelated      acquired by bigger companies, and their products incorpo-
+and linear combinations of the original ones. This makes it        rated into more general and integral network security plat-
+possible to express the data in a reduced form, thus facili-       forms. Some examples of this are BreachGate WebDefend
+tating the detection process (Wang and Battiti, 2006).             (Breach Security), based upon G-Server (by Gilian Technolo-
+    On the other hand, the aim in association rules discovery is   gies), and Checkpoint IPS-1 (Checkpoint), from NFR Sentivist
+to obtain correlations between different features extracted        IPS (NFR Security).
+from the training datasets. By means of these association              From a historical point of view, one of the best-known
+rules it is possible, for example, to find internal relations      anomaly detection projects was the Statistical Packet
+between data corresponding to a specific connection. In            Anomaly Detection Engine (SPADE), produced by Silicon
+Cohen (1995) some algorithms for association rules and             Defense. SPADE was defined as a plug-in for Snort, and
+frequent episodes are contributed.                                 enabled monitored data to be inspected in search of anoma-
+    To conclude the present section, let us present an impor-      lous behaviour events, from the estimation of a score. Another
+tant discussion of A-NIDS techniques. During recent decades        pioneering system was Login Anomaly Detection (LAD), from
+several scientific communities have contributed to analyzing       Psionic Technologies, which learned user login behaviour and
+information from high volume databases. However, in the            raised an intrusion alarm when any strange activity was
+1990s, KDD (‘‘Knowledge Discovery in Databases’’) burst onto       detected.
+the scene, to ‘‘identify new, valid, potentially useful and            Stealthwatch, from Lancope, used flow-based anomaly
+comprehensible patterns for data’’ (Fayyad et al., 1996). Data     detection, and characterized and tracked network activities to
+mining techniques appeared as a particular case of KDD (Lee        differentiate between abnormal and normal network
+and Stolfo, 1998); these consisted of ‘‘learning algorithms to     behaviour.
+large data repositories with the purpose of automatically              More recent systems make use of a distributed architecture
+discovering useful information’’.                                  for intrusion detection by incorporating agents (or sensors),
+    As a specific use case, KDD and data mining have been          and a central console to supervise the overall detection
+widely applied in the last few years to correlate traffic          process. This is the case of the SecurityFocus DeepSight
+instances in network related databases. It is now common-          Threat Management System – now part of DeepNines BBX
+place to categorize and refer to different IDS processing          Intrusion Prevention (see below for a very brief definition of
+approaches using the term ‘‘data mining’’, as a generic wild-      intrusion prevention systems) – which uses a statistical
+card analysis-related concept. In this line, almost every pro-     approach to detect potential Internet threats. Data are
+cessing scheme (statistical algorithms, neural networks, fuzzy     collected by distributed sensors, which include intrusion
+methods, instance-based learning procedures, and so on) is         detection capabilities. The sensors report current network
+now considered a data mining technique.                            scans and attacks to the controller, providing a global detec-
+                                                                   tion capability.
+                                                                       Apart from the above tools (some of which are no longer
+3.      Available A-NIDS systems                                   available), Table 2 lists several current intrusion detection/
+                                                                   prevention platforms that include anomaly-based detection
+This section describes several reported endeavours in the          modules. All of them can be deployed in production
+development and deployment of A-NIDS platforms in real             environments.
+network environments. The analysis is split into two cate-             A noticeable feature is the generalized use of a principal
+gories: available platforms, commercial or freeware, and           signature-based detection module, combined with a comple-
+research systems. Commercial systems tend to use well-             mentary anomaly-based scheme. This combination of the two
+proven techniques, and so they do not usually consider the A-      types of detection techniques in a ‘‘Hybrid NIDS’’ (PMG, 2001)
+NIDS techniques most recently proposed in the specialized          seeks to improve the overall intrusion detection performance
+literature. In fact, most of them include a signature-based        of signature-based systems, while avoiding the usual high
+detection module as the core of the detection platform. On the     false positive rate suffered by A-NIDS methods. Indeed, most
+other hand, research systems are mainly intended to incor-         existing platforms adopt a hybrid philosophy. Just a few
+porate the most innovative and recent intrusion methodolo-         systems (Mazu profiler, nPatrol, SPADE, and Prelude) use only
+gies, especially when they are under conditions of                 anomaly detection.
+development and evaluation.                                            Most of the platforms in Table 2 perform further analysis
+                                                                   on the monitored data, related to audit, tracing and forensic
+3.1.    A-NIDS platforms                                           capabilities. Additionally, they may trigger some kind of
+                                                                   response to detected attacks, namely an interaction with
+In recent years, a number of important actions have focused        firewalls, the reset of TCP connections, the use of honey-
+on implementing A-NIDS techniques in real security plat-           systems, etc. The inclusion of prevention mechanisms (such
+forms. Currently available IDS software tools in this line         as vulnerability analysis), as well as simulated responses, is
+include Snort (www.snort.org), Prelude (www.prelude-ids.           also considered in some systems. The most used ones (e.g.
+org), and N@G (www.ncb.ernet.in/nag).                              Cisco Intrusion Prevention, McAfee IntruShield Network
+   Although anomaly-based detection techniques are not yet         Intrusion Prevention, Checkpoint IPS-1) constitute integral
+mature, they are beginning to appear in commercial and open        network security solutions.
+source products. Furthermore, in recent years, some pio-               In some of the platforms examined, the detection tech-
+neering systems and businesses in the A-NIDS field have been       niques used are not explained in sufficient detail by the
+24                                              computers & security 28 (2009) 18–28
+
+
+
+
+ Table 2 – Network-based IDS platforms with anomaly detection functionalities, according to the manufacturer’s
+ information
+ Name                                  Manufacturer                Hybrid         Response           Anomaly-related techniques
+
+ AirDefense Guard             AirDefense, Inc.                                              Context-aware detection, correlation and
+                                                                                              multi-dimensional detection engines
+ Barbedwire IDS Softblade     BarbedWire Technologies                                       Protocol analysis, pattern matching
+ BreachGate WebDefend        Breach security                                                Behaviour-based analysis, statistical
+                                                                                              analysis, correlation
+ Bro                          Lawrence Berkeley                                             Application level semantics, event analysis,
+                              National Laboratory                                             pattern matching, protocol analysis
+ Checkpoint IPS-1             NFR Security                                                  Confidence indexing
+ Cisco Intrusion              Cisco Systems                                                 Behaviour analysis, statistical analysis
+   Prevention System
+ DeepNines BBX Intrusion      DeepNines Technologies                                         Multi-Method Inspection (MMI),
+   Prevention (IPS)                                                                           behaviour analysis, protocol analysis,
+                                                                                              data correlation
+ EMERALD                      SRI                                                           Rule-based inference, Bayesian inference
+ FireProof                    Radware Ltd.                                                   Protocol anomalies
+ Firestorm NIDS               Gianni Tedesco                                                 Protocol anomalies
+ Mazu Profiler                Mazu Networks, Inc.                                             Behaviour analysis (heuristics)
+ ModSecurity                  Ivan Ristic                                                    Event correlation
+ Network at Guard (N@G)       C-DAC (formerly National                                      Protocol anomaly detection,
+                              Centre for Software Technology)                                 statistical analysis
+ Next Generation Intrusion    SRI                                                            Statistical analysis
+   Detection Expert
+   System (NIDES)
+ Nitro Security IPS           Nitro Security                                                 Behaviour analysis
+ nPatrol                      nSecure                                                         Statistical analysis (profiles)
+ Portus (PAD)                 Livermore Software                                            Protocol anomaly detection
+                              Laboratories, Inc.
+ Prelude IDS                  Yoann Vandoorselaere et al.                                     Open platform/multiple anomaly-based
+                                                                                              modules available (3rd party)
+ SecureNet IDS/IPS            Intrusion Inc.                                                Protocol decoding, protocol anomalies
+ Siren                        Penta Security                                                Abnormal user behaviour
+ Snort IDS                    Marty Roesch                                                   Open platform/multiple anomaly-based
+                                                                                              modules available (3rd party)
+ Snort_inline                 Rob McMillen                                                  Open platform/multiple anomaly-based
+                                                                                              modules available (3rd party)
+ Sourcefire ETM               Sourcefire Inc.                                               Network behaviour analysis
+ SPADE                        Silicon Defense                                                 Statistical analysis
+ StealthWatch                 Lancope                                                       Network behaviour analysis, ‘‘concern index’’
+ Strata Guard IDS/IPS         StillSecure                                                   Behaviour analysis, protocol anomalies
+ Symantec Intrusion           Symantec                                                      Behaviour-based
+   Protection
+ TippingPoint Intrusion       3COM/TippingPoint Technologies                                 Statistical analysis, profiles
+   Prevention System
+ Toplayer Attack              Top Layer Networks                                            Statistical analysis, profiles
+   Mitigator IPS
+
+ Note: The ‘‘Hybrid’’ column indicates hybrid detection, and the ‘‘Response’’ column indicates that some kind of response mechanism is also
+ available.
+
+
+
+
+manufacturer. In fact, the information provided is generally               adopted in BarbedWire IDS, DeepNines BBX, N@G, and Strata
+poor, and often overblown and overvalued from a functional                 Guard. PAD combines specification-based and statistical
+perspective. The corresponding anomaly detection modules                   characterization A-NIDS techniques to model the behaviour of
+are usually very simple, being based on some kind of statis-               a given protocol. This can be complemented by using addi-
+tical analysis for obtaining a behaviour profile. As an example,           tional A-NIDS techniques.
+DeepNines BBX Intrusion Prevention claims to include
+anomaly detection, but it is only able to detect improper                  3.2.    A-NIDS research-related environments
+usages of the three way handshake procedure in TCP or unfair
+(non-symmetric) utilization of UDP.                                        Although some of the above-mentioned A-NIDS platforms are
+   More advanced platforms include the Protocol Anomaly                    also usable for research purposes, others have been specifi-
+Detection (PAD) technique, which is based on the detection of              cally developed for this. Unlike ‘‘commercial’’ A-NIDS
+anomalies in the use of protocols. This kind of analysis is                systems, research oriented environments include more
+                                                computers & security 28 (2009) 18–28                                                          25
+
+
+innovative anomaly detection techniques. This is the case of                  Another observed tendency is the consideration of
+Bro, from the Lawrence Berkeley National Laboratory, and                  intrusion prevention procedures or IPS (Intrusion Prevention
+EMERALD, from SRI. Bro includes semantic analysis at the                  System), that is, inline IDS schemes that filter and analyze all
+application layer, while EMERALD considers rule-based                     the network traffic accessing the target environment. This
+discovery and Bayesian networks. Conceived as research                    has two main consequences. On one hand, most projects
+platforms, these systems enable the integration of contrib-               have a structured architecture in which various detectors can
+uted modules performing additional detection techniques.                  work jointly, typically in a distributed way (e.g. EMERALD,
+This is also the case of Snort and Prelude, two of the most               AAFID, GIDRE). On the other hand, as the detectors are now
+widely deployed NIDS tools today.                                         ‘‘pluggable’’ modules, a specialization of their functions and
+   Current research activities in the field of anomaly-based              capabilities can be observed. Thus, individual detectors are
+network intrusion detection are plentiful. Table 3 shows some             designed to monitor only a specific protocol or behaviour (e.g.
+examples of on-going A-NIDS research projects and systems,                Anagram targets HTTP payloads), and the global detection
+some of which also appeared in Table 2. Although the list is              capabilities of the platform result from combining and
+not complete, it shows a snapshot of current tendencies and               correlating the information from different detectors.
+techniques.
+   Regarding the nature of the techniques applied in the
+detection process, older systems used statistical methods                 4.         Open issues and challenges
+(IDES, PHAD, ALAD) or expert systems (NIDX, ISCA, Computer
+Watch). More recently, the explored techniques have been                  Intrusion detection techniques are continuously evolving,
+diversified, from state-based transition analysis to neural               with the goal of improving the security and protection of
+networks, fuzzy logic and even genetic algorithms. At present,            networks and computer infrastructures. Despite the prom-
+most approaches are related to machine learning by Markov                 ising nature of anomaly-based IDS, as well as its relatively
+models (GIDRE), N-grams (Anagram), and others.                            long existence, there still exist several open issues regarding
+
+
+
+
+ Table 3 – Anomaly-based NIDS research projects and systems under development
+ Name                                                  Entity                                       Techniques/comments
+
+ Anagram                                  Intrusion Detection Systems Lab,        Payload modelling through N-grams
+                                          Columbia University
+ Autonomous Agents for                    CERIAS/Purdue University                Open platform/additional anomaly-based
+   Intrusion Detection (AAFID)                                                    modules available. Distributed architecture (agents)
+ Bro                                      Lawrence Berkeley                       Development platform. Snort-signatures compatible.
+                                          National Laboratory                     Application level semantics, event analysis, pattern
+                                                                                  matching, protocol analysis. Able to execute response scripts.
+ Data Mining for Network                  MITRE corporation                       Clustering techniques
+   Intrusion Detection
+ Dependable Anomaly                       Various partners                        Detection by diversification
+   Detection with Diagnosis (DADDi)
+ EMERALD                                  SRI                                     Open distributed platform. Rule-based inference.
+                                                                                  Bayesian inference
+ Genetic Art For Intrusion                Northwestern University                 Genetic algorithms for visualizing malicious activities
+   Detection (GA-IDS)
+ GIDRE                                    University of Granada, UPC              Distributed architecture, stochastic modelling,
+                                                                                  pattern matching
+ Intelligent Intrusion                    Mississippi State University            Fuzzy data mining
+   Detection (IIDS)
+ Minnesota INtrusion                      University of Minnesota                 Statistical analysis, pattern matching, data mining,
+   Detection System (MINDS)                                                       outlier detection
+ Network at Guard (N@G)                   C-DAC                                   Development platform. Protocol anomaly detection,
+                                                                                  statistical analysis
+ NETSTAT                                  University of California
+ NFIDS                                    Informatics & Stat. Center,             Fuzzy logic, neural networks
+                                          Tehran University
+ Orchids                                  Ecole Normale Supérieure               Real-time event analysis and temporal correlation
+                                          (ENS) de Cachan
+ Prelude IDS                              Yoann Vandoorselaere et al.             Open distributed platform
+ Shadow IDS                               The CIDER Project                       Old CIDER. Development platform
+ Snort IDS                                Marty Roesch                            Open platform/multiple anomaly-based modules
+                                                                                  available (3rd party)
+
+ Some of them are also available for deployment in real scenarios, see Table 2.
+26                                          computers & security 28 (2009) 18–28
+
+
+
+these systems. Some of the most significant challenges in the      approach is subject to: (a) the risk of potential attacks, and (b)
+area are:                                                          the possible interruption of the system operation due to
+                                                                   simulated attacks. On the other hand, the evaluation of NIDS
+– Low detection efficiency, especially due to the high false       methodologies in experimental environments involves the
+  positive rate usually obtained (Axelsson, 2000). This aspect     generation of synthetic traffic as well as background traffic
+  is generally explained as arising from the lack of good          representing legal users, which is far from being a trivial
+  studies on the nature of the intrusion events. The problem       undertaking.
+  calls for the exploration and development of new, accurate          A number of studies have examined the use of the two
+  processing schemes, as well as better structured approaches      types of testing methodologies (Athanasiades et al., 2003).
+  to modelling network systems.                                    This research is summarized in the following contributions to
+– Low throughput and high cost, mainly due to the high             dealing with traffic databases:
+  data rates (Gbps) that characterize current wideband
+  transmission technologies (Kruegel et al., 2002). Some           – In 1998, DARPA (Defense Advanced Research Project
+  proposals intended to optimize intrusion detection are             Agency) initiated a programme at the MIT Lincoln Labs with
+  concerned with grid techniques and distributed detection           the aim of providing a complete and realistic benchmarking
+  paradigms.                                                         environment for IDS (Puketza et al., 1997).
+– The absence of appropriate metrics and assessment meth-          – The DARPA project was reviewed in 1999, and the resulting
+  odologies, as well as a general framework for evaluating and       1999 DARPA/Lincoln Laboratory intrusion detection evalu-
+  comparing alternative IDS techniques (Stolfo and Fan, 2000;        ation dataset (IDEVAL) became a widely used benchmarking
+  Gaffney and Ulvila, 2001). Due to the importance of this           tool by which synthetic network traffic was generated
+  issue, it is analyzed in greater depth below.                      (Lippmann et al., 2000).
+– Axelsson (1998) reported that most of the IDS systems            – Additionally, in 2001, DARPA, in collaboration with other
+  perform poorly in defending themselves from attacks.               institutions, started the LARIAT (Lincoln Adaptable Real-
+  Despite that different mechanisms to elude IDS have been           tIme Assurance Test-bed) programme (Rossey et al., 2001).
+  described in the literature (Ptacek and Newsham, 2003),            Unfortunately, LARIAT is restricted to US military environ-
+  more significant efforts should be done to improve intrusion       ments and to some academic organizations under special
+  detection technology in this aspect.                               circumstances.
+– Another relevant issue is the analysis of ciphered data          – Several contributions in the literature have raised ques-
+  (e.g. in wireless and mobile environments), although this          tions about the accuracy of the DARPA simulations
+  is also a general problem faced by all intrusion detection         (McHugh, 2000; Mahoney and Chan, 2003). In this respect,
+  platforms. Moreover, this problem could be dealt with by           many efforts have been made to obtain new traffic data-
+  simply locating the detection agents at those functional           bases. However, all of these proposals quickly became
+  points in the system where data are available in ‘‘plain-          obsolete, as the traffic was out of date compared with that
+  text’’ format and, for which the corresponding detection           of current networks. Furthermore, the specifications of the
+  analysis can be carried out without special restrictions.          corresponding datasets are not described in detail.
+                                                                   – Another key issue about traffic databases is the confidenti-
+    From this discussion, the main conclusion of the section,        ality of the data. Some researchers propose anonymity
+and thus of the present report, is that a deeper analysis is         through IP address masquerading (Fan et al., 2004), which
+required of every one of the mentioned aspects and, thus, of         has the advantage of real traffic while avoiding the problem
+alternative proposals in order to address the near future in the     of ciphering. This is a good approach, but sometimes the
+field of A-NIDS with confidence.                                     masquerading process is carried out without any consider-
+                                                                     ation of the information kept in each IP address, workload
+4.1.    A-NIDS assessment                                            or URI, which could be useful for some NIDS systems.
+                                                                     Therefore, it would be good practice to change the IP
+As stated in Section 2, one of the main challenges that              addresses in such a way that the relations between the real
+researchers must face, when trying to implement and vali-            and the faked addresses are univocal. The same applies to
+date a new intrusion detection method, is to assess it and           other masqueraded information: user-ID, URI, etc. Usually,
+compare its performance with that of other available                 these basic rules are not obeyed, and the anonymized
+approaches. It is noticeable that this task is not restricted to     databases become useless.
+A-NIDS, but is also applicable to NIDS (and even to IDS in         – Other network traffic related studies deal with the problem
+some cases) in general.                                              of standardizing the acquisition and use of real traffic for
+   The need for test-beds that provide robust and reliable           validating NIDS environments. In this respect, we should
+metrics to quantify NIDS has been suggested, for example, by         cite Bermúdez-Edo et al. (2006), which contributes some
+the National Institute for Standards and Technology (NIST)           proposals on a general methodology to acquire and organize
+(Mell et al., 2003). Although some authors defend a testing          traffic datasets, in order to define an evaluation framework
+methodology in real environments, most of them, as in Debar          to test the performance of anomaly-based NIDS.
+et al. (1998), advocate an evaluation procedure in experi-
+mental environments. Both approaches have their pros and              The considerable research effort made to date in the field of
+their cons. An advantage of assessment in real environments        NIDS assessment is proof of its importance. However, it
+is that the traffic is sufficiently realistic; however, this       remains an open issue and a significant challenge.
+                                            computers & security 28 (2009) 18–28                                                   27
+
+
+                                                                        Conference on Computational Intelligence and Multimedia
+5.      Summary                                                         Applications (ICCMA’97); 1997. p. 276–80.
+                                                                    Cohen W.W. Fast effective rule induction. In: Proceedings
+Albeit briefly, the present paper discusses the foundations of          12th International Conference on Machine Learning; 1995. p.
+the main A-NIDS technologies, together with their general               115–23.
+                                                                    Debar H., Becker M., Siboni, D. A neural network component
+operational architecture, and provides a classification for
+                                                                        for an intrusion detection system. In: IEEE Symposium
+them according to the type of processing related to the
+                                                                        on Research in Computer Security and Privacy; 1992.
+‘‘behavioural’’ model for the target system. Another valuable           p. 240–50.
+aspect of this study is that it describes, in a concise way, the    Debar H, Dacier M, Wespi A, Lampart S. An experimentation
+main features of several currently available IDS systems/               workbench for intrusion detection systems. Research Report
+platforms. Finally, the most significant open issues regarding          RZ 2998. IBM Reserarch Division, Zurich Research Laboratory;
+A-NIDS are identified, among which that of assessment is                1998.
+                                                                    Denning DE, Neumann PG. Requirements and model for IDES –
+given particular emphasis.
+                                                                        a real-time intrusion detection system. Computer Science
+    The information presented constitutes an important                  Laboratory, SRI International; 1985. Technical Report #83F83-
+starting point for addressing R&D in the field of IDS. Faster and       01-00.
+more effective countermeasures are needed to cope with the          Denning ED. An intrusion-detection model. IEEE Transactions on
+ever-growing number of detected attacks.                                Software Engineering 1987;13(2):222–32.
+                                                                    Detecting hackers (analyzing network traffic) by Poisson model
+                                                                        measure. Available from: http://www.ensc.sfu.ca/people/
+                                                                        grad/pwangf/IPSW_report.pdf.
+                                                                    Dickerson J.E. Fuzzy network profiling for intrusion detection. In:
+Acknowledgments
+                                                                        Proceedings of the 19th International Conference of the North
+                                                                        American Fuzzy Information Processing Society (NAFIPS);
+This work was partially supported by the European CELTIC                2000. p. 301–6.
+RED project (CP3-011), by the Spanish Ministry of Industry,         Estévez-Tapiador JM, Garcı́a-Teodoro P, Dı́az-Verdejo JE.
+Tourism, and Commerce, and by the Spanish project TSI2005-              Stochastic protocol modeling for anomaly based network
+08145-C02-02 (70% FEDER funds).                                         intrusion detection. In: Proceedings of IWIA 2003. IEEE Press,
+                                                                        ISBN 0-7695-1886-9; 2003. p. 3–12.
+                                                                    Estévez-Tapiador JM, Garcı́a-Teodoro P, Dı́az-Verdejo JE. Anomaly
+                                                                        detection methods in wired networks: a survey and taxonomy.
+references                                                              Computer Networks 2004;27(16):1569–84.
+                                                                    Estévez-Tapiador J.M., Garcı́a-Teodoro P., Dı́az-Verdejo J.E.
+                                                                        Detection of web-based attacks through Markovian protocol
+Anderson D, Lunt TF, Javitz H, Tamaru A, Valdes A. Detecting            parsing. In: Proc. ISCC05; 2005 p. 457–62.
+   unusual program behaviour using the statistical component        Fan J, Xu J, Ammar MH, Moon SB. Prefix-preserving IP address
+   of the next-generation intrusion detection expert system             anonymization: measurement-based security evaluation and
+   (NIDES). Menlo Park, CA, USA: Computer Science Laboratory,           a new cryptography-based scheme. Computers Networks
+   SRI International; 1995. SRIO-CSL-95-06.                             2004;46(2):253–72.
+Athanasiades N, Abler R, Levine J, Owen H, Riley G. Intrusion       Fayyad U, Piatetsky-Shapiro G, Smyth P. The KDD process
+   detection testing and benchmarking methodologies. In:                for extracting useful knowledge from volumes of data.
+   Proceedings of the 1st IEEE international workshop on                Communications of the ACM 1996;29(11):27–34.
+   information assurance. IEEE Computer Society Press; 2003. p.     Fox K., Henning R., Reed J., Simonian, R. A neural network
+   63–72.                                                               approach towards intrusion detection. In: 13th National
+Axelsson S. Research in intrusion detection systems: a survey.          Computer Security Conference; 1990. p. 125–34.
+   Technical report. Chalmers University of Technology.             Gaffney J, Ulvila J. Evaluation of intrusion detectors: a decision
+   Goteborg 1998.                                                       theory approach. IEEE Symposium on Security and Privacy
+Axelsson S. The Base-rate fallacy and its implications for the          2001:50–61.
+   difficulty of intrusion detection. ACM Transactions on           Heckerman D. A tutorial on learning with Bayesian networks.
+   Information and System Security 2000;3:186–205.                      Microsoft Research; 1995. Technical Report MSRTR-95-06.
+Barnett V, Lewis T. Outliers in statistical data. Wiley, ISBN       Kabiri P, Ghorbani AA. Research in intrusion detection and
+   9780471930945; 1994.                                                 response – a survey. International Journal of Network Security
+Bermúdez-Edo M., Salazar-Hernández R., Dı́az-Verdejo J.E.,            2005;1(2):84–102.
+   Garcı́a-Teodoro P. Proposals on assessment environments for      Kruegel C, Valeur F, Vigna G, Kemmerer R. Statetul intrusion
+   anomaly-based network intrusion detection systems. LNCS              detection for high-speed networks. IEEE Symposium on
+   4347; 2006. p. 210–21.                                               Security and Privacy 2002:285–94.
+Breunig M., Kriegel H.P., Ng R.T., Sander J. LOF: identifying       Kruegel C., Mutz D., Robertson W., Valeur F. Bayesian event
+   density-based local outliers. In: Proceedings of the ACM             classification for intrusion detection. In: Proceedings of the
+   SIGMOD, International Conference on Management of Data;              19th Annual Computer Security Applications Conference;
+   2000. p. 93–104.                                                     2003.
+Bridges S.M., Vaughn R.B. Fuzzy data mining and genetic             Lazarevic A, Kumar V, Srivastava J. Intrusion detection: a survey,
+   algorithms applied to intrusion detection. In: Proceedings of        Managing cyber threats: issues, approaches, and challenges.
+   the National Information Systems Security Conference; 2000.          Springer Verlag; 2005. p. 330.
+   p. 13–31.                                                        Lee W., Stolfo S.J. Data mining approaches for intrusion detection.
+Cansian A.M., Moreira E., Carvalho A., Bonifacio J.M. Network           In: Proceedings of the 7th USENIX Security Symposium
+   intrusion detection using neural networks. In: International         (SECURITY-98); 1998. p. 79–94.
+28                                              computers & security 28 (2009) 18–28
+
+
+
+Li W. Using genetic algorithm for network intrusion detection. C.                              Pedro Garcı́a-Teodoro received his B.Sc. in
+   S.G. Department of Energy; 2004. p. 1–8.                                                    Physics (Electronics speciality) from the
+Liao Y, Vemuri VR. Use of K-nearest neighbor classifier                                        University of Granada, Spain, in 1989. This
+   for intrusion detection. Computers & Security 2002;21:
+                                                                                               same year he was granted by ‘‘Fujitsu
+   439–48.
+Lippmann R, Haines J, Fried D, Korba J, Das K. Analysis and results                            España’’, and during 1990 by ‘‘IBM España’’.
+   of the 1999 DARPA off-line intrusion detection evaluation.                                  Since 1989 he is Associate Professor in the
+   Computer Networks 2000;34(4):579–95.                                                        Department of Signal Theory, Telematics
+Mahoney M.V., Chan P.K. Learning nonstationary models                                          and Communications of the University of
+   of normal network traffic for detecting novel attacks.                                      Granada, and member of the ‘‘Research
+   In: Proceedings of the Eighth ACM SIGKDD; 2002.
+                                                                                               Group on Signal, Telematics and Commu-
+   p. 376–85.
+                                                                         nications’’ of this University. His initial research interest was
+Mahoney M., Chan P.K. An analysis of the 1999 DARPA/Lincoln
+   laboratory evaluation data for network anomaly detection.             concerned with speech technologies, in which he developed his
+   Florida tech. report CS-2003-02; 2003.                                Ph.D. Thesis in 1996. From then, his professional profile has
+McHugh J. The 1998 Lincoln laboratory IDS evaluation. A critique.        derived to the field of computer and network security, specially
+   In: RAID. LNCS, vol. 1907; 2000. p. 145–61.                           focused on intrusion detection and denial of service attacks.
+Mell P, Hu V, Lippman R, Haines J, Zissman M. An overview o
+   issues in testing intrusion detection systems’’. NIST
+                                                                                              Jesús E. Dı́az-Verdejo is Associate
+   Interagency Report NIST IR 7007. Available from: http://csrc.
+   nist.gov/publications/nistir/nistir-7007.pdf; 2003.                                        Professor in the Department of Signal
+PMG. Maximizing the value of network intrusion detection. A                                   Theory, Telematics and Communications
+   corporate white paper from the product management group                                    of the University of Granada (Spain). He
+   ofintrusion.com; 2001.                                                                     received his B.Sc. in Physics (Electronics
+Portnoy L., Eskin E., Stolfo S.J. Intrusion detection with unlabeled                          speciality) from the University of Granada
+   data using clustering. In: Proceedings of The ACM Workshop
+                                                                                              in 1989 and has held a Ph.D. grant from
+   on Data Mining Applied to Security; 2001.
+                                                                                              Spanish Government. Since 1990 he is
+Ptacek T, Newsham T. Insertion, evasion and denial of service:
+   eluding network intrusion detection. Secure Networks 2003.                                 Associate Professor at this University. In
+Puketza N, Zhang K, Chung M, Mukherjee B, Olsson R. A                                         1995 he obtained a Ph.D. degree in Physics.
+   methodology for testing intrusion detection systems. IEEE             His initial research interest was related with speech technol-
+   Software 1997;4(5):43–51.                                             ogies, especially automatic speech recognition. He is currently
+Ramadas M, Ostermann S, Tjaden B. Detecting anomalous                    working in computer networks, mainly in computer and
+   network traffic with self-organizing maps. In: Recent
+                                                                         network security, although he has developed some work in
+   advances in intrusion detection, RAID. Lecture notes in
+   computer science (LNCS), vol. 2820; 2003. p. 36–54.
+                                                                         telematics applications and e-learning systems.
+Rossey L, Rabek J, Cunnigham R, Fried R, Lippmann R,
+   Zissmann R. LARIAT: Lincoln adaptable real-time information                                   Gabriel Maciá-Fernández is an Assistant
+   assurance test-bed. RAID; 2001.                                                               Professor in the Department of Signal
+Sekar R., Gupta A., Frullo J., Shanbhag T., Tiwari A., Yang H., et al.                           Theory, Telematics and Communications
+   Specification-based anomaly detection: a new approach for
+                                                                                                 of the University of Granada (Spain). He
+   detecting network intrusions. In: Proceedings of the Ninth
+                                                                                                 received a MS in Telecommunications
+   ACM Conference on Computer and Communications Security;
+   2002. p. 265–74.                                                                              Engineering from the University of Seville,
+Sequeira K., Zaki M. ADMIT: anomaly-based data mining for                                        Spain, and got a Ph.D in 2007 from the
+   intrusions. In: Proceedings of the 8th ACM SIGKDD                                             University of Granada. From 1999 to
+   International Conference on Knowledge Discovery and Data                                      2005 he worked as a specialist consultant
+   Mining; 2002. p. 386–95.                                                                      in ‘Vodafone Spain’. His research was
+Sobh TS. Wired and wireless intrusion detection system:
+                                                                         initially focused on multicasting technologies but he is
+   classifications, good characteristics and state-of-the-art.
+   Computer Standards & Interfaces 2006;28:670–94.
+                                                                         currently working on computer and network security, espe-
+Staniford-Chen S., Tung B., Porrar P., Kahn C., Schnackenberg D.,        cially in the field of intrusion detection and response systems,
+   Feiertag R., et al. The common intrusion detection framework-         denial of service, web security and secure protocols design.
+   data formats. 1998. Internet draft ‘draft-staniford-cidf-data-
+   formats-00.txt’.                                                                         Enrique Vázquez received his M.Sc. and
+Stolfo SJ, Fan W. Cost-based modeling for fraud and intrusion
+                                                                                            Ph.D. degrees in Telecommunication Engi-
+   detection: results from the JAM project. DARPA Information
+   Survivability Conference & Exposition 2000:130–44.                                       neering from the Technical University of
+Wang W., Battiti R. Identifying intrusions in computer networks                             Madrid, Spain, in 1983 and 1987, respec-
+   with principal component analysis. In: The First International                           tively. Presently, he is a full professor in the
+   Conference on Availability, Reliability and Security; 2006. p.                           Department of Telematic Engineering of
+   270–79. Vienna, Austria.                                                                 the Technical University of Madrid. He has
+Ye N, Emran SM, Chen Q, Vilbert S. Multivariate statistical
+                                                                                            worked in Spanish and European R&D
+   analysis of audit trails for host-based intrusion detection. IEEE
+                                                                                            projects on several areas of telecommuni-
+   Transactions on Computers 2002;51(7).
+Yeung DY, Ding Y. Host-based intrusion detection using dynamic                              cations and computer networks, including
+   and static behavioral models. Pattern Recognition 2003;36(1):         protocol performance evaluation, traffic engineering, mobile
+   229–43.                                                               networks, network convergence, and network security.
+
